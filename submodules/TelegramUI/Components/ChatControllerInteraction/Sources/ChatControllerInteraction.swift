@@ -203,6 +203,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
     public let activateMessagePinch: (PinchSourceContainerNode) -> Void
     // MARK: NAGRAM
     public let nagramPerformMessageDoubleTapAction: (EngineRawMessage, String) -> Bool
+    public let nagramRepeatMessages: ([EngineRawMessage], Bool) -> Bool
     public let openMessageContextActions: (EngineRawMessage, ASDisplayNode, CGRect, ContextGesture?) -> Void
     public let navigateToMessage: (EngineMessage.Id, EngineMessage.Id, NavigateToMessageParams) -> Void
     public let navigateToMessageStandalone: (EngineMessage.Id) -> Void
@@ -384,6 +385,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         updateMessageReaction: @escaping (EngineRawMessage, ChatControllerInteractionReaction, Bool, ContextExtractedContentContainingView?) -> Void,
         // MARK: NAGRAM
         nagramPerformMessageDoubleTapAction: @escaping (EngineRawMessage, String) -> Bool = { _, _ in false },
+        nagramRepeatMessages: @escaping ([EngineRawMessage], Bool) -> Bool = { _, _ in false },
         activateMessagePinch: @escaping (PinchSourceContainerNode) -> Void,
         openMessageContextActions: @escaping (EngineRawMessage, ASDisplayNode, CGRect, ContextGesture?) -> Void,
         navigateToMessage: @escaping (EngineMessage.Id, EngineMessage.Id, NavigateToMessageParams) -> Void,
@@ -519,6 +521,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         self.activateMessagePinch = activateMessagePinch
         // MARK: NAGRAM
         self.nagramPerformMessageDoubleTapAction = nagramPerformMessageDoubleTapAction
+        self.nagramRepeatMessages = nagramRepeatMessages
         self.openMessageContextActions = openMessageContextActions
         self.navigateToMessage = navigateToMessage
         self.navigateToMessageStandalone = navigateToMessageStandalone

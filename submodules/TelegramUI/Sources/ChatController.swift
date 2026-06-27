@@ -2174,6 +2174,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 return false
             }
             return self.nagramPerformMessageDoubleTapAction(message: message, actionRawValue: actionRawValue)
+        }, nagramRepeatMessages: { [weak self] messages, hideNames in
+            guard let self else {
+                return false
+            }
+            return self.nagramRepeatMessages(messages: messages, hideNames: hideNames)
         }, activateMessagePinch: { [weak self] sourceNode in
             guard let strongSelf = self else {
                 return
@@ -11079,6 +11084,44 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
     
     // MARK: NAGRAM
+    private func nagramRepeatMessages(messages: [EngineRawMessage], hideNames: Bool) -> Bool {
+        guard self.isNodeLoaded, !messages.isEmpty else {
+            return false
+        }
+        guard self.chatLocation.peerId != nil else {
+            return false
+        }
+        guard canSendMessagesToChat(self.presentationInterfaceState) else {
+            return false
+        }
+        guard messages.allSatisfy({ !Namespaces.Message.allScheduled.contains($0.id.namespace) }) else {
+            return false
+        }
+        
+        let isCopyProtected = messages.contains { message in
+            return (self.presentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled
+        }
+        guard !isCopyProtected else {
+            return false
+        }
+        
+        let forwardAttributes: [EngineMessage.Attribute]
+        if hideNames {
+            forwardAttributes = [
+                ForwardOptionsMessageAttribute(hideNames: true, hideCaptions: false)
+            ]
+        } else {
+            forwardAttributes = []
+        }
+        
+        let repeatedMessages = messages.map { message -> EnqueueMessage in
+            return .forward(source: message.id, threadId: self.chatLocation.threadId, grouping: .auto, attributes: forwardAttributes, correlationId: nil)
+        }
+        self.chatDisplayNode.setupSendActionOnViewUpdate({}, nil)
+        self.chatDisplayNode.sendMessages(repeatedMessages, nil, nil, nil, repeatedMessages.count > 1, false)
+        return true
+    }
+    
     private func nagramPerformMessageDoubleTapAction(message: EngineRawMessage, actionRawValue: String) -> Bool {
         guard self.isNodeLoaded, let action = NagramMessageDoubleTapAction(rawValue: actionRawValue) else {
             return false
@@ -11088,35 +11131,13 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         case .disabled, .sendReaction, .showReactions, .reply:
             return false
         case .repeatMessage, .repeatWithoutQuote:
-            guard let peerId = self.chatLocation.peerId else {
-                return false
+            let hideNames: Bool
+            if case .repeatWithoutQuote = action {
+                hideNames = true
+            } else {
+                hideNames = false
             }
-            guard canSendMessagesToChat(self.presentationInterfaceState) else {
-                return false
-            }
-            guard !Namespaces.Message.allScheduled.contains(message.id.namespace) else {
-                return false
-            }
-            let isCopyProtected = (self.presentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled
-            guard !isCopyProtected else {
-                return false
-            }
-            
-            let forwardAttributes: [EngineMessage.Attribute]
-            switch action {
-            case .repeatWithoutQuote:
-                forwardAttributes = [
-                    ForwardOptionsMessageAttribute(hideNames: true, hideCaptions: false)
-                ]
-            default:
-                forwardAttributes = []
-            }
-            
-            let messages: [EnqueueMessage] = [
-                .forward(source: message.id, threadId: self.chatLocation.threadId, grouping: .auto, attributes: forwardAttributes, correlationId: nil)
-            ]
-            let _ = enqueueMessages(account: self.context.account, peerId: peerId, messages: messages).startStandalone()
-            return true
+            return self.nagramRepeatMessages(messages: [message], hideNames: hideNames)
         case .edit:
             if case .pinnedMessages = self.subject {
                 return false
