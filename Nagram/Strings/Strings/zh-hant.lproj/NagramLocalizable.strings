@@ -107,8 +107,8 @@
 "Nagram.MessageMenu.Item.viewPollStats" = "查看投票統計";
 "Nagram.MessageMenu.Item.factCheck" = "事實核查";
 "Nagram.MessageMenu.Item.viewInChannel" = "在頻道中查看";
-"Nagram.MessageMenu.Item.selectFromAuthor" = "選擇該使用者訊息";
-"Nagram.MessageMenu.Item.authorAllChats" = "所有會話";
+"Nagram.MessageMenu.Item.selectFromAuthor" = "選擇此人所有訊息";
+"Nagram.MessageMenu.Item.viewAuthorMessages" = "查看所有訊息";
 "Nagram.MessageMenu.Item.select" = "選擇";
 "Nagram.MessageMenu.Item.selectAll" = "全選";
 "Nagram.MessageMenu.Item.delete" = "刪除";

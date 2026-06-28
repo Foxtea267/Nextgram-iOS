@@ -108,7 +108,7 @@
 "Nagram.MessageMenu.Item.factCheck" = "Fact Check";
 "Nagram.MessageMenu.Item.viewInChannel" = "View in Channel";
 "Nagram.MessageMenu.Item.selectFromAuthor" = "Select Author Messages";
-"Nagram.MessageMenu.Item.authorAllChats" = "All Chats";
+"Nagram.MessageMenu.Item.viewAuthorMessages" = "View All Messages";
 "Nagram.MessageMenu.Item.select" = "Select";
 "Nagram.MessageMenu.Item.selectAll" = "Select All";
 "Nagram.MessageMenu.Item.delete" = "Delete";

@@ -2182,84 +2182,70 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                 actions.append(.selectFromAuthor, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.selectFromAuthor", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
                     return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/SelectAll"), color: theme.actionSheet.primaryTextColor)
                 }, action: { _, f in
-                    let overlayController = OverlayStatusController(theme: chatPresentationInterfaceState.theme, type: .loading(cancelled: nil))
-                    controllerInteraction.presentGlobalOverlayController(overlayController, nil)
-                    
-                    let threadId: Int64?
+                    let progressSignal = Signal<Never, NoError> { _ in
+                        let overlayController = OverlayStatusController(theme: chatPresentationInterfaceState.theme, type: .loading(cancelled: nil))
+                        controllerInteraction.presentGlobalOverlayController(overlayController, nil)
+                        return ActionDisposable { [weak overlayController] in
+                            Queue.mainQueue().async {
+                                overlayController?.dismiss()
+                            }
+                        }
+                    }
+                    |> runOn(Queue.mainQueue())
+                    |> delay(0.2, queue: Queue.mainQueue())
+                    let progressDisposable = progressSignal.start()
+
+                    let searchThreadId: Int64?
                     if case let .replyThread(replyThreadMessage) = chatPresentationInterfaceState.chatLocation {
-                        threadId = replyThreadMessage.threadId
+                        searchThreadId = replyThreadMessage.threadId
                     } else {
-                        threadId = nil
+                        searchThreadId = nil
                     }
                     
-                    let _ = (context.engine.messages.searchMessages(location: .peer(peerId: message.id.peerId, fromId: author.id, tags: nil, reactions: nil, threadId: threadId, minDate: nil, maxDate: nil), query: "", state: nil, limit: 500)
-                    |> deliverOnMainQueue).startStandalone(next: { result, _ in
+                    let _ = (context.account.postbox.transaction { transaction -> [EngineMessage.Id] in
+                        let limit = 500
                         var ids: [EngineMessage.Id] = []
-                        for searchMessage in result.messages {
+                        transaction.withAllMessages(peerId: message.id.peerId, { searchMessage in
+                            if ids.count >= limit {
+                                return false
+                            }
+                            guard searchMessage.author?.id == author.id else {
+                                return true
+                            }
+                            if let searchThreadId, searchMessage.threadId != searchThreadId {
+                                return true
+                            }
                             if searchMessage.media.contains(where: { $0 is TelegramMediaAction }) {
-                                continue
+                                return true
                             }
                             ids.append(searchMessage.id)
-                        }
-                        if ids.isEmpty {
-                            ids = [message.id]
-                        }
-                        interfaceInteraction.beginMessageSelection(ids, { transition in
-                            f(.custom(transition))
+                            return true
                         })
-                        overlayController.dismiss()
+                        return ids
+                    }
+                    |> deliverOnMainQueue).startStandalone(next: { ids in
+                        if ids.isEmpty {
+                            f(.default)
+                        } else {
+                            interfaceInteraction.beginMessageSelection(ids, { transition in
+                                f(.custom(transition))
+                            })
+                        }
+                        Queue.mainQueue().async {
+                            progressDisposable.dispose()
+                        }
                     }, completed: {
-                        overlayController.dismiss()
+                        Queue.mainQueue().async {
+                            progressDisposable.dispose()
+                        }
                     })
                 })))
                 
-                actions.append(.authorAllChats, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.authorAllChats", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
-                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Chats"), color: theme.actionSheet.primaryTextColor)
+                actions.append(.viewAuthorMessages, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.viewAuthorMessages", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
                 }, action: { _, f in
                     f(.dismissWithoutContent)
-                    
-                    guard let navigationController = controllerInteraction.navigationController() else {
-                        return
-                    }
-                    
-                    let controller = context.sharedContext.makePeerSelectionController(PeerSelectionControllerParams(context: context, filter: [.excludeDisabled, .excludeRecent, .excludeSecretChats, .doNotSearchMessages], hasContactSelector: false, hasGlobalSearch: false, title: ngI18n("Nagram.MessageMenu.Item.authorAllChats", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode)))
-                    controller.peerSelected = { [weak controller, weak navigationController] peer, threadId in
-                        guard let navigationController else {
-                            return
-                        }
-                        controller?.dismiss()
-                        
-                        let chatLocation: NavigateToChatControllerParams.Location
-                        if let threadId {
-                            chatLocation = .replyThread(ChatReplyThreadMessage(
-                                peerId: peer.id,
-                                threadId: threadId,
-                                channelMessageId: nil,
-                                isChannelPost: false,
-                                isForumPost: true,
-                                isMonoforumPost: false,
-                                maxMessage: nil,
-                                maxReadIncomingMessageId: nil,
-                                maxReadOutgoingMessageId: nil,
-                                unreadCount: 0,
-                                initialFilledHoles: IndexSet(),
-                                initialAnchor: .automatic,
-                                isNotAvailable: false
-                            ))
-                        } else {
-                            chatLocation = .peer(peer)
-                        }
-                        
-                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(
-                            navigationController: navigationController,
-                            context: context,
-                            chatLocation: chatLocation,
-                            keepStack: .always,
-                            activateMessageSearch: (.member(author), ""),
-                            forceOpenChat: true
-                        ))
-                    }
-                    navigationController.pushViewController(controller)
+                    interfaceInteraction.beginMessageSearch(.member(author), "")
                 })))
             }
             
