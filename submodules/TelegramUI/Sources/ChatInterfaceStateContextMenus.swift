@@ -2172,13 +2172,38 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
 
         if !isPinnedMessages, !isReplyThreadHead, data.canSelect {
             var didAddSeparator = false
-            // MARK: NAGRAM — 按当前消息作者批量选择当前会话/话题里的消息。
             if let author = message.author {
                 if !actions.isEmpty && !didAddSeparator {
                     didAddSeparator = true
                     actions.append(.separator)
                 }
 
+                // MARK: NAGRAM — 在当前会话/话题里查找当前消息作者的所有消息。
+                actions.append(.viewAuthorMessages, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.viewAuthorMessages", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    f(.dismissWithoutContent)
+                    interfaceInteraction.beginMessageSearch(.member(author), "")
+                })))
+            }
+            
+            if !selectAll || messages.count == 1 {
+                if !actions.isEmpty && !didAddSeparator {
+                    didAddSeparator = true
+                    actions.append(.separator)
+                }
+
+                actions.append(.select, .action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuSelect, icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Select"), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    interfaceInteraction.beginMessageSelection(selectAll ? messages.map { $0.id } : [message.id], { transition in
+                        f(.custom(transition))
+                    })
+                })))
+            }
+
+            if let author = message.author {
+                // MARK: NAGRAM — 按当前消息作者批量选择当前会话/话题里的消息。
                 actions.append(.selectFromAuthor, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.selectFromAuthor", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
                     return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/SelectAll"), color: theme.actionSheet.primaryTextColor)
                 }, action: { _, f in
@@ -2238,28 +2263,6 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                         Queue.mainQueue().async {
                             progressDisposable.dispose()
                         }
-                    })
-                })))
-                
-                actions.append(.viewAuthorMessages, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.viewAuthorMessages", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
-                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
-                }, action: { _, f in
-                    f(.dismissWithoutContent)
-                    interfaceInteraction.beginMessageSearch(.member(author), "")
-                })))
-            }
-            
-            if !selectAll || messages.count == 1 {
-                if !actions.isEmpty && !didAddSeparator {
-                    didAddSeparator = true
-                    actions.append(.separator)
-                }
-
-                actions.append(.select, .action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuSelect, icon: { theme in
-                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Select"), color: theme.actionSheet.primaryTextColor)
-                }, action: { _, f in
-                    interfaceInteraction.beginMessageSelection(selectAll ? messages.map { $0.id } : [message.id], { transition in
-                        f(.custom(transition))
                     })
                 })))
             }
