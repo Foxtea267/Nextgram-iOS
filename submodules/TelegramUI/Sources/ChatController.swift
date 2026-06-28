@@ -11094,17 +11094,10 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         guard canSendMessagesToChat(self.presentationInterfaceState) else {
             return false
         }
-        guard messages.allSatisfy({ !Namespaces.Message.allScheduled.contains($0.id.namespace) }) else {
+        guard messages.allSatisfy({ self.nagramCanRepeatMessage($0) }) else {
             return false
         }
-        
-        let isCopyProtected = messages.contains { message in
-            return (self.presentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled
-        }
-        guard !isCopyProtected else {
-            return false
-        }
-        
+
         let forwardAttributes: [EngineMessage.Attribute]
         if hideNames {
             forwardAttributes = [
@@ -11119,6 +11112,43 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
         self.chatDisplayNode.setupSendActionOnViewUpdate({}, nil)
         self.chatDisplayNode.sendMessages(repeatedMessages, nil, nil, nil, repeatedMessages.count > 1, false)
+        return true
+    }
+
+    // Keep double-tap repeat aligned with messages that can safely use the native forward pipeline.
+    private func nagramCanRepeatMessage(_ message: EngineRawMessage) -> Bool {
+        if Namespaces.Message.allScheduled.contains(message.id.namespace) {
+            return false
+        }
+        if message.flags.isSending || message.flags.contains(.Failed) {
+            return false
+        }
+        if message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.containsSecretMedia {
+            return false
+        }
+        if message.id.peerId.isReplies {
+            return false
+        }
+        if (self.presentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled {
+            return false
+        }
+
+        for media in message.media {
+            if media is TelegramMediaAction || media is TelegramMediaExpiredContent {
+                return false
+            }
+            if let invoice = media as? TelegramMediaInvoice, let _ = invoice.extendedMedia {
+                return false
+            }
+            if let story = media as? TelegramMediaStory {
+                if let story = message.associatedStories[story.storyId], story.data.isEmpty {
+                    return false
+                } else if story.isMention {
+                    return false
+                }
+            }
+        }
+
         return true
     }
     
