@@ -107,6 +107,8 @@
 "Nagram.MessageMenu.Item.viewPollStats" = "投票統計を表示";
 "Nagram.MessageMenu.Item.factCheck" = "ファクトチェック";
 "Nagram.MessageMenu.Item.viewInChannel" = "チャンネルで表示";
+"Nagram.MessageMenu.Item.selectFromAuthor" = "このユーザーのメッセージを選択";
+"Nagram.MessageMenu.Item.authorAllChats" = "すべてのチャット";
 "Nagram.MessageMenu.Item.select" = "選択";
 "Nagram.MessageMenu.Item.selectAll" = "すべて選択";
 "Nagram.MessageMenu.Item.delete" = "削除";

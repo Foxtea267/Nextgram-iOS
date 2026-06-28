@@ -43,6 +43,8 @@ public enum NagramMessageMenuItemId: String, CaseIterable {
     case viewPollStats
     case factCheck
     case viewInChannel
+    case selectFromAuthor
+    case authorAllChats
     case select
     case selectAll
     case delete

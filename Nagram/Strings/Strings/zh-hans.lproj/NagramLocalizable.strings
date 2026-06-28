@@ -107,6 +107,8 @@
 "Nagram.MessageMenu.Item.viewPollStats" = "查看投票统计";
 "Nagram.MessageMenu.Item.factCheck" = "事实核查";
 "Nagram.MessageMenu.Item.viewInChannel" = "在频道中查看";
+"Nagram.MessageMenu.Item.selectFromAuthor" = "选择该用户消息";
+"Nagram.MessageMenu.Item.authorAllChats" = "所有会话";
 "Nagram.MessageMenu.Item.select" = "选择";
 "Nagram.MessageMenu.Item.selectAll" = "全选";
 "Nagram.MessageMenu.Item.delete" = "删除";
