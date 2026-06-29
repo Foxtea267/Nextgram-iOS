@@ -168,8 +168,11 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                 }
             })
         case let .visibility(_, section, title, settings, itemTitles):
+            let visibleBottomItems = Set(settings.visibleBottomItems)
             let chips = NagramBottomBarItemId.allCases.map { id in
-                NagramBottomBarChipRowItem.Chip(id: id.rawValue, title: itemTitles[id] ?? id.rawValue, isSelected: settings.isVisible(id), isEnabled: true)
+                let isSelected = settings.isVisible(id)
+                let isEnabled = id == .search || !isSelected || !visibleBottomItems.contains(id) || settings.canHide(id)
+                return NagramBottomBarChipRowItem.Chip(id: id.rawValue, title: itemTitles[id] ?? id.rawValue, isSelected: isSelected, isEnabled: isEnabled)
             }
             return NagramBottomBarChipRowItem(theme: presentationData.theme, title: title, chips: chips, sectionId: section, selected: { rawValue in
                 guard let id = NagramBottomBarItemId(rawValue: rawValue) else {

@@ -554,15 +554,15 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
     let groups = nagramGroups(hideCalls: {
         return !currentShowCallsTab
     }, setHideCalls: { hidden in
-        currentShowCallsTab = !hidden
         var bottomBarSettings = NagramSettings.shared.bottomBarSettings
         bottomBarSettings.setVisible(.calls, visible: !hidden)
         if bottomBarSettings.searchMode == .bar && !bottomBarSettings.visibleBottomItems.isEmpty {
             bottomBarSettings.setSearchMode(.button)
         }
         NagramSettings.shared.bottomBarSettings = bottomBarSettings
+        currentShowCallsTab = bottomBarSettings.isVisible(.calls)
         let _ = updateCallListSettingsInteractively(accountManager: context.sharedContext.accountManager, {
-            $0.withUpdatedShowTab(!hidden)
+            $0.withUpdatedShowTab(currentShowCallsTab)
         }).startStandalone()
     }, sensitiveContentConfiguration: {
         return currentContentSettingsConfiguration
