@@ -178,6 +178,11 @@
 "Nagram.Section.Interface" = "Interface";
 "Nagram.HideStories" = "Hide Stories";
 "Nagram.ControlHighlight" = "Control Highlight";
+"Nagram.GlassTransparency" = "Glass Transparency";
+"Nagram.GlassTransparency.system" = "Follow System";
+"Nagram.GlassTransparency.custom" = "Custom";
+"Nagram.GlassTransparency.OverlayOpacity" = "Glass Overlay Opacity";
+"Nagram.GlassTransparency.Footer" = "Follow System keeps Apple's native Liquid Glass and Reduce Transparency behavior. Custom adjusts Nagram's glass overlay opacity.";
 "Nagram.HideTabBar" = "Hide Tab Bar";
 "Nagram.HideTabBarCalls" = "Hide Calls";
 "Nagram.HideTabBarContacts" = "Hide Contacts";

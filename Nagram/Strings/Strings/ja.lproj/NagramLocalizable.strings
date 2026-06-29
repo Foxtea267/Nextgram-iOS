@@ -178,6 +178,11 @@
 "Nagram.Section.Interface" = "インターフェース";
 "Nagram.HideStories" = "ストーリーズを非表示";
 "Nagram.ControlHighlight" = "コントロールのハイライト";
+"Nagram.GlassTransparency" = "ガラスの透明度";
+"Nagram.GlassTransparency.system" = "システムに従う";
+"Nagram.GlassTransparency.custom" = "カスタム";
+"Nagram.GlassTransparency.OverlayOpacity" = "ガラスオーバーレイの不透明度";
+"Nagram.GlassTransparency.Footer" = "システムに従う場合は、Apple 標準の Liquid Glass と透明度を下げる設定の動作を保ちます。カスタムでは Nagram のガラスオーバーレイの不透明度を調整します。";
 "Nagram.HideTabBar" = "タブバーを非表示";
 "Nagram.HideTabBarCalls" = "通話を非表示";
 "Nagram.HideTabBarContacts" = "連絡先を非表示";

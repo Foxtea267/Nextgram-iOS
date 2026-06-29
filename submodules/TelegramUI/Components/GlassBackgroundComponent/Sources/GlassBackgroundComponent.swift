@@ -8,6 +8,32 @@ import CoreImage
 import AppBundle
 import NagramSettings // MARK: NAGRAM
 
+// MARK: NAGRAM
+private func nagramReduceGlassTransparencyEnabled(settings: GlassOverlayTransparencySettings) -> Bool {
+    return settings.followsSystemTransparency && isReduceTransparencyEnabled()
+}
+
+private func nagramAdjustedLegacyGlassColor(_ color: UIColor, settings: GlassOverlayTransparencySettings) -> UIColor {
+    if nagramReduceGlassTransparencyEnabled(settings: settings) {
+        return color.withAlphaComponent(1.0)
+    }
+    return color.withAlphaComponent(color.alpha * settings.overlayOpacity)
+}
+
+private func nagramAdjustedNativeGlassTintColor(_ color: UIColor, settings: GlassOverlayTransparencySettings) -> UIColor {
+    if settings.followsSystemTransparency {
+        return color
+    }
+    return color.withAlphaComponent(color.alpha * settings.overlayOpacity)
+}
+
+private func nagramAdjustedGlassShadowAlpha(_ alpha: CGFloat, settings: GlassOverlayTransparencySettings) -> CGFloat {
+    if nagramReduceGlassTransparencyEnabled(settings: settings) {
+        return 0.0
+    }
+    return alpha * settings.overlayOpacity
+}
+
 private final class ContentContainer: UIView {
     private let maskContentView: UIView
     
@@ -455,13 +481,17 @@ public class GlassBackgroundView: UIView {
         public let tintColor: TintColor
         public let isInteractive: Bool
         public let isVisible: Bool
+        public let transparencySettings: GlassOverlayTransparencySettings // MARK: NAGRAM
+        public let reduceTransparencyEnabled: Bool // MARK: NAGRAM
         
-        init(shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool, isVisible: Bool) {
+        init(shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool, isVisible: Bool, transparencySettings: GlassOverlayTransparencySettings, reduceTransparencyEnabled: Bool) {
             self.shape = shape
             self.isDark = isDark
             self.tintColor = tintColor
             self.isInteractive = isInteractive
             self.isVisible = isVisible
+            self.transparencySettings = transparencySettings
+            self.reduceTransparencyEnabled = reduceTransparencyEnabled
         }
     }
     
@@ -607,6 +637,8 @@ public class GlassBackgroundView: UIView {
 
     func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {
         let effectiveIsInteractive = isInteractive && NagramSettings.shared.controlHighlightEnabled // MARK: NAGRAM
+        let transparencySettings = currentGlassOverlayTransparencySettings() // MARK: NAGRAM
+        let reduceTransparencyEnabled = nagramReduceGlassTransparencyEnabled(settings: transparencySettings) // MARK: NAGRAM
         
         if let glassHighlightRecognizer = self.glassHighlightRecognizer {
             glassHighlightRecognizer.isEnabled = effectiveIsInteractive
@@ -641,7 +673,7 @@ public class GlassBackgroundView: UIView {
             }
             legacyView.update(size: size, shape: shape, style: style, transition: transition)
             transition.setFrame(view: legacyView, frame: CGRect(origin: CGPoint(), size: size))
-            transition.setAlpha(view: legacyView, alpha: isVisible ? 1.0 : 0.0)
+            transition.setAlpha(view: legacyView, alpha: isVisible && !reduceTransparencyEnabled ? 1.0 : 0.0) // MARK: NAGRAM
             
             transition.setPosition(view: self.contentView, position: CGPoint(x: size.width * 0.5, y: size.height * 0.5))
             transition.setBounds(view: self.contentView, bounds: CGRect(origin: CGPoint(), size: size))
@@ -673,7 +705,7 @@ public class GlassBackgroundView: UIView {
                 animateIn = true
             }
             
-            innerBackgroundView.backgroundColor = innerColor
+            innerBackgroundView.backgroundColor = nagramAdjustedLegacyGlassColor(innerColor, settings: transparencySettings) // MARK: NAGRAM
             innerBackgroundTransition.setFrame(view: innerBackgroundView, frame: innerBackgroundFrame)
             innerBackgroundTransition.setCornerRadius(layer: innerBackgroundView.layer, cornerRadius: innerBackgroundRadius)
             
@@ -692,7 +724,7 @@ public class GlassBackgroundView: UIView {
             innerBackgroundView.removeFromSuperview()
         }
         
-        let params = Params(shape: shape, isDark: isDark, tintColor: tintColor, isInteractive: effectiveIsInteractive, isVisible: isVisible)
+        let params = Params(shape: shape, isDark: isDark, tintColor: tintColor, isInteractive: effectiveIsInteractive, isVisible: isVisible, transparencySettings: transparencySettings, reduceTransparencyEnabled: reduceTransparencyEnabled) // MARK: NAGRAM
         if self.params != params {
             self.params = params
             
@@ -703,7 +735,7 @@ public class GlassBackgroundView: UIView {
                 case let .customRoundedRect(cornerRadii):
                     shadowView.image = Self.generateLegacyShadowImage(cornerRadii: GlassBackgroundView.clampedCornerRadii(size: size, cornerRadii: cornerRadii), shadowInset: shadowInset)
                 }
-                transition.setAlpha(view: shadowView, alpha: isVisible ? 1.0 : 0.0)
+                transition.setAlpha(view: shadowView, alpha: isVisible ? nagramAdjustedGlassShadowAlpha(1.0, settings: transparencySettings) : 0.0) // MARK: NAGRAM
             }
             
             if let foregroundView = self.foregroundView {
@@ -729,11 +761,12 @@ public class GlassBackgroundView: UIView {
                         borderWidthFactor = 1.0
                     }
                 }
+                let effectiveFillColor = nagramAdjustedLegacyGlassColor(fillColor, settings: transparencySettings) // MARK: NAGRAM
                 switch shape {
                 case let .roundedRect(cornerRadius):
-                    foregroundView.image = GlassBackgroundView.generateLegacyGlassImage(size: CGSize(width: cornerRadius * 2.0, height: cornerRadius * 2.0), inset: shadowInset, borderWidthFactor: borderWidthFactor, isDark: isDark, fillColor: fillColor)
+                    foregroundView.image = GlassBackgroundView.generateLegacyGlassImage(size: CGSize(width: cornerRadius * 2.0, height: cornerRadius * 2.0), inset: shadowInset, borderWidthFactor: borderWidthFactor, isDark: isDark, fillColor: effectiveFillColor)
                 case let .customRoundedRect(cornerRadii):
-                    foregroundView.image = GlassBackgroundView.generateLegacyGlassImage(cornerRadii: GlassBackgroundView.clampedCornerRadii(size: size, cornerRadii: cornerRadii), inset: shadowInset, borderWidthFactor: borderWidthFactor, isDark: isDark, fillColor: fillColor)
+                    foregroundView.image = GlassBackgroundView.generateLegacyGlassImage(cornerRadii: GlassBackgroundView.clampedCornerRadii(size: size, cornerRadii: cornerRadii), inset: shadowInset, borderWidthFactor: borderWidthFactor, isDark: isDark, fillColor: effectiveFillColor)
                 }
                 #if DEBUG
                 //foregroundView.image = nil
@@ -750,24 +783,24 @@ public class GlassBackgroundView: UIView {
                             case .panel:
                                 if isDark {
                                     glassEffectValue = UIGlassEffect(style: .regular)
-                                    glassEffectValue.tintColor = UIColor(white: 1.0, alpha: 0.025)
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(UIColor(white: 1.0, alpha: 0.025), settings: transparencySettings) // MARK: NAGRAM
                                 } else {
                                     glassEffectValue = UIGlassEffect(style: .regular)
-                                    glassEffectValue.tintColor = UIColor(white: 1.0, alpha: 0.1)
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(UIColor(white: 1.0, alpha: 0.1), settings: transparencySettings) // MARK: NAGRAM
                                 }
                             case let .custom(style, color):
                                 switch style {
                                 case .default:
                                     glassEffectValue = UIGlassEffect(style: .regular)
-                                    glassEffectValue.tintColor = color
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(color, settings: transparencySettings) // MARK: NAGRAM
                                 case .clear:
                                     glassEffectValue = UIGlassEffect(style: .clear)
-                                    glassEffectValue.tintColor = color
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(color, settings: transparencySettings) // MARK: NAGRAM
                                 }
                             case .clear:
                                 glassEffectValue = UIGlassEffect(style: .clear)
                                 if isDark {
-                                    glassEffectValue.tintColor = UIColor(white: 0.0, alpha: 0.28)
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(UIColor(white: 0.0, alpha: 0.28), settings: transparencySettings) // MARK: NAGRAM
                                 } else {
                                     glassEffectValue.tintColor = nil
                                 }

@@ -34,6 +34,16 @@ import ChatEmptyNode
 import NagramSettings
 import NagramSettingsSignal
 
+// MARK: NAGRAM
+private func updateNagramGlassOverlayTransparencySettings() {
+    currentGlassOverlayTransparencySettings = {
+        return GlassOverlayTransparencySettings(
+            followsSystemTransparency: NagramSettings.shared.glassTransparencyFollowsSystem,
+            overlayOpacity: CGFloat(NagramSettings.shared.glassTransparencyFactor)
+        )
+    }
+}
+
 private class DetailsChatPlaceholderNode: ASDisplayNode, NavigationDetailsPlaceholderNode {
     private var presentationData: PresentationData
     private var presentationInterfaceState: ChatPresentationInterfaceState
@@ -87,6 +97,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     private var presentationDataDisposable: Disposable?
     // MARK: NAGRAM
     private var nagramTabBarSettingsDisposable: Disposable?
+    private var nagramGlassTransparencyDisposable: Disposable?
     private var presentationData: PresentationData
     // MARK: NAGRAM
     private var rootShowCallsTab: Bool = true
@@ -109,6 +120,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.context = context
         
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        updateNagramGlassOverlayTransparencySettings() // MARK: NAGRAM
         
         super.init(mode: .automaticMasterDetail, theme: NavigationControllerTheme(presentationTheme: self.presentationData.theme))
         
@@ -133,6 +145,15 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
                 return
             }
             strongSelf.updateRootControllers(showCallsTab: strongSelf.rootShowCallsTab)
+        })
+        self.nagramGlassTransparencyDisposable = (nagramGlassTransparencySignal()
+        |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
+            updateNagramGlassOverlayTransparencySettings()
+            guard let strongSelf = self else {
+                return
+            }
+            strongSelf.updateTheme(NavigationControllerTheme(presentationTheme: strongSelf.presentationData.theme))
+            (strongSelf.rootTabController as? TabBarControllerImpl)?.updateLayout(transition: .immediate)
         })
         
         if context.sharedContext.applicationBindings.isMainApp {
@@ -161,6 +182,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         self.permissionsDisposable?.dispose()
         self.presentationDataDisposable?.dispose()
         self.nagramTabBarSettingsDisposable?.dispose() // MARK: NAGRAM
+        self.nagramGlassTransparencyDisposable?.dispose() // MARK: NAGRAM
         self.applicationInFocusDisposable?.dispose()
         self.storyUploadEventsDisposable?.dispose()
     }

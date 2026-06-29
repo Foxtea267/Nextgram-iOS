@@ -178,6 +178,11 @@
 "Nagram.Section.Interface" = "介面";
 "Nagram.HideStories" = "隱藏動態";
 "Nagram.ControlHighlight" = "控件高亮";
+"Nagram.GlassTransparency" = "玻璃透明度";
+"Nagram.GlassTransparency.system" = "跟隨系統";
+"Nagram.GlassTransparency.custom" = "自訂";
+"Nagram.GlassTransparency.OverlayOpacity" = "玻璃覆蓋層不透明度";
+"Nagram.GlassTransparency.Footer" = "跟隨系統會保留 Apple 原生 Liquid Glass 與降低透明度行為。自訂會調整 Nagram 玻璃覆蓋層不透明度。";
 "Nagram.HideTabBar" = "隱藏底部標籤列";
 "Nagram.HideTabBarCalls" = "隱藏通話";
 "Nagram.HideTabBarContacts" = "隱藏聯絡人";

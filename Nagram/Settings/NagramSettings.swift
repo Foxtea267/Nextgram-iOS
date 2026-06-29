@@ -73,6 +73,11 @@ public enum NagramChatListMessagePreviewStyle: String {
     case two
 }
 
+public enum NagramGlassTransparencyMode: String {
+    case system
+    case custom
+}
+
 public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
@@ -134,6 +139,12 @@ public final class NagramSettings {
     /// 控件玻璃高亮（默认开 = 保持原生交互反馈）
     @NagramDefault("nagram.controlHighlightEnabled", true)
     public var controlHighlightEnabled: Bool
+    /// 玻璃透明度模式（默认跟随系统 = 保持原生 Liquid Glass / 降低透明度行为）
+    @NagramDefault("nagram.glassTransparencyMode", NagramGlassTransparencyMode.system.rawValue)
+    public var glassTransparencyMode: String
+    /// 自定义玻璃覆盖层不透明度百分比（0–100，默认 100 = 当前视觉）
+    @NagramDefault("nagram.glassTransparencyPercent", Int32(100))
+    public var glassTransparencyPercent: Int32
 
     // MARK: 波次 3 批 B — UI 中改
     /// 底栏布局完整配置。新逻辑只读写这一份模型。
@@ -314,6 +325,25 @@ public extension NagramSettings {
             return legacyMode
         }
         return NagramChatListMessagePreviewStyle(rawValue: self.chatListMessagePreviewStyle) ?? .three
+    }
+
+    var glassTransparencyModeValue: NagramGlassTransparencyMode {
+        return NagramGlassTransparencyMode(rawValue: self.glassTransparencyMode) ?? .system
+    }
+
+    var glassTransparencyPercentValue: Int32 {
+        return max(0, min(100, self.glassTransparencyPercent))
+    }
+
+    var glassTransparencyFactor: Double {
+        guard self.glassTransparencyModeValue == .custom else {
+            return 1.0
+        }
+        return Double(self.glassTransparencyPercentValue) / 100.0
+    }
+
+    var glassTransparencyFollowsSystem: Bool {
+        return self.glassTransparencyModeValue != .custom
     }
 
     var messageDoubleTapActionValue: NagramMessageDoubleTapAction {
