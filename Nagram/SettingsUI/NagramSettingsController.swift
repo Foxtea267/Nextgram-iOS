@@ -146,6 +146,10 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["MessageMenu", "DisableActionBarButton"]
     case "Nagram.RegexFilters":
         return ["RegexFilters", "Filters", "MessageFilters"]
+    case "Nagram.RegexFilters.GlobalEnabled":
+        return ["RegexFiltersEnabled", "EnableRegexFilters", "MessageFiltersEnabled"]
+    case "Nagram.RegexFilters.FilterOutgoing":
+        return ["RegexFiltersFilterOutgoing", "FilterSelf", "FilterOutgoing", "FilterOwnMessages"]
     case "Nagram.StickerSize":
         return ["stickerSize"]
     case "Nagram.StickerTimestamp":
@@ -390,6 +394,8 @@ private func nagramGroups(
             .navigation(titleKey: "Nagram.MessageMenu", action: messageMenuAction),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Filtering", footerKey: "Nagram.RegexFilters.Main.Footer", rows: [
+            .toggle(titleKey: "Nagram.RegexFilters.GlobalEnabled", get: { NagramSettings.shared.regexFiltersEnabled }, set: { NagramSettings.shared.regexFiltersEnabled = $0 }),
+            .toggle(titleKey: "Nagram.RegexFilters.FilterOutgoing", get: { NagramSettings.shared.regexFiltersFilterOutgoing }, set: { NagramSettings.shared.regexFiltersFilterOutgoing = $0 }),
             .navigation(titleKey: "Nagram.RegexFilters", action: regexFiltersAction),
         ]),
         // 贴纸尺寸:单独成段,header 即标题,行内滑杆中央显示当前 %。

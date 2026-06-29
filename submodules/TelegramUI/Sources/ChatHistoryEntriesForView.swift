@@ -143,7 +143,9 @@ func chatHistoryEntriesForView(
     }
     
     var count = 0
-    let nagramRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: location.peerId?.toInt64()) // MARK: NAGRAM
+    let nagramRegexFilterPeerId = location.peerId?.toInt64() // MARK: NAGRAM
+    let nagramIncomingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: false) // MARK: NAGRAM
+    let nagramOutgoingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: true) // MARK: NAGRAM
     loop: for entry in view.entries {
         var message = entry.message
         var isRead = entry.isRead
@@ -157,6 +159,7 @@ func chatHistoryEntriesForView(
             continue
         }
 
+        let nagramRegexFilterMatcher = message.effectivelyIncoming(context.account.peerId) ? nagramIncomingRegexFilterMatcher : nagramOutgoingRegexFilterMatcher // MARK: NAGRAM
         if let nagramRegexFilterMatcher { // MARK: NAGRAM — 正则消息过滤只影响聊天展示，不写回 Postbox。
             switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.toInt64()) {
             case .hidden:

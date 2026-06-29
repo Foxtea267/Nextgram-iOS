@@ -124,8 +124,8 @@ public struct NagramRegexFilterRule: Codable, Equatable {
         }
     }
 
-    public static func matches(text: String, rules: [NagramRegexFilterRule], peerId: Int64?, authorPeerId: Int64? = nil) -> Bool {
-        guard NagramSettings.shared.isRegexFilteringEnabled(peerId: peerId) else {
+    public static func matches(text: String, rules: [NagramRegexFilterRule], peerId: Int64?, authorPeerId: Int64? = nil, isOutgoing: Bool = false) -> Bool {
+        guard NagramSettings.shared.isRegexFilteringEnabled(peerId: peerId, isOutgoing: isOutgoing) else {
             return false
         }
         return NagramRegexFilterMatcher(rules: rules).matches(text, authorPeerId: authorPeerId)
@@ -265,6 +265,8 @@ public struct NagramRegexFilterMatcher {
 
 private let nagramRegexFilterRulesKey = "nagram.regexFilters.rules"
 private let nagramRegexFilterDisabledPeerIdsKey = "nagram.regexFilters.disabledPeerIds"
+private let nagramRegexFiltersEnabledKey = "nagram.regexFilters.isEnabled"
+private let nagramRegexFiltersFilterOutgoingKey = "nagram.regexFilters.filterOutgoing"
 
 private final class NagramRegexFilterMatcherCache {
     private var rules: [NagramRegexFilterRule]?
@@ -296,6 +298,46 @@ private final class NagramRegexFilterMatcherCache {
 private let nagramRegexFilterMatcherCache = NagramRegexFilterMatcherCache()
 
 public extension NagramSettings {
+    var regexFiltersEnabled: Bool {
+        get {
+            guard UserDefaults.standard.object(forKey: nagramRegexFiltersEnabledKey) != nil else {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: nagramRegexFiltersEnabledKey)
+        }
+        set {
+            guard self.regexFiltersEnabled != newValue else {
+                return
+            }
+            if newValue {
+                UserDefaults.standard.removeObject(forKey: nagramRegexFiltersEnabledKey)
+            } else {
+                UserDefaults.standard.set(false, forKey: nagramRegexFiltersEnabledKey)
+            }
+            self.notifyRegexFiltersChanged()
+        }
+    }
+
+    var regexFiltersFilterOutgoing: Bool {
+        get {
+            guard UserDefaults.standard.object(forKey: nagramRegexFiltersFilterOutgoingKey) != nil else {
+                return true
+            }
+            return UserDefaults.standard.bool(forKey: nagramRegexFiltersFilterOutgoingKey)
+        }
+        set {
+            guard self.regexFiltersFilterOutgoing != newValue else {
+                return
+            }
+            if newValue {
+                UserDefaults.standard.removeObject(forKey: nagramRegexFiltersFilterOutgoingKey)
+            } else {
+                UserDefaults.standard.set(false, forKey: nagramRegexFiltersFilterOutgoingKey)
+            }
+            self.notifyRegexFiltersChanged()
+        }
+    }
+
     var regexFilterRules: [NagramRegexFilterRule] {
         get {
             guard let data = UserDefaults.standard.data(forKey: nagramRegexFilterRulesKey),
@@ -339,7 +381,13 @@ public extension NagramSettings {
         self.regexFilterRules = rules
     }
 
-    func isRegexFilteringEnabled(peerId: Int64?) -> Bool {
+    func isRegexFilteringEnabled(peerId: Int64?, isOutgoing: Bool = false) -> Bool {
+        guard self.regexFiltersEnabled else {
+            return false
+        }
+        if isOutgoing && !self.regexFiltersFilterOutgoing {
+            return false
+        }
         guard let peerId else {
             return true
         }
@@ -361,8 +409,8 @@ public extension NagramSettings {
         self.notifyRegexFiltersChanged()
     }
 
-    func regexFilterMatcher(peerId: Int64?) -> NagramRegexFilterMatcher? {
-        guard self.isRegexFilteringEnabled(peerId: peerId) else {
+    func regexFilterMatcher(peerId: Int64?, isOutgoing: Bool = false) -> NagramRegexFilterMatcher? {
+        guard self.isRegexFilteringEnabled(peerId: peerId, isOutgoing: isOutgoing) else {
             return nil
         }
         return nagramRegexFilterMatcherCache.matcher(for: self.regexFilterRules)

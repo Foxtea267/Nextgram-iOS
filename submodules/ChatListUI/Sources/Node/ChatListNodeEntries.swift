@@ -607,12 +607,17 @@ struct ChatListContactPeer {
 }
 
 // MARK: NAGRAM — 对话列表预览复用聊天内正则过滤规则，仅改展示层消息副本。
-private func nagramFilteredChatListMessages(_ messages: [EngineMessage], peerId: EnginePeer.Id?, presentationData: ChatListPresentationData) -> [EngineMessage] {
-    guard let nagramRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64()) else {
+private func nagramFilteredChatListMessages(_ messages: [EngineMessage], peerId: EnginePeer.Id?, accountPeerId: EnginePeer.Id, presentationData: ChatListPresentationData) -> [EngineMessage] {
+    let incomingMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64(), isOutgoing: false)
+    let outgoingMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64(), isOutgoing: true)
+    guard incomingMatcher != nil || outgoingMatcher != nil else {
         return messages
     }
     
     return messages.compactMap { engineMessage -> EngineMessage? in
+        guard let nagramRegexFilterMatcher = engineMessage.effectivelyIncoming(accountPeerId) ? incomingMatcher : outgoingMatcher else {
+            return engineMessage
+        }
         var message = engineMessage._asMessage()
         switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.toInt64()) {
         case .hidden:
@@ -654,7 +659,7 @@ private func nagramShouldIgnoreRegexFilteredUnreadBadge(messages: [EngineMessage
     guard let readState, readState.count > 0 else {
         return false
     }
-    guard let nagramRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64()) else {
+    guard let nagramRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64(), isOutgoing: false) else {
         return false
     }
 
@@ -669,7 +674,7 @@ private func nagramShouldIgnoreRegexFilteredUnreadBadge(messages: [EngineMessage
         guard !readState.isIncomingMessageIndexRead(message.index) else {
             continue
         }
-        if nagramRegexFilterMatcher.isHidden(text: message.text) {
+        if nagramRegexFilterMatcher.isHidden(text: message.text, authorPeerId: message.author?.id.toInt64()) {
             hiddenUnreadCount += 1
         }
     }
@@ -766,7 +771,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
         }
         let nagramIgnoreUnreadBadge = nagramShouldIgnoreRegexFilteredUnreadBadge(messages: updatedMessages, readState: updatedCombinedReadState, peerId: peerId, accountPeerId: accountPeerId)
         if !updatedMessages.isEmpty {
-            updatedMessages = nagramFilteredChatListMessages(updatedMessages, peerId: peerId, presentationData: state.presentationData)
+            updatedMessages = nagramFilteredChatListMessages(updatedMessages, peerId: peerId, accountPeerId: accountPeerId, presentationData: state.presentationData)
         }
 
         var draftState: ChatListItemContent.DraftState?
@@ -963,7 +968,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                     result.append(.PeerEntry(ChatListNodeEntry.PeerEntryData(
                         index: .chatList(EngineChatList.Item.Index.ChatList(pinningIndex: pinningIndex, messageIndex: index.messageIndex)),
                         presentationData: state.presentationData,
-                        messages: nagramFilteredChatListMessages(item.item.messages, peerId: peerId, presentationData: state.presentationData),
+                        messages: nagramFilteredChatListMessages(item.item.messages, peerId: peerId, accountPeerId: accountPeerId, presentationData: state.presentationData),
                         readState: item.item.readCounters,
                         nagramIgnoreUnreadBadge: nagramIgnoreUnreadBadge,
                         isRemovedFromTotalUnreadCount: item.item.isMuted,

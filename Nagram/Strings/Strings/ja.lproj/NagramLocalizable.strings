@@ -117,6 +117,8 @@
 "Nagram.MessageMenu.Item.delete" = "削除";
 "Nagram.RegexFilters" = "正規表現メッセージフィルター";
 "Nagram.RegexFilters.Main.Footer" = "有効な正規表現に一致する本文またはキャプションを持つチャットメッセージに、一致部分のマスク、全体マスク、文字置換、または非表示を適用します。";
+"Nagram.RegexFilters.GlobalEnabled" = "正規表現フィルターを有効化";
+"Nagram.RegexFilters.FilterOutgoing" = "自分のメッセージをフィルター";
 "Nagram.RegexFilters.Header" = "ルール";
 "Nagram.RegexFilters.Empty" = "正規表現フィルターはまだありません。";
 "Nagram.RegexFilters.Footer" = "有効なルールはローカルで順番に適用されます。チャットごとの上書きはローカルに保存されます。";

@@ -117,6 +117,8 @@
 "Nagram.MessageMenu.Item.delete" = "Delete";
 "Nagram.RegexFilters" = "Regex Filters";
 "Nagram.RegexFilters.Main.Footer" = "Mask matched text, mask whole messages, replace text in, or hide chat messages whose text or caption matches enabled regular expressions.";
+"Nagram.RegexFilters.GlobalEnabled" = "Enable Regex Filters";
+"Nagram.RegexFilters.FilterOutgoing" = "Filter My Messages";
 "Nagram.RegexFilters.Header" = "Rules";
 "Nagram.RegexFilters.Empty" = "No regex filters yet.";
 "Nagram.RegexFilters.Footer" = "Enabled rules run locally in order. Per-chat overrides are kept locally.";

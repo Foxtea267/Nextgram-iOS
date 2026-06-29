@@ -117,6 +117,8 @@
 "Nagram.MessageMenu.Item.delete" = "删除";
 "Nagram.RegexFilters" = "正则消息过滤";
 "Nagram.RegexFilters.Main.Footer" = "对文本或图文说明匹配已启用正则表达式的聊天消息执行匹配部分遮罩、整条遮罩、文字替换或整条隐藏。";
+"Nagram.RegexFilters.GlobalEnabled" = "启用正则过滤";
+"Nagram.RegexFilters.FilterOutgoing" = "过滤自己发送的消息";
 "Nagram.RegexFilters.Header" = "规则";
 "Nagram.RegexFilters.Empty" = "暂无正则过滤规则。";
 "Nagram.RegexFilters.Footer" = "已启用规则会按顺序在本地处理匹配消息。对话级覆盖仅本地保存。";
