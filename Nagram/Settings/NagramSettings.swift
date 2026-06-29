@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: NAGRAM — 增强开关集中地。
-// 数据层零 Telegram 依赖，纯 UserDefaults。每个开关一行 @NagramDefault 声明（复用核心）。
+// 数据层零 Telegram 依赖，本地 UserDefaults + iCloud KVS 镜像。每个开关一行 @NagramDefault 声明（复用核心）。
 // 默认值原则：增强开关默认 = 不改变 Telegram 原生行为（除明确语义需要）。
 
 /// 极简 UserDefaults property wrapper。支持 Bool / Int32 / String（覆盖全部开关类型）。
@@ -32,7 +32,7 @@ public struct NagramDefault<T> {
             }
         }
         nonmutating set {
-            UserDefaults.standard.set(newValue, forKey: key)
+            NagramSettingsCloudSync.shared.set(newValue, forKey: key)
         }
     }
 }
@@ -76,7 +76,9 @@ public enum NagramChatListMessagePreviewStyle: String {
 public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
-    private init() {}
+    private init() {
+        NagramSettingsCloudSync.shared.start()
+    }
 
     // MARK: 波次 1 — force-copy（已落地，key 保持不变以平滑迁移）
     @NagramDefault("nagram.forceCopyEnabled", false)
@@ -371,9 +373,9 @@ private extension NagramSettings {
 
     func setChatListStartupFolderId(_ folderId: Int32?, forKey key: String) {
         guard let folderId else {
-            UserDefaults.standard.removeObject(forKey: key)
+            NagramSettingsCloudSync.shared.removeObject(forKey: key)
             return
         }
-        UserDefaults.standard.set(Int(folderId), forKey: key)
+        NagramSettingsCloudSync.shared.set(Int(folderId), forKey: key)
     }
 }

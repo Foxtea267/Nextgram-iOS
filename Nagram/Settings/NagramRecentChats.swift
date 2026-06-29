@@ -54,9 +54,9 @@ public extension NagramSettings {
             values.remove(id)
         }
         if values.isEmpty {
-            UserDefaults.standard.removeObject(forKey: key)
+            NagramSettingsCloudSync.shared.removeObject(forKey: key)
         } else {
-            UserDefaults.standard.set(Array(values).sorted(), forKey: key)
+            NagramSettingsCloudSync.shared.set(Array(values).sorted(), forKey: key)
         }
         
         if hadValue != enabled {

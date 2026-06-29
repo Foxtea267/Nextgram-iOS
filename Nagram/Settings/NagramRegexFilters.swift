@@ -192,9 +192,9 @@ public extension NagramSettings {
         }
         set {
             if newValue.isEmpty {
-                UserDefaults.standard.removeObject(forKey: nagramRegexFilterRulesKey)
+                NagramSettingsCloudSync.shared.removeObject(forKey: nagramRegexFilterRulesKey)
             } else if let data = try? JSONEncoder().encode(newValue) {
-                UserDefaults.standard.set(data, forKey: nagramRegexFilterRulesKey)
+                NagramSettingsCloudSync.shared.set(data, forKey: nagramRegexFilterRulesKey)
             }
             self.notifyRegexFiltersChanged()
         }
@@ -264,9 +264,9 @@ private extension NagramSettings {
         }
         set {
             if newValue.isEmpty {
-                UserDefaults.standard.removeObject(forKey: nagramRegexFilterDisabledPeerIdsKey)
+                NagramSettingsCloudSync.shared.removeObject(forKey: nagramRegexFilterDisabledPeerIdsKey)
             } else {
-                UserDefaults.standard.set(newValue.map { String($0) }.sorted(), forKey: nagramRegexFilterDisabledPeerIdsKey)
+                NagramSettingsCloudSync.shared.set(newValue.map { String($0) }.sorted(), forKey: nagramRegexFilterDisabledPeerIdsKey)
             }
         }
     }

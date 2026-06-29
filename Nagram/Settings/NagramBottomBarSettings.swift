@@ -371,29 +371,29 @@ public extension NagramBottomBarSettings {
         var settings = self
         settings.normalize()
 
-        defaults.set(1, forKey: Keys.marker)
-        defaults.set(settings.isBottomBarVisible, forKey: Keys.isBottomBarVisible)
-        defaults.set(settings.bottomItems.map(\.rawValue), forKey: Keys.bottomItems)
+        NagramSettingsCloudSync.shared.set(1, forKey: Keys.marker, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.isBottomBarVisible, forKey: Keys.isBottomBarVisible, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.bottomItems.map(\.rawValue), forKey: Keys.bottomItems, defaults: defaults)
         if let externalItem = settings.externalItem {
-            defaults.set(externalItem.rawValue, forKey: Keys.externalItem)
+            NagramSettingsCloudSync.shared.set(externalItem.rawValue, forKey: Keys.externalItem, defaults: defaults)
         } else {
-            defaults.removeObject(forKey: Keys.externalItem)
+            NagramSettingsCloudSync.shared.removeObject(forKey: Keys.externalItem, defaults: defaults)
         }
-        defaults.set(NagramBottomBarItemId.allCases.filter { settings.hiddenItems.contains($0) }.map(\.rawValue), forKey: Keys.hiddenItems)
-        defaults.set(settings.topSearchVisible, forKey: Keys.topSearchVisible)
-        defaults.set(settings.showLabels, forKey: Keys.showLabels)
-        defaults.set(settings.widthMode.rawValue, forKey: Keys.widthMode)
-        defaults.set(settings.slotMode.rawValue, forKey: Keys.slotMode)
-        defaults.set(settings.buttonWidthFillRatio, forKey: Keys.buttonWidthFillRatio)
-        defaults.set(settings.alignment.rawValue, forKey: Keys.alignment)
-        defaults.set(settings.searchMode.rawValue, forKey: Keys.searchMode)
+        NagramSettingsCloudSync.shared.set(NagramBottomBarItemId.allCases.filter { settings.hiddenItems.contains($0) }.map(\.rawValue), forKey: Keys.hiddenItems, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.topSearchVisible, forKey: Keys.topSearchVisible, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.showLabels, forKey: Keys.showLabels, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.widthMode.rawValue, forKey: Keys.widthMode, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.slotMode.rawValue, forKey: Keys.slotMode, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.buttonWidthFillRatio, forKey: Keys.buttonWidthFillRatio, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.alignment.rawValue, forKey: Keys.alignment, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.searchMode.rawValue, forKey: Keys.searchMode, defaults: defaults)
 
-        defaults.set(!settings.isBottomBarVisible, forKey: "nagram.hideTabBar")
-        defaults.set(!settings.isVisible(.contacts), forKey: "nagram.hideTabBarContacts")
-        defaults.set(!settings.isVisible(.chats), forKey: "nagram.hideTabBarChats")
-        defaults.set(!settings.isVisible(.settings), forKey: "nagram.hideTabBarSettings")
-        defaults.set(!settings.topSearchVisible, forKey: "nagram.showTabBarSearch")
-        defaults.set(settings.buttonWidthFillRatio >= 100, forKey: "nagram.wideTabBar")
+        NagramSettingsCloudSync.shared.set(!settings.isBottomBarVisible, forKey: "nagram.hideTabBar", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.isVisible(.contacts), forKey: "nagram.hideTabBarContacts", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.isVisible(.chats), forKey: "nagram.hideTabBarChats", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.isVisible(.settings), forKey: "nagram.hideTabBarSettings", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.topSearchVisible, forKey: "nagram.showTabBarSearch", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.buttonWidthFillRatio >= 100, forKey: "nagram.wideTabBar", defaults: defaults)
     }
 
     private static func itemIds(forKey key: String, defaults: UserDefaults) -> [NagramBottomBarItemId] {
