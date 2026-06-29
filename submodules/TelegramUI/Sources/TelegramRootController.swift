@@ -39,7 +39,7 @@ private func updateNagramGlassOverlayTransparencySettings() {
     currentGlassOverlayTransparencySettings = {
         return GlassOverlayTransparencySettings(
             followsSystemTransparency: NagramSettings.shared.glassTransparencyFollowsSystem,
-            overlayOpacity: CGFloat(NagramSettings.shared.glassTransparencyFactor)
+            tintStrength: CGFloat(NagramSettings.shared.glassTransparencyFactor)
         )
     }
 }

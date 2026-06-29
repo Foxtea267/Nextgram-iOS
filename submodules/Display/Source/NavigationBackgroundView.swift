@@ -5,16 +5,16 @@ import AsyncDisplayKit
 // MARK: NAGRAM
 public struct GlassOverlayTransparencySettings: Equatable {
     public let followsSystemTransparency: Bool
-    public let overlayOpacity: CGFloat
+    public let tintStrength: CGFloat
 
-    public init(followsSystemTransparency: Bool, overlayOpacity: CGFloat) {
+    public init(followsSystemTransparency: Bool, tintStrength: CGFloat) {
         self.followsSystemTransparency = followsSystemTransparency
-        self.overlayOpacity = max(0.0, min(1.0, overlayOpacity))
+        self.tintStrength = max(0.0, min(1.0, tintStrength))
     }
 }
 
 public var currentGlassOverlayTransparencySettings: () -> GlassOverlayTransparencySettings = {
-    return GlassOverlayTransparencySettings(followsSystemTransparency: true, overlayOpacity: 1.0)
+    return GlassOverlayTransparencySettings(followsSystemTransparency: true, tintStrength: 1.0)
 }
 
 private func glassOverlayReduceTransparencyEnabled(settings: GlassOverlayTransparencySettings) -> Bool {
@@ -25,7 +25,7 @@ private func adjustedGlassOverlayColor(_ color: UIColor, settings: GlassOverlayT
     if glassOverlayReduceTransparencyEnabled(settings: settings) {
         return color.withAlphaComponent(1.0)
     }
-    return color.withAlphaComponent(color.alpha * settings.overlayOpacity)
+    return color
 }
 
 public final class NavigationBackgroundNode: ASDisplayNode {
