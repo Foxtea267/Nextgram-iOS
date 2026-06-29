@@ -13,6 +13,7 @@
 "Nagram.Section.Gesture" = "手勢";
 "Nagram.Section.Gesture.Footer" = "設定對話列表橫滑，以及在頻道/主題底部上滑時是否跳至下一個對話。";
 "Nagram.Section.Privacy" = "隱私";
+"Nagram.Section.Sync" = "同步";
 
 "Nagram.SecondsInMessages" = "時間戳顯示秒";
 "Nagram.ChatListMessagePreviewStyle" = "訊息預覽樣式";
@@ -52,6 +53,8 @@
 "Nagram.DisableGalleryCameraPreview" = "停用圖庫相機預覽";
 "Nagram.DisableFiltering" = "關閉敏感內容過濾";
 "Nagram.DisableFiltering.Footer" = "可用時，顯示敏感內容而不是過濾隱藏。此項是 Telegram 同步的帳號設定。";
+"Nagram.ICloudSync" = "iCloud 同步";
+"Nagram.ICloudSync.Footer" = "開啟後，Nagram 設定會透過 iCloud 在同一 Apple ID 的裝置間同步。關閉不會刪除雲端既有設定。";
 "Nagram.ForceCopy" = "強制複製";
 "Nagram.ForceCopy.Footer" = "開啟後，在設定了內容保護（禁止複製/轉發）的對話中仍可複製訊息文字。";
 "Nagram.MessageMenu" = "訊息選單管理";

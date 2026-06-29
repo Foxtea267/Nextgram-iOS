@@ -80,6 +80,16 @@ public final class NagramSettings {
         NagramSettingsCloudSync.shared.start()
     }
 
+    /// iCloud KVS 同步开关。保持本地-only,避免关闭同步的选择被云端覆盖。
+    public var iCloudSyncEnabled: Bool {
+        get {
+            return NagramSettingsCloudSync.isEnabled()
+        }
+        set {
+            NagramSettingsCloudSync.shared.setEnabled(newValue)
+        }
+    }
+
     // MARK: 波次 1 — force-copy（已落地，key 保持不变以平滑迁移）
     @NagramDefault("nagram.forceCopyEnabled", false)
     public var forceCopyEnabled: Bool

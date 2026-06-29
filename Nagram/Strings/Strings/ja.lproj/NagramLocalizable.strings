@@ -13,6 +13,7 @@
 "Nagram.Section.Gesture" = "ジェスチャ";
 "Nagram.Section.Gesture.Footer" = "チャットリストの横スワイプと、チャンネル/トピック最下部で上にスワイプした際に次のチャットへ移動するかを設定します。";
 "Nagram.Section.Privacy" = "プライバシー";
+"Nagram.Section.Sync" = "同期";
 
 "Nagram.SecondsInMessages" = "タイムスタンプに秒を表示";
 "Nagram.ChatListMessagePreviewStyle" = "メッセージプレビュー形式";
@@ -52,6 +53,8 @@
 "Nagram.DisableGalleryCameraPreview" = "カメラプレビューを無効化";
 "Nagram.DisableFiltering" = "センシティブ内容のフィルターを無効化";
 "Nagram.DisableFiltering.Footer" = "利用可能な場合、センシティブな内容をフィルターで隠さずに表示します。この項目は Telegram で同期されるアカウント設定です。";
+"Nagram.ICloudSync" = "iCloud 同期";
+"Nagram.ICloudSync.Footer" = "有効にすると、Nagram の設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
 "Nagram.ForceCopy" = "強制コピー";
 "Nagram.ForceCopy.Footer" = "コンテンツ保護（コピー/転送禁止）が有効なチャットでもメッセージ本文をコピーできるようにします。";
 "Nagram.MessageMenu" = "メッセージメニュー管理";

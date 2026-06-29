@@ -93,6 +93,7 @@ enum NagramSettingsSyncKeys {
 
 final class NagramSettingsCloudSync {
     static let shared = NagramSettingsCloudSync()
+    private static let enabledKey = "nagram.iCloudSyncEnabled"
 
     private let store = NSUbiquitousKeyValueStore.default
     private let lock = NSLock()
@@ -102,7 +103,27 @@ final class NagramSettingsCloudSync {
 
     private init() {}
 
+    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
+        return defaults.bool(forKey: self.enabledKey)
+    }
+
+    func setEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: Self.enabledKey)
+        guard defaults === UserDefaults.standard else {
+            return
+        }
+        if enabled {
+            self.start()
+        } else {
+            self.stop()
+        }
+    }
+
     func start() {
+        guard Self.isEnabled() else {
+            return
+        }
+
         self.lock.lock()
         if self.isStarted {
             self.lock.unlock()
@@ -123,21 +144,33 @@ final class NagramSettingsCloudSync {
         self.mergeInitialValues()
     }
 
+    private func stop() {
+        self.lock.lock()
+        let observer = self.observer
+        self.observer = nil
+        self.isStarted = false
+        self.lock.unlock()
+
+        if let observer {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+
     func set(_ value: Any, forKey key: String, defaults: UserDefaults = .standard) {
-        self.start()
         defaults.set(value, forKey: key)
-        guard defaults === UserDefaults.standard else {
+        guard defaults === UserDefaults.standard, Self.isEnabled() else {
             return
         }
+        self.start()
         self.exportValue(value, forKey: key)
     }
 
     func removeObject(forKey key: String, defaults: UserDefaults = .standard) {
-        self.start()
         defaults.removeObject(forKey: key)
-        guard defaults === UserDefaults.standard else {
+        guard defaults === UserDefaults.standard, Self.isEnabled() else {
             return
         }
+        self.start()
         self.removeCloudValue(forKey: key)
     }
 
@@ -164,6 +197,10 @@ final class NagramSettingsCloudSync {
     }
 
     private func handleCloudChange(_ notification: Notification) {
+        guard Self.isEnabled() else {
+            return
+        }
+
         guard let changedCloudKeys = notification.userInfo?[NSUbiquitousKeyValueStoreChangedKeysKey] as? [String] else {
             return
         }

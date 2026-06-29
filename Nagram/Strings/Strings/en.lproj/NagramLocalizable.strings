@@ -13,6 +13,7 @@
 "Nagram.Section.Gesture" = "Gestures";
 "Nagram.Section.Gesture.Footer" = "Configure chat list horizontal swipes and whether swiping up at the bottom of a channel/topic jumps to the next chat.";
 "Nagram.Section.Privacy" = "Privacy";
+"Nagram.Section.Sync" = "Sync";
 
 "Nagram.SecondsInMessages" = "Show Seconds in Timestamps";
 "Nagram.ChatListMessagePreviewStyle" = "Message Preview Style";
@@ -52,6 +53,8 @@
 "Nagram.DisableGalleryCameraPreview" = "Disable Camera Preview";
 "Nagram.DisableFiltering" = "Disable Filtering";
 "Nagram.DisableFiltering.Footer" = "When available, show sensitive content instead of filtering it. This is an account setting synced by Telegram.";
+"Nagram.ICloudSync" = "iCloud Sync";
+"Nagram.ICloudSync.Footer" = "When enabled, Nagram settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
 "Nagram.ForceCopy" = "Force Copy";
 "Nagram.ForceCopy.Footer" = "Allow copying message text even in chats with content protection (no copy / no forward) enabled.";
 "Nagram.MessageMenu" = "Message Menu";
