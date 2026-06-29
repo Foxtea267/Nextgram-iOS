@@ -126,11 +126,14 @@
 "Nagram.RegexFilters.Action.maskMessage" = "遮罩整条消息";
 "Nagram.RegexFilters.Action.replace" = "文字替换";
 "Nagram.RegexFilters.Action.hide" = "整条隐藏";
+"Nagram.RegexFilters.AuthorPeerId" = "用户 ID";
+"Nagram.RegexFilters.AuthorPeerId.Placeholder" = "填写后隐藏该发送者所有消息";
 "Nagram.RegexFilters.RuleName" = "名称";
 "Nagram.RegexFilters.RuleName.Placeholder" = "可选";
-"Nagram.RegexFilters.Pattern.Placeholder" = "正则表达式";
+"Nagram.RegexFilters.Pattern.Placeholder" = "正则表达式（用户 ID 为空时使用）";
 "Nagram.RegexFilters.InvalidPattern" = "请输入有效且非空的正则表达式。";
-"Nagram.RegexFilters.Edit.Footer" = "遮罩匹配部分只对命中的文字使用 Telegram spoiler 样式；遮罩整条消息会对整条匹配消息使用 spoiler 样式；文字替换显示本地“内容被隐藏”占位提示；整条隐藏会从聊天中移除整条匹配消息。";
+"Nagram.RegexFilters.InvalidAuthorPeerId" = "请输入有效的正整数用户 ID，或留空改用正则过滤。";
+"Nagram.RegexFilters.Edit.Footer" = "填写用户 ID 后会直接隐藏该发送者的所有消息，正则可留空；用户 ID 为空时按正则匹配并执行所选处理方式。";
 "Nagram.RegexFilters.ContentHidden" = "内容被隐藏";
 "Nagram.RegexFilters.Status.Enabled" = "已启用";
 "Nagram.RegexFilters.Status.Disabled" = "已停用";

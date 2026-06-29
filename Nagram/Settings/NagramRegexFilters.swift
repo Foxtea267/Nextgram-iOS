@@ -28,14 +28,16 @@ public struct NagramRegexFilterRule: Codable, Equatable {
     public var isEnabled: Bool
     public var action: NagramRegexFilterAction
     public var replacement: String
+    public var authorPeerId: Int64?
 
-    public init(id: String = UUID().uuidString, title: String, pattern: String, isEnabled: Bool = true, action: NagramRegexFilterAction = .hide, replacement: String = "") {
+    public init(id: String = UUID().uuidString, title: String, pattern: String, isEnabled: Bool = true, action: NagramRegexFilterAction = .hide, replacement: String = "", authorPeerId: Int64? = nil) {
         self.id = id
         self.title = title
         self.pattern = pattern
         self.isEnabled = isEnabled
         self.action = action
         self.replacement = replacement
+        self.authorPeerId = authorPeerId
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -45,6 +47,7 @@ public struct NagramRegexFilterRule: Codable, Equatable {
         case isEnabled
         case action
         case replacement
+        case authorPeerId
     }
 
     public init(from decoder: Decoder) throws {
@@ -55,6 +58,7 @@ public struct NagramRegexFilterRule: Codable, Equatable {
         self.isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         self.action = try container.decodeIfPresent(NagramRegexFilterAction.self, forKey: .action) ?? .hide
         self.replacement = try container.decodeIfPresent(String.self, forKey: .replacement) ?? ""
+        self.authorPeerId = try container.decodeIfPresent(Int64.self, forKey: .authorPeerId)
     }
 
     public func encode(to encoder: Encoder) throws {
@@ -65,12 +69,16 @@ public struct NagramRegexFilterRule: Codable, Equatable {
         try container.encode(self.isEnabled, forKey: .isEnabled)
         try container.encode(self.action, forKey: .action)
         try container.encode(self.replacement, forKey: .replacement)
+        try container.encodeIfPresent(self.authorPeerId, forKey: .authorPeerId)
     }
 
     public var displayTitle: String {
         let trimmedTitle = self.title.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedTitle.isEmpty {
             return trimmedTitle
+        }
+        if let authorPeerId = self.authorPeerId {
+            return "User ID \(authorPeerId)"
         }
         return self.pattern
     }
@@ -83,18 +91,19 @@ public struct NagramRegexFilterRule: Codable, Equatable {
         return (try? NSRegularExpression(pattern: trimmedPattern, options: [])) != nil
     }
 
-    public static func matches(text: String, rules: [NagramRegexFilterRule], peerId: Int64?) -> Bool {
+    public static func matches(text: String, rules: [NagramRegexFilterRule], peerId: Int64?, authorPeerId: Int64? = nil) -> Bool {
         guard NagramSettings.shared.isRegexFilteringEnabled(peerId: peerId) else {
             return false
         }
-        return NagramRegexFilterMatcher(rules: rules).matches(text)
+        return NagramRegexFilterMatcher(rules: rules).matches(text, authorPeerId: authorPeerId)
     }
 }
 
 public struct NagramRegexFilterMatcher {
     private struct CompiledRule {
-        let expression: NSRegularExpression
+        let expression: NSRegularExpression?
         let action: NagramRegexFilterAction
+        let authorPeerId: Int64?
     }
 
     private let rules: [CompiledRule]
@@ -104,14 +113,14 @@ public struct NagramRegexFilterMatcher {
             guard rule.isEnabled else {
                 return nil
             }
+            if let authorPeerId = rule.authorPeerId {
+                return CompiledRule(expression: nil, action: .hide, authorPeerId: authorPeerId)
+            }
             let pattern = rule.pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !pattern.isEmpty else {
+            guard !pattern.isEmpty, let expression = try? NSRegularExpression(pattern: pattern, options: []) else {
                 return nil
             }
-            guard let expression = try? NSRegularExpression(pattern: pattern, options: []) else {
-                return nil
-            }
-            return CompiledRule(expression: expression, action: rule.action)
+            return CompiledRule(expression: expression, action: rule.action, authorPeerId: nil)
         }
     }
 
@@ -119,22 +128,34 @@ public struct NagramRegexFilterMatcher {
         return self.rules.isEmpty
     }
 
-    public func apply(to text: String) -> NagramRegexFilterResult {
-        guard !self.rules.isEmpty, !text.isEmpty else {
+    public func apply(to text: String, authorPeerId: Int64? = nil) -> NagramRegexFilterResult {
+        guard !self.rules.isEmpty else {
             return .visible(text: text, spoilerRanges: [])
         }
         let currentText = text
         var spoilerRanges: [Range<Int>] = []
         for rule in self.rules {
+            if let ruleAuthorPeerId = rule.authorPeerId {
+                if ruleAuthorPeerId == authorPeerId {
+                    return .hidden
+                }
+                continue
+            }
+            guard let expression = rule.expression else {
+                continue
+            }
+            guard !currentText.isEmpty else {
+                continue
+            }
             let range = NSRange(location: 0, length: (currentText as NSString).length)
-            guard rule.expression.firstMatch(in: currentText, options: [], range: range) != nil else {
+            guard expression.firstMatch(in: currentText, options: [], range: range) != nil else {
                 continue
             }
             switch rule.action {
             case .hide:
                 return .hidden
             case .mask:
-                let matches = rule.expression.matches(in: currentText, options: [], range: range)
+                let matches = expression.matches(in: currentText, options: [], range: range)
                 for match in matches where match.range.length > 0 {
                     spoilerRanges.append(match.range.location ..< (match.range.location + match.range.length))
                 }
@@ -149,8 +170,8 @@ public struct NagramRegexFilterMatcher {
         return .visible(text: currentText, spoilerRanges: spoilerRanges)
     }
 
-    public func matches(_ text: String) -> Bool {
-        if case .hidden = self.apply(to: text) {
+    public func matches(_ text: String, authorPeerId: Int64? = nil) -> Bool {
+        if case .hidden = self.apply(to: text, authorPeerId: authorPeerId) {
             return true
         }
         return false

@@ -158,7 +158,7 @@ func chatHistoryEntriesForView(
         }
 
         if let nagramRegexFilterMatcher { // MARK: NAGRAM — 正则消息过滤只影响聊天展示，不写回 Postbox。
-            switch nagramRegexFilterMatcher.apply(to: message.text) {
+            switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.toInt64()) {
             case .hidden:
                 continue
             case .contentHidden:

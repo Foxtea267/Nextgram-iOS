@@ -608,7 +608,7 @@ private func nagramFilteredChatListMessages(_ messages: [EngineMessage], peerId:
     
     return messages.compactMap { engineMessage -> EngineMessage? in
         var message = engineMessage._asMessage()
-        switch nagramRegexFilterMatcher.apply(to: message.text) {
+        switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.toInt64()) {
         case .hidden:
             return nil
         case .contentHidden:

@@ -126,11 +126,14 @@
 "Nagram.RegexFilters.Action.maskMessage" = "Mask Whole Message";
 "Nagram.RegexFilters.Action.replace" = "Replace Text";
 "Nagram.RegexFilters.Action.hide" = "Hide Message";
+"Nagram.RegexFilters.AuthorPeerId" = "User ID";
+"Nagram.RegexFilters.AuthorPeerId.Placeholder" = "Hides every message from this sender";
 "Nagram.RegexFilters.RuleName" = "Name";
 "Nagram.RegexFilters.RuleName.Placeholder" = "Optional";
-"Nagram.RegexFilters.Pattern.Placeholder" = "Regular expression";
+"Nagram.RegexFilters.Pattern.Placeholder" = "Regular expression (used when User ID is empty)";
 "Nagram.RegexFilters.InvalidPattern" = "Enter a valid non-empty regular expression.";
-"Nagram.RegexFilters.Edit.Footer" = "Mask Matches uses Telegram spoiler style only for matching text. Mask Whole Message applies spoiler style to the entire matching message. Replace Text shows a local content-hidden placeholder. Hide Message removes the whole matching message from chat.";
+"Nagram.RegexFilters.InvalidAuthorPeerId" = "Enter a valid positive numeric user ID, or leave it empty to use regex filtering.";
+"Nagram.RegexFilters.Edit.Footer" = "A User ID directly hides every message from that sender, and the regex can be empty. When User ID is empty, the regex is matched and the selected action is applied.";
 "Nagram.RegexFilters.ContentHidden" = "Content hidden";
 "Nagram.RegexFilters.Status.Enabled" = "Enabled";
 "Nagram.RegexFilters.Status.Disabled" = "Disabled";

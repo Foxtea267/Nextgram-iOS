@@ -21,6 +21,39 @@ private func nagramRegexFilterActionTitle(_ action: NagramRegexFilterAction, lan
     return ngI18n("Nagram.RegexFilters.Action.\(action.rawValue)", lang)
 }
 
+private func nagramRegexFilterAuthorPeerId(_ text: String) -> Int64? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let value = Int64(trimmed), value > 0 else {
+        return nil
+    }
+    return value
+}
+
+private func nagramRegexFilterHasInvalidAuthorPeerId(_ text: String) -> Bool {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    return !trimmed.isEmpty && nagramRegexFilterAuthorPeerId(trimmed) == nil
+}
+
+private func nagramRegexFilterRuleTitle(_ rule: NagramRegexFilterRule, lang: String) -> String {
+    let trimmedTitle = rule.title.trimmingCharacters(in: .whitespacesAndNewlines)
+    if !trimmedTitle.isEmpty {
+        return trimmedTitle
+    }
+    if let authorPeerId = rule.authorPeerId {
+        return "\(ngI18n("Nagram.RegexFilters.AuthorPeerId", lang)): \(authorPeerId)"
+    }
+    return rule.pattern
+}
+
+private func nagramRegexFilterRuleLabel(_ rule: NagramRegexFilterRule, lang: String) -> String {
+    let status = ngI18n(rule.isEnabled ? "Nagram.RegexFilters.Status.Enabled" : "Nagram.RegexFilters.Status.Disabled", lang)
+    if let authorPeerId = rule.authorPeerId {
+        return "\(status) - \(ngI18n("Nagram.RegexFilters.AuthorPeerId", lang)): \(authorPeerId)"
+    }
+    let action = nagramRegexFilterActionTitle(rule.action, lang: lang)
+    return "\(status) - \(action) - \(rule.pattern)"
+}
+
 private enum NagramRegexFilterEntryStableId: Hashable {
     case header
     case empty
@@ -145,9 +178,7 @@ private func nagramRegexFilterEntries(presentationData: PresentationData) -> [Na
         entries.append(.empty(section: 0, text: ngI18n("Nagram.RegexFilters.Empty", lang)))
     } else {
         for (index, rule) in rules.enumerated() {
-            let status = ngI18n(rule.isEnabled ? "Nagram.RegexFilters.Status.Enabled" : "Nagram.RegexFilters.Status.Disabled", lang)
-            let action = nagramRegexFilterActionTitle(rule.action, lang: lang)
-            entries.append(.rule(index: Int32(index), section: 0, id: rule.id, title: rule.displayTitle, label: "\(status) - \(action) - \(rule.pattern)"))
+            entries.append(.rule(index: Int32(index), section: 0, id: rule.id, title: nagramRegexFilterRuleTitle(rule, lang: lang), label: nagramRegexFilterRuleLabel(rule, lang: lang)))
         }
         entries.append(.footer(section: 0, text: ngI18n("Nagram.RegexFilters.Footer", lang)))
     }
@@ -195,6 +226,7 @@ public func nagramRegexFilterSettingsController(context: AccountContext) -> View
 private struct NagramRegexFilterEditState: Equatable {
     var title: String
     var pattern: String
+    var authorPeerId: String
     var isEnabled: Bool
     var action: NagramRegexFilterAction
 }
@@ -217,13 +249,15 @@ private final class NagramRegexFilterEditInputTag: ItemListItemTag {
 private final class NagramRegexFilterEditArguments {
     let updateTitle: (String) -> Void
     let updatePattern: (String) -> Void
+    let updateAuthorPeerId: (String) -> Void
     let updateEnabled: (Bool) -> Void
     let selectAction: (NagramRegexFilterAction) -> Void
     let delete: () -> Void
 
-    init(updateTitle: @escaping (String) -> Void, updatePattern: @escaping (String) -> Void, updateEnabled: @escaping (Bool) -> Void, selectAction: @escaping (NagramRegexFilterAction) -> Void, delete: @escaping () -> Void) {
+    init(updateTitle: @escaping (String) -> Void, updatePattern: @escaping (String) -> Void, updateAuthorPeerId: @escaping (String) -> Void, updateEnabled: @escaping (Bool) -> Void, selectAction: @escaping (NagramRegexFilterAction) -> Void, delete: @escaping () -> Void) {
         self.updateTitle = updateTitle
         self.updatePattern = updatePattern
+        self.updateAuthorPeerId = updateAuthorPeerId
         self.updateEnabled = updateEnabled
         self.selectAction = selectAction
         self.delete = delete
@@ -235,6 +269,7 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
     case enabled(stableId: Int32, section: Int32, title: String, value: Bool)
     case action(stableId: Int32, section: Int32, title: String, value: NagramRegexFilterAction, label: String)
     case title(stableId: Int32, section: Int32, title: String, text: String, placeholder: String)
+    case authorPeerId(stableId: Int32, section: Int32, title: String, text: String, placeholder: String)
     case pattern(stableId: Int32, section: Int32, text: String, placeholder: String)
     case error(stableId: Int32, section: Int32, text: String)
     case delete(stableId: Int32, section: Int32, title: String)
@@ -249,6 +284,8 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
         case let .action(_, section, _, _, _):
             return section
         case let .title(_, section, _, _, _):
+            return section
+        case let .authorPeerId(_, section, _, _, _):
             return section
         case let .pattern(_, section, _, _):
             return section
@@ -270,6 +307,8 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
         case let .action(stableId, _, _, _, _):
             return stableId
         case let .title(stableId, _, _, _, _):
+            return stableId
+        case let .authorPeerId(stableId, _, _, _, _):
             return stableId
         case let .pattern(stableId, _, _, _):
             return stableId
@@ -295,6 +334,9 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
             return false
         case let .title(lId, lSection, lTitle, lText, lPlaceholder):
             if case let .title(rId, rSection, rTitle, rText, rPlaceholder) = rhs { return lId == rId && lSection == rSection && lTitle == rTitle && lText == rText && lPlaceholder == rPlaceholder }
+            return false
+        case let .authorPeerId(lId, lSection, lTitle, lText, lPlaceholder):
+            if case let .authorPeerId(rId, rSection, rTitle, rText, rPlaceholder) = rhs { return lId == rId && lSection == rSection && lTitle == rTitle && lText == rText && lPlaceholder == rPlaceholder }
             return false
         case let .pattern(lId, lSection, lText, lPlaceholder):
             if case let .pattern(rId, rSection, rText, rPlaceholder) = rhs { return lId == rId && lSection == rSection && lText == rText && lPlaceholder == rPlaceholder }
@@ -332,6 +374,10 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
             return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title), text: text, placeholder: placeholder, type: .regular(capitalization: false, autocorrection: false), returnKeyType: .next, clearType: .always, tag: NagramRegexFilterEditInputTag(0), sectionId: section, textUpdated: { value in
                 arguments.updateTitle(value)
             }, action: {})
+        case let .authorPeerId(_, section, title, text, placeholder):
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title), text: text, placeholder: placeholder, type: .number, returnKeyType: .next, clearType: .always, tag: NagramRegexFilterEditInputTag(2), sectionId: section, textUpdated: { value in
+                arguments.updateAuthorPeerId(value)
+            }, action: {})
         case let .pattern(_, section, text, placeholder):
             return ItemListMultilineInputItem(presentationData: presentationData, systemStyle: .glass, text: text, placeholder: placeholder, maxLength: nil, sectionId: section, style: .blocks, capitalization: false, autocorrection: false, returnKeyType: .done, minimalHeight: 80.0, textUpdated: { value in
                 arguments.updatePattern(value)
@@ -359,11 +405,18 @@ private func nagramRegexFilterEditEntries(presentationData: PresentationData, st
     stableId += 1
     entries.append(.action(stableId: stableId, section: 0, title: ngI18n("Nagram.RegexFilters.Action", lang), value: state.action, label: nagramRegexFilterActionTitle(state.action, lang: lang)))
     stableId += 1
+    entries.append(.authorPeerId(stableId: stableId, section: 0, title: ngI18n("Nagram.RegexFilters.AuthorPeerId", lang), text: state.authorPeerId, placeholder: ngI18n("Nagram.RegexFilters.AuthorPeerId.Placeholder", lang)))
+    stableId += 1
     entries.append(.title(stableId: stableId, section: 0, title: ngI18n("Nagram.RegexFilters.RuleName", lang), text: state.title, placeholder: ngI18n("Nagram.RegexFilters.RuleName.Placeholder", lang)))
     stableId += 1
     entries.append(.pattern(stableId: stableId, section: 0, text: state.pattern, placeholder: ngI18n("Nagram.RegexFilters.Pattern.Placeholder", lang)))
     stableId += 1
-    if !state.pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !NagramRegexFilterRule.isValidPattern(state.pattern) {
+    let authorPeerIdText = state.authorPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+    let authorPeerId = nagramRegexFilterAuthorPeerId(authorPeerIdText)
+    if nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) {
+        entries.append(.error(stableId: stableId, section: 0, text: ngI18n("Nagram.RegexFilters.InvalidAuthorPeerId", lang)))
+        stableId += 1
+    } else if authorPeerId == nil && !state.pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !NagramRegexFilterRule.isValidPattern(state.pattern) {
         entries.append(.error(stableId: stableId, section: 0, text: ngI18n("Nagram.RegexFilters.InvalidPattern", lang)))
         stableId += 1
     } else {
@@ -379,7 +432,7 @@ private func nagramRegexFilterEditEntries(presentationData: PresentationData, st
 }
 
 private func nagramRegexFilterEditController(context: AccountContext, rule: NagramRegexFilterRule?, completion: @escaping () -> Void) -> ViewController {
-    let initialState = NagramRegexFilterEditState(title: rule?.title ?? "", pattern: rule?.pattern ?? "", isEnabled: rule?.isEnabled ?? true, action: rule?.action ?? .hide)
+    let initialState = NagramRegexFilterEditState(title: rule?.title ?? "", pattern: rule?.pattern ?? "", authorPeerId: rule?.authorPeerId.flatMap { String($0) } ?? "", isEnabled: rule?.isEnabled ?? true, action: rule?.action ?? .hide)
     let statePromise = ValuePromise<NagramRegexFilterEditState>(initialState, ignoreRepeated: false)
     let stateValue = Atomic<NagramRegexFilterEditState>(value: initialState)
 
@@ -398,6 +451,13 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
         let updated = stateValue.modify { state -> NagramRegexFilterEditState in
             var state = state
             state.pattern = value
+            return state
+        }
+        statePromise.set(updated)
+    }, updateAuthorPeerId: { value in
+        let updated = stateValue.modify { state -> NagramRegexFilterEditState in
+            var state = state
+            state.authorPeerId = value
             return state
         }
         statePromise.set(updated)
@@ -421,7 +481,8 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
     |> map { presentationData, state -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let lang = presentationData.strings.baseLanguageCode
         let pattern = state.pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-        let canSave = NagramRegexFilterRule.isValidPattern(pattern)
+        let authorPeerIdText = state.authorPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let canSave = !nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) && (nagramRegexFilterAuthorPeerId(authorPeerIdText) != nil || NagramRegexFilterRule.isValidPattern(pattern))
         let rightNavigationButton = ItemListNavigationButton(content: .text(ngI18n("Nagram.Common.Save", lang)), style: .bold, enabled: canSave, action: {
             saveImpl?()
         })
@@ -467,7 +528,17 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
     saveImpl = { [weak controller] in
         let state = stateValue.with { $0 }
         let pattern = state.pattern.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard NagramRegexFilterRule.isValidPattern(pattern) else {
+        let authorPeerIdText = state.authorPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let authorPeerId = nagramRegexFilterAuthorPeerId(authorPeerIdText)
+        guard !nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) else {
+            let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+            let lang = presentationData.strings.baseLanguageCode
+            controller?.present(textAlertController(context: context, title: nil, text: ngI18n("Nagram.RegexFilters.InvalidAuthorPeerId", lang), actions: [
+                TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+            ]), in: .window(.root))
+            return
+        }
+        guard authorPeerId != nil || NagramRegexFilterRule.isValidPattern(pattern) else {
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let lang = presentationData.strings.baseLanguageCode
             controller?.present(textAlertController(context: context, title: nil, text: ngI18n("Nagram.RegexFilters.InvalidPattern", lang), actions: [
@@ -476,7 +547,7 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
             return
         }
 
-        let updatedRule = NagramRegexFilterRule(id: rule?.id ?? UUID().uuidString, title: state.title.trimmingCharacters(in: .whitespacesAndNewlines), pattern: pattern, isEnabled: state.isEnabled, action: state.action)
+        let updatedRule = NagramRegexFilterRule(id: rule?.id ?? UUID().uuidString, title: state.title.trimmingCharacters(in: .whitespacesAndNewlines), pattern: authorPeerId == nil ? pattern : "", isEnabled: state.isEnabled, action: authorPeerId == nil ? state.action : .hide, replacement: "", authorPeerId: authorPeerId)
         NagramSettings.shared.upsertRegexFilterRule(updatedRule)
         completion()
         let _ = (controller?.navigationController as? NavigationController)?.popViewController(animated: true)

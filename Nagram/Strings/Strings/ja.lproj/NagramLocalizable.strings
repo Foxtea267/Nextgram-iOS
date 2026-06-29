@@ -126,11 +126,14 @@
 "Nagram.RegexFilters.Action.maskMessage" = "メッセージ全体をマスク";
 "Nagram.RegexFilters.Action.replace" = "文字置換";
 "Nagram.RegexFilters.Action.hide" = "メッセージ全体を非表示";
+"Nagram.RegexFilters.AuthorPeerId" = "ユーザー ID";
+"Nagram.RegexFilters.AuthorPeerId.Placeholder" = "入力するとこの送信者の全メッセージを非表示";
 "Nagram.RegexFilters.RuleName" = "名前";
 "Nagram.RegexFilters.RuleName.Placeholder" = "任意";
-"Nagram.RegexFilters.Pattern.Placeholder" = "正規表現";
+"Nagram.RegexFilters.Pattern.Placeholder" = "正規表現（ユーザー ID が空欄のときに使用）";
 "Nagram.RegexFilters.InvalidPattern" = "空ではない有効な正規表現を入力してください。";
-"Nagram.RegexFilters.Edit.Footer" = "一致部分をマスクは命中した文字だけに Telegram のスポイラー表示を使います。メッセージ全体をマスクは一致したメッセージ全体にスポイラー表示を使います。文字置換は本文非表示のローカルプレースホルダーを表示します。全体非表示は一致したメッセージをチャットから取り除きます。";
+"Nagram.RegexFilters.InvalidAuthorPeerId" = "有効な正の数値ユーザー ID を入力するか、正規表現フィルターを使う場合は空欄にしてください。";
+"Nagram.RegexFilters.Edit.Footer" = "ユーザー ID を入力すると、その送信者の全メッセージを直接非表示にします。正規表現は空欄にできます。ユーザー ID が空欄の場合は正規表現に一致したメッセージへ選択した処理を適用します。";
 "Nagram.RegexFilters.ContentHidden" = "内容は非表示です";
 "Nagram.RegexFilters.Status.Enabled" = "有効";
 "Nagram.RegexFilters.Status.Disabled" = "無効";
