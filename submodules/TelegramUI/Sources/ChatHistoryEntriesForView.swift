@@ -469,22 +469,36 @@ func chatHistoryEntriesForView(
     }
         
     if let maxReadIndex = view.maxReadIndex, includeUnreadEntry {
-        var i = 0
-        let unreadEntry: ChatHistoryEntry = .UnreadEntry(maxReadIndex, presentationData)
-        for entry in entries {
-            if case let .MessageGroupEntry(_, messages, _) = entry {
-                if !messages.isEmpty && maxReadIndex >= messages[0].0.index {
-                    i += 1
-                    continue
-                }
+        let hasVisibleUnreadMessages = entries.contains { entry -> Bool in
+            switch entry {
+            case let .MessageEntry(message, _, _, _, _, _):
+                return message.index > maxReadIndex
+            case let .MessageGroupEntry(_, messages, _):
+                return messages.contains(where: { item in
+                    return item.0.index > maxReadIndex
+                })
+            default:
+                return false
             }
-            if entry > unreadEntry {
-                if i != 0 {
-                    entries.insert(unreadEntry, at: i)
+        }
+        if hasVisibleUnreadMessages { // MARK: NAGRAM — hide 规则过滤掉全部未读时，不保留空的未读分隔占位。
+            var i = 0
+            let unreadEntry: ChatHistoryEntry = .UnreadEntry(maxReadIndex, presentationData)
+            for entry in entries {
+                if case let .MessageGroupEntry(_, messages, _) = entry {
+                    if !messages.isEmpty && maxReadIndex >= messages[0].0.index {
+                        i += 1
+                        continue
+                    }
                 }
-                break
+                if entry > unreadEntry {
+                    if i != 0 {
+                        entries.insert(unreadEntry, at: i)
+                    }
+                    break
+                }
+                i += 1
             }
-            i += 1
         }
     }
     

@@ -445,6 +445,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
             let forumTopicData = peerEntry.forumTopicData
             let topForumTopicItems = peerEntry.topForumTopicItems
             let revealed = peerEntry.revealed
+            let nagramIgnoreUnreadBadge = peerEntry.nagramIgnoreUnreadBadge // MARK: NAGRAM
         
             switch mode {
                 case .chatList:
@@ -468,7 +469,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                             mediaDraftContentType: peerEntry.mediaDraftContentType,
                             inputActivities: inputActivities,
                             promoInfo: promoInfo,
-                            ignoreUnreadBadge: false,
+                            ignoreUnreadBadge: nagramIgnoreUnreadBadge,
                             displayAsMessage: false,
                             hasFailedMessages: hasFailedMessages,
                             forumTopicData: forumTopicData,
@@ -482,7 +483,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                             },
                             requiresPremiumForMessaging: peerEntry.requiresPremiumForMessaging,
                             displayAsTopicList: peerEntry.displayAsTopicList,
-                            tags: chatListItemTags(location: location, accountPeerId: context.account.peerId, isPremium: isPremium, peer: peer.chatMainPeer, isUnread: combinedReadState?.isUnread ?? false, isMuted: isRemovedFromTotalUnreadCount, isContact: isContact, hasUnseenMentions: hasUnseenMentions, chatListFilters: chatListFilters)
+                            tags: chatListItemTags(location: location, accountPeerId: context.account.peerId, isPremium: isPremium, peer: peer.chatMainPeer, isUnread: (combinedReadState?.isUnread ?? false) && !nagramIgnoreUnreadBadge, isMuted: isRemovedFromTotalUnreadCount, isContact: isContact, hasUnseenMentions: hasUnseenMentions, chatListFilters: chatListFilters)
                         )),
                         editing: editing,
                         hasActiveRevealControls: hasActiveRevealControls,
@@ -806,6 +807,7 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                 let forumTopicData = peerEntry.forumTopicData
                 let topForumTopicItems = peerEntry.topForumTopicItems
                 let revealed = peerEntry.revealed
+                let nagramIgnoreUnreadBadge = peerEntry.nagramIgnoreUnreadBadge // MARK: NAGRAM
             
                 switch mode {
                     case .chatList:
@@ -829,7 +831,7 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                                 mediaDraftContentType: peerEntry.mediaDraftContentType,
                                 inputActivities: inputActivities,
                                 promoInfo: promoInfo,
-                                ignoreUnreadBadge: false,
+                                ignoreUnreadBadge: nagramIgnoreUnreadBadge,
                                 displayAsMessage: false,
                                 hasFailedMessages: hasFailedMessages,
                                 forumTopicData: forumTopicData,
@@ -843,7 +845,7 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                                 },
                                 requiresPremiumForMessaging: peerEntry.requiresPremiumForMessaging,
                                 displayAsTopicList: peerEntry.displayAsTopicList,
-                                tags: chatListItemTags(location: location, accountPeerId: context.account.peerId, isPremium: isPremium, peer: peer.chatMainPeer, isUnread: combinedReadState?.isUnread ?? false, isMuted: isRemovedFromTotalUnreadCount, isContact: isContact, hasUnseenMentions: hasUnseenMentions, chatListFilters: chatListFilters)
+                                tags: chatListItemTags(location: location, accountPeerId: context.account.peerId, isPremium: isPremium, peer: peer.chatMainPeer, isUnread: (combinedReadState?.isUnread ?? false) && !nagramIgnoreUnreadBadge, isMuted: isRemovedFromTotalUnreadCount, isContact: isContact, hasUnseenMentions: hasUnseenMentions, chatListFilters: chatListFilters)
                             )),
                             editing: editing,
                             hasActiveRevealControls: hasActiveRevealControls,

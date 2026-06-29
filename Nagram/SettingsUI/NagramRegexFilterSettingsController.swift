@@ -54,6 +54,14 @@ private func nagramRegexFilterRuleLabel(_ rule: NagramRegexFilterRule, lang: Str
     return "\(status) - \(action) - \(rule.pattern)"
 }
 
+private func nagramRegexFilterValidationText(_ validation: NagramRegexFilterPatternValidation, lang: String) -> String {
+    let baseText = ngI18n("Nagram.RegexFilters.InvalidPattern", lang)
+    guard let errorDescription = validation.errorDescription, !errorDescription.isEmpty else {
+        return baseText
+    }
+    return "\(baseText)\n\(errorDescription)"
+}
+
 private enum NagramRegexFilterEntryStableId: Hashable {
     case header
     case empty
@@ -229,6 +237,7 @@ private struct NagramRegexFilterEditState: Equatable {
     var authorPeerId: String
     var isEnabled: Bool
     var action: NagramRegexFilterAction
+    var validationError: String?
 }
 
 private final class NagramRegexFilterEditInputTag: ItemListItemTag {
@@ -416,8 +425,8 @@ private func nagramRegexFilterEditEntries(presentationData: PresentationData, st
     if nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) {
         entries.append(.error(stableId: stableId, section: 0, text: ngI18n("Nagram.RegexFilters.InvalidAuthorPeerId", lang)))
         stableId += 1
-    } else if authorPeerId == nil && !state.pattern.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !NagramRegexFilterRule.isValidPattern(state.pattern) {
-        entries.append(.error(stableId: stableId, section: 0, text: ngI18n("Nagram.RegexFilters.InvalidPattern", lang)))
+    } else if let validationError = state.validationError {
+        entries.append(.error(stableId: stableId, section: 0, text: validationError))
         stableId += 1
     } else {
         entries.append(.footer(stableId: stableId, section: 0, text: ngI18n("Nagram.RegexFilters.Edit.Footer", lang)))
@@ -432,7 +441,7 @@ private func nagramRegexFilterEditEntries(presentationData: PresentationData, st
 }
 
 private func nagramRegexFilterEditController(context: AccountContext, rule: NagramRegexFilterRule?, completion: @escaping () -> Void) -> ViewController {
-    let initialState = NagramRegexFilterEditState(title: rule?.title ?? "", pattern: rule?.pattern ?? "", authorPeerId: rule?.authorPeerId.flatMap { String($0) } ?? "", isEnabled: rule?.isEnabled ?? true, action: rule?.action ?? .hide)
+    let initialState = NagramRegexFilterEditState(title: rule?.title ?? "", pattern: rule?.pattern ?? "", authorPeerId: rule?.authorPeerId.flatMap { String($0) } ?? "", isEnabled: rule?.isEnabled ?? true, action: rule?.action ?? .hide, validationError: nil)
     let statePromise = ValuePromise<NagramRegexFilterEditState>(initialState, ignoreRepeated: false)
     let stateValue = Atomic<NagramRegexFilterEditState>(value: initialState)
 
@@ -451,6 +460,7 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
         let updated = stateValue.modify { state -> NagramRegexFilterEditState in
             var state = state
             state.pattern = value
+            state.validationError = nil
             return state
         }
         statePromise.set(updated)
@@ -458,6 +468,7 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
         let updated = stateValue.modify { state -> NagramRegexFilterEditState in
             var state = state
             state.authorPeerId = value
+            state.validationError = nil
             return state
         }
         statePromise.set(updated)
@@ -482,7 +493,7 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
         let lang = presentationData.strings.baseLanguageCode
         let pattern = state.pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         let authorPeerIdText = state.authorPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let canSave = !nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) && (nagramRegexFilterAuthorPeerId(authorPeerIdText) != nil || NagramRegexFilterRule.isValidPattern(pattern))
+        let canSave = !nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) && (nagramRegexFilterAuthorPeerId(authorPeerIdText) != nil || !pattern.isEmpty)
         let rightNavigationButton = ItemListNavigationButton(content: .text(ngI18n("Nagram.Common.Save", lang)), style: .bold, enabled: canSave, action: {
             saveImpl?()
         })
@@ -533,15 +544,30 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
         guard !nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) else {
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let lang = presentationData.strings.baseLanguageCode
-            controller?.present(textAlertController(context: context, title: nil, text: ngI18n("Nagram.RegexFilters.InvalidAuthorPeerId", lang), actions: [
+            let validationText = ngI18n("Nagram.RegexFilters.InvalidAuthorPeerId", lang)
+            let updated = stateValue.modify { state -> NagramRegexFilterEditState in
+                var state = state
+                state.validationError = validationText
+                return state
+            }
+            statePromise.set(updated)
+            controller?.present(textAlertController(context: context, title: nil, text: validationText, actions: [
                 TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
             ]), in: .window(.root))
             return
         }
-        guard authorPeerId != nil || NagramRegexFilterRule.isValidPattern(pattern) else {
+        let validation: NagramRegexFilterPatternValidation = authorPeerId == nil ? NagramRegexFilterRule.validatePattern(pattern) : .valid
+        guard validation.isValid else {
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let lang = presentationData.strings.baseLanguageCode
-            controller?.present(textAlertController(context: context, title: nil, text: ngI18n("Nagram.RegexFilters.InvalidPattern", lang), actions: [
+            let validationText = nagramRegexFilterValidationText(validation, lang: lang)
+            let updated = stateValue.modify { state -> NagramRegexFilterEditState in
+                var state = state
+                state.validationError = validationText
+                return state
+            }
+            statePromise.set(updated)
+            controller?.present(textAlertController(context: context, title: nil, text: validationText, actions: [
                 TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
             ]), in: .window(.root))
             return

@@ -21,6 +21,30 @@ public enum NagramRegexFilterResult: Equatable {
     case hidden
 }
 
+public enum NagramRegexFilterPatternValidation: Equatable {
+    case valid
+    case empty
+    case invalid(String)
+
+    public var isValid: Bool {
+        if case .valid = self {
+            return true
+        }
+        return false
+    }
+
+    public var errorDescription: String? {
+        switch self {
+        case .valid:
+            return nil
+        case .empty:
+            return nil
+        case let .invalid(reason):
+            return reason
+        }
+    }
+}
+
 public struct NagramRegexFilterRule: Codable, Equatable {
     public var id: String
     public var title: String
@@ -84,11 +108,20 @@ public struct NagramRegexFilterRule: Codable, Equatable {
     }
 
     public static func isValidPattern(_ pattern: String) -> Bool {
+        return self.validatePattern(pattern).isValid
+    }
+
+    public static func validatePattern(_ pattern: String) -> NagramRegexFilterPatternValidation {
         let trimmedPattern = pattern.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedPattern.isEmpty else {
-            return false
+            return .empty
         }
-        return (try? NSRegularExpression(pattern: trimmedPattern, options: [])) != nil
+        do {
+            _ = try NSRegularExpression(pattern: trimmedPattern, options: [])
+            return .valid
+        } catch {
+            return .invalid((error as NSError).localizedDescription)
+        }
     }
 
     public static func matches(text: String, rules: [NagramRegexFilterRule], peerId: Int64?, authorPeerId: Int64? = nil) -> Bool {
@@ -96,6 +129,40 @@ public struct NagramRegexFilterRule: Codable, Equatable {
             return false
         }
         return NagramRegexFilterMatcher(rules: rules).matches(text, authorPeerId: authorPeerId)
+    }
+}
+
+private final class NagramRegexFilterResultCache {
+    private let limit: Int
+    private var values: [String: NagramRegexFilterResult] = [:]
+    private var keys: [String] = []
+    private let lock = NSLock()
+
+    init(limit: Int) {
+        self.limit = limit
+    }
+
+    func get(_ key: String) -> NagramRegexFilterResult? {
+        self.lock.lock()
+        defer {
+            self.lock.unlock()
+        }
+        return self.values[key]
+    }
+
+    func set(_ value: NagramRegexFilterResult, for key: String) {
+        self.lock.lock()
+        defer {
+            self.lock.unlock()
+        }
+        if self.values[key] == nil {
+            self.keys.append(key)
+        }
+        self.values[key] = value
+        while self.keys.count > self.limit {
+            let removedKey = self.keys.removeFirst()
+            self.values.removeValue(forKey: removedKey)
+        }
     }
 }
 
@@ -107,6 +174,7 @@ public struct NagramRegexFilterMatcher {
     }
 
     private let rules: [CompiledRule]
+    private let resultCache = NagramRegexFilterResultCache(limit: 512)
 
     public init(rules: [NagramRegexFilterRule]) {
         self.rules = rules.compactMap { rule -> CompiledRule? in
@@ -132,8 +200,22 @@ public struct NagramRegexFilterMatcher {
         guard !self.rules.isEmpty else {
             return .visible(text: text, spoilerRanges: [])
         }
+        let shouldCache = text.utf16.count <= 4096
+        let cacheKey = "\(authorPeerId.map(String.init) ?? "")\u{1f}\(text)"
+        if shouldCache, let cachedResult = self.resultCache.get(cacheKey) {
+            return cachedResult
+        }
+        let result = self.applyUncached(to: text, authorPeerId: authorPeerId)
+        if shouldCache {
+            self.resultCache.set(result, for: cacheKey)
+        }
+        return result
+    }
+
+    private func applyUncached(to text: String, authorPeerId: Int64?) -> NagramRegexFilterResult {
         let currentText = text
         var spoilerRanges: [Range<Int>] = []
+        let matchRange = NSRange(location: 0, length: (currentText as NSString).length)
         for rule in self.rules {
             if let ruleAuthorPeerId = rule.authorPeerId {
                 if ruleAuthorPeerId == authorPeerId {
@@ -147,21 +229,20 @@ public struct NagramRegexFilterMatcher {
             guard !currentText.isEmpty else {
                 continue
             }
-            let range = NSRange(location: 0, length: (currentText as NSString).length)
-            guard expression.firstMatch(in: currentText, options: [], range: range) != nil else {
+            guard expression.firstMatch(in: currentText, options: [], range: matchRange) != nil else {
                 continue
             }
             switch rule.action {
             case .hide:
                 return .hidden
             case .mask:
-                let matches = expression.matches(in: currentText, options: [], range: range)
+                let matches = expression.matches(in: currentText, options: [], range: matchRange)
                 for match in matches where match.range.length > 0 {
                     spoilerRanges.append(match.range.location ..< (match.range.location + match.range.length))
                 }
             case .maskMessage:
-                if range.length > 0 {
-                    spoilerRanges.append(0 ..< range.length)
+                if matchRange.length > 0 {
+                    spoilerRanges.append(0 ..< matchRange.length)
                 }
             case .replace:
                 return .contentHidden
@@ -170,16 +251,49 @@ public struct NagramRegexFilterMatcher {
         return .visible(text: currentText, spoilerRanges: spoilerRanges)
     }
 
-    public func matches(_ text: String, authorPeerId: Int64? = nil) -> Bool {
+    public func isHidden(text: String, authorPeerId: Int64? = nil) -> Bool {
         if case .hidden = self.apply(to: text, authorPeerId: authorPeerId) {
             return true
         }
         return false
     }
+
+    public func matches(_ text: String, authorPeerId: Int64? = nil) -> Bool {
+        return self.isHidden(text: text, authorPeerId: authorPeerId)
+    }
 }
 
 private let nagramRegexFilterRulesKey = "nagram.regexFilters.rules"
 private let nagramRegexFilterDisabledPeerIdsKey = "nagram.regexFilters.disabledPeerIds"
+
+private final class NagramRegexFilterMatcherCache {
+    private var rules: [NagramRegexFilterRule]?
+    private var matcher: NagramRegexFilterMatcher?
+    private let lock = NSLock()
+
+    func matcher(for rules: [NagramRegexFilterRule]) -> NagramRegexFilterMatcher? {
+        self.lock.lock()
+        defer {
+            self.lock.unlock()
+        }
+        if self.rules == rules {
+            return self.matcher
+        }
+        let matcher = NagramRegexFilterMatcher(rules: rules)
+        self.rules = rules
+        self.matcher = matcher.isEmpty ? nil : matcher
+        return self.matcher
+    }
+
+    func invalidate() {
+        self.lock.lock()
+        self.rules = nil
+        self.matcher = nil
+        self.lock.unlock()
+    }
+}
+
+private let nagramRegexFilterMatcherCache = NagramRegexFilterMatcherCache()
 
 public extension NagramSettings {
     var regexFilterRules: [NagramRegexFilterRule] {
@@ -251,8 +365,7 @@ public extension NagramSettings {
         guard self.isRegexFilteringEnabled(peerId: peerId) else {
             return nil
         }
-        let matcher = NagramRegexFilterMatcher(rules: self.regexFilterRules)
-        return matcher.isEmpty ? nil : matcher
+        return nagramRegexFilterMatcherCache.matcher(for: self.regexFilterRules)
     }
 }
 
@@ -272,6 +385,7 @@ private extension NagramSettings {
     }
 
     func notifyRegexFiltersChanged() {
+        nagramRegexFilterMatcherCache.invalidate()
         NotificationCenter.default.post(name: .nagramRegexFiltersDidChange, object: self)
     }
 }
