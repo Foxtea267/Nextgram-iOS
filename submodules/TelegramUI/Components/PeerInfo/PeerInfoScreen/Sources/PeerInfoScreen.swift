@@ -6850,7 +6850,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
     
     fileprivate var movingInHierarchy = false
     public override func willMove(toParent viewController: UIViewController?) {
-        super.willMove(toParent: parent)
+        super.willMove(toParent: viewController)
         
         if self.isSettings, viewController == nil, let tabBarController = self.parent as? TabBarController {
             self.movingInHierarchy = true
