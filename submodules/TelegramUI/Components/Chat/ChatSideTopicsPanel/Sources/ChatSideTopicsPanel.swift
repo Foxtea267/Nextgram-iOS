@@ -1507,6 +1507,8 @@ public final class ChatSideTopicsPanel: Component {
         private let pinnedBackgroundContainer: AsyncListComponent.OverlayContainerView
         private let pinnedBackgroundView: UIImageView
         private let pinnedIconView: UIImageView
+        // MARK: NAGRAM
+        private var createTopicButton: ComponentView<Empty>?
         
         private var tabItemView: TabItemView?
         
@@ -1876,6 +1878,41 @@ public final class ChatSideTopicsPanel: Component {
             
             let containerInsets = environment.insets
             
+            // MARK: NAGRAM
+            var createTopicButtonSize: CGSize?
+            if case .side = component.location, !self.isReordering, let openCreateTopic = component.openCreateTopic {
+                let createTopicButton: ComponentView<Empty>
+                if let current = self.createTopicButton {
+                    createTopicButton = current
+                } else {
+                    createTopicButton = ComponentView()
+                    self.createTopicButton = createTopicButton
+                }
+                createTopicButtonSize = createTopicButton.update(
+                    transition: transition,
+                    component: AnyComponent(VerticalAllItemComponent(
+                        isSelected: false,
+                        mode: .createTopic,
+                        kind: component.kind,
+                        theme: component.theme,
+                        strings: component.strings,
+                        action: {
+                            openCreateTopic()
+                        }
+                    )),
+                    environment: {},
+                    containerSize: CGSize(width: availableSize.width, height: 100.0)
+                )
+                if let createTopicButtonView = createTopicButton.view {
+                    if createTopicButtonView.superview == nil {
+                        self.addSubview(createTopicButtonView)
+                    }
+                }
+            } else if let createTopicButton = self.createTopicButton {
+                self.createTopicButton = nil
+                createTopicButton.view?.removeFromSuperview()
+            }
+            
             var directionContainerInset: CGFloat
             switch component.location {
             case .side:
@@ -1960,7 +1997,8 @@ public final class ChatSideTopicsPanel: Component {
             switch component.location {
             case .side:
                 additionalInsets = UIEdgeInsets(top: 8.0, left: 8.0, bottom: 8.0, right: 0.0)
-                scrollSize = CGSize(width: availableSize.width, height: availableSize.height - directionContainerInset - environment.insets.top - containerInsets.bottom - additionalInsets.top - additionalInsets.bottom)
+                let createTopicButtonInset: CGFloat = createTopicButtonSize.flatMap { $0.height + 6.0 } ?? 0.0
+                scrollSize = CGSize(width: availableSize.width, height: max(0.0, availableSize.height - directionContainerInset - environment.insets.top - containerInsets.bottom - additionalInsets.top - additionalInsets.bottom - createTopicButtonInset))
                 scrollFrame = CGRect(origin: CGPoint(x: additionalInsets.left, y: directionContainerInset + environment.insets.top + additionalInsets.top), size: scrollSize)
                 listContentInsets = UIEdgeInsets(top: 8.0, left: 0.0, bottom: 8.0, right: 0.0)
             case .top, .bottom:
@@ -1971,6 +2009,12 @@ public final class ChatSideTopicsPanel: Component {
             }
             
             self.scrollContainerView.frame = scrollFrame
+            
+            // MARK: NAGRAM
+            if let createTopicButtonSize, let createTopicButtonView = self.createTopicButton?.view {
+                let createTopicButtonFrame = CGRect(origin: CGPoint(x: additionalInsets.left, y: scrollFrame.maxY + 6.0), size: CGSize(width: scrollSize.width, height: createTopicButtonSize.height))
+                transition.setFrame(view: createTopicButtonView, frame: createTopicButtonFrame)
+            }
             
             self.scrollViewMask.frame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: scrollSize)
             
@@ -2004,22 +2048,6 @@ public final class ChatSideTopicsPanel: Component {
                         }
                     )))
                 )
-                // MARK: NAGRAM
-                if !self.isReordering, let openCreateTopic = component.openCreateTopic {
-                    listItems.append(AnyComponentWithIdentity(
-                        id: ScrollId.createTopic,
-                        component: AnyComponent(VerticalAllItemComponent(
-                            isSelected: false,
-                            mode: .createTopic,
-                            kind: component.kind,
-                            theme: component.theme,
-                            strings: component.strings,
-                            action: {
-                                openCreateTopic()
-                            }
-                        ))
-                    ))
-                }
             case .top, .bottom:
                 listItems.append(AnyComponentWithIdentity(
                     id: ScrollId.all,
@@ -2037,22 +2065,6 @@ public final class ChatSideTopicsPanel: Component {
                         }
                     )))
                 )
-                // MARK: NAGRAM
-                if !self.isReordering, let openCreateTopic = component.openCreateTopic {
-                    listItems.append(AnyComponentWithIdentity(
-                        id: ScrollId.createTopic,
-                        component: AnyComponent(HorizontalAllItemComponent(
-                            isSelected: false,
-                            mode: .createTopic,
-                            kind: component.kind,
-                            theme: component.theme,
-                            strings: component.strings,
-                            action: {
-                                openCreateTopic()
-                            }
-                        ))
-                    ))
-                }
             }
             for item in self.reorderingItems ?? self.rawItems {
                 let scrollId: ScrollId
@@ -2316,6 +2328,27 @@ public final class ChatSideTopicsPanel: Component {
                             contextGesture: itemContextGesture
                         )))
                     )
+                }
+            }
+            // MARK: NAGRAM
+            if !self.isReordering, let openCreateTopic = component.openCreateTopic {
+                switch component.location {
+                case .side:
+                    break
+                case .top, .bottom:
+                    listItems.append(AnyComponentWithIdentity(
+                        id: ScrollId.createTopic,
+                        component: AnyComponent(HorizontalAllItemComponent(
+                            isSelected: false,
+                            mode: .createTopic,
+                            kind: component.kind,
+                            theme: component.theme,
+                            strings: component.strings,
+                            action: {
+                                openCreateTopic()
+                            }
+                        ))
+                    ))
                 }
             }
             
