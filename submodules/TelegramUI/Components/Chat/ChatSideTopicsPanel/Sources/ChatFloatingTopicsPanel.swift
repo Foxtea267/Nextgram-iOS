@@ -21,6 +21,8 @@ public final class ChatFloatingTopicsPanel: Component {
     public let controller: () -> ViewController?
     public let togglePanel: () -> Void
     public let updateTopicId: (Int64?, ChatControllerAnimateInnerChatSwitchDirection) -> Void
+    // MARK: NAGRAM
+    public let openCreateTopic: (() -> Void)?
     public let openDeletePeer: (Int64) -> Void
     
     public init(
@@ -35,6 +37,7 @@ public final class ChatFloatingTopicsPanel: Component {
         controller: @escaping () -> ViewController?,
         togglePanel: @escaping () -> Void,
         updateTopicId: @escaping (Int64?, ChatControllerAnimateInnerChatSwitchDirection) -> Void,
+        openCreateTopic: (() -> Void)?,
         openDeletePeer: @escaping (Int64) -> Void
     ) {
         self.context = context
@@ -48,6 +51,7 @@ public final class ChatFloatingTopicsPanel: Component {
         self.controller = controller
         self.togglePanel = togglePanel
         self.updateTopicId = updateTopicId
+        self.openCreateTopic = openCreateTopic
         self.openDeletePeer = openDeletePeer
     }
     
@@ -74,6 +78,9 @@ public final class ChatFloatingTopicsPanel: Component {
             return false
         }
         if lhs.topicId != rhs.topicId {
+            return false
+        }
+        if (lhs.openCreateTopic == nil) != (rhs.openCreateTopic == nil) {
             return false
         }
         return true
@@ -145,6 +152,7 @@ public final class ChatFloatingTopicsPanel: Component {
                             }
                             component.updateTopicId(threadId, direction ? .down : .up)
                         },
+                        openCreateTopic: component.openCreateTopic,
                         openDeletePeer: component.openDeletePeer
                     )),
                     environment: {
@@ -209,6 +217,7 @@ public final class ChatFloatingTopicsPanel: Component {
                             }
                             component.updateTopicId(threadId, direction ? .right : .left)
                         },
+                        openCreateTopic: component.openCreateTopic,
                         openDeletePeer: component.openDeletePeer
                     )),
                     environment: {
@@ -309,6 +318,8 @@ public final class ChatTopicsHeaderPanelComponent: Component {
     public let controller: () -> ViewController?
     public let togglePanel: () -> Void
     public let updateTopicId: (Int64?, ChatControllerAnimateInnerChatSwitchDirection) -> Void
+    // MARK: NAGRAM
+    public let openCreateTopic: (() -> Void)?
     public let openDeletePeer: (Int64) -> Void
     
     public init(
@@ -322,6 +333,7 @@ public final class ChatTopicsHeaderPanelComponent: Component {
         controller: @escaping () -> ViewController?,
         togglePanel: @escaping () -> Void,
         updateTopicId: @escaping (Int64?, ChatControllerAnimateInnerChatSwitchDirection) -> Void,
+        openCreateTopic: (() -> Void)?,
         openDeletePeer: @escaping (Int64) -> Void
     ) {
         self.context = context
@@ -334,6 +346,7 @@ public final class ChatTopicsHeaderPanelComponent: Component {
         self.controller = controller
         self.togglePanel = togglePanel
         self.updateTopicId = updateTopicId
+        self.openCreateTopic = openCreateTopic
         self.openDeletePeer = openDeletePeer
     }
     
@@ -357,6 +370,9 @@ public final class ChatTopicsHeaderPanelComponent: Component {
             return false
         }
         if lhs.topicId != rhs.topicId {
+            return false
+        }
+        if (lhs.openCreateTopic == nil) != (rhs.openCreateTopic == nil) {
             return false
         }
         return true
@@ -397,6 +413,7 @@ public final class ChatTopicsHeaderPanelComponent: Component {
                         }
                         component.updateTopicId(threadId, direction ? .right : .left)
                     },
+                    openCreateTopic: component.openCreateTopic,
                     openDeletePeer: component.openDeletePeer
                 )),
                 environment: {

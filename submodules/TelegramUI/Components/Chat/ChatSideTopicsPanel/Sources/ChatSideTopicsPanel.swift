@@ -62,6 +62,8 @@ public final class ChatSideTopicsPanel: Component {
     let controller: () -> ViewController?
     let togglePanel: () -> Void
     let updateTopicId: (Int64?, Bool) -> Void
+    // MARK: NAGRAM
+    let openCreateTopic: (() -> Void)?
     let openDeletePeer: (Int64) -> Void
     
     public init(
@@ -75,6 +77,7 @@ public final class ChatSideTopicsPanel: Component {
         controller: @escaping () -> ViewController?,
         togglePanel: @escaping () -> Void,
         updateTopicId: @escaping (Int64?, Bool) -> Void,
+        openCreateTopic: (() -> Void)?,
         openDeletePeer: @escaping (Int64) -> Void
     ) {
         self.context = context
@@ -87,6 +90,7 @@ public final class ChatSideTopicsPanel: Component {
         self.controller = controller
         self.togglePanel = togglePanel
         self.updateTopicId = updateTopicId
+        self.openCreateTopic = openCreateTopic
         self.openDeletePeer = openDeletePeer
     }
     
@@ -110,6 +114,9 @@ public final class ChatSideTopicsPanel: Component {
             return false
         }
         if lhs.topicId != rhs.topicId {
+            return false
+        }
+        if (lhs.openCreateTopic == nil) != (rhs.openCreateTopic == nil) {
             return false
         }
         return true
@@ -1160,15 +1167,23 @@ public final class ChatSideTopicsPanel: Component {
     private protocol AllItemComponent: AnyObject {
     }
     
+    // MARK: NAGRAM
+    private enum AllItemMode: Equatable {
+        case all
+        case createTopic
+    }
+    
     private final class VerticalAllItemComponent: Component, AllItemComponent {
         let isSelected: Bool
+        let mode: AllItemMode
         let kind: ChatSideTopicsPanel.Kind
         let theme: PresentationTheme
         let strings: PresentationStrings
         let action: (() -> Void)?
         
-        init(isSelected: Bool, kind: ChatSideTopicsPanel.Kind, theme: PresentationTheme, strings: PresentationStrings, action: (() -> Void)?) {
+        init(isSelected: Bool, mode: AllItemMode, kind: ChatSideTopicsPanel.Kind, theme: PresentationTheme, strings: PresentationStrings, action: (() -> Void)?) {
             self.isSelected = isSelected
+            self.mode = mode
             self.kind = kind
             self.theme = theme
             self.strings = strings
@@ -1180,6 +1195,9 @@ public final class ChatSideTopicsPanel: Component {
                 return true
             }
             if lhs.isSelected != rhs.isSelected {
+                return false
+            }
+            if lhs.mode != rhs.mode {
                 return false
             }
             if lhs.kind != rhs.kind {
@@ -1247,10 +1265,18 @@ public final class ChatSideTopicsPanel: Component {
                 
                 let spacing: CGFloat = 1.0
                 
+                let iconName: String
+                switch component.mode {
+                case .all:
+                    iconName = "Chat List/Tabs/IconChats"
+                case .createTopic:
+                    iconName = "Chat/Context Menu/Add"
+                }
+                
                 let iconSize = self.icon.update(
                     transition: .immediate,
                     component: AnyComponent(BundleIconComponent(
-                        name: "Chat List/Tabs/IconChats",
+                        name: iconName,
                         tintColor: component.isSelected ? component.theme.rootController.navigationBar.accentTextColor : component.theme.chat.inputPanel.panelControlColor
                     )),
                     environment: {},
@@ -1258,14 +1284,19 @@ public final class ChatSideTopicsPanel: Component {
                 )
                 
                 let titleText: String
-                if case let .botForum(forumManagedByUser) = component.kind {
-                    if forumManagedByUser {
-                        titleText = component.strings.Chat_InlineTopicMenu_NewForumThreadTab
+                switch component.mode {
+                case .all:
+                    if case let .botForum(forumManagedByUser) = component.kind {
+                        if forumManagedByUser {
+                            titleText = component.strings.Chat_InlineTopicMenu_NewForumThreadTab
+                        } else {
+                            titleText = component.strings.Chat_InlineTopicMenu_TabAll
+                        }
                     } else {
-                        titleText = component.strings.Chat_InlineTopicMenu_TabAll
+                        titleText = component.strings.Chat_InlineTopicMenu_AllTab
                     }
-                } else {
-                    titleText = component.strings.Chat_InlineTopicMenu_AllTab
+                case .createTopic:
+                    titleText = component.strings.Chat_CreateTopic
                 }
                 let titleSize = self.title.update(
                     transition: .immediate,
@@ -1316,13 +1347,15 @@ public final class ChatSideTopicsPanel: Component {
     
     private final class HorizontalAllItemComponent: Component, AllItemComponent {
         let isSelected: Bool
+        let mode: AllItemMode
         let kind: ChatSideTopicsPanel.Kind
         let theme: PresentationTheme
         let strings: PresentationStrings
         let action: (() -> Void)?
         
-        init(isSelected: Bool, kind: ChatSideTopicsPanel.Kind, theme: PresentationTheme, strings: PresentationStrings, action: (() -> Void)?) {
+        init(isSelected: Bool, mode: AllItemMode, kind: ChatSideTopicsPanel.Kind, theme: PresentationTheme, strings: PresentationStrings, action: (() -> Void)?) {
             self.isSelected = isSelected
+            self.mode = mode
             self.kind = kind
             self.theme = theme
             self.strings = strings
@@ -1334,6 +1367,9 @@ public final class ChatSideTopicsPanel: Component {
                 return true
             }
             if lhs.isSelected != rhs.isSelected {
+                return false
+            }
+            if lhs.mode != rhs.mode {
                 return false
             }
             if lhs.kind != rhs.kind {
@@ -1399,14 +1435,19 @@ public final class ChatSideTopicsPanel: Component {
                 let rightInset: CGFloat = 12.0
                 
                 let titleText: String
-                if case let .botForum(forumManagedByUser) = component.kind {
-                    if forumManagedByUser {
-                        titleText = component.strings.Chat_InlineTopicMenu_NewForumThreadTab
+                switch component.mode {
+                case .all:
+                    if case let .botForum(forumManagedByUser) = component.kind {
+                        if forumManagedByUser {
+                            titleText = component.strings.Chat_InlineTopicMenu_NewForumThreadTab
+                        } else {
+                            titleText = component.strings.Chat_InlineTopicMenu_TabAll
+                        }
                     } else {
-                        titleText = component.strings.Chat_InlineTopicMenu_TabAll
+                        titleText = component.strings.Chat_InlineTopicMenu_AllTab
                     }
-                } else {
-                    titleText = component.strings.Chat_InlineTopicMenu_AllTab
+                case .createTopic:
+                    titleText = component.strings.Chat_CreateTopic
                 }
                 let titleSize = self.title.update(
                     transition: .immediate,
@@ -1448,6 +1489,8 @@ public final class ChatSideTopicsPanel: Component {
     
     private enum ScrollId: Hashable {
         case all
+        // MARK: NAGRAM
+        case createTopic
         case topic(Int64)
     }
     
@@ -1949,6 +1992,7 @@ public final class ChatSideTopicsPanel: Component {
                     id: ScrollId.all,
                     component: AnyComponent(VerticalAllItemComponent(
                         isSelected: component.topicId == nil,
+                        mode: .all,
                         kind: component.kind,
                         theme: component.theme,
                         strings: component.strings,
@@ -1960,11 +2004,28 @@ public final class ChatSideTopicsPanel: Component {
                         }
                     )))
                 )
+                // MARK: NAGRAM
+                if !self.isReordering, let openCreateTopic = component.openCreateTopic {
+                    listItems.append(AnyComponentWithIdentity(
+                        id: ScrollId.createTopic,
+                        component: AnyComponent(VerticalAllItemComponent(
+                            isSelected: false,
+                            mode: .createTopic,
+                            kind: component.kind,
+                            theme: component.theme,
+                            strings: component.strings,
+                            action: {
+                                openCreateTopic()
+                            }
+                        ))
+                    ))
+                }
             case .top, .bottom:
                 listItems.append(AnyComponentWithIdentity(
                     id: ScrollId.all,
                     component: AnyComponent(HorizontalAllItemComponent(
                         isSelected: component.topicId == nil,
+                        mode: .all,
                         kind: component.kind,
                         theme: component.theme,
                         strings: component.strings,
@@ -1976,6 +2037,22 @@ public final class ChatSideTopicsPanel: Component {
                         }
                     )))
                 )
+                // MARK: NAGRAM
+                if !self.isReordering, let openCreateTopic = component.openCreateTopic {
+                    listItems.append(AnyComponentWithIdentity(
+                        id: ScrollId.createTopic,
+                        component: AnyComponent(HorizontalAllItemComponent(
+                            isSelected: false,
+                            mode: .createTopic,
+                            kind: component.kind,
+                            theme: component.theme,
+                            strings: component.strings,
+                            action: {
+                                openCreateTopic()
+                            }
+                        ))
+                    ))
+                }
             }
             for item in self.reorderingItems ?? self.rawItems {
                 let scrollId: ScrollId
