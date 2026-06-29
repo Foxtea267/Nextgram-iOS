@@ -28,13 +28,6 @@ private func adjustedGlassOverlayColor(_ color: UIColor, settings: GlassOverlayT
     return color.withAlphaComponent(color.alpha * settings.overlayOpacity)
 }
 
-private func glassOverlayMaterialOpacity(settings: GlassOverlayTransparencySettings) -> CGFloat {
-    if settings.followsSystemTransparency {
-        return 1.0
-    }
-    return settings.overlayOpacity
-}
-
 public final class NavigationBackgroundNode: ASDisplayNode {
     private var _color: UIColor
     private var appliedTransparencySettings = currentGlassOverlayTransparencySettings()
@@ -98,8 +91,7 @@ public final class NavigationBackgroundNode: ASDisplayNode {
             return
         }
         let transparencySettings = currentGlassOverlayTransparencySettings()
-        let materialOpacity = glassOverlayMaterialOpacity(settings: transparencySettings)
-        if self.enableBlur && materialOpacity > .ulpOfOne && !glassOverlayReduceTransparencyEnabled(settings: transparencySettings) && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {
+        if self.enableBlur && !glassOverlayReduceTransparencyEnabled(settings: transparencySettings) && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {
             if self.effectView == nil {
                 let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
 
@@ -141,7 +133,7 @@ public final class NavigationBackgroundNode: ASDisplayNode {
                 self.effectView = effectView
                 self.view.insertSubview(effectView, at: 0)
             }
-            self.effectView?.alpha = materialOpacity
+            self.effectView?.alpha = 1.0
         } else if let effectView = self.effectView {
             self.effectView = nil
             effectView.removeFromSuperview()
@@ -254,8 +246,7 @@ open class BlurredBackgroundView: UIView {
     
     private func updateBackgroundBlur(forceKeepBlur: Bool) {
         let transparencySettings = currentGlassOverlayTransparencySettings()
-        let materialOpacity = glassOverlayMaterialOpacity(settings: transparencySettings)
-        if let color = self._color, self.enableBlur && materialOpacity > .ulpOfOne && !glassOverlayReduceTransparencyEnabled(settings: transparencySettings) && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {
+        if let color = self._color, self.enableBlur && !glassOverlayReduceTransparencyEnabled(settings: transparencySettings) && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {
             if self.effectView == nil {
                 let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
 
@@ -296,7 +287,7 @@ open class BlurredBackgroundView: UIView {
                 self.effectView = effectView
                 self.insertSubview(effectView, at: 0)
             }
-            self.effectView?.alpha = materialOpacity
+            self.effectView?.alpha = 1.0
         } else if let effectView = self.effectView {
             self.effectView = nil
             effectView.removeFromSuperview()

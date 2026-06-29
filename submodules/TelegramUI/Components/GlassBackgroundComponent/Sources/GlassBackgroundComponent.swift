@@ -34,16 +34,6 @@ private func nagramAdjustedGlassShadowAlpha(_ alpha: CGFloat, settings: GlassOve
     return alpha * settings.overlayOpacity
 }
 
-private func nagramGlassMaterialOpacity(settings: GlassOverlayTransparencySettings) -> CGFloat {
-    if nagramReduceGlassTransparencyEnabled(settings: settings) {
-        return 0.0
-    }
-    if settings.followsSystemTransparency {
-        return 1.0
-    }
-    return settings.overlayOpacity
-}
-
 private final class ContentContainer: UIView {
     private let maskContentView: UIView
     
@@ -649,7 +639,6 @@ public class GlassBackgroundView: UIView {
         let effectiveIsInteractive = isInteractive && NagramSettings.shared.controlHighlightEnabled // MARK: NAGRAM
         let transparencySettings = currentGlassOverlayTransparencySettings() // MARK: NAGRAM
         let reduceTransparencyEnabled = nagramReduceGlassTransparencyEnabled(settings: transparencySettings) // MARK: NAGRAM
-        let materialOpacity = nagramGlassMaterialOpacity(settings: transparencySettings) // MARK: NAGRAM
         
         if let glassHighlightRecognizer = self.glassHighlightRecognizer {
             glassHighlightRecognizer.isEnabled = effectiveIsInteractive
@@ -684,7 +673,7 @@ public class GlassBackgroundView: UIView {
             }
             legacyView.update(size: size, shape: shape, style: style, transition: transition)
             transition.setFrame(view: legacyView, frame: CGRect(origin: CGPoint(), size: size))
-            transition.setAlpha(view: legacyView, alpha: isVisible && !reduceTransparencyEnabled ? materialOpacity : 0.0) // MARK: NAGRAM
+            transition.setAlpha(view: legacyView, alpha: isVisible && !reduceTransparencyEnabled ? 1.0 : 0.0) // MARK: NAGRAM
             
             transition.setPosition(view: self.contentView, position: CGPoint(x: size.width * 0.5, y: size.height * 0.5))
             transition.setBounds(view: self.contentView, bounds: CGRect(origin: CGPoint(), size: size))
@@ -782,13 +771,13 @@ public class GlassBackgroundView: UIView {
                 #if DEBUG
                 //foregroundView.image = nil
                 #endif
-                transition.setAlpha(view: foregroundView, alpha: isVisible ? materialOpacity : 0.0) // MARK: NAGRAM
+                transition.setAlpha(view: foregroundView, alpha: isVisible ? 1.0 : 0.0) // MARK: NAGRAM
             } else {
                 if let nativeParamsView = self.nativeParamsView, let nativeView = self.nativeView {
                     if #available(iOS 26.0, *) {
                         var glassEffect: UIGlassEffect?
                         
-                        if isVisible && materialOpacity > .ulpOfOne {
+                        if isVisible {
                             let glassEffectValue: UIGlassEffect
                             switch tintColor.kind {
                             case .panel:
@@ -891,7 +880,6 @@ public final class GlassBackgroundContainerView: UIView {
     private let legacyView: ContentView?
     private let nativeParamsView: EffectSettingsContainerView?
     private let nativeView: UIVisualEffectView?
-    private let spacing: CGFloat
     
     public var contentView: UIView {
         if let nativeView = self.nativeView {
@@ -902,7 +890,6 @@ public final class GlassBackgroundContainerView: UIView {
     }
     
     public init(spacing: CGFloat = 7.0) {
-        self.spacing = spacing
         if #available(iOS 26.0, *), !GlassBackgroundView.useCustomGlassImpl {
             let effect = UIGlassContainerEffect()
             effect.spacing = spacing
@@ -995,19 +982,6 @@ public final class GlassBackgroundContainerView: UIView {
     
     public func update(size: CGSize, isDark: Bool, transition: ComponentTransition) {
         if let nativeParamsView = self.nativeParamsView, let nativeView = self.nativeView {
-            let transparencySettings = currentGlassOverlayTransparencySettings() // MARK: NAGRAM
-            let materialOpacity = nagramGlassMaterialOpacity(settings: transparencySettings) // MARK: NAGRAM
-            if #available(iOS 26.0, *) {
-                if materialOpacity > .ulpOfOne {
-                    if !(nativeView.effect is UIGlassContainerEffect) {
-                        let effect = UIGlassContainerEffect()
-                        effect.spacing = self.spacing
-                        nativeView.effect = effect
-                    }
-                } else if nativeView.effect != nil {
-                    nativeView.effect = nil
-                }
-            }
             nativeView.overrideUserInterfaceStyle = isDark ? .dark : .light
             
             if isDark {

@@ -139,10 +139,10 @@ public final class NagramSettings {
     /// 控件玻璃高亮（默认开 = 保持原生交互反馈）
     @NagramDefault("nagram.controlHighlightEnabled", true)
     public var controlHighlightEnabled: Bool
-    /// 玻璃透明度模式（默认跟随系统 = 保持原生 Liquid Glass / 降低透明度行为）
+    /// Liquid Glass 色调模式（默认跟随系统 = 保持原生 Liquid Glass / 降低透明度行为）
     @NagramDefault("nagram.glassTransparencyMode", NagramGlassTransparencyMode.system.rawValue)
     public var glassTransparencyMode: String
-    /// 自定义玻璃覆盖层不透明度百分比（0–100，默认 100 = 当前视觉）
+    /// 自定义 Liquid Glass 色调强度百分比（0–100，默认 100 = 当前视觉）
     @NagramDefault("nagram.glassTransparencyPercent", Int32(100))
     public var glassTransparencyPercent: Int32
 

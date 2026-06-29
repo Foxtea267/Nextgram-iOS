@@ -179,9 +179,9 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
     case "Nagram.ControlHighlight":
         return ["ControlHighlight", "GlassHighlight", "LiquidGlassHighlight"]
     case "Nagram.GlassTransparency":
-        return ["GlassTransparency", "LiquidGlassTransparency", "GlassOpacity", "LiquidGlassOpacity"]
+        return ["GlassTransparency", "LiquidGlassTransparency", "GlassOpacity", "LiquidGlassOpacity", "LiquidGlass", "GlassTint"]
     case "Nagram.GlassTransparency.OverlayOpacity":
-        return ["GlassOverlayOpacity", "LiquidGlassOverlayOpacity", "GlassTransparencyPercent", "LiquidGlassTransparencyPercent"]
+        return ["GlassOverlayOpacity", "LiquidGlassOverlayOpacity", "GlassTransparencyPercent", "LiquidGlassTransparencyPercent", "GlassTintStrength", "LiquidGlassTintStrength"]
     case "Nagram.ShowRegDate":
         return ["ShowRegDate", "RegistrationDate"]
     case "Nagram.HidePhoneInSettings":
