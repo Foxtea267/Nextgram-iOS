@@ -33,6 +33,7 @@ enum NagramSettingsSyncKeys {
         "nagram.uploadSpeedBoost",
         "nagram.downloadSpeedBoost",
         "nagram.sendWithReturnKey",
+        "nagram.showTextStyleToolbar",
         "nagram.enablePanguOnSending",
         "nagram.enablePanguOnEditing",
         "nagram.enablePanguOnReceiving",

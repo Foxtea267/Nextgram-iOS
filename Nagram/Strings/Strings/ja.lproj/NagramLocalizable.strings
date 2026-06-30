@@ -25,6 +25,7 @@
 "Nagram.HideReactions" = "リアクションを非表示";
 "Nagram.DisableSendAsButton" = "「チャンネルとして送信」ボタンを非表示";
 "Nagram.SendWithReturnKey" = "Returnキーで送信";
+"Nagram.TextStyleToolbar" = "文字スタイルツールバー";
 "Nagram.PanguOnSending" = "送信メッセージをPangu化";
 "Nagram.PanguOnEditing" = "編集メッセージをPangu化";
 "Nagram.HideRecordingButton" = "音声録音ボタンを非表示";

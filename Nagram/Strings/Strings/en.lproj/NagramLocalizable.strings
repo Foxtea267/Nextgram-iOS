@@ -25,6 +25,7 @@
 "Nagram.HideReactions" = "Hide Reactions";
 "Nagram.DisableSendAsButton" = "Hide \"Send as Channel\" Button";
 "Nagram.SendWithReturnKey" = "Send with Return Key";
+"Nagram.TextStyleToolbar" = "Text Style Toolbar";
 "Nagram.PanguOnSending" = "Enable Pangu on Sending";
 "Nagram.PanguOnEditing" = "Enable Pangu on Editing";
 "Nagram.HideRecordingButton" = "Hide Voice Recording Button";

@@ -25,6 +25,7 @@
 "Nagram.HideReactions" = "隐藏消息反应";
 "Nagram.DisableSendAsButton" = "隐藏「以频道身份发送」";
 "Nagram.SendWithReturnKey" = "回车键发送";
+"Nagram.TextStyleToolbar" = "文字样式工具栏";
 "Nagram.PanguOnSending" = "发送消息 Pangu 化";
 "Nagram.PanguOnEditing" = "编辑消息 Pangu 化";
 "Nagram.HideRecordingButton" = "隐藏语音录制按钮";

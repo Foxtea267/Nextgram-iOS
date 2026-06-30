@@ -156,6 +156,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["StickerTimestamp", "StickerTime"]
     case "Nagram.DisableSendAsButton":
         return ["hideSendAsChannel", "DisableSendAsButton"]
+    case "Nagram.TextStyleToolbar":
+        return ["TextStyleToolbar", "FormattingToolbar", "RichTextToolbar"]
     case "Nagram.SendWithReturnKey":
         return ["SendWithReturnKey", "ReturnKeySend"]
     case "Nagram.HideRecordingButton":
@@ -414,6 +416,7 @@ private func nagramGroups(
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Sending", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.DisableSendAsButton", get: { NagramSettings.shared.disableSendAsButton }, set: { NagramSettings.shared.disableSendAsButton = $0 }),
             .toggle(titleKey: "Nagram.SendWithReturnKey", get: { NagramSettings.shared.sendWithReturnKey }, set: { NagramSettings.shared.sendWithReturnKey = $0 }),
+            .toggle(titleKey: "Nagram.TextStyleToolbar", get: { NagramSettings.shared.showTextStyleToolbar }, set: { NagramSettings.shared.showTextStyleToolbar = $0 }),
             .toggle(titleKey: "Nagram.HideRecordingButton", get: { NagramSettings.shared.hideRecordingButton }, set: { NagramSettings.shared.hideRecordingButton = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Gesture", footerKey: "Nagram.Section.Gesture.Footer", rows: [

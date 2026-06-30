@@ -25,6 +25,7 @@
 "Nagram.HideReactions" = "隱藏訊息反應";
 "Nagram.DisableSendAsButton" = "隱藏「以頻道身分傳送」";
 "Nagram.SendWithReturnKey" = "Enter 鍵傳送";
+"Nagram.TextStyleToolbar" = "文字樣式工具列";
 "Nagram.PanguOnSending" = "傳送訊息 Pangu 化";
 "Nagram.PanguOnEditing" = "編輯訊息 Pangu 化";
 "Nagram.HideRecordingButton" = "隱藏語音錄製按鈕";

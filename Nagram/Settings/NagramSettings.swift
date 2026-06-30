@@ -282,6 +282,9 @@ public final class NagramSettings {
     /// 回车键发送消息
     @NagramDefault("nagram.sendWithReturnKey", false)
     public var sendWithReturnKey: Bool
+    /// 选中文本时显示文字样式工具栏
+    @NagramDefault("nagram.showTextStyleToolbar", true)
+    public var showTextStyleToolbar: Bool
     /// 发送时自动插入中英文空格
     @NagramDefault("nagram.enablePanguOnSending", false)
     public var enablePanguOnSending: Bool
