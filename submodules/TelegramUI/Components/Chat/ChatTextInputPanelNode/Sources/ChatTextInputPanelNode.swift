@@ -4468,14 +4468,79 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             }
         })
 
-        if intersectsMonospace {
+        if intersectsMonospace && !selectedActions.contains(.spoiler) {
             enabledActions.remove(.spoiler)
         }
-        if intersectsSpoiler {
+        if intersectsSpoiler && !selectedActions.contains(.monospace) {
             enabledActions.remove(.monospace)
         }
 
         return (enabledActions, selectedActions)
+    }
+
+    // MARK: NAGRAM — 选区内只要已有某样式，再点一次就移除选区内该样式。
+    private func removeTextFormattingAction(_ action: ChatTextFormattingToolbarAction, from state: ChatTextInputState) -> ChatTextInputState {
+        guard !state.selectionRange.isEmpty else {
+            return state
+        }
+        let nsRange = NSRange(location: state.selectionRange.lowerBound, length: state.selectionRange.count)
+        guard nsRange.location >= 0, nsRange.upperBound <= state.inputText.length else {
+            return state
+        }
+
+        let result = NSMutableAttributedString(attributedString: state.inputText)
+        let removeAttribute: NSAttributedString.Key?
+        switch action {
+        case .bold:
+            removeAttribute = ChatTextInputAttributes.bold
+        case .italic:
+            removeAttribute = ChatTextInputAttributes.italic
+        case .monospace:
+            removeAttribute = ChatTextInputAttributes.monospace
+        case .link:
+            removeAttribute = ChatTextInputAttributes.textUrl
+        case .date:
+            removeAttribute = ChatTextInputAttributes.date
+        case .strikethrough:
+            removeAttribute = ChatTextInputAttributes.strikethrough
+        case .underline:
+            removeAttribute = ChatTextInputAttributes.underline
+        case .spoiler:
+            removeAttribute = ChatTextInputAttributes.spoiler
+        case .quote, .code:
+            removeAttribute = nil
+        }
+
+        if let removeAttribute {
+            result.removeAttribute(removeAttribute, range: nsRange)
+        } else {
+            var rangesToRemove: [NSRange] = []
+            state.inputText.enumerateAttribute(ChatTextInputAttributes.block, in: nsRange, options: []) { value, range, _ in
+                guard let quote = value as? ChatTextInputTextQuoteAttribute else {
+                    return
+                }
+                let shouldRemove: Bool
+                switch (action, quote.kind) {
+                case (.quote, .quote):
+                    shouldRemove = true
+                case (.code, .code):
+                    shouldRemove = true
+                default:
+                    shouldRemove = false
+                }
+                if shouldRemove {
+                    let intersection = NSIntersectionRange(nsRange, range)
+                    if intersection.length > 0 {
+                        rangesToRemove.append(intersection)
+                    }
+                }
+            }
+            for range in rangesToRemove {
+                result.removeAttribute(ChatTextInputAttributes.block, range: range)
+            }
+        }
+
+        return ChatTextInputState(inputText: result, selectionRange: state.selectionRange)
     }
 
     // MARK: NAGRAM — 键盘区域文本格式面板
@@ -4519,27 +4584,40 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             UIMenuController.shared.update()
         }
 
-        switch action {
-        case .quote:
-            self.formatAttributesQuote(self)
-        case .spoiler:
-            self.formatAttributesSpoiler(self)
-        case .bold:
-            self.formatAttributesBold(self)
-        case .italic:
-            self.formatAttributesItalic(self)
-        case .monospace:
-            self.formatAttributesMonospace(self)
-        case .link:
-            self.formatAttributesLink(self)
-        case .date:
-            self.formatAttributesDate(self)
-        case .strikethrough:
-            self.formatAttributesStrikethrough(self)
-        case .underline:
-            self.formatAttributesUnderline(self)
-        case .code:
-            self.formatAttributesCodeBlock(self)
+        if toolbarState.selectedActions.contains(action) {
+            self.inputMenu.back()
+            self.interfaceInteraction?.updateTextInputStateAndMode { [weak self] current, inputMode in
+                guard let self else {
+                    return (current, inputMode)
+                }
+                return (self.removeTextFormattingAction(action, from: current), inputMode)
+            }
+            if action == .spoiler {
+                self.updateSpoilersRevealed(animated: true)
+            }
+        } else {
+            switch action {
+            case .quote:
+                self.formatAttributesQuote(self)
+            case .spoiler:
+                self.formatAttributesSpoiler(self)
+            case .bold:
+                self.formatAttributesBold(self)
+            case .italic:
+                self.formatAttributesItalic(self)
+            case .monospace:
+                self.formatAttributesMonospace(self)
+            case .link:
+                self.formatAttributesLink(self)
+            case .date:
+                self.formatAttributesDate(self)
+            case .strikethrough:
+                self.formatAttributesStrikethrough(self)
+            case .underline:
+                self.formatAttributesUnderline(self)
+            case .code:
+                self.formatAttributesCodeBlock(self)
+            }
         }
 
         Queue.mainQueue().after(0.05) { [weak self] in
