@@ -6,6 +6,9 @@ import libprisma
 import SwiftSignalKit
 import TelegramPresentationData
 
+// MARK: NAGRAM — Render-time synthetic slant for glyphs without native italic faces.
+private let nagramMessageItalicObliqueness: NSNumber = NSNumber(value: 0.16)
+
 public func chatInputStateStringWithAppliedEntities(_ text: String, entities: [MessageTextEntity]) -> NSAttributedString {
     var nsString: NSString?
     let string = NSMutableAttributedString(string: text)
@@ -419,6 +422,10 @@ public func stringWithAppliedEntities(_ text: String, entities: [MessageTextEnti
             }
             
             string.addAttribute(.font, value: font, range: range)
+            // MARK: NAGRAM — keep italic visible for CJK glyphs without native italic faces.
+            if fontAttributes.contains(.italic) {
+                string.addAttribute(.obliqueness, value: nagramMessageItalicObliqueness, range: range)
+            }
         }
         
         var currentAttributeSpan: (startIndex: Int, attributes: ChatTextFontAttributes)?
