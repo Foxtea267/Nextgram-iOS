@@ -39,7 +39,8 @@ public final class ListViewTransactionQueue {
     
     private func endTransaction() {
         precondition(Thread.isMainThread)
-        Queue.mainQueue().async {
+        // MARK: NAGRAM — Queue.async runs inline when already on the main queue; force an async boundary to avoid recursive transaction draining.
+        Queue.mainQueue().justDispatch {
             self.transactionCompleted()
             if !self.transactions.isEmpty {
                 let _ = self.transactions.removeFirst()

@@ -614,7 +614,8 @@ class DefaultIntentHandler: INExtension, INSendMessageIntentHandling, INSearchFo
             if let identifiers = intent.identifiers {
                 for identifier in identifiers {
                     let components = identifier.components(separatedBy: "_")
-                    if let first = components.first, let peerId = Int64(first), let namespace = Int32(components[1]), let id = Int32(components[2]) {
+                    // MARK: NAGRAM — Siri can hand back malformed identifiers; validate component count before subscripting.
+                    if components.count == 3, let first = components.first, let peerId = Int64(first), let namespace = Int32(components[1]), let id = Int32(components[2]) {
                         let peerId = PeerId(peerId)
                         let messageId = MessageId(peerId: peerId, namespace: namespace, id: id)
                         if let currentMessageId = maxMessageIdsToApply[peerId] {

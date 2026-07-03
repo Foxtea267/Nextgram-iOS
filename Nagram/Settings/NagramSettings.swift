@@ -373,6 +373,11 @@ public extension NagramSettings {
         self.setChatListStartupFolderId(folderId, forKey: self.chatListStartupLastFolderKey(accountPeerId: accountPeerId))
     }
 
+    var stickerSizeCoefficient: Float {
+        let clampedSize = max(Int32(50), min(Int32(200), self.stickerSize))
+        return Float(clampedSize) / 100.0
+    }
+
     /// 下载分片大小：按加速档位放大（接入 TelegramCore FetchV2）。仿 SG getSGDownloadPartSize。
     func downloadPartSize(default defaultValue: Int64, fileSize: Int64?) -> Int64 {
         let smallFileThreshold: Int64 = 1 * 1024 * 1024

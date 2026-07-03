@@ -569,12 +569,12 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
             let node = (viewClassName as! ChatMessageItemView.Type).init(rotated: self.controllerInteraction.chatIsRotated)
             // MARK: NAGRAM — 贴纸尺寸 + 贴纸时间戳显隐
             if let node = node as? ChatMessageStickerItemNode {
-                node.sizeCoefficient = Float(NagramSettings.shared.stickerSize) / 100.0
+                node.sizeCoefficient = NagramSettings.shared.stickerSizeCoefficient
                 if !NagramSettings.shared.stickerTimestamp {
                     node.dateAndStatusNode.isHidden = true
                 }
             } else if let node = node as? ChatMessageAnimatedStickerItemNode {
-                node.sizeCoefficient = Float(NagramSettings.shared.stickerSize) / 100.0
+                node.sizeCoefficient = NagramSettings.shared.stickerSizeCoefficient
                 if !NagramSettings.shared.stickerTimestamp {
                     node.dateAndStatusNode.isHidden = true
                 }

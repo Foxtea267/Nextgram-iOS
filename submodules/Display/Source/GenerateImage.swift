@@ -638,6 +638,10 @@ public class DrawingContext {
         self.length = self.bytesPerRow * Int(scaledSize.height)
 
         self.imageBuffer = ASCGImageBuffer(length: UInt(self.length))
+        // MARK: NAGRAM — ASCGImageBuffer can wrap a failed malloc; avoid drawing into / clearing a null buffer.
+        guard UInt(bitPattern: self.imageBuffer.mutableBytes) != 0 else {
+            return nil
+        }
 
         if opaque {
             self.bitmapInfo = DeviceGraphicsContextSettings.shared.opaqueBitmapInfo

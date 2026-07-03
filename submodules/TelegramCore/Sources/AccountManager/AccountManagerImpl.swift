@@ -72,7 +72,8 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
         } catch let e {
             postboxLog("decode atomic state error: \(e)")
             postboxLogSync()
-            preconditionFailure()
+            // MARK: NAGRAM — Siri/widget option providers can run before account metadata is readable; fail closed with no accounts instead of crashing the extension.
+            return ([], nil)
         }
     }
     
@@ -85,7 +86,13 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
         self.loginTokensPath = "\(basePath)/login-tokens"
         self.temporarySessionId = temporarySessionId
         let _ = try? FileManager.default.createDirectory(atPath: basePath, withIntermediateDirectories: true, attributes: nil)
-        guard let guardValueBox = SqliteValueBox(basePath: basePath + "/guard_db", queue: queue, isTemporary: isTemporary, isReadOnly: false, useCaches: useCaches, removeDatabaseOnError: removeDatabaseOnError, encryptionParameters: nil, upgradeProgress: { _ in }) else {
+        var guardValueBox = SqliteValueBox(basePath: basePath + "/guard_db", queue: queue, isTemporary: isTemporary, isReadOnly: false, useCaches: useCaches, removeDatabaseOnError: removeDatabaseOnError, encryptionParameters: nil, upgradeProgress: { _ in })
+        if guardValueBox == nil, !removeDatabaseOnError {
+            // MARK: NAGRAM — extensions should fail closed if account metadata guard db is temporarily unavailable, not trap during launch.
+            postboxLog("Falling back to in-memory guard value box at \(basePath + "/guard_db")")
+            guardValueBox = SqliteValueBox(basePath: basePath + "/guard_db", queue: queue, isTemporary: true, isReadOnly: false, useCaches: false, removeDatabaseOnError: false, encryptionParameters: nil, upgradeProgress: { _ in }, inMemory: true)
+        }
+        guard let guardValueBox else {
             postboxLog("Could not open guard value box at \(basePath + "/guard_db")")
             postboxLogSync()
             preconditionFailure()
@@ -104,6 +111,11 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
                 
                 Thread.sleep(forTimeInterval: 0.1 + 0.5 * Double(i))
             }
+        }
+        if valueBox == nil, !removeDatabaseOnError {
+            // MARK: NAGRAM — extension metadata reads can race data protection or another process; use a transient empty store instead of crashing.
+            postboxLog("Falling back to in-memory value box at \(basePath + "/db")")
+            valueBox = SqliteValueBox(basePath: basePath + "/db", queue: queue, isTemporary: true, isReadOnly: false, useCaches: false, removeDatabaseOnError: false, encryptionParameters: nil, upgradeProgress: { _ in }, inMemory: true)
         }
         guard let valueBox = valueBox else {
             postboxLog("Giving up on opening value box at \(basePath + "/db")")
@@ -128,8 +140,11 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
                 
                 if removeDatabaseOnError {
                     let _ = try? FileManager.default.removeItem(atPath: self.atomicStatePath)
+                    preconditionFailure()
+                } else {
+                    // MARK: NAGRAM — extensions should treat unreadable/corrupt account metadata as no accounts instead of crashing.
+                    self.currentAtomicState = AccountManagerAtomicState()
                 }
-                preconditionFailure()
             }
         } catch let e {
             postboxLog("load atomic state error: \(e)")
@@ -143,7 +158,8 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
                 self.currentAtomicState = AccountManagerAtomicState(records: legacyRecordDict, currentRecordId: self.legacyMetadataTable.getCurrentAccountId(), currentAuthRecord: self.legacyMetadataTable.getCurrentAuthAccount(), accessChallengeData: self.legacyMetadataTable.getAccessChallengeData())
                 self.syncAtomicStateToFile()
             } else {
-                preconditionFailure()
+                // MARK: NAGRAM — extensions can be launched while protected account metadata is unavailable; fail closed with no accounts.
+                self.currentAtomicState = AccountManagerAtomicState()
             }
         }
         
@@ -154,7 +170,9 @@ final class AccountManagerImpl<Types: AccountManagerTypes> {
             }
         } else if tableAccessChallengeData != .none {
             self.currentAtomicState.accessChallengeData = tableAccessChallengeData
-            self.syncAtomicStateToFile()
+            if removeDatabaseOnError {
+                self.syncAtomicStateToFile()
+            }
         }
         
         postboxLog("AccountManager: currentAccountId = \(String(describing: currentAtomicState.currentRecordId))")

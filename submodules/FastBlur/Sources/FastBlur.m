@@ -1,5 +1,7 @@
 #import <FastBlur/FastBlur.h>
 
+#import <stdint.h>
+
 #import <Accelerate/Accelerate.h>
 
 static inline uint64_t get_colors (const uint8_t *p) {
@@ -8,20 +10,31 @@ static inline uint64_t get_colors (const uint8_t *p) {
 
 void imageFastBlur(int imageWidth, int imageHeight, int imageStride, void * _Nonnull pixels)
 {
-    uint8_t *pix = (uint8_t *)pixels;
-    const int w = imageWidth;
-    const int h = imageHeight;
-    const int stride = imageStride;
     const int radius = 3;
     const int r1 = radius + 1;
     const int div = radius * 2 + 1;
     
-    if (radius > 15 || div >= w || div >= h)
+    // MARK: NAGRAM — tolerate allocation/input failures in background image transforms instead of dereferencing null buffers.
+    if (pixels == NULL || imageWidth <= 0 || imageHeight <= 0 || imageStride <= 0 || (size_t)imageStride < (size_t)imageWidth * 4 || radius > 15 || div >= imageWidth || div >= imageHeight)
     {
         return;
     }
+    if ((size_t)imageWidth > SIZE_MAX / (size_t)imageHeight) {
+        return;
+    }
+    const size_t pixelCount = (size_t)imageWidth * (size_t)imageHeight;
+    if (pixelCount > SIZE_MAX / sizeof(uint64_t)) {
+        return;
+    }
     
-    uint64_t *rgb = malloc(imageStride * imageHeight * sizeof(uint64_t));
+    uint8_t *pix = (uint8_t *)pixels;
+    const int w = imageWidth;
+    const int h = imageHeight;
+    const int stride = imageStride;
+    uint64_t *rgb = malloc(pixelCount * sizeof(uint64_t));
+    if (rgb == NULL) {
+        return;
+    }
     
     int x, y, i;
     
@@ -105,20 +118,31 @@ yi += stride;
 
 void telegramFastBlurMore(int imageWidth, int imageHeight, int imageStride, void * _Nonnull pixels)
 {
-    uint8_t *pix = (uint8_t *)pixels;
-    const int w = imageWidth;
-    const int h = imageHeight;
-    const int stride = imageStride;
     const int radius = 7;
     const int r1 = radius + 1;
     const int div = radius * 2 + 1;
     
-    if (radius > 15 || div >= w || div >= h)
+    // MARK: NAGRAM — tolerate allocation/input failures in background image transforms instead of dereferencing null buffers.
+    if (pixels == NULL || imageWidth <= 0 || imageHeight <= 0 || imageStride <= 0 || (size_t)imageStride < (size_t)imageWidth * 4 || radius > 15 || div >= imageWidth || div >= imageHeight)
     {
         return;
     }
+    if ((size_t)imageWidth > SIZE_MAX / (size_t)imageHeight) {
+        return;
+    }
+    const size_t pixelCount = (size_t)imageWidth * (size_t)imageHeight;
+    if (pixelCount > SIZE_MAX / sizeof(uint64_t)) {
+        return;
+    }
     
-    uint64_t *rgb = malloc(imageStride * imageHeight * sizeof(uint64_t));
+    uint8_t *pix = (uint8_t *)pixels;
+    const int w = imageWidth;
+    const int h = imageHeight;
+    const int stride = imageStride;
+    uint64_t *rgb = malloc(pixelCount * sizeof(uint64_t));
+    if (rgb == NULL) {
+        return;
+    }
     
     int x, y, i;
     
@@ -201,13 +225,24 @@ yi += stride;
 }
 
 void stickerThumbnailAlphaBlur(int imageWidth, int imageHeight, int imageStride, void * _Nonnull pixels) {
+    // MARK: NAGRAM — guard temp blur allocation; failing to blur is safer than crashing on a null buffer.
+    if (pixels == NULL || imageWidth <= 0 || imageHeight <= 0 || imageStride <= 0) {
+        return;
+    }
+    if ((size_t)imageHeight > SIZE_MAX / (size_t)imageStride) {
+        return;
+    }
+    size_t tempSize = (size_t)imageHeight * (size_t)imageStride;
+    void *tempBytes = malloc(tempSize);
+    if (tempBytes == NULL) {
+        return;
+    }
+
     vImage_Buffer srcBuffer;
     srcBuffer.width = imageWidth;
     srcBuffer.height = imageHeight;
     srcBuffer.rowBytes = imageStride;
     srcBuffer.data = pixels;
-    
-    void *tempBytes = malloc(imageHeight * imageStride);
     
     {
         vImage_Buffer dstBuffer;
@@ -222,7 +257,7 @@ void stickerThumbnailAlphaBlur(int imageWidth, int imageHeight, int imageStride,
         vImageBoxConvolve_ARGB8888(&srcBuffer, &dstBuffer, NULL, 0, 0, boxSize, boxSize, NULL, kvImageEdgeExtend);
     }
     
-    memcpy(pixels, tempBytes, imageHeight * imageStride);
+    memcpy(pixels, tempBytes, tempSize);
     free(tempBytes);
 }
 
