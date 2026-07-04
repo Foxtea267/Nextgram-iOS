@@ -9,15 +9,22 @@
           "blend-mode" : "normal",
           "fill" : "automatic",
           "glass" : true,
-          "image-name" : "ic_launcher_nagram_blue-playstore.png",
-          "name" : "ic_launcher_nagram_blue-playstore",
-          "position" : {
-            "scale" : 2.2,
-            "translation-in-points" : [
-              0,
-              5.684341886080802e-14
-            ]
-          }
+          "image-name" : "day-1.svg",
+          "name" : "day-1"
+        },
+        {
+          "blend-mode" : "normal",
+          "fill" : "automatic",
+          "glass" : true,
+          "image-name" : "day-2.svg",
+          "name" : "day-2"
+        },
+        {
+          "blend-mode" : "normal",
+          "fill" : "automatic",
+          "glass" : true,
+          "image-name" : "day-3.svg",
+          "name" : "day-3"
         }
       ],
       "shadow" : {

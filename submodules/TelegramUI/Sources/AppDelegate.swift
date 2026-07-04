@@ -951,6 +951,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 var icons = [
                     // MARK: NAGRAM
                     PresentationAppIcon(name: "Nagram", imageName: "Nagram", isDefault: true),
+                    PresentationAppIcon(name: "NagramBlock", imageName: "NagramBlock"),
+                    PresentationAppIcon(name: "NagramColorful", imageName: "NagramColorful"),
                     PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon"),
                     PresentationAppIcon(name: "New2", imageName: "New2"),
                     PresentationAppIcon(name: "New1", imageName: "New1"),

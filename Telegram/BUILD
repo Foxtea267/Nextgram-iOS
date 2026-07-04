@@ -349,7 +349,15 @@ alternate_icon_folders = [
     "PremiumTurbo",
 ]
 
-composer_icon_folders = ["Nagram"]
+composer_icon_folders = ["Nagram", "NagramBlock", "NagramColorful"]
+
+filegroup(
+    name = "NagramIconPreviews",
+    srcs = glob([
+        "Telegram-iOS/NagramBlock*.png",
+        "Telegram-iOS/NagramColorful*.png",
+    ]),
+)
 
 [
     filegroup(
@@ -1783,12 +1791,14 @@ ios_application(
         ":RequiredDeviceCapabilitiesPlist",
         ":UrlTypesInfoPlist",
     ],
+    primary_app_icon = "Nagram",
     app_icons = [ ":{}_icon".format(name) for name in composer_icon_folders ],
     alternate_icons = [
         ":{}".format(name) for name in alternate_icon_folders
     ],
     resources = [
         ":LaunchScreen",
+        ":NagramIconPreviews",
         #":DefaultAppIcon",
     ],
     frameworks = [

@@ -35,13 +35,29 @@ private func generateBorderImage(theme: PresentationTheme, bordered: Bool, selec
 }
 
 // MARK: NAGRAM
+private func nagramAppIconTitle(_ iconName: String, strings: PresentationStrings) -> String? {
+    let isChinese = strings.baseLanguageCode.hasPrefix("zh")
+    switch iconName {
+        case "Nagram":
+            return isChinese ? "轻盈" : "Light"
+        case "NagramBlock":
+            return isChinese ? "几何" : "Geometric"
+        case "NagramColorful":
+            return isChinese ? "缤纷" : "Colorful"
+        default:
+            return nil
+    }
+}
+
 private func loadThemeSettingsAppIconImage(_ icon: PresentationAppIcon) -> UIImage? {
-    if icon.name == "Nagram" {
-        for imageName in ["Nagram@3x", "Nagram@2x", "NagramIpad@2x", "NagramLargeIpad@2x", "NagramIpad"] {
+    if icon.name == "Nagram" || icon.name == "NagramBlock" || icon.name == "NagramColorful" {
+        for suffix in ["@3x", "@2x", "Ipad@2x", "LargeIpad@2x", "Ipad"] {
+            let imageName = "\(icon.name)\(suffix)"
             if let path = getAppBundle().path(forResource: imageName, ofType: "png"), let image = UIImage(contentsOfFile: path) {
                 return image
             }
         }
+        // MARK: NAGRAM — Icon Composer app-icon assets are not safe as regular UIImage previews.
         return UIImage(named: "BlueIcon", in: getAppBundle(), compatibleWith: nil)
     }
     return UIImage(named: icon.imageName, in: getAppBundle(), compatibleWith: nil)
@@ -388,38 +404,39 @@ class ThemeSettingsAppIconItemNode: ListViewItemNode, ItemListItemNode {
 
                             var name = "Icon"
                             var bordered = true
-                            switch icon.name {
-                                // MARK: NAGRAM
-                                case "Nagram":
-                                    name = "Nagram"
-                                case "BlueIcon":
-                                    name = item.strings.Appearance_AppIconDefault
-                                case "BlackIcon":
-                                    name = item.strings.Appearance_AppIconDefaultX
-                                case "BlueClassicIcon":
-                                    name = item.strings.Appearance_AppIconClassic
-                                case "BlackClassicIcon":
-                                    name = item.strings.Appearance_AppIconClassicX
-                                case "BlueFilledIcon":
-                                    name = item.strings.Appearance_AppIconFilled
-                                    bordered = false
-                                case "BlackFilledIcon":
-                                    name = item.strings.Appearance_AppIconFilledX
-                                    bordered = false
-                                case "WhiteFilled":
-                                    name = "⍺ White"
-                                case "New1":
-                                    name = item.strings.Appearance_AppIconNew1
-                                case "New2":
-                                    name = item.strings.Appearance_AppIconNew2
-                                case "Premium":
-                                    name = item.strings.Appearance_AppIconPremium
-                                case "PremiumBlack":
-                                    name = item.strings.Appearance_AppIconBlack
-                                case "PremiumTurbo":
-                                    name = item.strings.Appearance_AppIconTurbo
-                                default:
-                                    name = icon.name
+                            if let nagramTitle = nagramAppIconTitle(icon.name, strings: item.strings) {
+                                name = nagramTitle
+                            } else {
+                                switch icon.name {
+                                    case "BlueIcon":
+                                        name = item.strings.Appearance_AppIconDefault
+                                    case "BlackIcon":
+                                        name = item.strings.Appearance_AppIconDefaultX
+                                    case "BlueClassicIcon":
+                                        name = item.strings.Appearance_AppIconClassic
+                                    case "BlackClassicIcon":
+                                        name = item.strings.Appearance_AppIconClassicX
+                                    case "BlueFilledIcon":
+                                        name = item.strings.Appearance_AppIconFilled
+                                        bordered = false
+                                    case "BlackFilledIcon":
+                                        name = item.strings.Appearance_AppIconFilledX
+                                        bordered = false
+                                    case "WhiteFilled":
+                                        name = "⍺ White"
+                                    case "New1":
+                                        name = item.strings.Appearance_AppIconNew1
+                                    case "New2":
+                                        name = item.strings.Appearance_AppIconNew2
+                                    case "Premium":
+                                        name = item.strings.Appearance_AppIconPremium
+                                    case "PremiumBlack":
+                                        name = item.strings.Appearance_AppIconBlack
+                                    case "PremiumTurbo":
+                                        name = item.strings.Appearance_AppIconTurbo
+                                    default:
+                                        name = icon.name
+                                }
                             }
                         
                             imageNode.setup(theme: item.theme, icon: image, title: NSAttributedString(string: name, font: selected ? selectedTextFont : textFont, textColor: selected  ? item.theme.list.itemAccentColor : item.theme.list.itemPrimaryTextColor, paragraphAlignment: .center), locked: !item.isPremium && icon.isPremium, color: item.theme.list.itemPrimaryTextColor, bordered: bordered, selected: selected, action: {
