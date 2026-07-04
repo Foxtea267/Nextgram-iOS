@@ -3,6 +3,7 @@ import Foundation
 public enum NagramMessageMenuItemId: String, CaseIterable {
     case viewInChat
     case favoriteSticker
+    case saveStickerToCameraRoll
     case shareCallStats
     case rateCall
     case saveNotificationSound

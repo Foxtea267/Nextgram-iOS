@@ -91,6 +91,9 @@
 "Nagram.MessageMenu.Action.MoveDown" = "Move Down";
 "Nagram.MessageMenu.Item.viewInChat" = "View in Chat";
 "Nagram.MessageMenu.Item.favoriteSticker" = "Add/Remove Favorite Sticker";
+"Nagram.MessageMenu.Item.saveStickerToCameraRoll" = "Save Sticker to Photos";
+"Nagram.MessageMenu.StickerSavedToCameraRoll" = "Sticker saved to Photos";
+"Nagram.MessageMenu.StickerSaveFailed" = "Could not save sticker";
 "Nagram.MessageMenu.Item.shareCallStats" = "Share Call Stats";
 "Nagram.MessageMenu.Item.rateCall" = "Rate Call";
 "Nagram.MessageMenu.Item.saveNotificationSound" = "Save Notification Sound";

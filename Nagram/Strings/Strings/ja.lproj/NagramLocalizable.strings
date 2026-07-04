@@ -91,6 +91,9 @@
 "Nagram.MessageMenu.Action.MoveDown" = "下へ移動";
 "Nagram.MessageMenu.Item.viewInChat" = "チャットで表示";
 "Nagram.MessageMenu.Item.favoriteSticker" = "お気に入りステッカーを追加/削除";
+"Nagram.MessageMenu.Item.saveStickerToCameraRoll" = "ステッカーを写真に保存";
+"Nagram.MessageMenu.StickerSavedToCameraRoll" = "ステッカーを写真に保存しました";
+"Nagram.MessageMenu.StickerSaveFailed" = "ステッカーを保存できませんでした";
 "Nagram.MessageMenu.Item.shareCallStats" = "通話統計を共有";
 "Nagram.MessageMenu.Item.rateCall" = "通話を評価";
 "Nagram.MessageMenu.Item.saveNotificationSound" = "通知音を保存";

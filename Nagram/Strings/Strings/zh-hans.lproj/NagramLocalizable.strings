@@ -91,6 +91,9 @@
 "Nagram.MessageMenu.Action.MoveDown" = "下移";
 "Nagram.MessageMenu.Item.viewInChat" = "在聊天中查看";
 "Nagram.MessageMenu.Item.favoriteSticker" = "添加/移除收藏贴纸";
+"Nagram.MessageMenu.Item.saveStickerToCameraRoll" = "保存贴纸到相册";
+"Nagram.MessageMenu.StickerSavedToCameraRoll" = "贴纸已保存到相册";
+"Nagram.MessageMenu.StickerSaveFailed" = "无法保存贴纸";
 "Nagram.MessageMenu.Item.shareCallStats" = "分享通话统计";
 "Nagram.MessageMenu.Item.rateCall" = "评价通话";
 "Nagram.MessageMenu.Item.saveNotificationSound" = "保存通知声音";

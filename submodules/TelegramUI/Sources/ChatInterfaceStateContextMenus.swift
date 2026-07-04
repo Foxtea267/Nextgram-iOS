@@ -1961,6 +1961,36 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        // MARK: NAGRAM — 保存单个贴纸到系统相册，供其他 App 从相册选择使用。
+        var saveStickerToCameraRollFile: TelegramMediaFile?
+        if !isCopyProtected && !message.containsSecretMedia {
+            for media in message.media {
+                if let file = media as? TelegramMediaFile, file.isSticker {
+                    saveStickerToCameraRollFile = file
+                    break
+                }
+            }
+        }
+        if let saveStickerToCameraRollFile {
+            actions.append(.saveStickerToCameraRoll, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.saveStickerToCameraRoll", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Save"), color: theme.actionSheet.primaryTextColor)
+            }, action: { _, f in
+                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                let lang = presentationData.strings.baseLanguageCode
+                let _ = (saveStickerToCameraRoll(context: context, fileReference: .message(message: MessageReference(message), media: saveStickerToCameraRollFile), userLocation: .peer(message.id.peerId))
+                |> deliverOnMainQueue).startStandalone(next: { success in
+                    Queue.mainQueue().after(0.2) {
+                        if success {
+                            controllerInteraction.displayUndo(.mediaSaved(text: ngI18n("Nagram.MessageMenu.StickerSavedToCameraRoll", lang)))
+                        } else {
+                            controllerInteraction.displayUndo(.info(title: nil, text: ngI18n("Nagram.MessageMenu.StickerSaveFailed", lang), timeout: nil, customUndoText: nil))
+                        }
+                    }
+                })
+                f(.default)
+            })))
+        }
+        
         var editStickerFile: TelegramMediaFile?
         for media in messages[0].media {
             if let file = media as? TelegramMediaFile, file.isSticker && !file.isPremiumSticker {
