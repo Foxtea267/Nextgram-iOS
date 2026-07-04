@@ -1,0 +1,56 @@
+{
+  "supported-platforms": {
+    "squares": "shared"
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "display-p3:0.00000,0.58431,1.00000,1.00000",
+          "srgb:0.00000,0.51765,1.00000,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "layer1",
+      "hidden": false,
+      "position": {
+        "scale": 1.2,
+        "translation-in-points": [
+          0,
+          0
+        ]
+      },
+      "layers": [
+        {
+          "image-name": "day-3.svg",
+          "name": "day-3",
+          "hidden": false
+        }
+      ]
+    },
+    {
+      "name": "layer2",
+      "hidden": false,
+      "position": {
+        "scale": 1.2,
+        "translation-in-points": [
+          0,
+          0
+        ]
+      },
+      "layers": [
+        {
+          "image-name": "day-2.svg",
+          "name": "day-2"
+        },
+        {
+          "image-name": "day-1.svg",
+          "name": "day-1"
+        }
+      ]
+    }
+  ]
+}

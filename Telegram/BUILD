@@ -349,7 +349,8 @@ alternate_icon_folders = [
     "PremiumTurbo",
 ]
 
-composer_icon_folders = ["Nagram", "NagramBlock", "NagramColorful"]
+composer_source_icon_folders = ["Nagram", "NagramBlock", "NagramColorful"]
+composer_build_icon_folders = ["NagramBuild"]
 
 filegroup(
     name = "NagramIconPreviews",
@@ -374,7 +375,7 @@ filegroup(
         srcs = glob([
             "Telegram-iOS/{}.icon/**/*".format(name),
         ]),
-    ) for name in composer_icon_folders
+    ) for name in composer_source_icon_folders + composer_build_icon_folders
 ]
 
 filegroup(
@@ -957,6 +958,16 @@ genrule(
 
 sh_binary(
     name = "NagramFixComposerAlternateIcons",
+    data = [
+        ":Icons",
+        ":Nagram_icon",
+        ":NagramBlock_icon",
+        ":NagramColorful_icon",
+        "//submodules/LegacyComponents:LegacyComponentsAssets",
+        "//submodules/PasswordSetupUI:PasswordSetupUIAssets",
+        "//submodules/TelegramUI:TelegramUIAssets",
+        "//submodules/TelegramUI/Components/Calls/CallScreen:Assets",
+    ],
     srcs = [":GenerateNagramFixComposerAlternateIcons"],
 )
 
@@ -1814,8 +1825,8 @@ ios_application(
         ":RequiredDeviceCapabilitiesPlist",
         ":UrlTypesInfoPlist",
     ],
-    primary_app_icon = "Nagram",
-    app_icons = [ ":{}_icon".format(name) for name in composer_icon_folders ],
+    primary_app_icon = "NagramBuild",
+    app_icons = [ ":{}_icon".format(name) for name in composer_build_icon_folders ],
     alternate_icons = [
         ":{}".format(name) for name in alternate_icon_folders
     ],
