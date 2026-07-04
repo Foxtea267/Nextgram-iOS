@@ -64,6 +64,8 @@
 "Nagram.ChatListSwipeAction.switch" = "切替";
 "Nagram.ChatListSwipeAction.quick" = "クイック";
 "Nagram.ChatListSwipeAction.none" = "なし";
+"Nagram.ShowArchiveInFolders" = "フォルダにアーカイブを表示";
+"Nagram.OpenArchiveOnPull" = "プルでアーカイブを開く";
 "Nagram.HideChannelBottomButton" = "チャンネル下部パネルを非表示";
 "Nagram.HideSponsoredMessages" = "広告メッセージを非表示";
 "Nagram.DisableScrollToNextChannel" = "次のチャンネルへのスワイプを無効化";

@@ -1402,6 +1402,8 @@ public final class ChatListNode: ListViewImpl {
         }
     }
     
+    public var navigationScrollHeightTopInset: CGFloat = ChatListNavigationBar.searchScrollHeight // MARK: NAGRAM
+    
     public var startedScrollingAtUpperBound: Bool = false
     
     private let autoSetReady: Bool
@@ -2192,9 +2194,21 @@ public final class ChatListNode: ListViewImpl {
         }
         |> distinctUntilChanged
         
+        let archiveGroupItem: Signal<EngineChatList.GroupItem?, NoError>
+        if case .chatList(.root) = location, case .chatList = mode {
+            archiveGroupItem = context.engine.messages.chatList(group: .root, count: 1)
+            |> map { chatList -> EngineChatList.GroupItem? in
+                return chatList.groupItems.first(where: { $0.id == .archive })
+            }
+            |> distinctUntilChanged
+        } else {
+            archiveGroupItem = .single(nil)
+        }
+        let archiveDisplayState = combineLatest(displayArchiveIntro, archiveGroupItem, nagramBoolSignal("nagram.showArchiveInFolders", defaultValue: false)) // MARK: NAGRAM
+        
         let chatListNodeViewTransition = combineLatest(queue: viewProcessingQueue,
             hideArchivedFolderByDefault,
-            displayArchiveIntro,
+            archiveDisplayState,
             storageInfo,
             savedMessagesPeer,
             chatListViewUpdate,
@@ -2203,14 +2217,15 @@ public final class ChatListNode: ListViewImpl {
             chatListFilters,
             accountIsPremium
         )
-        |> mapToQueue { (hideArchivedFolderByDefault, displayArchiveIntro, storageInfo, savedMessagesPeer, updateAndFilter, state, contacts, chatListFilters, accountIsPremium) -> Signal<ChatListNodeListViewTransition, NoError> in
+        |> mapToQueue { (hideArchivedFolderByDefault, archiveDisplayState, storageInfo, savedMessagesPeer, updateAndFilter, state, contacts, chatListFilters, accountIsPremium) -> Signal<ChatListNodeListViewTransition, NoError> in
             let (update, filter) = updateAndFilter
+            let (displayArchiveIntro, archiveGroupItem, showArchiveInFolders) = archiveDisplayState
             
             let previousHideArchivedFolderByDefaultValue = previousHideArchivedFolderByDefault.swap(hideArchivedFolderByDefault)
             
             let innerIsMainTab = location == .chatList(groupId: .root) && chatListFilter == nil
             
-            let (rawEntries, isLoading) = chatListNodeEntriesForView(view: update.list, state: state, savedMessagesPeer: savedMessagesPeer, foundPeers: state.foundPeers, hideArchivedFolderByDefault: hideArchivedFolderByDefault, displayArchiveIntro: displayArchiveIntro, mode: mode, chatListLocation: location, contacts: contacts, accountPeerId: accountPeerId, isMainTab: innerIsMainTab)
+            let (rawEntries, isLoading) = chatListNodeEntriesForView(view: update.list, state: state, savedMessagesPeer: savedMessagesPeer, foundPeers: state.foundPeers, hideArchivedFolderByDefault: hideArchivedFolderByDefault, displayArchiveIntro: displayArchiveIntro, archiveGroupItem: archiveGroupItem, mode: mode, chatListLocation: location, contacts: contacts, accountPeerId: accountPeerId, isMainTab: innerIsMainTab, showArchiveInFolders: showArchiveInFolders)
             var isEmpty = true
             var entries = rawEntries.filter { entry in
                 switch entry {
@@ -2718,6 +2733,9 @@ public final class ChatListNode: ListViewImpl {
                         }
                     }
                 }
+                if strongSelf.currentState.hiddenItemShouldBeTemporaryRevealed, let isUncovered = strongSelf.temporaryHiddenItemIsUncovered() { // MARK: NAGRAM
+                    isHiddenItemVisible = isUncovered
+                }
                 if !isHiddenItemVisible && strongSelf.currentState.hiddenItemShouldBeTemporaryRevealed {
                     strongSelf.updateState { state in
                         var state = state
@@ -3158,6 +3176,14 @@ public final class ChatListNode: ListViewImpl {
             }
             
             strongSelf.contentOffsetChanged?(offset)
+            if strongSelf.currentState.hiddenItemShouldBeTemporaryRevealed && strongSelf.temporaryHiddenItemIsUncovered() == false { // MARK: NAGRAM
+                strongSelf.updateState { state in
+                    var state = state
+                    state.hiddenItemShouldBeTemporaryRevealed = false
+                    return state
+                }
+            }
+            
             strongSelf.pinnedScrollFraction = pinnedScrollFraction
             strongSelf.pinnedHeaderDisplayFractionUpdated?(transition)
         }
@@ -3200,6 +3226,32 @@ public final class ChatListNode: ListViewImpl {
         }
     }
     
+    private func temporaryHiddenItemIsUncovered() -> Bool? { // MARK: NAGRAM
+        let topInset = self.visibleTopInset ?? self.insets.top
+        var hasHiddenItem = false
+        var hasUncoveredHiddenItem = false
+        self.forEachVisibleItemNode { itemNode in
+            guard let itemNode = itemNode as? ChatListItemNode, let item = itemNode.item else {
+                return
+            }
+            let isHiddenItem: Bool
+            if case let .peer(peerData) = item.content, peerData.threadInfo?.isHidden == true {
+                isHiddenItem = true
+            } else if case let .groupReference(groupReference) = item.content, groupReference.hiddenByDefault {
+                isHiddenItem = true
+            } else {
+                isHiddenItem = false
+            }
+            if isHiddenItem {
+                hasHiddenItem = true
+                if itemNode.frame.maxY > topInset + UIScreenPixel {
+                    hasUncoveredHiddenItem = true
+                }
+            }
+        }
+        return hasHiddenItem ? hasUncoveredHiddenItem : nil
+    }
+    
     func hasItemsToBeRevealed() -> Bool {
         if self.currentState.hiddenItemShouldBeTemporaryRevealed {
             return false
@@ -3223,8 +3275,10 @@ public final class ChatListNode: ListViewImpl {
         return isHiddenItemVisible
     }
     
-    func revealScrollHiddenItem() {
+    @discardableResult
+    func revealScrollHiddenItem() -> EngineChatList.Group? {
         var isHiddenItemVisible = false
+        var revealedGroupId: EngineChatList.Group?
         self.forEachItemNode({ itemNode in
             if let itemNode = itemNode as? ChatListItemNode, let item = itemNode.item {
                 if case let .peer(peerData) = item.content, let threadInfo = peerData.threadInfo {
@@ -3235,6 +3289,7 @@ public final class ChatListNode: ListViewImpl {
                 if case let .groupReference(groupReference) = item.content {
                     if groupReference.hiddenByDefault {
                         isHiddenItemVisible = true
+                        revealedGroupId = groupReference.groupId
                     }
                 }
             }
@@ -3249,7 +3304,9 @@ public final class ChatListNode: ListViewImpl {
                 state.hiddenItemShouldBeTemporaryRevealed = true
                 return state
             }
+            return revealedGroupId
         }
+        return nil
     }
     
     private func pollFilterUpdates() {
@@ -3588,8 +3645,11 @@ public final class ChatListNode: ListViewImpl {
     }
     
     var isNavigationHidden: Bool {
+        if self.navigationScrollHeightTopInset <= 1.0 { // MARK: NAGRAM
+            return false
+        }
         switch self.visibleContentOffset() {
-        case let .known(value) where abs(value) < self.scrollHeightTopInset - 1.0:
+        case let .known(value) where abs(value) < self.navigationScrollHeightTopInset - 1.0:
             return false
         case .none:
             return false
@@ -3619,14 +3679,14 @@ public final class ChatListNode: ListViewImpl {
     }
     
     func adjustScrollOffsetForNavigation(isNavigationHidden: Bool) {
-        if self.isNavigationHidden == isNavigationHidden {
+        if self.navigationScrollHeightTopInset <= 1.0 || self.isNavigationHidden == isNavigationHidden { // MARK: NAGRAM
             return
         }
         var scrollToItem: ListViewScrollToItem?
         switch self.visibleContentOffset() {
-        case let .known(value) where abs(value) < self.scrollHeightTopInset - 1.0:
+        case let .known(value) where abs(value) < self.navigationScrollHeightTopInset - 1.0:
             if isNavigationHidden {
-                scrollToItem = ListViewScrollToItem(index: 0, position: .top(-self.scrollHeightTopInset), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
+                scrollToItem = ListViewScrollToItem(index: 0, position: .top(-self.navigationScrollHeightTopInset), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
             }
         default:
             if !isNavigationHidden {

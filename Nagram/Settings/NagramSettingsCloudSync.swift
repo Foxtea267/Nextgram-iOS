@@ -22,6 +22,8 @@ enum NagramSettingsSyncKeys {
         "nagram.stickerTimestamp",
         "nagram.videoPIPSwipeDirection",
         "nagram.chatListSwipeAction",
+        "nagram.openArchiveOnPull",
+        "nagram.showArchiveInFolders",
         "nagram.chatListStartupFolderMode",
         "nagram.chatListMessagePreviewStyle",
         "nagram.chatListLines",

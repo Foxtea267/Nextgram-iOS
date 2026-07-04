@@ -681,15 +681,24 @@ private func nagramShouldIgnoreRegexFilteredUnreadBadge(messages: [EngineMessage
     return hiddenUnreadCount > 0 && hiddenUnreadCount >= readState.count
 }
 
-func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, savedMessagesPeer: EnginePeer?, foundPeers: [(EnginePeer, EnginePeer?)], hideArchivedFolderByDefault: Bool, displayArchiveIntro: Bool, mode: ChatListNodeMode, chatListLocation: ChatListControllerLocation, contacts: [ChatListContactPeer], accountPeerId: EnginePeer.Id, isMainTab: Bool) -> (entries: [ChatListNodeEntry], loading: Bool) {
+func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, savedMessagesPeer: EnginePeer?, foundPeers: [(EnginePeer, EnginePeer?)], hideArchivedFolderByDefault: Bool, displayArchiveIntro: Bool, archiveGroupItem: EngineChatList.GroupItem?, mode: ChatListNodeMode, chatListLocation: ChatListControllerLocation, contacts: [ChatListContactPeer], accountPeerId: EnginePeer.Id, isMainTab: Bool, showArchiveInFolders: Bool) -> (entries: [ChatListNodeEntry], loading: Bool) {
     var groupItems = view.groupItems
-    if isMainTab && state.archiveStoryState != nil && groupItems.isEmpty {
-        groupItems.append(EngineChatList.GroupItem(
+    let hasArchiveGroup = { () -> Bool in
+        return groupItems.contains(where: { $0.id == .archive })
+    }
+    let appendArchiveGroup = { (item: EngineChatList.GroupItem?) in
+        groupItems.append(item ?? EngineChatList.GroupItem(
             id: .archive,
             topMessage: nil,
             items: [],
             unreadCount: 0
         ))
+    }
+    if !isMainTab && showArchiveInFolders && (archiveGroupItem != nil || state.archiveStoryState != nil), case .chatList(.root) = chatListLocation, case .chatList = mode, !hasArchiveGroup() {
+        appendArchiveGroup(archiveGroupItem)
+    }
+    if isMainTab && state.archiveStoryState != nil && groupItems.isEmpty {
+        appendArchiveGroup(nil)
     }
     
     var result: [ChatListNodeEntry] = []

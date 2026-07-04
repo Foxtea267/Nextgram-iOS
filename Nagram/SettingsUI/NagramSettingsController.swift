@@ -179,6 +179,10 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["RecentChats", "recent_dialogs", "ShowRecentChatsInSidebar"]
     case "Nagram.ChatListSwipeAction":
         return ["ChatListSwipeAction"]
+    case "Nagram.OpenArchiveOnPull":
+        return ["OpenArchiveOnPull", "PullArchive", "PullDownArchive"]
+    case "Nagram.ShowArchiveInFolders":
+        return ["ShowArchiveInFolders", "ArchiveInFolders", "ShowArchiveInTabs"]
     case "Nagram.ChatListStartupFolder":
         return ["DefaultFolder", "StartupFolder", "RememberLastFolder"]
     case "Nagram.DisableScrollToNextChannel":
@@ -442,6 +446,8 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.TapMessageRowToOpenContextMenu", get: { NagramSettings.shared.tapMessageRowToOpenContextMenu }, set: { NagramSettings.shared.tapMessageRowToOpenContextMenu = $0 }),
             .choice(titleKey: "Nagram.MessageDoubleTapAction", prefix: "Nagram.MessageDoubleTapAction", options: NagramMessageDoubleTapAction.allCases.map { $0.rawValue }, current: { NagramSettings.shared.messageDoubleTapActionValue.rawValue }, set: { NagramSettings.shared.messageDoubleTapAction = $0 }),
             .choice(titleKey: "Nagram.ChatListSwipeAction", prefix: "Nagram.ChatListSwipeAction", options: ["both", "switch", "quick", "none"], current: { NagramSettings.shared.chatListSwipeActionMode.rawValue }, set: { NagramSettings.shared.chatListSwipeAction = $0 }),
+            .toggle(titleKey: "Nagram.ShowArchiveInFolders", get: { NagramSettings.shared.showArchiveInFolders }, set: { NagramSettings.shared.showArchiveInFolders = $0 }),
+            .toggle(titleKey: "Nagram.OpenArchiveOnPull", get: { NagramSettings.shared.openArchiveOnPull }, set: { NagramSettings.shared.openArchiveOnPull = $0 }),
             .toggle(titleKey: "Nagram.DisableScrollToNextChannel", get: { NagramSettings.shared.disableScrollToNextChannel }, set: { NagramSettings.shared.disableScrollToNextChannel = $0 }),
             .toggle(titleKey: "Nagram.DisableScrollToNextTopic", get: { NagramSettings.shared.disableScrollToNextTopic }, set: { NagramSettings.shared.disableScrollToNextTopic = $0 }),
             .toggle(titleKey: "Nagram.VideoPIPSwipeUp", get: { NagramSettings.shared.videoPIPSwipeDirection == "up" }, set: { NagramSettings.shared.videoPIPSwipeDirection = $0 ? "up" : "none" }),

@@ -64,6 +64,8 @@
 "Nagram.ChatListSwipeAction.switch" = "Switch Folders";
 "Nagram.ChatListSwipeAction.quick" = "Quick Actions";
 "Nagram.ChatListSwipeAction.none" = "None";
+"Nagram.ShowArchiveInFolders" = "Show Archive in Folders";
+"Nagram.OpenArchiveOnPull" = "Open Archive on Pull";
 "Nagram.HideChannelBottomButton" = "Hide Channel Bottom Panel";
 "Nagram.HideSponsoredMessages" = "Hide Sponsored Messages";
 "Nagram.DisableScrollToNextChannel" = "Disable Swipe to Next Channel";

@@ -285,6 +285,12 @@ public final class NagramSettings {
     /// 对话列表横滑行为（"both" / "switch" / "quick" / "none"）
     @NagramDefault("nagram.chatListSwipeAction", NagramChatListSwipeAction.both.rawValue)
     public var chatListSwipeAction: String
+    /// 下拉展示归档后自动进入归档
+    @NagramDefault("nagram.openArchiveOnPull", false)
+    public var openArchiveOnPull: Bool
+    /// 在非“全部会话”分组顶部展示归档入口（默认关 = 保持 Telegram 原生行为）
+    @NagramDefault("nagram.showArchiveInFolders", false)
+    public var showArchiveInFolders: Bool
     /// 对话列表启动分组（"telegram" / "last" / "specific"）
     @NagramDefault("nagram.chatListStartupFolderMode", NagramChatListStartupFolderMode.telegramDefault.rawValue)
     public var chatListStartupFolderMode: String

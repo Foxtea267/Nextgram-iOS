@@ -64,6 +64,8 @@
 "Nagram.ChatListSwipeAction.switch" = "切换";
 "Nagram.ChatListSwipeAction.quick" = "快捷";
 "Nagram.ChatListSwipeAction.none" = "无";
+"Nagram.ShowArchiveInFolders" = "文件夹显示归档";
+"Nagram.OpenArchiveOnPull" = "下拉归档自动进入";
 "Nagram.HideChannelBottomButton" = "隐藏频道底部面板";
 "Nagram.HideSponsoredMessages" = "隐藏赞助消息";
 "Nagram.DisableScrollToNextChannel" = "禁止上滑到下一频道";
