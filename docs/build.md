@@ -137,6 +137,48 @@ python3 build-system/Make/Make.py --overrideXcodeVersion \
   --configuration=debug_arm64 --continueOnError
 ```
 
+## 在 workspace / worktree 构建真机包
+
+这里的 workspace / worktree 指 `.workspaces/<name>`、`.worktrees/<name>` 这类独立 checkout。真机构建必须在对应 checkout 根目录执行；仓库根 `.bazelrc` 里的 `try-import %workspace%/local.bazelrc` 会按当前 Bazel workspace root 解析，所以每个 checkout 都需要能看到本地签名输入。
+
+主 checkout 已有 `local.bazelrc` 和 `build-input/*` 时不需要额外准备。新 workspace / worktree 里，建议把这些 gitignored 本地输入链接回主 checkout，避免复制证书和 profile。示例使用 `.worktrees/<name>`；如果是 `.workspaces/<name>`，只改 `TARGET`：
+
+```sh
+PRIMARY=/Volumes/Repository/iOS/Nagram-ios
+TARGET="${PRIMARY}/.worktrees/<name>"
+
+cd "${TARGET}"
+mkdir -p build-input
+
+for path in \
+  local.bazelrc \
+  build-input/bazel-8.4.2-darwin-arm64 \
+  build-input/codesigning-development \
+  build-input/configuration-repository \
+  build-input/configuration-repository-workdir \
+  build-input/local-configuration.json \
+  build-input/xcode
+do
+  test -e "${PRIMARY}/${path}" || {
+    echo "missing ${PRIMARY}/${path}" >&2
+    exit 1
+  }
+  ln -sfn "${PRIMARY}/${path}" "${path}"
+done
+```
+
+如果目标 checkout 已经有同名普通文件或目录，先确认内容并移走后再链接，不要覆盖未知证书或配置。`configuration-repository*` 是 `Make.py` 生成的本地配置仓库；链接它们后 direct Bazel fallback 可以直接复用主 checkout 已生成的 `variables.bzl`。如果选择不链接它们，就先在当前 checkout 跑一次 `Make.py build`，让它重新生成后再走 direct Bazel。
+
+准备完成后，在该 workspace / worktree 根目录按签名模式执行上面的真机命令：正式/完整签名用 `--codesigningInformationPath build-input/codesigning-development`；免费 Apple ID 自签用 `--xcodeManagedCodesigning`。产物仍是当前 checkout 下的 `bazel-bin/Telegram/Telegram.ipa`。安装也在同一个 checkout 根目录执行：
+
+```sh
+xcrun devicectl list devices
+unzip -o bazel-bin/Telegram/Telegram.ipa -d /tmp/tg-device
+xcrun devicectl device install app --device <DEVICE_UDID> /tmp/tg-device/Payload/Telegram.app
+```
+
+注意：真机包仍然不能在 `local.bazelrc` 中开启 `disableProvisioningProfiles`。使用完整 development profiles 时，也不能开启 `disableExtensions`。
+
 ## 模拟器免签
 
 模拟器模式可以禁用 provisioning 和扩展：
