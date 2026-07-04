@@ -190,13 +190,50 @@ build-input/local-configuration.json
 build-input/codesigning-development/
 ```
 
-主 checkout 已有这些输入时，建议在新 workspace / worktree 中链接回主 checkout。示例使用 `.worktrees/<name>`；如果是 `.workspaces/<name>`，只改 `TARGET`：
+主 checkout 已有这些输入时，可以从 `default` workspace 或主仓库目录复制 / 链接过来。先在目标 workspace / worktree 根目录确定来源目录 `PRIMARY`。
+
+从 `jj` 的 `default` workspace 读取：
+
+```sh
+PRIMARY="$(jj workspace list -T 'if(name == "default", root ++ "\n", "")' | head -n 1)"
+test -n "${PRIMARY}" || {
+  echo "default workspace path not found" >&2
+  exit 1
+}
+```
+
+如果当前目录就是主仓库下的 `.worktrees/<name>` 或 `.workspaces/<name>`，也可以直接取上两级作为主仓库：
+
+```sh
+PRIMARY="$(cd ../.. && pwd)"
+```
+
+或者手写主仓库路径：
 
 ```sh
 PRIMARY=/Volumes/Repository/iOS/Nagram-ios
-TARGET="${PRIMARY}/.worktrees/<name>"
+```
 
-cd "${TARGET}"
+一次性复制签名输入：
+
+```sh
+mkdir -p build-input
+
+cp -f "${PRIMARY}/build-input/local-configuration.json" build-input/local-configuration.json
+
+if test -e build-input/codesigning-development; then
+  mv build-input/codesigning-development "build-input/codesigning-development.bak.$(date +%Y%m%d%H%M%S)"
+fi
+cp -R "${PRIMARY}/build-input/codesigning-development" build-input/codesigning-development
+
+if test -f "${PRIMARY}/local.bazelrc"; then
+  cp -f "${PRIMARY}/local.bazelrc" local.bazelrc
+fi
+```
+
+如果希望后续随主仓库签名配置更新，也可以改用 symlink：
+
+```sh
 mkdir -p build-input
 
 for path in \
@@ -215,9 +252,29 @@ if test -e "${PRIMARY}/local.bazelrc"; then
 fi
 ```
 
-如果目标 checkout 已经有同名普通文件或目录，先确认内容并移走后再链接，不要覆盖未知证书或配置。
+如果目标 checkout 已经有同名普通文件或目录，先确认内容并移走后再复制 / 链接，不要覆盖未知证书或配置。
 
-如果需要使用 direct Bazel fallback，或 `local.bazelrc` 引用了本地 `build-input/xcode` 配置，再补下面这些本地构建输入：
+如果需要使用 direct Bazel fallback，或 `local.bazelrc` 引用了本地 `build-input/xcode` 配置，再从同一个 `PRIMARY` 补下面这些本地构建输入。一次性复制：
+
+```sh
+for path in \
+  build-input/bazel-8.4.2-darwin-arm64 \
+  build-input/configuration-repository \
+  build-input/configuration-repository-workdir \
+  build-input/xcode
+do
+  test -e "${PRIMARY}/${path}" || {
+    echo "missing ${PRIMARY}/${path}" >&2
+    exit 1
+  }
+  if test -e "${path}"; then
+    mv "${path}" "${path}.bak.$(date +%Y%m%d%H%M%S)"
+  fi
+  cp -R "${PRIMARY}/${path}" "${path}"
+done
+```
+
+或者继续使用 symlink：
 
 ```sh
 for path in \
@@ -234,7 +291,7 @@ do
 done
 ```
 
-`configuration-repository*` 是 `Make.py` 生成的本地配置仓库；链接它们后 direct Bazel fallback 可以直接复用主 checkout 已生成的 `variables.bzl`。如果选择不链接它们，就先在当前 checkout 跑一次 `Make.py build`，让它重新生成后再走 direct Bazel。
+`configuration-repository*` 是 `Make.py` 生成的本地配置仓库；复制 / 链接它们后 direct Bazel fallback 可以直接复用主 checkout 已生成的 `variables.bzl`。如果选择不补它们，就先在当前 checkout 跑一次 `Make.py build`，让它重新生成后再走 direct Bazel。
 
 补齐后，在该 workspace / worktree 根目录按签名模式执行真机命令：正式/完整签名用 `--codesigningInformationPath build-input/codesigning-development`；免费 Apple ID 自签用 `--xcodeManagedCodesigning`。产物仍是当前 checkout 下的 `bazel-bin/Telegram/Telegram.ipa`。安装也在同一个 checkout 根目录执行：
 
