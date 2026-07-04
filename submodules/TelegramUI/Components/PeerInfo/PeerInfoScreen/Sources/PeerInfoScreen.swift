@@ -197,6 +197,8 @@ enum PeerInfoSettingsSection {
     case ton
     // MARK: NAGRAM — 增强设置入口
     case nagram
+    // MARK: NAGRAM — Debug fallback when the bottom tab bar is hidden.
+    case nagramDebug
 }
 
 enum PeerInfoReportType {

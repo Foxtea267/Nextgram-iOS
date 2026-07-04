@@ -227,8 +227,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.chatFolders)
     }))
 
-    // MARK: NAGRAM — 增强设置入口
-    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: "Nagram", icon: PresentationResourcesSettings.settings, action: {
+    // MARK: NAGRAM — 增强设置入口；长按可在隐藏底栏时进入 Debug Settings。
+    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: "Nagram", icon: PresentationResourcesSettings.settings, longPressAction: {
+        interaction.openSettings(.nagramDebug)
+    }, action: {
         interaction.openSettings(.nagram)
     }))
 
