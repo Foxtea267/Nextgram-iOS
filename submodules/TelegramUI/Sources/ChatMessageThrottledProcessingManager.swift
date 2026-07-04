@@ -27,6 +27,14 @@ final class ChatMessageThrottledProcessingManager {
         }
     }
     
+    func reset() {
+        self.queue.async {
+            self.processedList.removeAll()
+            self.processed.removeAll()
+            self.buffer.removeAll()
+        }
+    }
+    
     func add(_ messageIds: [EngineMessageAndThreadId]) {
         self.queue.async {
             let timestamp = CFAbsoluteTimeGetCurrent()

@@ -1,5 +1,7 @@
 import Foundation
 import NaturalLanguage
+// MARK: NAGRAM — Nagram translation provider facade.
+import NagramTranslate
 import SwiftSignalKit
 import TelegramCore
 import AccountContext
@@ -138,7 +140,10 @@ public func updateChatTranslationStateInteractively(engine: TelegramEngine, peer
 @available(iOS 12.0, *)
 private let languageRecognizer = NLLanguageRecognizer()
 
-public func translateMessageIds(context: AccountContext, messageIds: [EngineMessage.Id], fromLang: String?, toLang: String) -> Signal<Never, NoError> {
+public func translateMessageIds(context: AccountContext, messageIds: [EngineMessage.Id], fromLang: String?, toLang: String, forceRefresh: Bool = false) -> Signal<Never, NoError> {
+    // MARK: NAGRAM — route through configured provider; target language remains Telegram's native choice.
+    let translationService = NagramTranslateService(context: context)
+    let effectiveToLang = toLang
     return context.account.postbox.transaction { transaction -> Signal<Never, NoError> in
         var messageIdsToTranslate: [EngineMessage.Id] = []
         var messageIdsSet = Set<EngineMessage.Id>()
@@ -146,7 +151,7 @@ public func translateMessageIds(context: AccountContext, messageIds: [EngineMess
             if let message = transaction.getMessage(messageId) {
                 if let replyAttribute = message.attributes.first(where: { $0 is ReplyMessageAttribute }) as? ReplyMessageAttribute, let replyMessage = message.associatedMessages[replyAttribute.messageId] {
                     if !replyMessage.text.isEmpty {
-                        if let translation = replyMessage.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == toLang {
+                        if !forceRefresh, let translation = replyMessage.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == effectiveToLang {
                         } else {
                             if !messageIdsSet.contains(replyMessage.id) {
                                 messageIdsToTranslate.append(replyMessage.id)
@@ -158,7 +163,7 @@ public func translateMessageIds(context: AccountContext, messageIds: [EngineMess
                 guard message.author?.id != context.account.peerId else {
                     continue
                 }
-                if let translation = message.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == toLang {
+                if !forceRefresh, let translation = message.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == effectiveToLang {
                     continue
                 }
                 
@@ -196,7 +201,8 @@ public func translateMessageIds(context: AccountContext, messageIds: [EngineMess
         default:
             break
         }
-        return context.engine.messages.translateMessages(messageIds: messageIdsToTranslate, fromLang: fromLang, toLang: toLang, enableLocalIfPossible: enableLocalIfPossible)
+        // MARK: NAGRAM — route chat translation through the Nagram provider facade while preserving TelegramUI's NoError entry contract.
+        return translationService.translateMessages(messageIds: messageIdsToTranslate, fromLang: fromLang, toLang: effectiveToLang, enableLocalIfPossible: enableLocalIfPossible)
         |> `catch` { _ -> Signal<Never, NoError> in
             return .complete()
         }

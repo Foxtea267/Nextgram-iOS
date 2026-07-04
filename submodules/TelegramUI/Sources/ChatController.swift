@@ -4308,65 +4308,30 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         
                         let _ = ApplicationSpecificNotice.incrementTranslationSuggestion(accountManager: context.sharedContext.accountManager, timestamp: Int32(Date().timeIntervalSince1970)).startStandalone()
                         
-                        let translationConfiguration = TranslationConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
-                        var useSystemTranslation = false
-                        switch translationConfiguration.manual {
-                        case .system:
-                            if #available(iOS 18.0, *) {
-                                useSystemTranslation = true
+                        // MARK: NAGRAM — route manual single-message translation through TextProcessingScreen so it uses NagramTranslateService instead of iOS system translationPresentation.
+                        self.push(await TextProcessingScreen(
+                            context: self.context,
+                            mode: .translate(fromLanguage: language, applyResult: nil),
+                            inputText: TextWithEntities(text: text.string, entities: entities ?? []),
+                            copyResult: canCopy ? { [weak self] text in
+                                guard let self else {
+                                    return
+                                }
+                                storeMessageTextInPasteboard(text.text, entities: text.entities)
+                                
+                                let infoText = self.presentationData.strings.Conversation_TextCopied
+                                self.present(UndoOverlayController(presentationData: self.presentationData, content: .copy(text: infoText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in
+                                        return true
+                                }), in: .current)
+                            } : nil,
+                            translateChat: { [weak self] toLang in
+                                guard let self else {
+                                    return
+                                }
+                                self.interfaceInteraction?.changeTranslationLanguage(toLang)
+                                self.interfaceInteraction?.toggleTranslation(.translated)
                             }
-                        default:
-                            break
-                        }
-                        
-                        if useSystemTranslation {
-                            presentTranslateScreen(
-                                context: context,
-                                text: text.string,
-                                entities: entities ?? [],
-                                canCopy: canCopy,
-                                fromLanguage: language,
-                                ignoredLanguages: translationSettings.ignoredLanguages,
-                                translateChat: { [weak self] _, toLang in
-                                    self?.interfaceInteraction?.changeTranslationLanguage(toLang)
-                                    self?.interfaceInteraction?.toggleTranslation(.translated)
-                                },
-                                pushController: { [weak self] c in
-                                    self?.effectiveNavigationController?._keepModalDismissProgress = true
-                                    self?.push(c)
-                                },
-                                presentController: { [weak self] c in
-                                    self?.present(c, in: .window(.root))
-                                },
-                                display: { [weak self] c in
-                                    self?.push(c)
-                                }
-                            )
-                        } else {
-                            self.push(await TextProcessingScreen(
-                                context: self.context,
-                                mode: .translate(fromLanguage: language, applyResult: nil),
-                                inputText: TextWithEntities(text: text.string, entities: entities ?? []),
-                                copyResult: canCopy ? { [weak self] text in
-                                    guard let self else {
-                                        return
-                                    }
-                                    storeMessageTextInPasteboard(text.text, entities: text.entities)
-                                    
-                                    let infoText = self.presentationData.strings.Conversation_TextCopied
-                                    self.present(UndoOverlayController(presentationData: self.presentationData, content: .copy(text: infoText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in
-                                            return true
-                                    }), in: .current)
-                                } : nil,
-                                translateChat: { [weak self] toLang in
-                                    guard let self else {
-                                        return
-                                    }
-                                    self.interfaceInteraction?.changeTranslationLanguage(toLang)
-                                    self.interfaceInteraction?.toggleTranslation(.translated)
-                                }
-                            ))
-                        }
+                        ))
                     }
                 }
                 if let currentContextController = self.currentContextController {

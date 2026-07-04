@@ -38,6 +38,7 @@ import TextFormat
 import ChatNewThreadInfoItem
 import PhoneNumberFormat
 import Postbox
+import NagramSettings // MARK: NAGRAM
 import NagramSettingsSignal // MARK: NAGRAM
 
 struct ChatTopVisibleMessageRange: Equatable {
@@ -755,6 +756,9 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
     private let clientId: Atomic<Int32>
     
     private var translationLang: (fromLang: String?, toLang: String)?
+    // MARK: NAGRAM — TranslationMessageAttribute has no provider marker, so refresh visible items once when provider/target changes.
+    private var nagramTranslationCacheKey: String?
+    private var nagramTranslationForceRefresh = false
     
     private var allowDustEffect: Bool = true
     private var dustEffectLayer: DustEffectLayer?
@@ -967,8 +971,10 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
             context?.account.viewTracker.refreshStoriesForMessageIds(messageIds: Set(messageIds.map(\.messageId)))
         }
         self.translationProcessingManager.process = { [weak self, weak context] messageIds in
-            if let context, let translationLang = self?.translationLang {
-                let _ = translateMessageIds(context: context, messageIds: Array(messageIds.map(\.messageId)), fromLang: translationLang.fromLang, toLang: translationLang.toLang).startStandalone()
+            if let context, let strongSelf = self, let translationLang = strongSelf.translationLang {
+                let forceRefresh = strongSelf.nagramTranslationForceRefresh
+                strongSelf.nagramTranslationForceRefresh = false
+                let _ = translateMessageIds(context: context, messageIds: Array(messageIds.map(\.messageId)), fromLang: translationLang.fromLang, toLang: translationLang.toLang, forceRefresh: forceRefresh).startStandalone()
             }
         }
         self.factCheckProcessingManager.process = { [weak context] messageIds in
@@ -2846,6 +2852,19 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
             var messageIdsToTranslate: [MessageId] = []
             var messageIdsToFactCheck: [MessageId] = []
             if let translateToLanguage {
+                // MARK: NAGRAM — provider/target changes must requeue visible messages once; Telegram's cached attribute only stores toLang.
+                let nagramTranslationCacheKey = "\(NagramSettings.shared.translationProviderValue.rawValue)|\(translateToLanguage)"
+                let previousNagramTranslationCacheKey = self.nagramTranslationCacheKey
+                let shouldForceRefreshTranslations = previousNagramTranslationCacheKey != nil && previousNagramTranslationCacheKey != nagramTranslationCacheKey
+                let shouldReuseExistingTranslations = !shouldForceRefreshTranslations
+                if previousNagramTranslationCacheKey != nagramTranslationCacheKey {
+                    self.nagramTranslationCacheKey = nagramTranslationCacheKey
+                    if shouldForceRefreshTranslations {
+                        self.nagramTranslationForceRefresh = true
+                        self.translationProcessingManager.reset()
+                    }
+                }
+                
                 let extendedRange: Int = 2
                 var wideIndexRange = (historyView.filteredEntries.count - 1 - visible.lastIndex - extendedRange, historyView.filteredEntries.count - 1 - visible.firstIndex + extendedRange)
                 wideIndexRange = (max(0, min(historyView.filteredEntries.count - 1, wideIndexRange.0)), max(0, min(historyView.filteredEntries.count - 1, wideIndexRange.1)))
@@ -2864,7 +2883,7 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
                             guard message.author?.id != self.context.account.peerId else {
                                 continue
                             }
-                            if let translation = message.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == translateToLanguage {
+                            if shouldReuseExistingTranslations, let translation = message.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == translateToLanguage {
                                 continue
                             }
                             if !message.text.isEmpty {
@@ -2882,7 +2901,7 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
                                 guard message.author?.id != self.context.account.peerId else {
                                     continue
                                 }
-                                if let translation = message.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == translateToLanguage {
+                                if shouldReuseExistingTranslations, let translation = message.attributes.first(where: { $0 is TranslationMessageAttribute }) as? TranslationMessageAttribute, translation.toLang == translateToLanguage {
                                     continue
                                 }
                                 if !message.text.isEmpty {

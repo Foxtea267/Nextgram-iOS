@@ -78,6 +78,43 @@ public enum NagramGlassTransparencyMode: String {
     case custom
 }
 
+public enum NagramTranslationProvider: String, CaseIterable {
+    case telegram
+    case google
+    case googleCN = "google-cn"
+    case microsoft
+    case yandex
+    case transmart
+    case llm
+}
+
+public enum NagramTranslationLLMAPIFormat: String, CaseIterable {
+    case openai
+    case anthropic
+
+    public var defaultBaseURL: String {
+        switch self {
+        case .openai:
+            return "https://api.openai.com"
+        case .anthropic:
+            return "https://api.anthropic.com"
+        }
+    }
+
+    public var defaultTranslationEndpoint: String {
+        switch self {
+        case .openai:
+            return "/v1/chat/completions"
+        case .anthropic:
+            return "/v1/messages"
+        }
+    }
+
+    public var defaultModelsEndpoint: String {
+        return "/v1/models"
+    }
+}
+
 public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
@@ -278,6 +315,32 @@ public final class NagramSettings {
     @NagramDefault("nagram.downloadSpeedBoost", "none")
     public var downloadSpeedBoost: String
 
+    // MARK: NAGRAM — 翻译 provider 设置
+    /// 翻译 provider（Telegram MTProto 或 Nagram 外部 provider）。
+    @NagramDefault("nagram.translationProvider", NagramTranslationProvider.telegram.rawValue)
+    public var translationProvider: String
+    /// LLM API wire format (OpenAI-compatible Chat Completions or Anthropic Messages).
+    @NagramDefault("nagram.translationLLMAPIFormat", NagramTranslationLLMAPIFormat.openai.rawValue)
+    public var translationLLMAPIFormat: String
+    /// Optional LLM API base URL; empty uses the selected format default.
+    @NagramDefault("nagram.translationLLMBaseURL", "")
+    public var translationLLMBaseURL: String
+    /// Optional LLM translation endpoint path/full URL; empty uses the selected format default.
+    @NagramDefault("nagram.translationLLMEndpoint", "")
+    public var translationLLMEndpoint: String
+    /// LLM API key is intentionally stored in Keychain and excluded from iCloud sync.
+    public var translationLLMAPIKey: String {
+        get {
+            return NagramTranslationLLMKeychain.apiKey
+        }
+        set {
+            NagramTranslationLLMKeychain.apiKey = newValue
+        }
+    }
+    /// OpenAI-compatible model name for LLM translation.
+    @NagramDefault("nagram.translationLLMModel", "")
+    public var translationLLMModel: String
+
     // MARK: 波次 3 批 D — 需新逻辑
     /// 回车键发送消息
     @NagramDefault("nagram.sendWithReturnKey", false)
@@ -306,6 +369,36 @@ public final class NagramSettings {
     /// 设置/资料页隐藏手机号（默认关 = 保持原生）
     @NagramDefault("nagram.hidePhoneInSettings", false)
     public var hidePhoneInSettings: Bool
+}
+
+private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, defaultBaseURL: String, defaultEndpoint: String) -> URL? {
+    let trimmedEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let url = URL(string: trimmedEndpoint), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+        return url
+    }
+
+    let baseString = baseURLString.isEmpty ? defaultBaseURL : baseURLString
+    guard var components = URLComponents(string: baseString), let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+        return nil
+    }
+
+    var basePath = components.percentEncodedPath
+    while basePath.hasSuffix("/") {
+        basePath.removeLast()
+    }
+
+    var endpointPath = trimmedEndpoint.isEmpty ? defaultEndpoint : trimmedEndpoint
+    if !endpointPath.hasPrefix("/") {
+        endpointPath = "/\(endpointPath)"
+    }
+    if basePath.hasSuffix("/v1"), endpointPath.hasPrefix("/v1/") {
+        endpointPath = String(endpointPath.dropFirst(3))
+    }
+
+    components.percentEncodedPath = basePath + endpointPath
+    components.percentEncodedQuery = nil
+    components.fragment = nil
+    return components.url
 }
 
 public extension NagramSettings {
@@ -355,6 +448,48 @@ public extension NagramSettings {
             return .sendReaction
         }
         return value
+    }
+
+    var translationProviderValue: NagramTranslationProvider {
+        guard let value = NagramTranslationProvider(rawValue: self.translationProvider) else {
+            self.translationProvider = NagramTranslationProvider.telegram.rawValue
+            return .telegram
+        }
+        return value
+    }
+
+    var translationLLMAPIFormatValue: NagramTranslationLLMAPIFormat {
+        guard let value = NagramTranslationLLMAPIFormat(rawValue: self.translationLLMAPIFormat) else {
+            self.translationLLMAPIFormat = NagramTranslationLLMAPIFormat.openai.rawValue
+            return .openai
+        }
+        return value
+    }
+
+    var translationLLMBaseURLValue: String {
+        return self.translationLLMBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var translationLLMEndpointValue: String {
+        return self.translationLLMEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var translationLLMAPIKeyValue: String {
+        return self.translationLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var translationLLMModelValue: String {
+        return self.translationLLMModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func translationLLMTranslationURL() -> URL? {
+        let format = self.translationLLMAPIFormatValue
+        return nagramTranslationLLMURL(baseURLString: self.translationLLMBaseURLValue, endpoint: self.translationLLMEndpointValue, defaultBaseURL: format.defaultBaseURL, defaultEndpoint: format.defaultTranslationEndpoint)
+    }
+
+    func translationLLMModelsURL() -> URL? {
+        let format = self.translationLLMAPIFormatValue
+        return nagramTranslationLLMURL(baseURLString: self.translationLLMBaseURLValue, endpoint: format.defaultModelsEndpoint, defaultBaseURL: format.defaultBaseURL, defaultEndpoint: format.defaultModelsEndpoint)
     }
 
     func chatListStartupSpecificFolderId(accountPeerId: Int64) -> Int32? {

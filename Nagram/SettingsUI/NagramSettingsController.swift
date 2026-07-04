@@ -62,6 +62,7 @@ private enum NagramRow {
     case toggle(titleKey: String, get: () -> Bool, set: (Bool) -> Void)
     case toggleWithEnabled(titleKey: String, get: () -> Bool, set: (Bool) -> Void, enabled: () -> Bool, enableInteractiveChanges: Bool)
     case choice(titleKey: String, prefix: String, options: [String], current: () -> String, set: (String) -> Void)
+    case input(titleKey: String, placeholderKey: String, get: () -> String, set: (String) -> Void, isSecret: Bool, isVisible: () -> Bool)
     case startupFolder(titleKey: String)
     case slider(titleKey: String?, minValue: Int32, maxValue: Int32, get: () -> Int32, set: (Int32) -> Void, isVisible: () -> Bool)
     case navigation(titleKey: String, action: () -> Void)
@@ -88,6 +89,8 @@ private func nagramRowTitleKey(_ row: NagramRow) -> String {
     case let .toggleWithEnabled(titleKey, _, _, _, _):
         return titleKey
     case let .choice(titleKey, _, _, _, _):
+        return titleKey
+    case let .input(titleKey, _, _, _, _, _):
         return titleKey
     case let .startupFolder(titleKey):
         return titleKey
@@ -120,6 +123,16 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["DisableInAppCamera", "inappCamera"]
     case "Nagram.DisableGalleryCameraPreview":
         return ["DisableCameraPreview"]
+    case "Nagram.TranslationProvider":
+        return ["TranslateProvider", "TranslationProvider"]
+    case "Nagram.TranslationLLMSettings":
+        return ["LLM", "LLMSettings", "OpenAI", "Anthropic", "LLMEndpoint", "OpenAIEndpoint", "ChatCompletionsEndpoint"]
+    case "Nagram.TranslationLLMEndpoint":
+        return ["LLMEndpoint", "OpenAIEndpoint", "ChatCompletionsEndpoint"]
+    case "Nagram.TranslationLLMModel":
+        return ["LLMModel", "OpenAIModel"]
+    case "Nagram.TranslationLLMAPIKey":
+        return ["LLMApiKey", "OpenAIApiKey"]
     case "Nagram.DownloadSpeedBoost":
         return ["enhancedFileLoader", "downloadSpeedBoost"]
     case "Nagram.UploadSpeedBoost":
@@ -345,7 +358,8 @@ private func nagramGroups(
     setSensitiveContentEnabled: @escaping (Bool) -> Void,
     bottomBarLayoutAction: @escaping () -> Void,
     messageMenuAction: @escaping () -> Void,
-    regexFiltersAction: @escaping () -> Void
+    regexFiltersAction: @escaping () -> Void,
+    llmTranslationSettingsAction: @escaping () -> Void
 ) -> [NagramGroup] {
     let sensitiveContentEnabled: () -> Bool = {
         return sensitiveContentConfiguration()?.sensitiveContentEnabled ?? false
@@ -392,6 +406,10 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.HideReactions", get: { NagramSettings.shared.hideReactions }, set: { NagramSettings.shared.hideReactions = $0 }),
             .toggle(titleKey: "Nagram.HideChannelBottomButton", get: { NagramSettings.shared.hideChannelBottomButton }, set: { NagramSettings.shared.hideChannelBottomButton = $0 }),
             .toggle(titleKey: "Nagram.HideSponsoredMessages", get: { NagramSettings.shared.hideSponsoredMessages }, set: { NagramSettings.shared.hideSponsoredMessages = $0 }),
+        ]),
+        NagramGroup(tab: .chat, headerKey: "Nagram.Section.Translation", footerKey: "Nagram.Section.Translation.Footer", rows: [
+            .choice(titleKey: "Nagram.TranslationProvider", prefix: "Nagram.TranslationProvider", options: NagramTranslationProvider.allCases.map { $0.rawValue }, current: { NagramSettings.shared.translationProviderValue.rawValue }, set: { NagramSettings.shared.translationProvider = $0 }),
+            .navigation(titleKey: "Nagram.TranslationLLMSettings", action: llmTranslationSettingsAction),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Pangu", footerKey: "Nagram.PanguInfo", rows: [
             .toggle(titleKey: "Nagram.PanguOnReceiving", get: { NagramSettings.shared.enablePanguOnReceiving }, set: { NagramSettings.shared.enablePanguOnReceiving = $0 }),
@@ -453,12 +471,14 @@ private func nagramGroups(
 private final class NagramSettingsArguments {
     let toggle: (Int, Bool) -> Void
     let disclosureAction: (Int) -> Void
+    let inputUpdated: (Int, String) -> Void
     let sliderUpdated: (Int, Int32) -> Void
     let copyDeepLink: (Int) -> Void
 
-    init(toggle: @escaping (Int, Bool) -> Void, disclosureAction: @escaping (Int) -> Void, sliderUpdated: @escaping (Int, Int32) -> Void, copyDeepLink: @escaping (Int) -> Void) {
+    init(toggle: @escaping (Int, Bool) -> Void, disclosureAction: @escaping (Int) -> Void, inputUpdated: @escaping (Int, String) -> Void, sliderUpdated: @escaping (Int, Int32) -> Void, copyDeepLink: @escaping (Int) -> Void) {
         self.toggle = toggle
         self.disclosureAction = disclosureAction
+        self.inputUpdated = inputUpdated
         self.sliderUpdated = sliderUpdated
         self.copyDeepLink = copyDeepLink
     }
@@ -468,6 +488,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
     case header(stableId: Int32, section: Int32, text: String)
     case toggle(stableId: Int32, section: Int32, title: String, value: Bool, enabled: Bool, enableInteractiveChanges: Bool, index: Int)
     case disclosure(stableId: Int32, section: Int32, title: String, label: String, index: Int)
+    case input(stableId: Int32, section: Int32, title: String, text: String, placeholder: String, isSecret: Bool, index: Int)
     case slider(stableId: Int32, section: Int32, title: String?, minValue: Int32, maxValue: Int32, value: Int32, index: Int)
     case footer(stableId: Int32, section: Int32, text: String)
 
@@ -476,6 +497,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .header(_, section, _): return section
         case let .toggle(_, section, _, _, _, _, _): return section
         case let .disclosure(_, section, _, _, _): return section
+        case let .input(_, section, _, _, _, _, _): return section
         case let .slider(_, section, _, _, _, _, _): return section
         case let .footer(_, section, _): return section
         }
@@ -486,6 +508,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .header(stableId, _, _): return stableId
         case let .toggle(stableId, _, _, _, _, _, _): return stableId
         case let .disclosure(stableId, _, _, _, _): return stableId
+        case let .input(stableId, _, _, _, _, _, _): return stableId
         case let .slider(stableId, _, _, _, _, _, _): return stableId
         case let .footer(stableId, _, _): return stableId
         }
@@ -501,6 +524,9 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
             return false
         case let .disclosure(lId, lSec, lTitle, lLabel, lIndex):
             if case let .disclosure(rId, rSec, rTitle, rLabel, rIndex) = rhs { return lId == rId && lSec == rSec && lTitle == rTitle && lLabel == rLabel && lIndex == rIndex }
+            return false
+        case let .input(lId, lSec, lTitle, lText, lPlaceholder, lIsSecret, lIndex):
+            if case let .input(rId, rSec, rTitle, rText, rPlaceholder, rIsSecret, rIndex) = rhs { return lId == rId && lSec == rSec && lTitle == rTitle && lText == rText && lPlaceholder == rPlaceholder && lIsSecret == rIsSecret && lIndex == rIndex }
             return false
         case let .slider(lId, lSec, lTitle, lMin, lMax, lValue, lIndex):
             if case let .slider(rId, rSec, rTitle, rMin, rMax, rValue, rIndex) = rhs { return lId == rId && lSec == rSec && lTitle == rTitle && lMin == rMin && lMax == rMax && lValue == rValue && lIndex == rIndex }
@@ -520,6 +546,8 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .toggle(_, _, _, _, _, _, index):
             return NagramSettingsRowTag(index: index)
         case let .disclosure(_, _, _, _, index):
+            return NagramSettingsRowTag(index: index)
+        case let .input(_, _, _, _, _, _, index):
             return NagramSettingsRowTag(index: index)
         case let .slider(_, _, _, _, _, _, index):
             return NagramSettingsRowTag(index: index)
@@ -545,6 +573,11 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
             }, longTapAction: {
                 arguments.copyDeepLink(index)
             }, tag: self.tag)
+        case let .input(_, section, title, text, placeholder, isSecret, index):
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { updatedText in
+                arguments.inputUpdated(index, updatedText)
+            }, action: {
+            })
         case let .slider(_, section, title, minValue, maxValue, value, index):
             return NagramSliderItem(theme: presentationData.theme, minValue: minValue, maxValue: maxValue, value: value, title: title, sectionId: section, updated: { newValue in
                 arguments.sliderUpdated(index, newValue)
@@ -615,6 +648,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nagramMessageMenuSettingsController(context: context))
     }, regexFiltersAction: {
         pushControllerImpl?(nagramRegexFilterSettingsController(context: context))
+    }, llmTranslationSettingsAction: {
+        pushControllerImpl?(nagramLLMTranslationSettingsController(context: context))
     })
     let flatRows: [NagramRow] = groups.flatMap { $0.rows }
     let flatRowDeepLinks: [String] = groups.flatMap { group in
@@ -724,6 +759,10 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         } else if case let .navigation(_, action) = row {
             action()
         }
+    }, inputUpdated: { index, value in
+        if case let .input(_, _, _, set, _, _) = flatRows[index] {
+            set(value)
+        }
     }, sliderUpdated: { index, value in
         // 只写值,不 bump:滑杆节点拖动时自更新中央「X%」,无需重建列表 → 避开重入崩溃。
         if case let .slider(_, _, _, _, set, _) = flatRows[index] {
@@ -790,6 +829,10 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                     case let .choice(titleKey, prefix, _, current, _):
                         let currentValue = titleKey == "Nagram.ChatListMessagePreviewStyle" && NagramSettings.shared.chatListCompact ? NagramChatListMessagePreviewStyle.two.rawValue : current()
                         entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: ngI18n("\(prefix).\(currentValue)", lang), index: rowIndex))
+                    case let .input(titleKey, placeholderKey, get, _, isSecret, isVisible):
+                        if isVisible() {
+                            entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, index: rowIndex))
+                        }
                     case let .startupFolder(titleKey):
                         entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: nagramChatListStartupFolderLabel(accountPeerId: context.account.peerId.toInt64(), strings: presentationData.strings, lang: lang), index: rowIndex))
                     case let .slider(titleKey, minValue, maxValue, get, _, isVisible):
