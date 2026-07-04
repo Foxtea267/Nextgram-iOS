@@ -937,6 +937,29 @@ sh_binary(
     srcs = [":GenerateAddAlternateIcons"],
 )
 
+genrule(
+    name = "GenerateNagramFixComposerAlternateIcons",
+    srcs = [
+        "Telegram-iOS/NagramFixComposerAlternateIcons.sh",
+    ],
+    cmd_bash =
+"""
+    cat $(location Telegram-iOS/NagramFixComposerAlternateIcons.sh) >> $(location NagramFixComposerAlternateIcons.sh)
+""",
+    outs = [
+        "NagramFixComposerAlternateIcons.sh",
+    ],
+    executable = True,
+    visibility = [
+        "//visibility:public",
+    ]
+)
+
+sh_binary(
+    name = "NagramFixComposerAlternateIcons",
+    srcs = [":GenerateNagramFixComposerAlternateIcons"],
+)
+
 plist_fragment(
     name = "TelegramUIInfoPlist",
     extension = "plist",
@@ -1801,6 +1824,7 @@ ios_application(
         ":NagramIconPreviews",
         #":DefaultAppIcon",
     ],
+    ipa_post_processor = ":NagramFixComposerAlternateIcons",
     frameworks = [
         ":MtProtoKitFramework",
         ":SwiftSignalKitFramework",
