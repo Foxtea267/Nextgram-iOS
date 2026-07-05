@@ -211,7 +211,7 @@ private func nagramFormBody(_ queryItems: [URLQueryItem]) -> Data? {
     return components.percentEncodedQuery?.data(using: .utf8)
 }
 
-private func nagramTargetLanguage(_ language: String, provider: NagramTranslationProvider) -> String {
+func nagramTargetLanguage(_ language: String, provider: NagramTranslationProvider) -> String {
     switch provider {
     case .google, .googleCN:
         switch language.lowercased() {
@@ -236,7 +236,16 @@ private func nagramTargetLanguage(_ language: String, provider: NagramTranslatio
             return "zh"
         }
         return language
-    case .telegram, .llm:
+    case .telegram:
+        var language = language.lowercased()
+        if language.contains("-") {
+            language = language.components(separatedBy: "-").first ?? language
+        }
+        if language == "nb" {
+            return "no"
+        }
+        return language
+    case .llm:
         return language
     }
 }

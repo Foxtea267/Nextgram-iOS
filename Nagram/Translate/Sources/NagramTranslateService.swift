@@ -21,7 +21,7 @@ public final class NagramTranslateService {
         let provider = self.provider
         switch provider {
         case .telegram:
-            return self.context.engine.messages.translate(text: text, toLang: toLang, entities: entities, tone: tone, messageId: messageId)
+            return self.context.engine.messages.translate(text: text, toLang: nagramTargetLanguage(toLang, provider: provider), entities: entities, tone: tone, messageId: messageId)
         case .google, .googleCN, .microsoft, .yandex, .transmart, .llm:
             return nagramExternalTranslate(provider: provider, text: text, fromLang: fromLang, toLang: toLang)
         }
@@ -31,7 +31,7 @@ public final class NagramTranslateService {
         let provider = self.provider
         switch provider {
         case .telegram:
-            return self.context.engine.messages.translateMessages(messageIds: messageIds, fromLang: fromLang, toLang: toLang, enableLocalIfPossible: enableLocalIfPossible, tone: tone)
+            return self.context.engine.messages.translateMessages(messageIds: messageIds, fromLang: fromLang, toLang: nagramTargetLanguage(toLang, provider: provider), enableLocalIfPossible: enableLocalIfPossible, tone: tone)
         case .google, .googleCN, .microsoft, .yandex, .transmart, .llm:
             return self.translateMessagesExternally(provider: provider, messageIds: messageIds, fromLang: fromLang, toLang: toLang)
         }
