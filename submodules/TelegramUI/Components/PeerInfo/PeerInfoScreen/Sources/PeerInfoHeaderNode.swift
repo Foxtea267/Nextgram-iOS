@@ -65,6 +65,55 @@ final class PeerInfoHeaderNavigationTransition {
     }
 }
 
+private final class NagramProfileBadgeView: UIControl {
+    private let backgroundView = UIView()
+    private let titleLabel = UILabel()
+    
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        
+        self.isHidden = true
+        self.isUserInteractionEnabled = true
+        self.addSubview(self.backgroundView)
+        self.addSubview(self.titleLabel)
+        
+        self.titleLabel.font = Font.medium(11.0)
+        self.titleLabel.textAlignment = .center
+        self.titleLabel.isUserInteractionEnabled = false
+        self.backgroundView.isUserInteractionEnabled = false
+    }
+    
+    required init?(coder: NSCoder) {
+        preconditionFailure()
+    }
+    
+    override var isHighlighted: Bool {
+        didSet {
+            self.alpha = self.isHighlighted ? 0.55 : 1.0
+        }
+    }
+    
+    func update(title: String?, fillColor: UIColor, foregroundColor: UIColor) -> CGSize {
+        guard let title, !title.isEmpty else {
+            self.isHidden = true
+            self.frame = CGRect(origin: self.frame.origin, size: CGSize())
+            return CGSize()
+        }
+        
+        self.isHidden = false
+        self.backgroundView.backgroundColor = fillColor
+        self.titleLabel.textColor = foregroundColor
+        self.titleLabel.text = title
+        
+        let textSize = self.titleLabel.sizeThatFits(CGSize(width: 120.0, height: 18.0))
+        let size = CGSize(width: ceil(textSize.width) + 12.0, height: 18.0)
+        self.backgroundView.frame = CGRect(origin: CGPoint(), size: size)
+        self.backgroundView.layer.cornerRadius = size.height * 0.5
+        self.titleLabel.frame = CGRect(origin: CGPoint(x: 6.0, y: floor((size.height - textSize.height) / 2.0)), size: textSize)
+        return size
+    }
+}
+
 final class PeerInfoHeaderRegularContentNode: SparseNode {
 }
 
@@ -139,6 +188,11 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     let titleExpandedStatusIconView: ComponentHostView<Empty>
     var titleExpandedStatusIconSize: CGSize?
     
+    private let titleNagramBadgeView: NagramProfileBadgeView
+    private var nagramBadgeSize: CGSize?
+    private let titleExpandedNagramBadgeView: NagramProfileBadgeView
+    private var titleExpandedNagramBadgeSize: CGSize?
+    
     var subtitleRating: ComponentView<Empty>?
     
     let subtitleNodeContainer: ASDisplayNode
@@ -180,6 +234,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     
     var displaySavedMusic: (() -> Void)?
     
+    var displayNagramProfileBadgeInfo: ((UIView, NagramProfileBadge) -> Void)?
     var displayPremiumIntro: ((UIView, PeerEmojiStatus?, Signal<(TelegramMediaFile, LoadedStickerPack)?, NoError>, Bool) -> Void)?
     var displayStatusPremiumIntro: (() -> Void)?
     var displayUniqueGiftInfo: ((UIView, String) -> Void)?
@@ -238,6 +293,12 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         
         self.titleExpandedCredibilityIconView = ComponentHostView<Empty>()
         self.titleNode.stateNode(forKey: TitleNodeStateExpanded)?.view.addSubview(self.titleExpandedCredibilityIconView)
+        
+        self.titleNagramBadgeView = NagramProfileBadgeView()
+        self.titleNode.stateNode(forKey: TitleNodeStateRegular)?.view.addSubview(self.titleNagramBadgeView)
+        
+        self.titleExpandedNagramBadgeView = NagramProfileBadgeView()
+        self.titleNode.stateNode(forKey: TitleNodeStateExpanded)?.view.addSubview(self.titleExpandedNagramBadgeView)
         
         self.titleVerifiedIconView = ComponentHostView<Empty>()
         self.titleNode.stateNode(forKey: TitleNodeStateRegular)?.view.addSubview(self.titleVerifiedIconView)
@@ -340,6 +401,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         self.addSubnode(self.searchContainer)
         self.addSubnode(self.searchBarContainer)
         
+        self.titleNagramBadgeView.addTarget(self, action: #selector(self.nagramProfileBadgePressed(_:)), for: .touchUpInside)
+        self.titleExpandedNagramBadgeView.addTarget(self, action: #selector(self.nagramProfileBadgePressed(_:)), for: .touchUpInside)
+        
         self.avatarListNode.avatarContainerNode.tapped = { [weak self] in
             self?.initiateAvatarExpansion(gallery: false, first: false)
         }
@@ -407,6 +471,13 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             // MARK: NAGRAM
             self.displayCopyContextMenu?(self.subtitleNodeRawContainer, !NagramSettings.shared.hidePhoneInSettings, !self.isAvatarExpanded)
         }
+    }
+    
+    @objc private func nagramProfileBadgePressed(_ sender: UIControl) {
+        guard let badge = self.currentNagramProfileBadge else {
+            return
+        }
+        self.displayNagramProfileBadgeInfo?(sender, badge)
     }
     
     @objc private func subtitleBackgroundPressed() {
@@ -494,6 +565,7 @@ final class PeerInfoHeaderNode: ASDisplayNode {
     private var currentVerifiedIcon: CredibilityIcon?
     private var currentStatusIcon: CredibilityIcon?
     
+    private var currentNagramProfileBadge: NagramProfileBadge?
     private var currentPanelStatusData: PeerInfoStatusData?
     func update(width: CGFloat, containerHeight: CGFloat, containerInset: CGFloat, statusBarHeight: CGFloat, navigationHeight: CGFloat, isModalOverlay: Bool, isMediaOnly: Bool, contentOffset: CGFloat, paneContainerY: CGFloat, presentationData: PresentationData, peer: EnginePeer?, cachedData: EngineCachedPeerData?, threadData: MessageHistoryThreadData?, peerNotificationSettings: TelegramPeerNotificationSettings?, threadNotificationSettings: TelegramPeerNotificationSettings?, globalNotificationSettings: EngineGlobalNotificationSettings?, statusData: PeerInfoStatusData?, panelStatusData: (PeerInfoStatusData?, PeerInfoStatusData?, CGFloat?), isSecretChat: Bool, isContact: Bool, isSettings: Bool, state: PeerInfoState, profileGiftsContext: ProfileGiftsContext?, screenData: PeerInfoScreenData?, isSearching: Bool, metrics: LayoutMetrics, deviceMetrics: DeviceMetrics, transition: ContainedViewLayoutTransition, additive: Bool, animateHeader: Bool) -> CGFloat {
         if self.appliedCustomNavigationContentNode !== self.customNavigationContentNode {
@@ -598,6 +670,9 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         var credibilityIcon: CredibilityIcon = .none
         var verifiedIcon: CredibilityIcon = .none
         var statusIcon: CredibilityIcon = .none
+        let profileBadge = peer.flatMap { peer -> NagramProfileBadge? in
+            return nagramProfileBadge(userId: peer.id.id._internalGetInt64Value())
+        }
         if let peer {
             if peer.id == self.context.account.peerId && !self.isSettings && !self.isMyProfile {
                 credibilityIcon = .none
@@ -891,6 +966,17 @@ final class PeerInfoHeaderNode: ASDisplayNode {
                 ratingBorderColor = UIColor.clear
                 ratingForegroundColor = presentationData.theme.list.itemCheckColors.foregroundColor
             }
+        }
+        
+        do {
+            self.currentNagramProfileBadge = profileBadge
+            let badgeTitle = profileBadge.flatMap { badge -> String? in
+                return nagramProfileBadgeString(nagramProfileBadgeTitleKey(badge), languageCode: presentationData.strings.baseLanguageCode)
+            }
+            let badgeFillColor = presentationData.theme.list.itemAccentColor
+            let badgeForegroundColor = UIColor.white
+            self.nagramBadgeSize = self.titleNagramBadgeView.update(title: badgeTitle, fillColor: badgeFillColor, foregroundColor: badgeForegroundColor)
+            self.titleExpandedNagramBadgeSize = self.titleExpandedNagramBadgeView.update(title: badgeTitle, fillColor: badgeFillColor, foregroundColor: badgeForegroundColor)
         }
         
         do {
@@ -1560,6 +1646,26 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             nextExpandedIconX += 4.0 + titleExpandedCredibilityIconSize.width
         }
                 
+        // MARK: NAGRAM — Profile role badge sits after the premium/credibility icon.
+        if let nagramBadgeSize = self.nagramBadgeSize, let titleExpandedNagramBadgeSize = self.titleExpandedNagramBadgeSize, nagramBadgeSize.width > 0.0 {
+            let offset = (nagramBadgeSize.width + 4.0) / 2.0
+            
+            let leftOffset: CGFloat = nextIconX + 4.0
+            let leftExpandedOffset: CGFloat = nextExpandedIconX + 4.0
+            titleHorizontalOffset -= offset
+            
+            var collapsedTransitionOffset: CGFloat = 0.0
+            if let navigationTransition = self.navigationTransition {
+                collapsedTransitionOffset = -10.0 * navigationTransition.fraction
+            }
+            
+            transition.updateFrame(view: self.titleNagramBadgeView, frame: CGRect(origin: CGPoint(x: leftOffset + collapsedTransitionOffset, y: floor((titleSize.height - nagramBadgeSize.height) / 2.0)), size: nagramBadgeSize))
+            transition.updateFrame(view: self.titleExpandedNagramBadgeView, frame: CGRect(origin: CGPoint(x: leftExpandedOffset, y: floor((titleExpandedSize.height - titleExpandedNagramBadgeSize.height) / 2.0) + 1.0), size: titleExpandedNagramBadgeSize))
+            
+            nextIconX += 4.0 + nagramBadgeSize.width
+            nextExpandedIconX += 4.0 + titleExpandedNagramBadgeSize.width
+        }
+        
         if let verifiedIconSize = self.verifiedIconSize, let titleExpandedVerifiedIconSize = self.titleExpandedVerifiedIconSize, verifiedIconSize.width > 0.0 {
             let leftOffset: CGFloat
             let leftExpandedOffset: CGFloat
@@ -2783,6 +2889,16 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             default:
                 break
             }
+            if self.currentNagramProfileBadge != nil {
+                let badgeFrame = self.titleNagramBadgeView.convert(self.titleNagramBadgeView.bounds, to: self.view)
+                let expandedBadgeFrame = self.titleExpandedNagramBadgeView.convert(self.titleExpandedNagramBadgeView.bounds, to: self.view)
+                if expandedBadgeFrame.contains(point) && self.isAvatarExpanded {
+                    return self.titleExpandedNagramBadgeView.hitTest(self.view.convert(point, to: self.titleExpandedNagramBadgeView), with: event)
+                } else if badgeFrame.contains(point) {
+                    return self.titleNagramBadgeView.hitTest(self.view.convert(point, to: self.titleNagramBadgeView), with: event)
+                }
+            }
+            
             switch self.currentStatusIcon {
             case .emojiStatus:
                 let iconFrame = self.titleStatusIconView.convert(self.titleStatusIconView.bounds, to: self.view)
