@@ -1632,7 +1632,8 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                         isActive: translationState.isEnabled,
                         fromLang: translationState.fromLang,
                         toLang: translationState.toLang,
-                        peer: (self.chatPresentationInterfaceState.renderedPeer?.chatMainPeer).flatMap(EnginePeer.init)
+                        peer: (self.chatPresentationInterfaceState.renderedPeer?.chatMainPeer).flatMap(EnginePeer.init),
+                        isNagramAutoTranslateEnabled: translationState.isNagramAutoTranslateEnabled
                     ),
                     close: { [weak self] in
                         guard let self else {

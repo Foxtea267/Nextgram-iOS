@@ -1,6 +1,7 @@
 import Foundation
 import NaturalLanguage
 // MARK: NAGRAM — Nagram translation provider facade.
+import NagramSettingsSignal
 import NagramTranslate
 import SwiftSignalKit
 import TelegramCore
@@ -232,10 +233,11 @@ public func chatTranslationState(context: AccountContext, peerId: EnginePeer.Id,
             |> map { sharedData -> TranslationSettings in
                 return sharedData.entries[ApplicationSpecificSharedDataKeys.translationSettings]?.get(TranslationSettings.self) ?? TranslationSettings.defaultSettings
             },
-            context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.AutoTranslateEnabled(id: peerId))
+            context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.AutoTranslateEnabled(id: peerId)),
+            nagramAutoTranslateSignal(accountPeerId: context.account.peerId.toInt64(), peerId: peerId.toInt64(), threadId: threadId)
         )
-        |> mapToSignal { settings, autoTranslateEnabled in
-            if !settings.translateChats && !autoTranslateEnabled {
+        |> mapToSignal { settings, autoTranslateEnabled, nagramAutoTranslateEnabled in
+            if !settings.translateChats && !autoTranslateEnabled && !nagramAutoTranslateEnabled {
                 return .single(nil)
             }
             
@@ -253,8 +255,13 @@ public func chatTranslationState(context: AccountContext, peerId: EnginePeer.Id,
             |> mapToSignal { cached in
                 let currentTime = Int32(CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970)
                 if let cached, let timestamp = cached.timestamp, cached.baseLang == baseLang && currentTime - timestamp < 60 * 60 {
-                    if !dontTranslateLanguages.contains(cached.fromLang) {
-                        return .single(cached)
+                    var effectiveCached = cached
+                    if nagramAutoTranslateEnabled && !cached.isEnabled {
+                        effectiveCached = cached.withIsEnabled(true)
+                        let _ = updateChatTranslationState(engine: context.engine, peerId: peerId, threadId: threadId, state: effectiveCached).start()
+                    }
+                    if !dontTranslateLanguages.contains(effectiveCached.fromLang) {
+                        return .single(effectiveCached)
                     } else {
                         return .single(nil)
                     }
@@ -348,7 +355,9 @@ public func chatTranslationState(context: AccountContext, peerId: EnginePeer.Id,
                             }
                             
                             let isEnabled: Bool
-                            if let currentIsEnabled = cached?.isEnabled {
+                            if nagramAutoTranslateEnabled {
+                                isEnabled = true
+                            } else if let currentIsEnabled = cached?.isEnabled {
                                 isEnabled = currentIsEnabled
                             } else if autoTranslateEnabled {
                                 isEnabled = true

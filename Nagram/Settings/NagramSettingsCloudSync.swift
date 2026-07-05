@@ -70,7 +70,8 @@ enum NagramSettingsSyncKeys {
 
     private static let syncedPrefixes: [String] = [
         "nagram.chatListStartupSpecificFolder.",
-        "nagram.recentChatFolders."
+        "nagram.recentChatFolders.",
+        "nagram.autoTranslate."
     ]
 
     static func shouldSync(localKey: String) -> Bool {

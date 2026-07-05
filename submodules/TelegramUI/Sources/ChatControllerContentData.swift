@@ -14,6 +14,7 @@ import ChatListUI
 import EmojiStatusComponent
 import TelegramUIPreferences
 import TranslateUI
+import NagramSettingsSignal
 // MARK: NAGRAM
 import NagramSettings
 import TelegramNotices
@@ -2182,23 +2183,26 @@ extension ChatControllerImpl {
                     let hasAutoTranslate = context.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.AutoTranslateEnabled(id: peerId))
                     |> distinctUntilChanged
                     
+                    let hasNagramAutoTranslate = nagramAutoTranslateSignal(accountPeerId: context.account.peerId.toInt64(), peerId: peerId.toInt64(), threadId: chatLocation.threadId)
+                    
                     self.translationStateDisposable?.dispose()
                     self.translationStateDisposable = (combineLatest(
                         queue: .concurrentDefaultQueue(),
                         isPremium,
                         isHidden,
                         hasAutoTranslate,
+                        hasNagramAutoTranslate,
                         ApplicationSpecificNotice.translationSuggestion(accountManager: context.sharedContext.accountManager)
-                    ) |> mapToSignal { isPremium, isHidden, hasAutoTranslate, counterAndTimestamp -> Signal<ChatPresentationTranslationState?, NoError> in
+                    ) |> mapToSignal { isPremium, isHidden, hasAutoTranslate, hasNagramAutoTranslate, counterAndTimestamp -> Signal<ChatPresentationTranslationState?, NoError> in
                         var maybeSuggestPremium = false
                         if counterAndTimestamp.0 >= 3 {
                             maybeSuggestPremium = true
                         }
-                        if (isPremium || maybeSuggestPremium || hasAutoTranslate) && !isHidden {
+                        if (isPremium || maybeSuggestPremium || hasAutoTranslate || hasNagramAutoTranslate) && !isHidden {
                             return chatTranslationState(context: context, peerId: peerId, threadId: chatLocation.threadId)
                             |> map { translationState -> ChatPresentationTranslationState? in
                                 if let translationState, !translationState.fromLang.isEmpty && (translationState.fromLang != baseLanguageCode || translationState.isEnabled) {
-                                    return ChatPresentationTranslationState(isEnabled: translationState.isEnabled, fromLang: translationState.fromLang, toLang: translationState.toLang ?? baseLanguageCode)
+                                    return ChatPresentationTranslationState(isEnabled: translationState.isEnabled, fromLang: translationState.fromLang, toLang: translationState.toLang ?? baseLanguageCode, isNagramAutoTranslateEnabled: hasNagramAutoTranslate)
                                 } else {
                                     return nil
                                 }

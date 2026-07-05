@@ -22,6 +22,10 @@ public func nagramBoolSignal(_ key: String, defaultValue: Bool) -> Signal<Bool, 
     }
     return (initial |> then(changes)) |> distinctUntilChanged
 }
+public func nagramAutoTranslateSignal(accountPeerId: Int64, peerId: Int64, threadId: Int64?) -> Signal<Bool, NoError> {
+    return nagramBoolSignal(NagramSettings.autoTranslateKey(accountPeerId: accountPeerId, peerId: peerId, threadId: threadId), defaultValue: false)
+}
+
 public func nagramBottomBarSettingsSignal() -> Signal<NagramBottomBarSettings, NoError> {
     let initial = Signal<NagramBottomBarSettings, NoError>.single(NagramSettings.shared.bottomBarSettings)
     let changes = Signal<NagramBottomBarSettings, NoError> { subscriber in

@@ -167,6 +167,7 @@
 "Nagram.RegexFilters.Status.Enabled" = "已啟用";
 "Nagram.RegexFilters.Status.Disabled" = "已停用";
 "Nagram.RegexFilters.CurrentChat" = "啟用正則過濾";
+"Nagram.AutoTranslate.CurrentChat" = "啟用自動翻譯";
 "Nagram.RegexFilters.Delete" = "刪除規則";
 "Nagram.RegexFilters.DeleteConfirm" = "刪除此正則過濾規則？";
 "Nagram.Common.Save" = "儲存";

@@ -16,13 +16,15 @@ public final class TranslateHeaderPanelComponent: Component {
         public let fromLang: String
         public let toLang: String?
         public let peer: EnginePeer?
+        public let isNagramAutoTranslateEnabled: Bool
         
-        public init(isPremium: Bool, isActive: Bool, fromLang: String, toLang: String?, peer: EnginePeer?) {
+        public init(isPremium: Bool, isActive: Bool, fromLang: String, toLang: String?, peer: EnginePeer?, isNagramAutoTranslateEnabled: Bool = false) {
             self.isPremium = isPremium
             self.isActive = isActive
             self.fromLang = fromLang
             self.toLang = toLang
             self.peer = peer
+            self.isNagramAutoTranslateEnabled = isNagramAutoTranslateEnabled
         }
     }
     

@@ -167,6 +167,7 @@
 "Nagram.RegexFilters.Status.Enabled" = "Enabled";
 "Nagram.RegexFilters.Status.Disabled" = "Disabled";
 "Nagram.RegexFilters.CurrentChat" = "Enable Regex Filters";
+"Nagram.AutoTranslate.CurrentChat" = "Enable Auto Translate";
 "Nagram.RegexFilters.Delete" = "Delete Rule";
 "Nagram.RegexFilters.DeleteConfirm" = "Delete this regex filter rule?";
 "Nagram.Common.Save" = "Save";

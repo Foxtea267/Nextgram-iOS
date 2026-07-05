@@ -167,6 +167,7 @@
 "Nagram.RegexFilters.Status.Enabled" = "有効";
 "Nagram.RegexFilters.Status.Disabled" = "無効";
 "Nagram.RegexFilters.CurrentChat" = "正規表現フィルターを有効化";
+"Nagram.AutoTranslate.CurrentChat" = "自動翻訳を有効化";
 "Nagram.RegexFilters.Delete" = "ルールを削除";
 "Nagram.RegexFilters.DeleteConfirm" = "この正規表現フィルタールールを削除しますか？";
 "Nagram.Common.Save" = "保存";
