@@ -80,7 +80,8 @@ genrule(
     cp -R "$$SOURCE_PATH" "$$BUILD_DIR/"
 
     pushd "$$BUILD_DIR/libvpx"
-    patch -p1 < ../0001-Support-arm64-simulator.patch
+    # MARK: NAGRAM — Source may already include this patch; don't reverse it.
+    patch -N -p1 < ../0001-Support-arm64-simulator.patch || true
     popd
 
     mkdir -p "$$BUILD_DIR/Public/libvpx"
