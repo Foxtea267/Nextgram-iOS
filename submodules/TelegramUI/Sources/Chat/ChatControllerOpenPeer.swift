@@ -122,6 +122,37 @@ import FaceScanScreen
 import ForumCreateTopicScreen
 
 extension ChatControllerImpl {
+    // MARK: NAGRAM
+    func openCreateForumTopic() {
+        guard let peerId = self.chatLocation.peerId else {
+            return
+        }
+        
+        let controller = ForumCreateTopicScreen(context: self.context, peerId: peerId, mode: .create)
+        controller.navigationPresentation = .modal
+        
+        controller.completion = { [weak self, weak controller] title, fileId, iconColor, _ in
+            controller?.isInProgress = true
+            controller?.view.endEditing(true)
+            
+            guard let self else {
+                return
+            }
+            
+            let _ = (self.context.engine.peers.createForumChannelTopic(id: peerId, title: title, iconColor: iconColor, iconFileId: fileId)
+            |> deliverOnMainQueue).startStandalone(next: { [weak self, weak controller] topicId in
+                guard let self else {
+                    return
+                }
+                self.updateChatLocationThread(threadId: topicId)
+                controller?.dismiss()
+            }, error: { [weak controller] _ in
+                controller?.isInProgress = false
+            })
+        }
+        self.push(controller)
+    }
+    
     func openPeer(peer: EnginePeer?, navigation: ChatControllerInteractionNavigateToPeer, fromMessage: MessageReference?, fromReactionMessageId: EngineMessage.Id? = nil, expandAvatar: Bool = false, peerTypes: ReplyMarkupButtonAction.PeerTypes? = nil, skipAgeVerification: Bool = false) {
         let _ = self.presentVoiceMessageDiscardAlert(action: {
             if case let .peer(currentPeerId) = self.chatLocation, peer?.id == currentPeerId {

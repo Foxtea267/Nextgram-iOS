@@ -2,10 +2,36 @@ import Foundation
 import UIKit
 import AsyncDisplayKit
 
-private var sharedIsReduceTransparencyEnabled = UIAccessibility.isReduceTransparencyEnabled
+// MARK: NAGRAM
+public struct GlassOverlayTransparencySettings: Equatable {
+    public let followsSystemTransparency: Bool
+    public let tintStrength: CGFloat
+
+    public init(followsSystemTransparency: Bool, tintStrength: CGFloat) {
+        self.followsSystemTransparency = followsSystemTransparency
+        self.tintStrength = max(0.0, min(1.0, tintStrength))
+    }
+}
+
+public var currentGlassOverlayTransparencySettings: () -> GlassOverlayTransparencySettings = {
+    return GlassOverlayTransparencySettings(followsSystemTransparency: true, tintStrength: 1.0)
+}
+
+private func glassOverlayReduceTransparencyEnabled(settings: GlassOverlayTransparencySettings) -> Bool {
+    return settings.followsSystemTransparency && UIAccessibility.isReduceTransparencyEnabled
+}
+
+private func adjustedGlassOverlayColor(_ color: UIColor, settings: GlassOverlayTransparencySettings) -> UIColor {
+    if glassOverlayReduceTransparencyEnabled(settings: settings) {
+        return color.withAlphaComponent(1.0)
+    }
+    return color
+}
 
 public final class NavigationBackgroundNode: ASDisplayNode {
     private var _color: UIColor
+    private var appliedTransparencySettings = currentGlassOverlayTransparencySettings()
+    private var appliedReduceTransparencyEnabled = glassOverlayReduceTransparencyEnabled(settings: currentGlassOverlayTransparencySettings())
 
     public var color: UIColor {
         return self._color
@@ -64,7 +90,8 @@ public final class NavigationBackgroundNode: ASDisplayNode {
             self.scheduledUpdate = true
             return
         }
-        if self.enableBlur && !sharedIsReduceTransparencyEnabled && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {
+        let transparencySettings = currentGlassOverlayTransparencySettings()
+        if self.enableBlur && !glassOverlayReduceTransparencyEnabled(settings: transparencySettings) && ((self._color.alpha > .ulpOfOne && self._color.alpha < 0.95) || forceKeepBlur) {
             if self.effectView == nil {
                 let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
 
@@ -106,6 +133,7 @@ public final class NavigationBackgroundNode: ASDisplayNode {
                 self.effectView = effectView
                 self.view.insertSubview(effectView, at: 0)
             }
+            self.effectView?.alpha = 1.0
         } else if let effectView = self.effectView {
             self.effectView = nil
             effectView.removeFromSuperview()
@@ -115,19 +143,19 @@ public final class NavigationBackgroundNode: ASDisplayNode {
     public func updateColor(color: UIColor, enableBlur: Bool? = nil, enableSaturation: Bool? = nil, forceKeepBlur: Bool = false, transition: ContainedViewLayoutTransition) {
         let effectiveEnableBlur = enableBlur ?? self.enableBlur
         let effectiveEnableSaturation = enableSaturation ?? self.enableSaturation
+        let transparencySettings = currentGlassOverlayTransparencySettings()
+        let reduceTransparencyEnabled = glassOverlayReduceTransparencyEnabled(settings: transparencySettings)
         
-        if self._color.isEqual(color) && self.enableBlur == effectiveEnableBlur && self.enableSaturation == effectiveEnableSaturation {
+        if self._color.isEqual(color) && self.enableBlur == effectiveEnableBlur && self.enableSaturation == effectiveEnableSaturation && self.appliedTransparencySettings == transparencySettings && self.appliedReduceTransparencyEnabled == reduceTransparencyEnabled {
             return
         }
         self._color = color
         self.enableBlur = effectiveEnableBlur
         self.enableSaturation = effectiveEnableSaturation
+        self.appliedTransparencySettings = transparencySettings
+        self.appliedReduceTransparencyEnabled = reduceTransparencyEnabled
 
-        if sharedIsReduceTransparencyEnabled {
-            transition.updateBackgroundColor(node: self.backgroundNode, color: self._color.withAlphaComponent(1.0))
-        } else {
-            transition.updateBackgroundColor(node: self.backgroundNode, color: self._color)
-        }
+        transition.updateBackgroundColor(node: self.backgroundNode, color: adjustedGlassOverlayColor(self._color, settings: transparencySettings))
 
         self.updateBackgroundBlur(forceKeepBlur: forceKeepBlur)
     }
@@ -177,6 +205,8 @@ public final class NavigationBackgroundNode: ASDisplayNode {
 
 open class BlurredBackgroundView: UIView {
     private var _color: UIColor?
+    private var appliedTransparencySettings = currentGlassOverlayTransparencySettings()
+    private var appliedReduceTransparencyEnabled = glassOverlayReduceTransparencyEnabled(settings: currentGlassOverlayTransparencySettings())
 
     private var enableBlur: Bool
     private var customBlurRadius: CGFloat?
@@ -215,7 +245,8 @@ open class BlurredBackgroundView: UIView {
     }
     
     private func updateBackgroundBlur(forceKeepBlur: Bool) {
-        if let color = self._color, self.enableBlur && !sharedIsReduceTransparencyEnabled && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {
+        let transparencySettings = currentGlassOverlayTransparencySettings()
+        if let color = self._color, self.enableBlur && !glassOverlayReduceTransparencyEnabled(settings: transparencySettings) && ((color.alpha > .ulpOfOne && color.alpha < 0.95) || forceKeepBlur) {
             if self.effectView == nil {
                 let effectView = UIVisualEffectView(effect: UIBlurEffect(style: .light))
 
@@ -256,6 +287,7 @@ open class BlurredBackgroundView: UIView {
                 self.effectView = effectView
                 self.insertSubview(effectView, at: 0)
             }
+            self.effectView?.alpha = 1.0
         } else if let effectView = self.effectView {
             self.effectView = nil
             effectView.removeFromSuperview()
@@ -264,18 +296,18 @@ open class BlurredBackgroundView: UIView {
 
     public func updateColor(color: UIColor, enableBlur: Bool? = nil, forceKeepBlur: Bool = false, transition: ContainedViewLayoutTransition) {
         let effectiveEnableBlur = enableBlur ?? self.enableBlur
+        let transparencySettings = currentGlassOverlayTransparencySettings()
+        let reduceTransparencyEnabled = glassOverlayReduceTransparencyEnabled(settings: transparencySettings)
 
-        if self._color == color && self.enableBlur == effectiveEnableBlur {
+        if self._color == color && self.enableBlur == effectiveEnableBlur && self.appliedTransparencySettings == transparencySettings && self.appliedReduceTransparencyEnabled == reduceTransparencyEnabled {
             return
         }
         self._color = color
         self.enableBlur = effectiveEnableBlur
+        self.appliedTransparencySettings = transparencySettings
+        self.appliedReduceTransparencyEnabled = reduceTransparencyEnabled
 
-        if sharedIsReduceTransparencyEnabled {
-            transition.updateBackgroundColor(layer: self.backgroundView.layer, color: color.withAlphaComponent(1.0))
-        } else {
-            transition.updateBackgroundColor(layer: self.backgroundView.layer, color: color)
-        }
+        transition.updateBackgroundColor(layer: self.backgroundView.layer, color: adjustedGlassOverlayColor(color, settings: transparencySettings))
 
         self.updateBackgroundBlur(forceKeepBlur: forceKeepBlur)
     }

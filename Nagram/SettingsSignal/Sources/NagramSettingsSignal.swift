@@ -1,6 +1,7 @@
 import Foundation
 import NagramSettings
 import SwiftSignalKit
+import UIKit
 
 // MARK: NAGRAM — 增强开关的响应式桥接。
 // 用 UserDefaults.didChangeNotification 把开关变化转成 Signal，供需即时刷新的功能（如 hideStories）订阅。
@@ -21,6 +22,10 @@ public func nagramBoolSignal(_ key: String, defaultValue: Bool) -> Signal<Bool, 
     }
     return (initial |> then(changes)) |> distinctUntilChanged
 }
+public func nagramAutoTranslateSignal(accountPeerId: Int64, peerId: Int64, threadId: Int64?) -> Signal<Bool, NoError> {
+    return nagramBoolSignal(NagramSettings.autoTranslateKey(accountPeerId: accountPeerId, peerId: peerId, threadId: threadId), defaultValue: false)
+}
+
 public func nagramBottomBarSettingsSignal() -> Signal<NagramBottomBarSettings, NoError> {
     let initial = Signal<NagramBottomBarSettings, NoError>.single(NagramSettings.shared.bottomBarSettings)
     let changes = Signal<NagramBottomBarSettings, NoError> { subscriber in
@@ -36,6 +41,34 @@ public func nagramBottomBarSettingsSignal() -> Signal<NagramBottomBarSettings, N
         }
     }
     return (initial |> then(changes)) |> distinctUntilChanged
+}
+
+public func nagramGlassTransparencySignal() -> Signal<Int32, NoError> {
+    let initial = Signal<Int32, NoError>.single(0)
+    let changes = Signal<Int32, NoError> { subscriber in
+        var version: Int32 = 0
+        let defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: nil
+        ) { _ in
+            version += 1
+            subscriber.putNext(version)
+        }
+        let accessibilityObserver = NotificationCenter.default.addObserver(
+            forName: UIAccessibility.reduceTransparencyStatusDidChangeNotification,
+            object: nil,
+            queue: nil
+        ) { _ in
+            version += 1
+            subscriber.putNext(version)
+        }
+        return ActionDisposable {
+            NotificationCenter.default.removeObserver(defaultsObserver)
+            NotificationCenter.default.removeObserver(accessibilityObserver)
+        }
+    }
+    return initial |> then(changes)
 }
 
 public func nagramRegexFiltersSignal() -> Signal<Int32, NoError> {

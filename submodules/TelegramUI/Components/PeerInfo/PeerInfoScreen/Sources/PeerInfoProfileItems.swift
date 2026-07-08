@@ -16,6 +16,7 @@ import WebUI
 import AvatarNode
 import PeerNameColorItem
 import BoostLevelIconComponent
+import TranslateUI
 import NagramSettings
 import NagramStrings
 
@@ -220,7 +221,6 @@ func infoItems(
             if !usernames.isEmpty {
                 additionalUsernames = presentationData.strings.Profile_AdditionalUsernames(String(usernames.map { "@\($0.username)" }.joined(separator: ", "))).string
             }
-            
             items[currentPeerInfoSection]!.append(
                 PeerInfoScreenLabeledValueItem(
                     id: ItemUsername,
@@ -990,10 +990,23 @@ func infoItems(
         }
     }
     
-    // MARK: NAGRAM — 对话级正则过滤覆盖，只影响当前聊天本地展示。
-    if isOpenedFromChat, let peerId = data.peer?.id.toInt64() {
+    // MARK: NAGRAM — 对话级增强，只影响当前聊天本地展示。
+    if isOpenedFromChat, let peer = data.peer {
+        let accountPeerId = context.account.peerId.toInt64()
+        let peerId = peer.id.toInt64()
+        let threadId = chatLocation.threadId
         items[.nagram]!.append(PeerInfoScreenSwitchItem(id: AnyHashable("nagram_regex_filters_peer"), text: ngI18n("Nagram.RegexFilters.CurrentChat", presentationData.strings.baseLanguageCode), value: NagramSettings.shared.isRegexFilteringEnabled(peerId: peerId), toggled: { value in
             NagramSettings.shared.setRegexFilteringEnabled(value, peerId: peerId)
+        }))
+        items[.nagram]!.append(PeerInfoScreenSwitchItem(id: AnyHashable("nagram_auto_translate_peer"), text: ngI18n("Nagram.AutoTranslate.CurrentChat", presentationData.strings.baseLanguageCode), value: NagramSettings.shared.isAutoTranslateEnabled(accountPeerId: accountPeerId, peerId: peerId, threadId: threadId), toggled: { value in
+            NagramSettings.shared.setAutoTranslateEnabled(value, accountPeerId: accountPeerId, peerId: peerId, threadId: threadId)
+            let _ = updateChatTranslationStateInteractively(engine: context.engine, peerId: peer.id, threadId: threadId, { current in
+                return current?.withIsEnabled(value)
+            }).startStandalone()
+            if value {
+                let _ = context.engine.messages.togglePeerMessagesTranslationHidden(peerId: peer.id, hidden: false).startStandalone()
+                let _ = (chatTranslationState(context: context, peerId: peer.id, threadId: threadId) |> take(1)).startStandalone()
+            }
         }))
     }
     

@@ -1,60 +1,70 @@
+You are an experienced, pragmatic software engineering AI agent. Do not over-engineer a solution when a simple one is possible. Keep edits minimal. If you want an exception to ANY rule, you MUST stop and get permission first.
+
 # AGENTS.md
 
-This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
+This file guides AI agents working in this repository. It is specific to Nagram-iOS and should be kept in sync with the repo, not with generic Telegram-iOS assumptions.
 
-## What is Nagram-iOS
+## Project Overview
 
-A third-party enhancement fork of [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS), targeting Chinese users. Enhances the base app with additional features aligned with Android [Nagram](https://github.com/NextAlone/Nagram).
+Nagram-iOS is a third-party enhancement fork of [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS), targeting Chinese users and aligning selected features with Android [Nagram](https://github.com/NextAlone/Nagram). The goal is to keep the fork easy to rebase onto upstream Telegram while adding Nagram-specific settings, UI, translation, privacy, and interaction features.
 
-## Nagram Fork Conventions
+Technology stack:
 
-- **All Nagram additions go in `Nagram/`** (following upstream `SG*` naming convention). This directory contains `Settings/` (data layer, `NagramSettings`) and `SettingsUI/` (UI layer, `NagramSettingsController`).
-- **Upstream code changes must be annotated** with `// MARK: NAGRAM` at the modification site. This makes it possible to track and rebase onto upstream releases.
-- **Settings entry point:** the Nagram settings page appears as an independent group below "我的资料" (My Profile) in the PeerInfo screen. Implementation: `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` (the `SettingsSection.nagram` enum case + item at id 50). The PeerInfoScreen BUILD file depends on `//Nagram/SettingsUI:NagramSettingsUI`.
-- **App icon:** Icon Composer `.icon` directory at `Telegram/Telegram-iOS/Nagram.icon`; set via `composer_icon_folders = ["Nagram"]` in `Telegram/BUILD` (line ~317).
-- **App name:** `CFBundleDisplayName` / `CFBundleName` set to "Nagram" in the main app's `TelegramInfoPlist` section of `Telegram/BUILD` (lines ~1553–1558). Extension plist targets (AppNameInfoPlist) are left as "Telegram".
+- iOS app code in Swift, Objective-C, Objective-C++, C, and C++.
+- Bazel workspace (`WORKSPACE`, `MODULE.bazel`) with a custom Python wrapper at `build-system/Make/Make.py`.
+- Xcode/iOS SDK toolchains; expected versions are tracked in `versions.json`, while local build caveats live in `docs/build.md`.
+- Telegram modules under `submodules/` (`TelegramCore`, `TelegramUI`, `Display`, `SwiftSignalKit`, `Postbox`, etc.) plus vendored native dependencies under `third-party/`.
 
-## Build
+## Reference
 
-The app uses Bazel via the `build-system/Make/Make.py` wrapper. There is no per-module build — the only supported invocation builds the full `Telegram/Telegram` target.
+Important directories:
 
-`--continueOnError` (forwards to bazel `--keep_going`) lets all errors surface in one pass. Prefix build commands with `source ~/.zshrc 2>/dev/null;` if they need `TELEGRAM_CODESIGNING_GIT_PASSWORD`.
+- `Nagram/` — all new Nagram feature code. Main modules are `Settings/`, `SettingsSignal/`, `SettingsUI/`, `Strings/`, and `Translate/`.
+- `Telegram/` — main app target, app extensions, app plist fragments, icons, and app-level Bazel rules.
+- `submodules/` — upstream Telegram libraries. Modify only when a feature must integrate with upstream code, and mark the edit.
+- `third-party/` — vendored dependencies. Avoid style-only or opportunistic changes here.
+- `Tests/` — Bazel test/demo targets; `Tests/AllTests/BUILD` currently includes `//submodules/TgVoipWebrtc:TgCallsTests`.
+- `Telegram/Tests/Sources/` — XCUITest sources for the generated Xcode project.
+- `docs/` — build notes, UI testing notes, and the Postbox-to-TelegramEngine migration log.
 
-### local.bazelrc (gitignored, not committed)
+Important files:
 
-The repo `.bazelrc` ends with `try-import %workspace%/local.bazelrc`. This file controls whether extensions and provisioning are built. Pick exactly one signing mode first.
+- `README.md` and `docs/build.md` — signing modes, build commands, and current local toolchain pitfalls.
+- `.bazelrc` — imports gitignored `local.bazelrc`; local signing/provisioning flags belong there.
+- `build-system/Make/Make.py` — supported build/test/clean/query entry point.
+- `Telegram/BUILD` — app target, plist fragments, Nagram app name, strings, and icon integration.
+- `Nagram/Settings/NagramSettings.swift` — central Nagram settings store.
+- `Nagram/SettingsSignal/Sources/NagramSettingsSignal.swift` — reactive settings bridge.
+- `Nagram/SettingsUI/NagramSettingsController.swift` — Nagram settings UI entry controller.
+- `submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift` — Settings screen Nagram entry point (`SettingsSection.nagram`, item id `50`).
+- `docs/superpowers/postbox-refactor-log.md` — source of truth for the Postbox migration waves.
 
-Full/formal device signing with app + extension profiles:
+## Essential Commands
 
-```
-# Do not set disableExtensions.
-# Do not set disableProvisioningProfiles.
-```
+Full app builds are the only reliable validation path for app changes. There is no supported per-module build workflow for this fork.
 
-Free Apple ID device signing:
+### Build
 
-```
-build --//Telegram:disableExtensions
-```
-
-Simulator-only, codesigning-free:
-
-```
-build --//Telegram:disableProvisioningProfiles
-build --//Telegram:disableExtensions
-```
-
-`disableExtensions` skips the 6 app extensions (`Share`, `NotificationContent`, `NotificationService`, `Intents`, `Widget`, `BroadcastUpload`). It is allowed for free Apple IDs and simulator-only builds, but **must not be used when full/formal provisioning profiles are present**. Full signing needs profiles for `Telegram` plus all 6 extensions.
-
-`disableProvisioningProfiles` is simulator-only. Never use it for device builds; it makes provisioning resolve to `None` and fails.
-
-`Make.py build` does not accept `--disableExtensions` or `--disableProvisioningProfiles` as command-line arguments. Put Bazel build settings in `local.bazelrc`, or use direct Bazel.
-
-**Warning:** `bazel clean --expunge` (which `Make.py clean` runs) deletes `local.bazelrc`. Recreate it after cleaning.
-
-Full/formal local signing should use the gitignored codesigning directory:
+Simulator-only, codesigning-free setup:
 
 ```sh
+cat > local.bazelrc <<'EOF'
+build --//Telegram:disableProvisioningProfiles
+build --//Telegram:disableExtensions
+EOF
+
+python3 build-system/Make/Make.py --overrideXcodeVersion \
+  --cacheDir ~/telegram-bazel-cache \
+  build \
+  --configurationPath build-system/appstore-configuration.json \
+  --xcodeManagedCodesigning --buildNumber=1 \
+  --configuration=debug_sim_arm64 --continueOnError
+```
+
+Full/formal device signing needs app plus all 6 extension profiles (`Share`, `NotificationContent`, `NotificationService`, `Intents`, `Widget`, `BroadcastUpload`). Do not disable extensions in that mode:
+
+```sh
+source ~/.zshrc 2>/dev/null
 python3 build-system/Make/Make.py --overrideXcodeVersion \
   --cacheDir ~/telegram-bazel-cache \
   build \
@@ -64,27 +74,11 @@ python3 build-system/Make/Make.py --overrideXcodeVersion \
   --configuration=debug_arm64 --continueOnError
 ```
 
-### Simulator build (codesigning-free, fastest)
+Free Apple ID device signing may disable extensions, but must not disable provisioning profiles. See `docs/build.md` before changing signing flags.
 
-Set simulator-only flags in `local.bazelrc` first:
+### Install
 
-```
-build --//Telegram:disableProvisioningProfiles
-build --//Telegram:disableExtensions
-```
-
-```sh
-python3 build-system/Make/Make.py --overrideXcodeVersion \
-  --cacheDir ~/telegram-bazel-cache \
-  build \
-  --configurationPath build-system/appstore-configuration.json \
-  --xcodeManagedCodesigning --buildNumber=1 \
-  --configuration=debug_sim_arm64 --continueOnError
-```
-
-Output: `bazel-bin/Telegram/Telegram.ipa`.
-
-Install to booted simulator (**must uninstall first** — `simctl install` does not replace existing Frameworks dylibs):
+Simulator install must uninstall first; `simctl install` does not replace existing Frameworks dylibs reliably:
 
 ```sh
 unzip -o bazel-bin/Telegram/Telegram.ipa -d /tmp/tg-sim
@@ -92,106 +86,149 @@ xcrun simctl uninstall booted ph.telegra.Telegraph 2>/dev/null
 xcrun simctl install booted /tmp/tg-sim/Payload/Telegram.app
 ```
 
-### Device build (free Apple ID, self-signed)
-
-Requires `build-input/local-configuration.json` (gitignored via `build-input/*`). Fields match `build-system/template_minimal_development_configuration.json`:
-
-```json
-{
-  "bundle_id": "com.example.nagram",
-  "api_id": "<your_api_id>",
-  "api_hash": "<your_api_hash>",
-  "team_id": "<certificate OU field, NOT the CN serial>",
-  "app_center_id": "0",
-  "is_internal_build": "true",
-  "is_appstore_build": "false",
-  "appstore_id": "0",
-  "app_specific_url_scheme": "tg",
-  "premium_iap_product_id": "",
-  "enable_siri": false,
-  "enable_icloud": false
-}
-```
-
-**team_id** is the `OU` field from the certificate subject (not the serial in parentheses):
-```sh
-security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
-```
-
-Free Apple ID provisioning must be generated by Xcode: create an empty project with Bundle Identifier exactly matching `bundle_id`, run to device once. Then copy the `.mobileprovision` to where Bazel looks:
+Device install:
 
 ```sh
-cp ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.mobileprovision \
-   ~/Library/MobileDevice/Provisioning\ Profiles/
-```
-
-For free Apple IDs only, `local.bazelrc` may disable extensions:
-
-```
-build --//Telegram:disableExtensions
-```
-
-Build and install:
-
-```sh
-python3 build-system/Make/Make.py --overrideXcodeVersion \
-  --cacheDir ~/telegram-bazel-cache \
-  build \
-  --configurationPath build-input/local-configuration.json \
-  --xcodeManagedCodesigning --buildNumber=1 \
-  --configuration=debug_arm64 --continueOnError
-
 xcrun devicectl list devices
 unzip -o bazel-bin/Telegram/Telegram.ipa -d /tmp/tg-device
 xcrun devicectl device install app --device <UDID> /tmp/tg-device/Payload/Telegram.app
 ```
 
-First launch: trust the developer certificate in Settings → General → VPN & Device Management. Free certificates expire every 7 days.
+### Test
 
-**Known limitation:** Xcode 26.5 + rules_xcodeproj "Build with Bazel" mode is incompatible (Permission denied writing framework Info.plist). Use command-line build + `devicectl` instead.
+Bazel test wrapper (`debug_sim_arm64`, target `Tests/AllTests`):
 
-## Project Structure
+```sh
+python3 build-system/Make/Make.py --overrideXcodeVersion \
+  --cacheDir ~/telegram-bazel-cache \
+  test \
+  --configurationPath build-system/appstore-configuration.json \
+  --xcodeManagedCodesigning
+```
 
-- **`Telegram/`** — main app target, app extensions, Info.plist (including Nagram's `.icon` and display name)
-- **`Nagram/`** — all Nagram enhancement code (`Settings/`, `SettingsUI/`)
-- **`submodules/`** — library modules (TelegramCore, TelegramUI, Display, SwiftSignalKit, Postbox, etc.)
-- **`third-party/`** — vendored external code
-- **`build-system/`** — Bazel build rules, Make.py wrapper, configuration templates
-- **No tests exist** in this project. Verification is full-project build + manual testing.
+UI tests require a generated `Telegram/Telegram.xcodeproj` and a matching simulator. Always pass `--ui-test`; see `docs/ui-testing.md`.
 
-## Code Style
+```sh
+xcodebuild test \
+  -project Telegram/Telegram.xcodeproj \
+  -scheme iOSAppUITestSuite \
+  -destination 'platform=iOS Simulator,name=iPhone 17,OS=26.1'
+```
 
-Standard Swift conventions: PascalCase types, camelCase variables/methods, sorted imports. Annotation for Nagram-specific changes uses `// MARK: NAGRAM`.
+### Format and lint
+
+No dedicated repo-wide formatter or lint command was found. Follow local Swift style, keep imports sorted, and rely on Bazel/Swift warnings-as-errors for touched targets. Do not run broad auto-formatting over upstream files.
+
+### Clean
+
+```sh
+python3 build-system/Make/Make.py clean
+```
+
+`Make.py clean` runs `bazel clean --expunge`; recreate `local.bazelrc` afterward if it disappears.
+
+### Development server
+
+There is no development server. Build the app, then run it in a simulator or install it on a device.
+
+### Other scripts
+
+List shell scripts before using one:
+
+```sh
+find . -path './.jj' -prune -o -type f -name '*.sh' -print | sort
+```
+
+Prefer `build-system/Make/Make.py` for app build/test/clean. Use `build-system/generate-xcode-project.sh`, `build-system/verify.sh`, `Telegram/*Icon*.sh`, and `third-party/*/build-*-bazel.sh` only when the task specifically calls for them.
+
+## Nagram Fork Patterns
+
+- Put new Nagram-only code under `Nagram/`. Keep `Nagram/Settings` as the low-level data layer and `Nagram/SettingsUI` as the UI layer.
+- When upstream files must change, annotate the modification site with `// MARK: NAGRAM`. This is required for upstream rebases.
+- The Nagram settings entry appears below “我的资料” (My Profile) in `PeerInfoSettingsItems.swift`; long press opens Nagram debug settings.
+- Main app display name is `Nagram` in `Telegram/BUILD` (`CFBundleDisplayName` / `CFBundleName`). Extension plist targets remain `Telegram` unless a task explicitly changes that behavior.
+- App icon integration is in `Telegram/BUILD`: `alternate_icon_folders` includes `Nagram`, and Composer source icons include `Nagram`, `NagramBlock`, and `NagramColorful`.
+- Settings defaults should preserve native Telegram behavior unless the feature explicitly requires a different default. Existing settings use `@NagramDefault` and sync through local `UserDefaults` plus iCloud KVS.
+- Use `NagramSettingsSignal` helpers when UI must react live to setting changes. Do not add ad-hoc polling.
 
 ## Postbox → TelegramEngine Refactor
 
-A gradual upstream migration to eliminate direct `import Postbox` from consumer submodules. Full history in [`docs/superpowers/postbox-refactor-log.md`](docs/superpowers/postbox-refactor-log.md).
+A gradual upstream migration is eliminating direct `import Postbox` from consumer submodules. Read `docs/superpowers/postbox-refactor-log.md` before touching this area.
 
-### Rules
+Rules:
 
-1. `TelegramCore` does **not** `@_exported import Postbox`. Every Postbox-type reference in a migrated module must use an engine typealias.
-2. **Never typealias `Postbox`, `Account`, or `MediaBox`.** Narrow utility typealiases (`MemoryBuffer`, `PostboxDecoder`, `PostboxEncoder`, etc.) are allowed.
-3. No new engine wrapper structs unless the wave spec allows — only typealiases and thin forwarding methods.
-4. **Discovery first:** grep `submodules/TelegramCore/Sources/TelegramEngine/` for existing equivalents before adding any new wrapper.
-5. **TelegramCore never imports UIKit/Display.** UIKit-needing helpers stay in consumer-side submodules.
+1. `TelegramCore` does not `@_exported import Postbox`; migrated modules must use engine typealiases for Postbox-type references.
+2. Never typealias `Postbox`, `Account`, or `MediaBox`. Narrow utility typealiases such as `MemoryBuffer`, `PostboxDecoder`, and `PostboxEncoder` are allowed.
+3. Do not add new engine wrapper structs unless the wave spec allows it. Prefer typealiases and thin forwarding methods.
+4. Search `submodules/TelegramCore/Sources/TelegramEngine/` for existing equivalents before adding a wrapper.
+5. `TelegramCore` must not import UIKit or Display. UIKit-dependent helpers stay in consumer-side submodules.
 
-### Engine Typealias Cheat Sheet
+Common mappings:
 
-```
+```text
 PeerId              → EnginePeer.Id          MessageId           → EngineMessage.Id
 MessageIndex        → EngineMessage.Index    MessageTags         → EngineMessage.Tags
 MessageAttribute    → EngineMessage.Attribute MessageFlags       → EngineMessage.Flags
 MessageForwardInfo  → EngineMessage.ForwardInfo MediaId           → EngineMedia.Id
-PreferencesEntry    → EnginePreferencesEntry    TempBox           → EngineTempBox
+PreferencesEntry    → EnginePreferencesEntry TempBox             → EngineTempBox
 PinnedItemId        → EngineChatList.PinnedItem.Id
-MemoryBuffer        → EngineMemoryBuffer       PostboxDecoder    → EnginePostboxDecoder
-PostboxEncoder      → EnginePostboxEncoder     AdaptedPostboxDecoder → EngineAdaptedPostboxDecoder
-ItemCollectionId    → EngineItemCollectionId   FetchResourceSourceType → EngineFetchResourceSourceType
+MemoryBuffer        → EngineMemoryBuffer     PostboxDecoder      → EnginePostboxDecoder
+PostboxEncoder      → EnginePostboxEncoder   AdaptedPostboxDecoder → EngineAdaptedPostboxDecoder
+ItemCollectionId    → EngineItemCollectionId FetchResourceSourceType → EngineFetchResourceSourceType
 FetchResourceError  → EngineFetchResourceError
 ```
 
-`EngineMediaResource` is a **wrapper class** (not a typealias) — it wraps/unwraps via `EngineMediaResource(rawResource)` / `._asResource()`. Use it where a pure type reference suffices; fall back to raw `MediaResource` for protocol conformance or `isEqual(to:)`.
+`EngineMediaResource` is a wrapper class, not a typealias. It wraps/unwraps via `EngineMediaResource(rawResource)` and `._asResource()`. Use it when a pure type reference is enough; use raw `MediaResource` only for protocol conformance or `isEqual(to:)`.
 
-### TelegramEngine.Resources Facade (as of wave 32)
+## Anti-Patterns
 
-All mediaBox methods with clean signatures live in `submodules/TelegramCore/Sources/TelegramEngine/Resources/TelegramEngineResources.swift`. Consumers use `EngineMediaResource.Id` / `EngineMediaResource` parameters (never raw `MediaResourceId` / `MediaResource`).
+- Do not put Nagram-only feature code into upstream `submodules/` when it can live in `Nagram/`.
+- Do not edit upstream files without a nearby `// MARK: NAGRAM` marker.
+- Do not pass `--disableExtensions` or `--disableProvisioningProfiles` to `Make.py build`; those are Bazel flags for `local.bazelrc`, not Make.py build arguments.
+- Do not use `disableProvisioningProfiles` for device builds.
+- Do not disable extensions when full/formal provisioning profiles are present.
+- Do not mix functional changes with whitespace cleanup.
+- Do not treat stale-submodule errors (`tgcalls` missing files, WebRTC/FFmpeg API mismatches) as app code failures; verify submodule state first. The upstream README uses Git commands for this, so ask for explicit authorization before running them in a jj-only agent workspace.
+- Do not add production-data UI tests. XCUITests must launch with `--ui-test` so they use isolated data and Telegram test servers.
+
+## Code Style
+
+- Follow existing Swift conventions: PascalCase types, camelCase members, sorted imports, clear names over abbreviations.
+- Keep changes localized and boring. Prefer existing Telegram/Nagram helpers over new abstractions.
+- New Nagram Bazel modules should use `swift_library`, public visibility only when needed, and `copts = ["-warnings-as-errors"]` like the existing Nagram targets.
+- Boundary code should fail loudly with actionable errors; avoid silent fallback paths unless the product behavior explicitly requires one.
+- Do not commit debug prints, `debugger`, temporary TODOs, or commented-out old implementations.
+
+## Commit and Pull Request Guidelines
+
+Use `jj` in this workspace. The upstream `.github/CONTRIBUTING.md` is Git-oriented human guidance; AI agents should not run Git commands unless the user explicitly authorizes a concrete command in the current turn.
+
+Before editing:
+
+```sh
+jj st
+jj log -r @ -n 1 --no-graph
+```
+
+Before committing:
+
+- Re-read the request and confirm the change scope did not drift.
+- Run the narrowest useful validation, then a full app build when the touched area can affect compilation or runtime behavior.
+- For docs-only changes, at minimum inspect the Markdown and run `jj diff --git`.
+- Do not modify tests to fit a broken implementation.
+
+Commit messages in recent history use `type: summary`, especially `feat:`, `fix:`, `chore:`, and `docs:`. Prefer one focused change per commit:
+
+```sh
+jj commit -m "docs: improve agent guide"
+```
+
+Pull request descriptions should include:
+
+- Summary of user-visible or developer-visible changes.
+- Validation commands and whether they passed, failed, or were skipped with a reason.
+- Screenshots or screen recordings for UI changes.
+- Signing/build mode used for validation (`debug_sim_arm64`, `debug_arm64`, full profiles, free Apple ID, etc.).
+- Rebase or upstream-touch notes for every modified upstream file with `// MARK: NAGRAM`.
+
+Do not create or open a PR unless the user explicitly asks for it.

@@ -143,7 +143,9 @@ func chatHistoryEntriesForView(
     }
     
     var count = 0
-    let nagramRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: location.peerId?.toInt64()) // MARK: NAGRAM
+    let nagramRegexFilterPeerId = location.peerId?.toInt64() // MARK: NAGRAM
+    let nagramIncomingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: false) // MARK: NAGRAM
+    let nagramOutgoingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: true) // MARK: NAGRAM
     loop: for entry in view.entries {
         var message = entry.message
         var isRead = entry.isRead
@@ -157,8 +159,9 @@ func chatHistoryEntriesForView(
             continue
         }
 
+        let nagramRegexFilterMatcher = message.effectivelyIncoming(context.account.peerId) ? nagramIncomingRegexFilterMatcher : nagramOutgoingRegexFilterMatcher // MARK: NAGRAM
         if let nagramRegexFilterMatcher { // MARK: NAGRAM — 正则消息过滤只影响聊天展示，不写回 Postbox。
-            switch nagramRegexFilterMatcher.apply(to: message.text) {
+            switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.toInt64()) {
             case .hidden:
                 continue
             case .contentHidden:
@@ -469,22 +472,36 @@ func chatHistoryEntriesForView(
     }
         
     if let maxReadIndex = view.maxReadIndex, includeUnreadEntry {
-        var i = 0
-        let unreadEntry: ChatHistoryEntry = .UnreadEntry(maxReadIndex, presentationData)
-        for entry in entries {
-            if case let .MessageGroupEntry(_, messages, _) = entry {
-                if !messages.isEmpty && maxReadIndex >= messages[0].0.index {
-                    i += 1
-                    continue
-                }
+        let hasVisibleUnreadMessages = entries.contains { entry -> Bool in
+            switch entry {
+            case let .MessageEntry(message, _, _, _, _, _):
+                return message.index > maxReadIndex
+            case let .MessageGroupEntry(_, messages, _):
+                return messages.contains(where: { item in
+                    return item.0.index > maxReadIndex
+                })
+            default:
+                return false
             }
-            if entry > unreadEntry {
-                if i != 0 {
-                    entries.insert(unreadEntry, at: i)
+        }
+        if hasVisibleUnreadMessages { // MARK: NAGRAM — hide 规则过滤掉全部未读时，不保留空的未读分隔占位。
+            var i = 0
+            let unreadEntry: ChatHistoryEntry = .UnreadEntry(maxReadIndex, presentationData)
+            for entry in entries {
+                if case let .MessageGroupEntry(_, messages, _) = entry {
+                    if !messages.isEmpty && maxReadIndex >= messages[0].0.index {
+                        i += 1
+                        continue
+                    }
                 }
-                break
+                if entry > unreadEntry {
+                    if i != 0 {
+                        entries.insert(unreadEntry, at: i)
+                    }
+                    break
+                }
+                i += 1
             }
-            i += 1
         }
     }
     

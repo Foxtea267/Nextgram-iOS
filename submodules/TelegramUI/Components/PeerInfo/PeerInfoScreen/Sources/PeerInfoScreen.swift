@@ -197,6 +197,8 @@ enum PeerInfoSettingsSection {
     case ton
     // MARK: NAGRAM — 增强设置入口
     case nagram
+    // MARK: NAGRAM — Debug fallback when the bottom tab bar is hidden.
+    case nagramDebug
 }
 
 enum PeerInfoReportType {
@@ -2114,6 +2116,42 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                     transition.updateAlpha(node: section, alpha: alpha)
                 }
             }
+        }
+        
+        // MARK: NAGRAM
+        self.headerNode.displayNagramProfileBadgeInfo = { [weak self] sourceView, badge in
+            guard let strongSelf = self, let controller = strongSelf.controller else {
+                return
+            }
+            let languageCode = strongSelf.presentationData.strings.baseLanguageCode
+            let title = nagramProfileBadgeString(nagramProfileBadgeTitleKey(badge), languageCode: languageCode)
+            let text = nagramProfileBadgeString(nagramProfileBadgeInfoKey(badge), languageCode: languageCode)
+            
+            let attributedText = NSMutableAttributedString(string: title, attributes: [
+                .font: Font.semibold(13.0),
+                .foregroundColor: UIColor.white
+            ])
+            attributedText.append(NSAttributedString(string: "\n\(text)", attributes: [
+                .font: Font.regular(13.0),
+                .foregroundColor: UIColor.white.withAlphaComponent(0.86)
+            ]))
+            
+            let sourceRect = sourceView.convert(sourceView.bounds, to: controller.view)
+            let tooltipController = TooltipScreen(
+                context: strongSelf.context,
+                account: strongSelf.context.account,
+                sharedContext: strongSelf.context.sharedContext,
+                text: .attributedString(text: attributedText),
+                style: .customBlur(UIColor(rgb: 0x000000, alpha: 0.65), -4.0),
+                arrowStyle: .small,
+                location: .point(sourceRect, .bottom),
+                isShimmering: true,
+                cornerRadius: 10.0,
+                shouldDismissOnTouch: { _, _ in
+                    return .dismiss(consume: false)
+                }
+            )
+            controller.present(tooltipController, in: .current)
         }
         
         let screenData: Signal<PeerInfoScreenData, NoError>
@@ -6850,7 +6888,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
     
     fileprivate var movingInHierarchy = false
     public override func willMove(toParent viewController: UIViewController?) {
-        super.willMove(toParent: parent)
+        super.willMove(toParent: viewController)
         
         if self.isSettings, viewController == nil, let tabBarController = self.parent as? TabBarController {
             self.movingInHierarchy = true

@@ -40,6 +40,7 @@ public enum NagramBottomBarSearchMode: String {
 
 public struct NagramBottomBarSettings: Equatable {
     public static let defaultBottomItems: [NagramBottomBarItemId] = [.contacts, .calls, .chats, .settings]
+    public static let minimumVisibleNonSearchBottomItems = 2
 
     public var isBottomBarVisible: Bool
     public var bottomItems: [NagramBottomBarItemId]
@@ -84,9 +85,7 @@ public struct NagramBottomBarSettings: Equatable {
         guard self.isBottomBarVisible else {
             return []
         }
-        return self.bottomItems.filter { item in
-            return item != .search && !self.hiddenItems.contains(item) && self.externalItem != item
-        }
+        return self.activeBottomItems
     }
 
     public var visibleNavigationItems: [NagramBottomBarItemId] {
@@ -115,6 +114,13 @@ public struct NagramBottomBarSettings: Equatable {
         return hiddenItems + availableItems
     }
 
+    public func canHide(_ item: NagramBottomBarItemId) -> Bool {
+        if item == .search || !self.activeBottomItems.contains(item) {
+            return true
+        }
+        return self.activeBottomItems.count > Self.minimumVisibleNonSearchBottomItems
+    }
+
     public mutating func toggleHidden(_ item: NagramBottomBarItemId) {
         if item == .search {
             if self.hiddenItems.contains(.search) {
@@ -138,6 +144,9 @@ public struct NagramBottomBarSettings: Equatable {
                 self.bottomItems.append(item)
             }
         } else {
+            guard self.canHide(item) else {
+                return
+            }
             self.hiddenItems.insert(item)
             self.bottomItems.removeAll(where: { $0 == item })
             if self.externalItem == item {
@@ -148,6 +157,9 @@ public struct NagramBottomBarSettings: Equatable {
     }
 
     public mutating func hide(_ item: NagramBottomBarItemId) {
+        guard self.canHide(item) else {
+            return
+        }
         if !self.hiddenItems.contains(item) {
             self.hiddenItems.insert(item)
         }
@@ -294,7 +306,19 @@ public struct NagramBottomBarSettings: Equatable {
             self.bottomItems.append(item)
             seen.insert(item)
         }
+        if self.activeBottomItems.count == 1, let restoredItem = Self.defaultBottomItems.first(where: { self.hiddenItems.contains($0) }) {
+            self.hiddenItems.remove(restoredItem)
+            if !self.bottomItems.contains(restoredItem) {
+                self.bottomItems.append(restoredItem)
+            }
+        }
         self.buttonWidthFillRatio = max(0, min(100, self.buttonWidthFillRatio))
+    }
+
+    private var activeBottomItems: [NagramBottomBarItemId] {
+        return self.bottomItems.filter { item in
+            return item != .search && !self.hiddenItems.contains(item) && self.externalItem != item
+        }
     }
 }
 
@@ -344,29 +368,32 @@ public extension NagramBottomBarSettings {
     }
 
     func save(to defaults: UserDefaults = .standard) {
-        defaults.set(1, forKey: Keys.marker)
-        defaults.set(self.isBottomBarVisible, forKey: Keys.isBottomBarVisible)
-        defaults.set(self.bottomItems.map(\.rawValue), forKey: Keys.bottomItems)
-        if let externalItem = self.externalItem {
-            defaults.set(externalItem.rawValue, forKey: Keys.externalItem)
-        } else {
-            defaults.removeObject(forKey: Keys.externalItem)
-        }
-        defaults.set(NagramBottomBarItemId.allCases.filter { self.hiddenItems.contains($0) }.map(\.rawValue), forKey: Keys.hiddenItems)
-        defaults.set(self.topSearchVisible, forKey: Keys.topSearchVisible)
-        defaults.set(self.showLabels, forKey: Keys.showLabels)
-        defaults.set(self.widthMode.rawValue, forKey: Keys.widthMode)
-        defaults.set(self.slotMode.rawValue, forKey: Keys.slotMode)
-        defaults.set(self.buttonWidthFillRatio, forKey: Keys.buttonWidthFillRatio)
-        defaults.set(self.alignment.rawValue, forKey: Keys.alignment)
-        defaults.set(self.searchMode.rawValue, forKey: Keys.searchMode)
+        var settings = self
+        settings.normalize()
 
-        defaults.set(!self.isBottomBarVisible, forKey: "nagram.hideTabBar")
-        defaults.set(!self.isVisible(.contacts), forKey: "nagram.hideTabBarContacts")
-        defaults.set(!self.isVisible(.chats), forKey: "nagram.hideTabBarChats")
-        defaults.set(!self.isVisible(.settings), forKey: "nagram.hideTabBarSettings")
-        defaults.set(!self.topSearchVisible, forKey: "nagram.showTabBarSearch")
-        defaults.set(self.buttonWidthFillRatio >= 100, forKey: "nagram.wideTabBar")
+        NagramSettingsCloudSync.shared.set(1, forKey: Keys.marker, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.isBottomBarVisible, forKey: Keys.isBottomBarVisible, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.bottomItems.map(\.rawValue), forKey: Keys.bottomItems, defaults: defaults)
+        if let externalItem = settings.externalItem {
+            NagramSettingsCloudSync.shared.set(externalItem.rawValue, forKey: Keys.externalItem, defaults: defaults)
+        } else {
+            NagramSettingsCloudSync.shared.removeObject(forKey: Keys.externalItem, defaults: defaults)
+        }
+        NagramSettingsCloudSync.shared.set(NagramBottomBarItemId.allCases.filter { settings.hiddenItems.contains($0) }.map(\.rawValue), forKey: Keys.hiddenItems, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.topSearchVisible, forKey: Keys.topSearchVisible, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.showLabels, forKey: Keys.showLabels, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.widthMode.rawValue, forKey: Keys.widthMode, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.slotMode.rawValue, forKey: Keys.slotMode, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.buttonWidthFillRatio, forKey: Keys.buttonWidthFillRatio, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.alignment.rawValue, forKey: Keys.alignment, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.searchMode.rawValue, forKey: Keys.searchMode, defaults: defaults)
+
+        NagramSettingsCloudSync.shared.set(!settings.isBottomBarVisible, forKey: "nagram.hideTabBar", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.isVisible(.contacts), forKey: "nagram.hideTabBarContacts", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.isVisible(.chats), forKey: "nagram.hideTabBarChats", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.isVisible(.settings), forKey: "nagram.hideTabBarSettings", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(!settings.topSearchVisible, forKey: "nagram.showTabBarSearch", defaults: defaults)
+        NagramSettingsCloudSync.shared.set(settings.buttonWidthFillRatio >= 100, forKey: "nagram.wideTabBar", defaults: defaults)
     }
 
     private static func itemIds(forKey key: String, defaults: UserDefaults) -> [NagramBottomBarItemId] {

@@ -53,9 +53,10 @@ final class PeerInfoScreenDisclosureItem: PeerInfoScreenItem {
     let icon: UIImage?
     let iconSignal: Signal<UIImage?, NoError>?
     let hasArrow: Bool
+    let longPressAction: (() -> Void)?
     let action: (() -> Void)?
     
-    init(id: AnyHashable, label: Label = .none, additionalBadgeLabel: String? = nil, additionalBadgeIcon: UIImage? = nil, text: String, icon: UIImage? = nil, iconSignal: Signal<UIImage?, NoError>? = nil, hasArrow: Bool = true, action: (() -> Void)?) {
+    init(id: AnyHashable, label: Label = .none, additionalBadgeLabel: String? = nil, additionalBadgeIcon: UIImage? = nil, text: String, icon: UIImage? = nil, iconSignal: Signal<UIImage?, NoError>? = nil, hasArrow: Bool = true, longPressAction: (() -> Void)? = nil, action: (() -> Void)?) {
         self.id = id
         self.label = label
         self.additionalBadgeLabel = additionalBadgeLabel
@@ -64,6 +65,8 @@ final class PeerInfoScreenDisclosureItem: PeerInfoScreenItem {
         self.icon = icon
         self.iconSignal = iconSignal
         self.hasArrow = hasArrow
+        // MARK: NAGRAM — optional hidden action for the Nagram settings entry when the tab bar is hidden.
+        self.longPressAction = longPressAction
         self.action = action
     }
     
@@ -86,6 +89,7 @@ private final class PeerInfoScreenDisclosureItemNode: PeerInfoScreenItemNode {
     private let activateArea: AccessibilityAreaNode
     
     private var iconDisposable = MetaDisposable()
+    private var longPressGestureRecognizer: UILongPressGestureRecognizer?
     
     private var item: PeerInfoScreenDisclosureItem?
     
@@ -139,6 +143,23 @@ private final class PeerInfoScreenDisclosureItemNode: PeerInfoScreenItemNode {
         self.addSubnode(self.activateArea)
     }
     
+    override func didLoad() {
+        super.didLoad()
+        
+        // MARK: NAGRAM — long-press Nagram settings row opens Debug Settings without relying on the tab bar.
+        let longPressGestureRecognizer = UILongPressGestureRecognizer(target: self, action: #selector(self.longPressGesture(_:)))
+        longPressGestureRecognizer.isEnabled = false
+        self.view.addGestureRecognizer(longPressGestureRecognizer)
+        self.longPressGestureRecognizer = longPressGestureRecognizer
+    }
+    
+    @objc private func longPressGesture(_ gestureRecognizer: UILongPressGestureRecognizer) {
+        guard gestureRecognizer.state == .began else {
+            return
+        }
+        self.item?.longPressAction?()
+    }
+    
     deinit {
         self.iconDisposable.dispose()
     }
@@ -152,6 +173,7 @@ private final class PeerInfoScreenDisclosureItemNode: PeerInfoScreenItemNode {
         self.item = item
         
         self.selectionNode.pressed = item.action
+        self.longPressGestureRecognizer?.isEnabled = item.longPressAction != nil
         
         let sideInset: CGFloat = 16.0 + safeInsets.left
         let leftInset = (item.icon == nil && item.iconSignal == nil ? sideInset : sideInset + 29.0 + 16.0)

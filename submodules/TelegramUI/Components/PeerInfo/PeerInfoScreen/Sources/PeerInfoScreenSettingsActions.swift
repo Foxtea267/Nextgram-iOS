@@ -150,6 +150,11 @@ extension PeerInfoScreenNode {
         // MARK: NAGRAM — 增强设置入口
         case .nagram:
             push(nagramSettingsController(context: self.context))
+        // MARK: NAGRAM — Debug fallback when the bottom tab bar is hidden.
+        case .nagramDebug:
+            if let controller = self.context.sharedContext.makeDebugSettingsController(context: self.context) {
+                push(controller)
+            }
         case .appearance:
             push(themeSettingsController(context: self.context))
         case .language:

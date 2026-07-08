@@ -1386,26 +1386,17 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         // MARK: NAGRAM force-copy — 原条件追加 && !forceCopyEnabled，开启后无视 content protection 允许复制
         let isCopyProtected = (chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled
         // MARK: NAGRAM — 复读：参考 Android Nagram 的 Repeat，按原消息转发回当前会话
-        if !isScheduled, data.messageActions.options.contains(.forward), !isCopyProtected, canSendMessagesToChat(chatPresentationInterfaceState), let peerId = chatPresentationInterfaceState.chatLocation.peerId {
+        if !isScheduled, data.messageActions.options.contains(.forward), !isCopyProtected, canSendMessagesToChat(chatPresentationInterfaceState), chatPresentationInterfaceState.chatLocation.peerId != nil {
             actions.append(.repeat, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.repeat", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/RepeatPlusOne"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
-                let repeatedMessages = (selectAll ? messages : [message]).map { message -> EnqueueMessage in
-                    return .forward(source: message.id, threadId: chatPresentationInterfaceState.chatLocation.threadId, grouping: .auto, attributes: [], correlationId: nil)
-                }
-                let _ = enqueueMessages(account: context.account, peerId: peerId, messages: repeatedMessages).startStandalone()
+                let _ = controllerInteraction.nagramRepeatMessages(selectAll ? messages : [message], false)
                 f(.dismissWithoutContent)
             })))
             actions.append(.repeatWithoutQuote, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.repeatWithoutQuote", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/RepeatPlusOne"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
-                let forwardAttributes: [EngineMessage.Attribute] = [
-                    ForwardOptionsMessageAttribute(hideNames: true, hideCaptions: false)
-                ]
-                let repeatedMessages = (selectAll ? messages : [message]).map { message -> EnqueueMessage in
-                    return .forward(source: message.id, threadId: chatPresentationInterfaceState.chatLocation.threadId, grouping: .auto, attributes: forwardAttributes, correlationId: nil)
-                }
-                let _ = enqueueMessages(account: context.account, peerId: peerId, messages: repeatedMessages).startStandalone()
+                let _ = controllerInteraction.nagramRepeatMessages(selectAll ? messages : [message], true)
                 f(.dismissWithoutContent)
             })))
         }
@@ -1970,6 +1961,36 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        // MARK: NAGRAM — 保存单个贴纸到系统相册，供其他 App 从相册选择使用。
+        var saveStickerToCameraRollFile: TelegramMediaFile?
+        if !isCopyProtected && !message.containsSecretMedia {
+            for media in message.media {
+                if let file = media as? TelegramMediaFile, file.isSticker {
+                    saveStickerToCameraRollFile = file
+                    break
+                }
+            }
+        }
+        if let saveStickerToCameraRollFile {
+            actions.append(.saveStickerToCameraRoll, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.saveStickerToCameraRoll", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Save"), color: theme.actionSheet.primaryTextColor)
+            }, action: { _, f in
+                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                let lang = presentationData.strings.baseLanguageCode
+                let _ = (saveStickerToCameraRoll(context: context, fileReference: .message(message: MessageReference(message), media: saveStickerToCameraRollFile), userLocation: .peer(message.id.peerId))
+                |> deliverOnMainQueue).startStandalone(next: { success in
+                    Queue.mainQueue().after(0.2) {
+                        if success {
+                            controllerInteraction.displayUndo(.mediaSaved(text: ngI18n("Nagram.MessageMenu.StickerSavedToCameraRoll", lang)))
+                        } else {
+                            controllerInteraction.displayUndo(.info(title: nil, text: ngI18n("Nagram.MessageMenu.StickerSaveFailed", lang), timeout: nil, customUndoText: nil))
+                        }
+                    }
+                })
+                f(.default)
+            })))
+        }
+        
         var editStickerFile: TelegramMediaFile?
         for media in messages[0].media {
             if let file = media as? TelegramMediaFile, file.isSticker && !file.isPremiumSticker {
@@ -2181,6 +2202,21 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
 
         if !isPinnedMessages, !isReplyThreadHead, data.canSelect {
             var didAddSeparator = false
+            if let author = message.author {
+                if !actions.isEmpty && !didAddSeparator {
+                    didAddSeparator = true
+                    actions.append(.separator)
+                }
+
+                // MARK: NAGRAM — 在当前会话/话题里查找当前消息作者的所有消息。
+                actions.append(.viewAuthorMessages, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.viewAuthorMessages", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    f(.dismissWithoutContent)
+                    interfaceInteraction.beginMessageSearch(.member(author), "")
+                })))
+            }
+            
             if !selectAll || messages.count == 1 {
                 if !actions.isEmpty && !didAddSeparator {
                     didAddSeparator = true
@@ -2192,6 +2228,71 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                 }, action: { _, f in
                     interfaceInteraction.beginMessageSelection(selectAll ? messages.map { $0.id } : [message.id], { transition in
                         f(.custom(transition))
+                    })
+                })))
+            }
+
+            if let author = message.author {
+                // MARK: NAGRAM — 按当前消息作者批量选择当前会话/话题里的消息。
+                actions.append(.selectFromAuthor, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.selectFromAuthor", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/SelectAll"), color: theme.actionSheet.primaryTextColor)
+                }, action: { _, f in
+                    let progressSignal = Signal<Never, NoError> { _ in
+                        let overlayController = OverlayStatusController(theme: chatPresentationInterfaceState.theme, type: .loading(cancelled: nil))
+                        controllerInteraction.presentGlobalOverlayController(overlayController, nil)
+                        return ActionDisposable { [weak overlayController] in
+                            Queue.mainQueue().async {
+                                overlayController?.dismiss()
+                            }
+                        }
+                    }
+                    |> runOn(Queue.mainQueue())
+                    |> delay(0.2, queue: Queue.mainQueue())
+                    let progressDisposable = progressSignal.start()
+
+                    let searchThreadId: Int64?
+                    if case let .replyThread(replyThreadMessage) = chatPresentationInterfaceState.chatLocation {
+                        searchThreadId = replyThreadMessage.threadId
+                    } else {
+                        searchThreadId = nil
+                    }
+                    
+                    let _ = (context.account.postbox.transaction { transaction -> [EngineMessage.Id] in
+                        let limit = 500
+                        var ids: [EngineMessage.Id] = []
+                        transaction.withAllMessages(peerId: message.id.peerId, { searchMessage in
+                            if ids.count >= limit {
+                                return false
+                            }
+                            guard searchMessage.author?.id == author.id else {
+                                return true
+                            }
+                            if let searchThreadId, searchMessage.threadId != searchThreadId {
+                                return true
+                            }
+                            if searchMessage.media.contains(where: { $0 is TelegramMediaAction }) {
+                                return true
+                            }
+                            ids.append(searchMessage.id)
+                            return true
+                        })
+                        return ids
+                    }
+                    |> deliverOnMainQueue).startStandalone(next: { ids in
+                        if ids.isEmpty {
+                            f(.default)
+                        } else {
+                            interfaceInteraction.beginMessageSelection(ids, { transition in
+                                f(.custom(transition))
+                            })
+                        }
+                        Queue.mainQueue().async {
+                            progressDisposable.dispose()
+                        }
+                    }, completed: {
+                        Queue.mainQueue().async {
+                            progressDisposable.dispose()
+                        }
                     })
                 })))
             }

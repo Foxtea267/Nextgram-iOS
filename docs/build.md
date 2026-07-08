@@ -79,7 +79,39 @@ build --@build_bazel_rules_swift//swift:copt=-no-warnings-as-errors
 
 ## 正式/完整签名真机包
 
-`local.bazelrc` 不得包含任何 `disableExtensions` / `disableProvisioningProfiles`。编译：
+完整签名是真实 Apple Development 证书 + 主 app + 6 个 extension provisioning profiles 的模式。`local.bazelrc` 可以不存在；不存在等价于不禁用扩展、不禁用 provisioning profiles。如果存在，也不得包含任何 `disableExtensions` / `disableProvisioningProfiles`。
+
+必须先补齐当前 checkout 下的签名输入：
+
+```text
+build-input/local-configuration.json
+build-input/codesigning-development/
+```
+
+`build-input/local-configuration.json` 字段同 `build-system/template_minimal_development_configuration.json`。其中 `bundle_id` 必须和主 app provisioning profile 匹配，`team_id` 必须是证书 / profiles 所属团队的 Team ID。
+
+`build-input/codesigning-development/profiles/` 至少需要 7 个 `.mobileprovision`，分别覆盖：
+
+- `Telegram`
+- `Share`
+- `NotificationContent`
+- `NotificationService`
+- `Intents`
+- `Widget`
+- `BroadcastUpload`
+
+本地打包通常直接使用 Keychain 里的 Apple Development identity；只有需要在构建流程中导入证书的环境，才把 `.p12` 等证书材料放到 `build-input/codesigning-development/certs/`。
+
+打包前可先检查：
+
+```sh
+test -f build-input/local-configuration.json
+test -d build-input/codesigning-development/profiles
+find build-input/codesigning-development/profiles -name '*.mobileprovision' | wc -l
+security find-identity -v -p codesigning | grep "Apple Development"
+```
+
+编译：
 
 ```sh
 source ~/.zshrc 2>/dev/null
@@ -136,6 +168,140 @@ python3 build-system/Make/Make.py --overrideXcodeVersion \
   --xcodeManagedCodesigning --buildNumber=1 \
   --configuration=debug_arm64 --continueOnError
 ```
+
+## 在 workspace / worktree 构建真机包
+
+这里的 workspace / worktree 指 `.workspaces/<name>`、`.worktrees/<name>` 这类独立 checkout。真机构建必须在对应 checkout 根目录执行；`build-input/*` 和 `local.bazelrc` 都按当前 Bazel workspace root 解析，不会自动读取主 checkout 的 gitignored 文件。
+
+如果检查结果类似下面这样，说明当前 workspace / worktree 缺签名输入，不能直接打真实证书真机包：
+
+```text
+local.bazelrc: 不存在
+build-input/local-configuration.json: 不存在
+build-input/codesigning-development: 不存在
+~/Library/MobileDevice/Provisioning Profiles: 0 个 profile
+Keychain: 有 Apple Development identity
+```
+
+其中 `local.bazelrc` 对正式/完整签名不是必需项；缺它不等于错误，只表示不额外禁用扩展和 provisioning profiles。必须补的是：
+
+```text
+build-input/local-configuration.json
+build-input/codesigning-development/
+```
+
+主 checkout 已有这些输入时，可以从 `default` workspace 或主仓库目录复制 / 链接过来。先在目标 workspace / worktree 根目录确定来源目录 `PRIMARY`。
+
+从 `jj` 的 `default` workspace 读取：
+
+```sh
+PRIMARY="$(jj workspace list -T 'if(name == "default", root ++ "\n", "")' | head -n 1)"
+test -n "${PRIMARY}" || {
+  echo "default workspace path not found" >&2
+  exit 1
+}
+```
+
+如果当前目录就是主仓库下的 `.worktrees/<name>` 或 `.workspaces/<name>`，也可以直接取上两级作为主仓库：
+
+```sh
+PRIMARY="$(cd ../.. && pwd)"
+```
+
+或者手写主仓库路径：
+
+```sh
+PRIMARY=/Volumes/Repository/iOS/Nagram-ios
+```
+
+一次性复制签名输入：
+
+```sh
+mkdir -p build-input
+
+cp -f "${PRIMARY}/build-input/local-configuration.json" build-input/local-configuration.json
+
+if test -e build-input/codesigning-development; then
+  mv build-input/codesigning-development "build-input/codesigning-development.bak.$(date +%Y%m%d%H%M%S)"
+fi
+cp -R "${PRIMARY}/build-input/codesigning-development" build-input/codesigning-development
+
+if test -f "${PRIMARY}/local.bazelrc"; then
+  cp -f "${PRIMARY}/local.bazelrc" local.bazelrc
+fi
+```
+
+如果希望后续随主仓库签名配置更新，也可以改用 symlink：
+
+```sh
+mkdir -p build-input
+
+for path in \
+  build-input/local-configuration.json \
+  build-input/codesigning-development
+do
+  test -e "${PRIMARY}/${path}" || {
+    echo "missing ${PRIMARY}/${path}" >&2
+    exit 1
+  }
+  ln -sfn "${PRIMARY}/${path}" "${path}"
+done
+
+if test -e "${PRIMARY}/local.bazelrc"; then
+  ln -sfn "${PRIMARY}/local.bazelrc" local.bazelrc
+fi
+```
+
+如果目标 checkout 已经有同名普通文件或目录，先确认内容并移走后再复制 / 链接，不要覆盖未知证书或配置。
+
+如果需要使用 direct Bazel fallback，或 `local.bazelrc` 引用了本地 `build-input/xcode` 配置，再从同一个 `PRIMARY` 补下面这些本地构建输入。一次性复制：
+
+```sh
+for path in \
+  build-input/bazel-8.4.2-darwin-arm64 \
+  build-input/configuration-repository \
+  build-input/configuration-repository-workdir \
+  build-input/xcode
+do
+  test -e "${PRIMARY}/${path}" || {
+    echo "missing ${PRIMARY}/${path}" >&2
+    exit 1
+  }
+  if test -e "${path}"; then
+    mv "${path}" "${path}.bak.$(date +%Y%m%d%H%M%S)"
+  fi
+  cp -R "${PRIMARY}/${path}" "${path}"
+done
+```
+
+或者继续使用 symlink：
+
+```sh
+for path in \
+  build-input/bazel-8.4.2-darwin-arm64 \
+  build-input/configuration-repository \
+  build-input/configuration-repository-workdir \
+  build-input/xcode
+do
+  test -e "${PRIMARY}/${path}" || {
+    echo "missing ${PRIMARY}/${path}" >&2
+    exit 1
+  }
+  ln -sfn "${PRIMARY}/${path}" "${path}"
+done
+```
+
+`configuration-repository*` 是 `Make.py` 生成的本地配置仓库；复制 / 链接它们后 direct Bazel fallback 可以直接复用主 checkout 已生成的 `variables.bzl`。如果选择不补它们，就先在当前 checkout 跑一次 `Make.py build`，让它重新生成后再走 direct Bazel。
+
+补齐后，在该 workspace / worktree 根目录按签名模式执行真机命令：正式/完整签名用 `--codesigningInformationPath build-input/codesigning-development`；免费 Apple ID 自签用 `--xcodeManagedCodesigning`。产物仍是当前 checkout 下的 `bazel-bin/Telegram/Telegram.ipa`。安装也在同一个 checkout 根目录执行：
+
+```sh
+xcrun devicectl list devices
+unzip -o bazel-bin/Telegram/Telegram.ipa -d /tmp/tg-device
+xcrun devicectl device install app --device <DEVICE_UDID> /tmp/tg-device/Payload/Telegram.app
+```
+
+注意：真机包仍然不能在 `local.bazelrc` 中开启 `disableProvisioningProfiles`。使用完整 development profiles 时，也不能开启 `disableExtensions`。
 
 ## 模拟器免签
 

@@ -192,6 +192,12 @@ public final class StorageBox {
                 valueBox = SqliteValueBox(basePath: databasePath, queue: queue, isTemporary: false, isReadOnly: false, useCaches: isMainProcess, removeDatabaseOnError: isMainProcess, encryptionParameters: nil, upgradeProgress: { _ in })
             }
             
+            if valueBox == nil, !isMainProcess {
+                // MARK: NAGRAM — extensions should not crash when the shared media storage db is temporarily unavailable; stats can fall back to a transient store.
+                postboxLog("Falling back to in-memory storage value box at \(basePath + "/db")")
+                valueBox = SqliteValueBox(basePath: databasePath, queue: queue, isTemporary: true, isReadOnly: false, useCaches: false, removeDatabaseOnError: false, encryptionParameters: nil, upgradeProgress: { _ in }, inMemory: true)
+            }
+            
             guard let valueBox = valueBox else {
                 postboxLog("Giving up on opening value box at \(basePath + "/db")")
                 postboxLogSync()

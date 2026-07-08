@@ -345,15 +345,18 @@ public struct ChatPresentationTranslationState: Equatable {
     public var isEnabled: Bool
     public var fromLang: String
     public var toLang: String
+    public var isNagramAutoTranslateEnabled: Bool
     
     public init(
         isEnabled: Bool,
         fromLang: String,
-        toLang: String
+        toLang: String,
+        isNagramAutoTranslateEnabled: Bool = false
     ) {
         self.isEnabled = isEnabled
         self.fromLang = fromLang
         self.toLang = toLang
+        self.isNagramAutoTranslateEnabled = isNagramAutoTranslateEnabled
     }
 }
 

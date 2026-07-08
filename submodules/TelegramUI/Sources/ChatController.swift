@@ -2174,6 +2174,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 return false
             }
             return self.nagramPerformMessageDoubleTapAction(message: message, actionRawValue: actionRawValue)
+        }, nagramRepeatMessages: { [weak self] messages, hideNames in
+            guard let self else {
+                return false
+            }
+            return self.nagramRepeatMessages(messages: messages, hideNames: hideNames)
         }, activateMessagePinch: { [weak self] sourceNode in
             guard let strongSelf = self else {
                 return
@@ -4303,65 +4308,30 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         
                         let _ = ApplicationSpecificNotice.incrementTranslationSuggestion(accountManager: context.sharedContext.accountManager, timestamp: Int32(Date().timeIntervalSince1970)).startStandalone()
                         
-                        let translationConfiguration = TranslationConfiguration.with(appConfiguration: self.context.currentAppConfiguration.with { $0 })
-                        var useSystemTranslation = false
-                        switch translationConfiguration.manual {
-                        case .system:
-                            if #available(iOS 18.0, *) {
-                                useSystemTranslation = true
+                        // MARK: NAGRAM — route manual single-message translation through TextProcessingScreen so it uses NagramTranslateService instead of iOS system translationPresentation.
+                        self.push(await TextProcessingScreen(
+                            context: self.context,
+                            mode: .translate(fromLanguage: language, applyResult: nil),
+                            inputText: TextWithEntities(text: text.string, entities: entities ?? []),
+                            copyResult: canCopy ? { [weak self] text in
+                                guard let self else {
+                                    return
+                                }
+                                storeMessageTextInPasteboard(text.text, entities: text.entities)
+                                
+                                let infoText = self.presentationData.strings.Conversation_TextCopied
+                                self.present(UndoOverlayController(presentationData: self.presentationData, content: .copy(text: infoText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in
+                                        return true
+                                }), in: .current)
+                            } : nil,
+                            translateChat: { [weak self] toLang in
+                                guard let self else {
+                                    return
+                                }
+                                self.interfaceInteraction?.changeTranslationLanguage(toLang)
+                                self.interfaceInteraction?.toggleTranslation(.translated)
                             }
-                        default:
-                            break
-                        }
-                        
-                        if useSystemTranslation {
-                            presentTranslateScreen(
-                                context: context,
-                                text: text.string,
-                                entities: entities ?? [],
-                                canCopy: canCopy,
-                                fromLanguage: language,
-                                ignoredLanguages: translationSettings.ignoredLanguages,
-                                translateChat: { [weak self] _, toLang in
-                                    self?.interfaceInteraction?.changeTranslationLanguage(toLang)
-                                    self?.interfaceInteraction?.toggleTranslation(.translated)
-                                },
-                                pushController: { [weak self] c in
-                                    self?.effectiveNavigationController?._keepModalDismissProgress = true
-                                    self?.push(c)
-                                },
-                                presentController: { [weak self] c in
-                                    self?.present(c, in: .window(.root))
-                                },
-                                display: { [weak self] c in
-                                    self?.push(c)
-                                }
-                            )
-                        } else {
-                            self.push(await TextProcessingScreen(
-                                context: self.context,
-                                mode: .translate(fromLanguage: language, applyResult: nil),
-                                inputText: TextWithEntities(text: text.string, entities: entities ?? []),
-                                copyResult: canCopy ? { [weak self] text in
-                                    guard let self else {
-                                        return
-                                    }
-                                    storeMessageTextInPasteboard(text.text, entities: text.entities)
-                                    
-                                    let infoText = self.presentationData.strings.Conversation_TextCopied
-                                    self.present(UndoOverlayController(presentationData: self.presentationData, content: .copy(text: infoText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in
-                                            return true
-                                    }), in: .current)
-                                } : nil,
-                                translateChat: { [weak self] toLang in
-                                    guard let self else {
-                                        return
-                                    }
-                                    self.interfaceInteraction?.changeTranslationLanguage(toLang)
-                                    self.interfaceInteraction?.toggleTranslation(.translated)
-                                }
-                            ))
-                        }
+                        ))
                     }
                 }
                 if let currentContextController = self.currentContextController {
@@ -11079,6 +11049,74 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     }
     
     // MARK: NAGRAM
+    private func nagramRepeatMessages(messages: [EngineRawMessage], hideNames: Bool) -> Bool {
+        guard self.isNodeLoaded, !messages.isEmpty else {
+            return false
+        }
+        guard self.chatLocation.peerId != nil else {
+            return false
+        }
+        guard canSendMessagesToChat(self.presentationInterfaceState) else {
+            return false
+        }
+        guard messages.allSatisfy({ self.nagramCanRepeatMessage($0) }) else {
+            return false
+        }
+
+        let forwardAttributes: [EngineMessage.Attribute]
+        if hideNames {
+            forwardAttributes = [
+                ForwardOptionsMessageAttribute(hideNames: true, hideCaptions: false)
+            ]
+        } else {
+            forwardAttributes = []
+        }
+        
+        let repeatedMessages = messages.map { message -> EnqueueMessage in
+            return .forward(source: message.id, threadId: self.chatLocation.threadId, grouping: .auto, attributes: forwardAttributes, correlationId: nil)
+        }
+        self.chatDisplayNode.setupSendActionOnViewUpdate({}, nil)
+        self.chatDisplayNode.sendMessages(repeatedMessages, nil, nil, nil, repeatedMessages.count > 1, false)
+        return true
+    }
+
+    // Keep double-tap repeat aligned with messages that can safely use the native forward pipeline.
+    private func nagramCanRepeatMessage(_ message: EngineRawMessage) -> Bool {
+        if Namespaces.Message.allScheduled.contains(message.id.namespace) {
+            return false
+        }
+        if message.flags.isSending || message.flags.contains(.Failed) {
+            return false
+        }
+        if message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.containsSecretMedia {
+            return false
+        }
+        if message.id.peerId.isReplies {
+            return false
+        }
+        if (self.presentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled {
+            return false
+        }
+
+        for media in message.media {
+            if media is TelegramMediaAction || media is TelegramMediaExpiredContent {
+                return false
+            }
+            if let invoice = media as? TelegramMediaInvoice, let _ = invoice.extendedMedia {
+                return false
+            }
+            if let story = media as? TelegramMediaStory {
+                if let story = message.associatedStories[story.storyId], story.data.isEmpty {
+                    return false
+                } else if story.isMention {
+                    return false
+                }
+            }
+        }
+
+        return true
+    }
+    
     private func nagramPerformMessageDoubleTapAction(message: EngineRawMessage, actionRawValue: String) -> Bool {
         guard self.isNodeLoaded, let action = NagramMessageDoubleTapAction(rawValue: actionRawValue) else {
             return false
@@ -11088,35 +11126,13 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         case .disabled, .sendReaction, .showReactions, .reply:
             return false
         case .repeatMessage, .repeatWithoutQuote:
-            guard let peerId = self.chatLocation.peerId else {
-                return false
+            let hideNames: Bool
+            if case .repeatWithoutQuote = action {
+                hideNames = true
+            } else {
+                hideNames = false
             }
-            guard canSendMessagesToChat(self.presentationInterfaceState) else {
-                return false
-            }
-            guard !Namespaces.Message.allScheduled.contains(message.id.namespace) else {
-                return false
-            }
-            let isCopyProtected = (self.presentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled
-            guard !isCopyProtected else {
-                return false
-            }
-            
-            let forwardAttributes: [EngineMessage.Attribute]
-            switch action {
-            case .repeatWithoutQuote:
-                forwardAttributes = [
-                    ForwardOptionsMessageAttribute(hideNames: true, hideCaptions: false)
-                ]
-            default:
-                forwardAttributes = []
-            }
-            
-            let messages: [EnqueueMessage] = [
-                .forward(source: message.id, threadId: self.chatLocation.threadId, grouping: .auto, attributes: forwardAttributes, correlationId: nil)
-            ]
-            let _ = enqueueMessages(account: self.context.account, peerId: peerId, messages: messages).startStandalone()
-            return true
+            return self.nagramRepeatMessages(messages: [message], hideNames: hideNames)
         case .edit:
             if case .pinnedMessages = self.subject {
                 return false

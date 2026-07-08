@@ -12,6 +12,8 @@ public enum ChatTextInputAccessoryItem: Equatable {
         case scheduledMessages
         case gift
         case suggestPost
+        // MARK: NAGRAM
+        case format
     }
     
     public enum InputMode: Hashable {
@@ -29,6 +31,8 @@ public enum ChatTextInputAccessoryItem: Equatable {
     case scheduledMessages
     case gift
     case suggestPost
+    // MARK: NAGRAM
+    case format(isExpanded: Bool)
     
     public var key: Key {
         switch self {
@@ -48,6 +52,8 @@ public enum ChatTextInputAccessoryItem: Equatable {
             return .gift
         case .suggestPost:
             return .suggestPost
+        case .format:
+            return .format
         }
     }
 }

@@ -349,7 +349,16 @@ alternate_icon_folders = [
     "PremiumTurbo",
 ]
 
-composer_icon_folders = ["Nagram"]
+composer_source_icon_folders = ["Nagram", "NagramBlock", "NagramColorful"]
+composer_build_icon_folders = ["NagramBuild"]
+
+filegroup(
+    name = "NagramIconPreviews",
+    srcs = glob([
+        "Telegram-iOS/NagramBlock*.png",
+        "Telegram-iOS/NagramColorful*.png",
+    ]),
+)
 
 [
     filegroup(
@@ -366,7 +375,7 @@ composer_icon_folders = ["Nagram"]
         srcs = glob([
             "Telegram-iOS/{}.icon/**/*".format(name),
         ]),
-    ) for name in composer_icon_folders
+    ) for name in composer_source_icon_folders + composer_build_icon_folders
 ]
 
 filegroup(
@@ -565,6 +574,19 @@ app_groups_fragment = """
     telegram_bundle_id=telegram_bundle_id
 )
 
+# MARK: NAGRAM
+notification_service_app_groups_fragment = """
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.{telegram_bundle_id}</string>
+    </array>
+    <key>application-identifier</key>
+    <string>{telegram_team_id}.{telegram_bundle_id}.NotificationService</string>
+""".format(
+    telegram_team_id=telegram_team_id,
+    telegram_bundle_id=telegram_bundle_id
+)
+
 official_communication_notifications_fragment = """
 <key>com.apple.developer.usernotifications.communication</key>
 <true/>
@@ -581,7 +603,23 @@ official_notification_filtering_fragment = """
 <key>com.apple.developer.usernotifications.filtering</key>
 <true/>
 """
-notification_filtering_fragment = official_notification_filtering_fragment if telegram_bundle_id == "ph.telegra.Telegraph" else ""
+# MARK: NAGRAM
+# Only add Nagram bundle ids after Apple grants com.apple.developer.usernotifications.filtering.
+nagram_notification_filtering_bundle_ids = [
+    "xyz.nextalone.nagram",
+]
+
+notification_filtering_bundle_ids = ["ph.telegra.Telegraph"] + nagram_notification_filtering_bundle_ids
+notification_filtering_fragment = official_notification_filtering_fragment if telegram_bundle_id in notification_filtering_bundle_ids else ""
+
+# MARK: NAGRAM
+notification_filtering_info_plist_fragment = """
+<key>NagramNotificationFilteringEnabled</key>
+<true/>
+""" if notification_filtering_fragment != "" else """
+<key>NagramNotificationFilteringEnabled</key>
+<false/>
+"""
 
 store_signin_fragment = """
 <key>com.apple.developer.applesignin</key>
@@ -610,9 +648,26 @@ plist_fragment(
         unrestricted_voip_fragment,
         carplay_fragment,
         communication_notifications_fragment,
-        notification_filtering_fragment,
+        official_notification_filtering_fragment if telegram_bundle_id == "ph.telegra.Telegraph" else "",
         signin_fragment,
         background_gpu_fragment,
+    ])
+)
+
+# MARK: NAGRAM
+plist_fragment(
+    name = "NotificationFilteringInfoPlist",
+    extension = "plist",
+    template = notification_filtering_info_plist_fragment,
+)
+
+# MARK: NAGRAM
+plist_fragment(
+    name = "NotificationServiceEntitlements",
+    extension = "entitlements",
+    template = "".join([
+        notification_service_app_groups_fragment,
+        notification_filtering_fragment,
     ])
 )
 
@@ -927,6 +982,39 @@ sh_binary(
         "Telegram-iOS/AlternateIcons-iPad.plist",
     ],
     srcs = [":GenerateAddAlternateIcons"],
+)
+
+genrule(
+    name = "GenerateNagramFixComposerAlternateIcons",
+    srcs = [
+        "Telegram-iOS/NagramFixComposerAlternateIcons.sh",
+    ],
+    cmd_bash =
+"""
+    cat $(location Telegram-iOS/NagramFixComposerAlternateIcons.sh) >> $(location NagramFixComposerAlternateIcons.sh)
+""",
+    outs = [
+        "NagramFixComposerAlternateIcons.sh",
+    ],
+    executable = True,
+    visibility = [
+        "//visibility:public",
+    ]
+)
+
+sh_binary(
+    name = "NagramFixComposerAlternateIcons",
+    data = [
+        ":Icons",
+        ":Nagram_icon",
+        ":NagramBlock_icon",
+        ":NagramColorful_icon",
+        "//submodules/LegacyComponents:LegacyComponentsAssets",
+        "//submodules/PasswordSetupUI:PasswordSetupUIAssets",
+        "//submodules/TelegramUI:TelegramUIAssets",
+        "//submodules/TelegramUI/Components/Calls/CallScreen:Assets",
+    ],
+    srcs = [":GenerateNagramFixComposerAlternateIcons"],
 )
 
 plist_fragment(
@@ -1534,7 +1622,10 @@ ios_extension(
         "iphone",
         "ipad",
     ],
+    # MARK: NAGRAM
+    entitlements = ":NotificationServiceEntitlements.entitlements",
     infoplists = [
+        ":NotificationFilteringInfoPlist",
         ":NotificationServiceInfoPlist",
         ":VersionInfoPlist",
         ":RequiredDeviceCapabilitiesPlist",
@@ -1783,14 +1874,17 @@ ios_application(
         ":RequiredDeviceCapabilitiesPlist",
         ":UrlTypesInfoPlist",
     ],
-    app_icons = [ ":{}_icon".format(name) for name in composer_icon_folders ],
+    primary_app_icon = "NagramBuild",
+    app_icons = [ ":{}_icon".format(name) for name in composer_build_icon_folders ],
     alternate_icons = [
         ":{}".format(name) for name in alternate_icon_folders
     ],
     resources = [
         ":LaunchScreen",
+        ":NagramIconPreviews",
         #":DefaultAppIcon",
     ],
+    ipa_post_processor = ":NagramFixComposerAlternateIcons",
     frameworks = [
         ":MtProtoKitFramework",
         ":SwiftSignalKitFramework",

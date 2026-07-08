@@ -6,6 +6,13 @@ import TelegramCore
 import TelegramPresentationData
 import Emoji
 
+// MARK: NAGRAM — Render-time synthetic slant for glyphs without native italic faces (not persisted in state).
+private let nagramItalicObliqueness: NSNumber = NSNumber(value: 0.16)
+
+private func nagramApplyItalicObliqueness(_ attributedString: NSMutableAttributedString, range: NSRange) {
+    attributedString.addAttribute(NSAttributedString.Key.obliqueness, value: nagramItalicObliqueness, range: range)
+}
+
 private let alphanumericCharacters = CharacterSet.alphanumerics
 
 public struct ChatTextInputAttributes {
@@ -248,6 +255,7 @@ public func textAttributedStringForStateText(context: AnyObject, stateText: NSAt
                 fontAttributes.insert(.bold)
             } else if key == ChatTextInputAttributes.italic {
                 result.addAttribute(key, value: value, range: range)
+                nagramApplyItalicObliqueness(result, range: range)
                 fontAttributes.insert(.italic)
             } else if key == ChatTextInputAttributes.monospace {
                 result.addAttribute(key, value: value, range: range)
@@ -842,6 +850,7 @@ public func refreshChatTextInputAttributes(context: AnyObject, textView: UITextV
         fullRange = NSRange(location: 0, length: textView.textStorage.length)
         
         textView.textStorage.removeAttribute(NSAttributedString.Key.font, range: fullRange)
+        textView.textStorage.removeAttribute(NSAttributedString.Key.obliqueness, range: fullRange)
         textView.textStorage.removeAttribute(NSAttributedString.Key.foregroundColor, range: fullRange)
         textView.textStorage.removeAttribute(NSAttributedString.Key.backgroundColor, range: fullRange)
         textView.textStorage.removeAttribute(NSAttributedString.Key.underlineStyle, range: fullRange)
@@ -875,6 +884,7 @@ public func refreshChatTextInputAttributes(context: AnyObject, textView: UITextV
                     fontAttributes.insert(.bold)
                 } else if key == ChatTextInputAttributes.italic {
                     textView.textStorage.addAttribute(key, value: value, range: range)
+                    nagramApplyItalicObliqueness(textView.textStorage, range: range)
                     fontAttributes.insert(.italic)
                 } else if key == ChatTextInputAttributes.monospace {
                     textView.textStorage.addAttribute(key, value: value, range: range)
@@ -971,6 +981,7 @@ public func refreshGenericTextInputAttributes(context: AnyObject, textView: UITe
     
     if !resultAttributedText.isEqual(to: initialAttributedText) {
         textView.textStorage.removeAttribute(NSAttributedString.Key.font, range: fullRange)
+        textView.textStorage.removeAttribute(NSAttributedString.Key.obliqueness, range: fullRange)
         textView.textStorage.removeAttribute(NSAttributedString.Key.foregroundColor, range: fullRange)
         textView.textStorage.removeAttribute(NSAttributedString.Key.backgroundColor, range: fullRange)
         textView.textStorage.removeAttribute(NSAttributedString.Key.underlineStyle, range: fullRange)
@@ -999,6 +1010,7 @@ public func refreshGenericTextInputAttributes(context: AnyObject, textView: UITe
                     fontAttributes.insert(.bold)
                 } else if key == ChatTextInputAttributes.italic {
                     textView.textStorage.addAttribute(key, value: value, range: range)
+                    nagramApplyItalicObliqueness(textView.textStorage, range: range)
                     fontAttributes.insert(.italic)
                 } else if key == ChatTextInputAttributes.monospace {
                     textView.textStorage.addAttribute(key, value: value, range: range)
@@ -1060,6 +1072,7 @@ public func refreshChatTextInputTypingAttributes(_ textView: UITextView, textCol
                 filteredAttributes[key] = value
             } else if key == ChatTextInputAttributes.italic {
                 filteredAttributes[key] = value
+                filteredAttributes[NSAttributedString.Key.obliqueness] = nagramItalicObliqueness
             } else if key == ChatTextInputAttributes.monospace {
                 filteredAttributes[key] = value
             } else if key == NSAttributedString.Key.font {
@@ -1085,6 +1098,7 @@ public func refreshChatTextInputTypingAttributes(_ textView: UITextView, theme: 
                 filteredAttributes[key] = value
             } else if key == ChatTextInputAttributes.italic {
                 filteredAttributes[key] = value
+                filteredAttributes[NSAttributedString.Key.obliqueness] = nagramItalicObliqueness
             } else if key == ChatTextInputAttributes.monospace {
                 filteredAttributes[key] = value
             } else if key == NSAttributedString.Key.font {

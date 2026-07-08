@@ -39,6 +39,36 @@ import ContextControllerImpl
 
 private var installedSharedLogger = false
 
+// MARK: NAGRAM — System share suggestions may provide only conversationIdentifier, and DEBUG builds still need to honor the selected recipient.
+private func nagramPeerId(fromIntentIdentifier value: String?) -> PeerId? {
+    guard let value, !value.isEmpty else {
+        return nil
+    }
+    let idString: String
+    if value.hasPrefix("tg") {
+        idString = String(value.dropFirst(2))
+    } else {
+        idString = value
+    }
+    if let id = Int64(idString) {
+        return PeerId(id)
+    }
+    return nil
+}
+
+@available(iOSApplicationExtension 13.2, iOS 13.2, *)
+private func nagramPeerId(from sendMessageIntent: INSendMessageIntent) -> PeerId? {
+    if let recipient = sendMessageIntent.recipients?.first {
+        if let peerId = nagramPeerId(fromIntentIdentifier: recipient.customIdentifier) {
+            return peerId
+        }
+        if let peerId = nagramPeerId(fromIntentIdentifier: recipient.personHandle?.value) {
+            return peerId
+        }
+    }
+    return nagramPeerId(fromIntentIdentifier: sendMessageIntent.conversationIdentifier)
+}
+
 private func setupSharedLogger(rootPath: String, path: String) {
     if !installedSharedLogger {
         installedSharedLogger = true
@@ -341,19 +371,9 @@ public class ShareRootControllerImpl {
             presentationDataPromise.set(.single(presentationData))
             
             var immediatePeerId: PeerId?
-            #if DEBUG
-            // Xcode crashes
-            immediatePeerId = nil
-            #else
             if #available(iOS 13.2, *), let sendMessageIntent = self.getExtensionContext()?.intent as? INSendMessageIntent {
-                if let contact = sendMessageIntent.recipients?.first, let handle = contact.customIdentifier, handle.hasPrefix("tg") {
-                    let string = handle.suffix(from: handle.index(handle.startIndex, offsetBy: 2))
-                    if let peerId = Int64(string) {
-                        immediatePeerId = PeerId(peerId)
-                    }
-                }
+                immediatePeerId = nagramPeerId(from: sendMessageIntent)
             }
-            #endif
             
             /*let account: Signal<(SharedAccountContextImpl, Account, [AccountWithInfo]), ShareAuthorizationError> = internalContext.sharedContext.accountManager.transaction { transaction -> (SharedAccountContextImpl, LoggingSettings) in
                 return (internalContext.sharedContext, transaction.getSharedData(SharedDataKeys.loggingSettings)?.get(LoggingSettings.self) ?? LoggingSettings.defaultSettings)

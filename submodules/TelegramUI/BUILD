@@ -70,6 +70,7 @@ swift_library(
         # MARK: NAGRAM — Nagram 增强开关模块
         "//Nagram/Settings:NagramSettings",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
+        "//Nagram/TelegramSettingsCloudSync:NagramTelegramSettingsCloudSync",
         "//Nagram/Strings:NagramStrings",
         "//Nagram/SettingsUI:NagramSettingsUI",
         "//submodules/MediaPlayer:UniversalMediaPlayer",

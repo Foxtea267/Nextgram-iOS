@@ -3,6 +3,7 @@ import Foundation
 public enum NagramMessageMenuItemId: String, CaseIterable {
     case viewInChat
     case favoriteSticker
+    case saveStickerToCameraRoll
     case shareCallStats
     case rateCall
     case saveNotificationSound
@@ -43,7 +44,9 @@ public enum NagramMessageMenuItemId: String, CaseIterable {
     case viewPollStats
     case factCheck
     case viewInChannel
+    case viewAuthorMessages
     case select
+    case selectFromAuthor
     case selectAll
     case delete
 }
@@ -51,7 +54,7 @@ public enum NagramMessageMenuItemId: String, CaseIterable {
 private let nagramMessageMenuOrderKey = "nagram.messageMenu.order"
 private let nagramMessageMenuDisabledKey = "nagram.messageMenu.disabled"
 private let nagramMessageMenuEnabledDefaultDisabledKey = "nagram.messageMenu.enabledDefaultDisabled"
-private let nagramDefaultDisabledMessageMenuItemIds: Set<NagramMessageMenuItemId> = [.repeatWithoutQuote, .forwardWithoutQuote]
+private let nagramDefaultDisabledMessageMenuItemIds: Set<NagramMessageMenuItemId> = [.repeatWithoutQuote, .forwardWithoutQuote, .viewAuthorMessages, .selectFromAuthor]
 
 public extension NagramSettings {
     var messageMenuItemOrder: [NagramMessageMenuItemId] {
@@ -61,7 +64,7 @@ public extension NagramSettings {
         }
         set {
             let order = self.normalizedMessageMenuOrder(newValue)
-            UserDefaults.standard.set(order.map(\.rawValue).joined(separator: ","), forKey: nagramMessageMenuOrderKey)
+            NagramSettingsCloudSync.shared.set(order.map(\.rawValue).joined(separator: ","), forKey: nagramMessageMenuOrderKey)
         }
     }
 
@@ -84,14 +87,14 @@ public extension NagramSettings {
             disabled.insert(id)
             enabledDefaultDisabled.remove(id)
         }
-        UserDefaults.standard.set(disabled.map(\.rawValue).sorted().joined(separator: ","), forKey: nagramMessageMenuDisabledKey)
-        UserDefaults.standard.set(enabledDefaultDisabled.map(\.rawValue).sorted().joined(separator: ","), forKey: nagramMessageMenuEnabledDefaultDisabledKey)
+        NagramSettingsCloudSync.shared.set(disabled.map(\.rawValue).sorted().joined(separator: ","), forKey: nagramMessageMenuDisabledKey)
+        NagramSettingsCloudSync.shared.set(enabledDefaultDisabled.map(\.rawValue).sorted().joined(separator: ","), forKey: nagramMessageMenuEnabledDefaultDisabledKey)
     }
 
     func resetMessageMenuItems() {
-        UserDefaults.standard.removeObject(forKey: nagramMessageMenuOrderKey)
-        UserDefaults.standard.removeObject(forKey: nagramMessageMenuDisabledKey)
-        UserDefaults.standard.removeObject(forKey: nagramMessageMenuEnabledDefaultDisabledKey)
+        NagramSettingsCloudSync.shared.removeObject(forKey: nagramMessageMenuOrderKey)
+        NagramSettingsCloudSync.shared.removeObject(forKey: nagramMessageMenuDisabledKey)
+        NagramSettingsCloudSync.shared.removeObject(forKey: nagramMessageMenuEnabledDefaultDisabledKey)
     }
 }
 

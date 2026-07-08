@@ -52,6 +52,35 @@ enum IntentHandlingError {
     case generic
 }
 
+// MARK: NAGRAM — Share-sheet/Siri suggestions can carry either "tg<peerId>" or raw peer ids in different intent fields.
+private func nagramPeerId(fromIntentIdentifier value: String?) -> PeerId? {
+    guard let value, !value.isEmpty else {
+        return nil
+    }
+    let idString: String
+    if value.hasPrefix("tg") {
+        idString = String(value.dropFirst(2))
+    } else {
+        idString = value
+    }
+    if let id = Int64(idString) {
+        return PeerId(id)
+    }
+    return nil
+}
+
+private func nagramPeerId(from sendMessageIntent: INSendMessageIntent) -> PeerId? {
+    if let recipient = sendMessageIntent.recipients?.first {
+        if let peerId = nagramPeerId(fromIntentIdentifier: recipient.customIdentifier) {
+            return peerId
+        }
+        if let peerId = nagramPeerId(fromIntentIdentifier: recipient.personHandle?.value) {
+            return peerId
+        }
+    }
+    return nagramPeerId(fromIntentIdentifier: sendMessageIntent.conversationIdentifier)
+}
+
 @available(iOSApplicationExtension 10.0, iOS 10.0, *)
 @objc(IntentHandler)
 class IntentHandler: INExtension {
@@ -378,18 +407,18 @@ class DefaultIntentHandler: INExtension, INSendMessageIntentHandling, INSearchFo
             }
         }
         
-        if let peerId = intent.conversationIdentifier.flatMap(Int64.init) {
+        if let peerId = nagramPeerId(from: intent) {
             let account = self.accountPromise.get()
             
             let signal = account
             |> castError(IntentHandlingError.self)
             |> mapToSignal { account -> Signal<INPerson?, IntentHandlingError> in
                 if let account = account {
-                    return matchingCloudContact(postbox: account.postbox, peerId: PeerId(peerId))
+                    return matchingCloudContact(postbox: account.postbox, peerId: peerId)
                     |> castError(IntentHandlingError.self)
                     |> map { user -> INPerson? in
                         if let user = user {
-                            return personWithUser(stableId: "tg\(peerId)", user: user)
+                            return personWithUser(stableId: "tg\(peerId.toInt64())", user: user)
                         } else {
                             return nil
                         }
@@ -477,15 +506,9 @@ class DefaultIntentHandler: INExtension, INSendMessageIntentHandling, INSearchFo
             guard let account = account else {
                 return .fail(.generic)
             }
-            guard let recipient = intent.recipients?.first, let customIdentifier = recipient.customIdentifier, customIdentifier.hasPrefix("tg") else {
+            guard let peerId = nagramPeerId(from: intent) else {
                 return .fail(.generic)
             }
-            
-            guard let peerIdValue = Int64(String(customIdentifier[customIdentifier.index(customIdentifier.startIndex, offsetBy: 2)...])) else {
-                return .fail(.generic)
-            }
-            
-            let peerId = PeerId(peerIdValue)
             if peerId.namespace != Namespaces.Peer.CloudUser {
                 return .fail(.generic)
             }
@@ -614,7 +637,8 @@ class DefaultIntentHandler: INExtension, INSendMessageIntentHandling, INSearchFo
             if let identifiers = intent.identifiers {
                 for identifier in identifiers {
                     let components = identifier.components(separatedBy: "_")
-                    if let first = components.first, let peerId = Int64(first), let namespace = Int32(components[1]), let id = Int32(components[2]) {
+                    // MARK: NAGRAM — Siri can hand back malformed identifiers; validate component count before subscripting.
+                    if components.count == 3, let first = components.first, let peerId = Int64(first), let namespace = Int32(components[1]), let id = Int32(components[2]) {
                         let peerId = PeerId(peerId)
                         let messageId = MessageId(peerId: peerId, namespace: namespace, id: id)
                         if let currentMessageId = maxMessageIdsToApply[peerId] {

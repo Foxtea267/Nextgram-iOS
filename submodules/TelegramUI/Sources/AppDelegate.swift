@@ -951,6 +951,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 var icons = [
                     // MARK: NAGRAM
                     PresentationAppIcon(name: "Nagram", imageName: "Nagram", isDefault: true),
+                    PresentationAppIcon(name: "NagramBlock", imageName: "NagramBlock"),
+                    PresentationAppIcon(name: "NagramColorful", imageName: "NagramColorful"),
                     PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon"),
                     PresentationAppIcon(name: "New2", imageName: "New2"),
                     PresentationAppIcon(name: "New1", imageName: "New1"),
@@ -2547,6 +2549,35 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
         if #available(iOS 10.0, *) {
+            // MARK: NAGRAM — system share/contact suggestions may provide either "tg<peerId>" or raw peer ids.
+            func nagramPeerId(fromIntentIdentifier value: String?) -> PeerId? {
+                guard let value, !value.isEmpty else {
+                    return nil
+                }
+                let idString: String
+                if value.hasPrefix("tg") {
+                    idString = String(value.dropFirst(2))
+                } else {
+                    idString = value
+                }
+                if let id = Int64(idString) {
+                    return PeerId(id)
+                }
+                return nil
+            }
+
+            func nagramPeerId(from sendMessageIntent: INSendMessageIntent) -> PeerId? {
+                if let contact = sendMessageIntent.recipients?.first {
+                    if let peerId = nagramPeerId(fromIntentIdentifier: contact.customIdentifier) {
+                        return peerId
+                    }
+                    if let peerId = nagramPeerId(fromIntentIdentifier: contact.personHandle?.value) {
+                        return peerId
+                    }
+                }
+                return nagramPeerId(fromIntentIdentifier: sendMessageIntent.conversationIdentifier)
+            }
+
             var startCallContacts: [INPerson]?
             var isVideo = false
             if let startCallIntent = userActivity.interaction?.intent as? SupportedStartCallIntent {
@@ -2648,11 +2679,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     return true
                 }
             } else if let sendMessageIntent = userActivity.interaction?.intent as? INSendMessageIntent {
-                if let contact = sendMessageIntent.recipients?.first, let handle = contact.customIdentifier, handle.hasPrefix("tg") {
-                    let string = handle.suffix(from: handle.index(handle.startIndex, offsetBy: 2))
-                    if let value = Int64(string) {
-                        self.openChatWhenReady(accountId: nil, peerId: PeerId(value), threadId: nil, activateInput: true, storyId: nil)
-                    }
+                if let peerId = nagramPeerId(from: sendMessageIntent) {
+                    self.openChatWhenReady(accountId: nil, peerId: peerId, threadId: nil, activateInput: true, storyId: nil)
                 }
             }
         }

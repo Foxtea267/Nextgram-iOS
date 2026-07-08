@@ -16,19 +16,25 @@ final class TabBarControllerNode: ASDisplayNode {
         let isTabBarHidden: Bool
         let currentControllerSearchState: ViewController.TabBarSearchState?
         let nagramBottomBarSettings: NagramBottomBarSettings
+        let nagramGlassTransparencySettings: GlassOverlayTransparencySettings // MARK: NAGRAM
+        let nagramReduceTransparencyEnabled: Bool // MARK: NAGRAM
         
         init(
             layout: ContainerViewLayout,
             toolbar: Toolbar?,
             isTabBarHidden: Bool,
             currentControllerSearchState: ViewController.TabBarSearchState?,
-            nagramBottomBarSettings: NagramBottomBarSettings
+            nagramBottomBarSettings: NagramBottomBarSettings,
+            nagramGlassTransparencySettings: GlassOverlayTransparencySettings, // MARK: NAGRAM
+            nagramReduceTransparencyEnabled: Bool // MARK: NAGRAM
         ) {
             self.layout = layout
             self.toolbar = toolbar
             self.isTabBarHidden = isTabBarHidden
             self.currentControllerSearchState = currentControllerSearchState
             self.nagramBottomBarSettings = nagramBottomBarSettings
+            self.nagramGlassTransparencySettings = nagramGlassTransparencySettings
+            self.nagramReduceTransparencyEnabled = nagramReduceTransparencyEnabled
         }
     }
     
@@ -181,7 +187,8 @@ final class TabBarControllerNode: ASDisplayNode {
     }
     
     func containerLayoutUpdated(_ layout: ContainerViewLayout, toolbar: Toolbar?, transition: ContainedViewLayoutTransition) -> CGFloat {
-        let params = Params(layout: layout, toolbar: toolbar, isTabBarHidden: self.tabBarHidden, currentControllerSearchState: self.currentController?.tabBarSearchState, nagramBottomBarSettings: NagramSettings.shared.bottomBarSettings)
+        let nagramGlassTransparencySettings = currentGlassOverlayTransparencySettings() // MARK: NAGRAM
+        let params = Params(layout: layout, toolbar: toolbar, isTabBarHidden: self.tabBarHidden, currentControllerSearchState: self.currentController?.tabBarSearchState, nagramBottomBarSettings: NagramSettings.shared.bottomBarSettings, nagramGlassTransparencySettings: nagramGlassTransparencySettings, nagramReduceTransparencyEnabled: nagramGlassTransparencySettings.followsSystemTransparency && isReduceTransparencyEnabled()) // MARK: NAGRAM
         if let layoutResult = self.layoutResult, layoutResult.params == params {
             return layoutResult.bottomInset
         } else {

@@ -279,6 +279,7 @@ func headerTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInterf
                 updateTopicId: { [weak interfaceInteraction] topicId, direction in
                     interfaceInteraction?.updateChatLocationThread(topicId, direction)
                 },
+                openCreateTopic: nil,
                 openDeletePeer: { [weak interfaceInteraction] threadId in
                     guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
                         return
@@ -293,6 +294,13 @@ func headerTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInterf
         }
         let topicListDisplayModeOnTheSide = chatPresentationInterfaceState.persistentData.topicListPanelLocation == .side
         if !topicListDisplayModeOnTheSide {
+            // MARK: NAGRAM
+            let openCreateTopic: (() -> Void)? = channel.hasPermission(.createTopics) ? { [weak interfaceInteraction] in
+                guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
+                    return
+                }
+                controller.openCreateForumTopic()
+            } : nil
             return AnyComponent(ChatTopicsHeaderPanelComponent(
                 context: context,
                 theme: chatPresentationInterfaceState.theme,
@@ -310,6 +318,7 @@ func headerTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInterf
                 updateTopicId: { [weak interfaceInteraction] topicId, direction in
                     interfaceInteraction?.updateChatLocationThread(topicId, direction)
                 },
+                openCreateTopic: openCreateTopic,
                 openDeletePeer: { [weak interfaceInteraction] threadId in
                     guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
                         return
@@ -343,6 +352,7 @@ func headerTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInterf
                 updateTopicId: { [weak interfaceInteraction] topicId, direction in
                     interfaceInteraction?.updateChatLocationThread(topicId, direction)
                 },
+                openCreateTopic: nil,
                 openDeletePeer: { [weak interfaceInteraction] threadId in
                     guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
                         return
@@ -398,6 +408,7 @@ func floatingTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInte
                 updateTopicId: { [weak interfaceInteraction] topicId, direction in
                     interfaceInteraction?.updateChatLocationThread(topicId, direction)
                 },
+                openCreateTopic: nil,
                 openDeletePeer: { [weak interfaceInteraction] threadId in
                     guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
                         return
@@ -412,6 +423,13 @@ func floatingTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInte
         }
         let topicListDisplayModeOnTheSide = chatPresentationInterfaceState.persistentData.topicListPanelLocation == .side
         if topicListDisplayModeOnTheSide {
+            // MARK: NAGRAM
+            let openCreateTopic: (() -> Void)? = channel.hasPermission(.createTopics) ? { [weak interfaceInteraction] in
+                guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
+                    return
+                }
+                controller.openCreateForumTopic()
+            } : nil
             return ChatFloatingTopicsPanel(
                 context: context,
                 theme: chatPresentationInterfaceState.theme,
@@ -430,6 +448,7 @@ func floatingTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInte
                 updateTopicId: { [weak interfaceInteraction] topicId, direction in
                     interfaceInteraction?.updateChatLocationThread(topicId, direction)
                 },
+                openCreateTopic: openCreateTopic,
                 openDeletePeer: { [weak interfaceInteraction] threadId in
                     guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
                         return
@@ -464,6 +483,7 @@ func floatingTopicsPanelForChatPresentationInterfaceState(_ chatPresentationInte
                 updateTopicId: { [weak interfaceInteraction] topicId, direction in
                     interfaceInteraction?.updateChatLocationThread(topicId, direction)
                 },
+                openCreateTopic: nil,
                 openDeletePeer: { [weak interfaceInteraction] threadId in
                     guard let controller = interfaceInteraction?.chatController() as? ChatControllerImpl else {
                         return

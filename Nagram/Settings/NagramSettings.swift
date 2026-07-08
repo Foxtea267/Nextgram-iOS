@@ -1,7 +1,7 @@
 import Foundation
 
 // MARK: NAGRAM — 增强开关集中地。
-// 数据层零 Telegram 依赖，纯 UserDefaults。每个开关一行 @NagramDefault 声明（复用核心）。
+// 数据层零 Telegram 依赖，本地 UserDefaults + iCloud KVS 镜像。每个开关一行 @NagramDefault 声明（复用核心）。
 // 默认值原则：增强开关默认 = 不改变 Telegram 原生行为（除明确语义需要）。
 
 /// 极简 UserDefaults property wrapper。支持 Bool / Int32 / String（覆盖全部开关类型）。
@@ -32,7 +32,7 @@ public struct NagramDefault<T> {
             }
         }
         nonmutating set {
-            UserDefaults.standard.set(newValue, forKey: key)
+            NagramSettingsCloudSync.shared.set(newValue, forKey: key)
         }
     }
 }
@@ -73,10 +73,69 @@ public enum NagramChatListMessagePreviewStyle: String {
     case two
 }
 
+public enum NagramGlassTransparencyMode: String {
+    case system
+    case custom
+}
+
+public enum NagramTranslationProvider: String, CaseIterable {
+    case telegram
+    case google
+    case googleCN = "google-cn"
+    case microsoft
+    case yandex
+    case transmart
+    case llm
+}
+
+public enum NagramTranslationLLMAPIFormat: String, CaseIterable {
+    case openai
+    case anthropic
+
+    public var defaultBaseURL: String {
+        switch self {
+        case .openai:
+            return "https://api.openai.com"
+        case .anthropic:
+            return "https://api.anthropic.com"
+        }
+    }
+
+    public var defaultTranslationEndpoint: String {
+        switch self {
+        case .openai:
+            return "/v1/chat/completions"
+        case .anthropic:
+            return "/v1/messages"
+        }
+    }
+
+    public var defaultModelsEndpoint: String {
+        return "/v1/models"
+    }
+}
+
 public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
-    private init() {}
+
+    public static func isICloudSyncEnabled(defaults: UserDefaults = .standard) -> Bool {
+        return NagramSettingsCloudSync.isEnabled(defaults: defaults)
+    }
+
+    private init() {
+        NagramSettingsCloudSync.shared.start()
+    }
+
+    /// iCloud KVS 同步开关。保持本地-only,避免关闭同步的选择被云端覆盖。
+    public var iCloudSyncEnabled: Bool {
+        get {
+            return Self.isICloudSyncEnabled()
+        }
+        set {
+            NagramSettingsCloudSync.shared.setEnabled(newValue)
+        }
+    }
 
     // MARK: 波次 1 — force-copy（已落地，key 保持不变以平滑迁移）
     @NagramDefault("nagram.forceCopyEnabled", false)
@@ -122,6 +181,12 @@ public final class NagramSettings {
     /// 控件玻璃高亮（默认开 = 保持原生交互反馈）
     @NagramDefault("nagram.controlHighlightEnabled", true)
     public var controlHighlightEnabled: Bool
+    /// Liquid Glass 色调模式（默认跟随系统 = 保持原生 Liquid Glass / 降低透明度行为）
+    @NagramDefault("nagram.glassTransparencyMode", NagramGlassTransparencyMode.system.rawValue)
+    public var glassTransparencyMode: String
+    /// 自定义 Liquid Glass 色调强度百分比（0–100，默认 100 = 当前视觉）
+    @NagramDefault("nagram.glassTransparencyPercent", Int32(100))
+    public var glassTransparencyPercent: Int32
 
     // MARK: 波次 3 批 B — UI 中改
     /// 底栏布局完整配置。新逻辑只读写这一份模型。
@@ -225,6 +290,12 @@ public final class NagramSettings {
     /// 对话列表横滑行为（"both" / "switch" / "quick" / "none"）
     @NagramDefault("nagram.chatListSwipeAction", NagramChatListSwipeAction.both.rawValue)
     public var chatListSwipeAction: String
+    /// 下拉展示归档后自动进入归档
+    @NagramDefault("nagram.openArchiveOnPull", false)
+    public var openArchiveOnPull: Bool
+    /// 在非“全部会话”分组顶部展示归档入口（默认关 = 保持 Telegram 原生行为）
+    @NagramDefault("nagram.showArchiveInFolders", false)
+    public var showArchiveInFolders: Bool
     /// 对话列表启动分组（"telegram" / "last" / "specific"）
     @NagramDefault("nagram.chatListStartupFolderMode", NagramChatListStartupFolderMode.telegramDefault.rawValue)
     public var chatListStartupFolderMode: String
@@ -255,10 +326,39 @@ public final class NagramSettings {
     @NagramDefault("nagram.downloadSpeedBoost", "none")
     public var downloadSpeedBoost: String
 
+    // MARK: NAGRAM — 翻译 provider 设置
+    /// 翻译 provider（Telegram MTProto 或 Nagram 外部 provider）。
+    @NagramDefault("nagram.translationProvider", NagramTranslationProvider.telegram.rawValue)
+    public var translationProvider: String
+    /// LLM API wire format (OpenAI-compatible Chat Completions or Anthropic Messages).
+    @NagramDefault("nagram.translationLLMAPIFormat", NagramTranslationLLMAPIFormat.openai.rawValue)
+    public var translationLLMAPIFormat: String
+    /// Optional LLM API base URL; empty uses the selected format default.
+    @NagramDefault("nagram.translationLLMBaseURL", "")
+    public var translationLLMBaseURL: String
+    /// Optional LLM translation endpoint path/full URL; empty uses the selected format default.
+    @NagramDefault("nagram.translationLLMEndpoint", "")
+    public var translationLLMEndpoint: String
+    /// LLM API key is intentionally stored in Keychain and excluded from iCloud sync.
+    public var translationLLMAPIKey: String {
+        get {
+            return NagramTranslationLLMKeychain.apiKey
+        }
+        set {
+            NagramTranslationLLMKeychain.apiKey = newValue
+        }
+    }
+    /// OpenAI-compatible model name for LLM translation.
+    @NagramDefault("nagram.translationLLMModel", "")
+    public var translationLLMModel: String
+
     // MARK: 波次 3 批 D — 需新逻辑
     /// 回车键发送消息
     @NagramDefault("nagram.sendWithReturnKey", false)
     public var sendWithReturnKey: Bool
+    /// 选中文本时显示文字样式工具栏
+    @NagramDefault("nagram.showTextStyleToolbar", true)
+    public var showTextStyleToolbar: Bool
     /// 发送时自动插入中英文空格
     @NagramDefault("nagram.enablePanguOnSending", false)
     public var enablePanguOnSending: Bool
@@ -280,6 +380,36 @@ public final class NagramSettings {
     /// 设置/资料页隐藏手机号（默认关 = 保持原生）
     @NagramDefault("nagram.hidePhoneInSettings", false)
     public var hidePhoneInSettings: Bool
+}
+
+private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, defaultBaseURL: String, defaultEndpoint: String) -> URL? {
+    let trimmedEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+    if let url = URL(string: trimmedEndpoint), let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https" {
+        return url
+    }
+
+    let baseString = baseURLString.isEmpty ? defaultBaseURL : baseURLString
+    guard var components = URLComponents(string: baseString), let scheme = components.scheme?.lowercased(), scheme == "http" || scheme == "https" else {
+        return nil
+    }
+
+    var basePath = components.percentEncodedPath
+    while basePath.hasSuffix("/") {
+        basePath.removeLast()
+    }
+
+    var endpointPath = trimmedEndpoint.isEmpty ? defaultEndpoint : trimmedEndpoint
+    if !endpointPath.hasPrefix("/") {
+        endpointPath = "/\(endpointPath)"
+    }
+    if basePath.hasSuffix("/v1"), endpointPath.hasPrefix("/v1/") {
+        endpointPath = String(endpointPath.dropFirst(3))
+    }
+
+    components.percentEncodedPath = basePath + endpointPath
+    components.percentEncodedQuery = nil
+    components.fragment = nil
+    return components.url
 }
 
 public extension NagramSettings {
@@ -304,12 +434,73 @@ public extension NagramSettings {
         return NagramChatListMessagePreviewStyle(rawValue: self.chatListMessagePreviewStyle) ?? .three
     }
 
+    var glassTransparencyModeValue: NagramGlassTransparencyMode {
+        return NagramGlassTransparencyMode(rawValue: self.glassTransparencyMode) ?? .system
+    }
+
+    var glassTransparencyPercentValue: Int32 {
+        return max(0, min(100, self.glassTransparencyPercent))
+    }
+
+    var glassTransparencyFactor: Double {
+        guard self.glassTransparencyModeValue == .custom else {
+            return 1.0
+        }
+        return Double(self.glassTransparencyPercentValue) / 100.0
+    }
+
+    var glassTransparencyFollowsSystem: Bool {
+        return self.glassTransparencyModeValue != .custom
+    }
+
     var messageDoubleTapActionValue: NagramMessageDoubleTapAction {
         guard let value = NagramMessageDoubleTapAction(rawValue: self.messageDoubleTapAction) else {
             self.messageDoubleTapAction = NagramMessageDoubleTapAction.sendReaction.rawValue
             return .sendReaction
         }
         return value
+    }
+
+    var translationProviderValue: NagramTranslationProvider {
+        guard let value = NagramTranslationProvider(rawValue: self.translationProvider) else {
+            self.translationProvider = NagramTranslationProvider.telegram.rawValue
+            return .telegram
+        }
+        return value
+    }
+
+    var translationLLMAPIFormatValue: NagramTranslationLLMAPIFormat {
+        guard let value = NagramTranslationLLMAPIFormat(rawValue: self.translationLLMAPIFormat) else {
+            self.translationLLMAPIFormat = NagramTranslationLLMAPIFormat.openai.rawValue
+            return .openai
+        }
+        return value
+    }
+
+    var translationLLMBaseURLValue: String {
+        return self.translationLLMBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var translationLLMEndpointValue: String {
+        return self.translationLLMEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var translationLLMAPIKeyValue: String {
+        return self.translationLLMAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var translationLLMModelValue: String {
+        return self.translationLLMModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func translationLLMTranslationURL() -> URL? {
+        let format = self.translationLLMAPIFormatValue
+        return nagramTranslationLLMURL(baseURLString: self.translationLLMBaseURLValue, endpoint: self.translationLLMEndpointValue, defaultBaseURL: format.defaultBaseURL, defaultEndpoint: format.defaultTranslationEndpoint)
+    }
+
+    func translationLLMModelsURL() -> URL? {
+        let format = self.translationLLMAPIFormatValue
+        return nagramTranslationLLMURL(baseURLString: self.translationLLMBaseURLValue, endpoint: format.defaultModelsEndpoint, defaultBaseURL: format.defaultBaseURL, defaultEndpoint: format.defaultModelsEndpoint)
     }
 
     func chatListStartupSpecificFolderId(accountPeerId: Int64) -> Int32? {
@@ -326,6 +517,11 @@ public extension NagramSettings {
 
     func setChatListStartupLastFolderId(_ folderId: Int32?, accountPeerId: Int64) {
         self.setChatListStartupFolderId(folderId, forKey: self.chatListStartupLastFolderKey(accountPeerId: accountPeerId))
+    }
+
+    var stickerSizeCoefficient: Float {
+        let clampedSize = max(Int32(50), min(Int32(200), self.stickerSize))
+        return Float(clampedSize) / 100.0
     }
 
     /// 下载分片大小：按加速档位放大（接入 TelegramCore FetchV2）。仿 SG getSGDownloadPartSize。
@@ -371,9 +567,9 @@ private extension NagramSettings {
 
     func setChatListStartupFolderId(_ folderId: Int32?, forKey key: String) {
         guard let folderId else {
-            UserDefaults.standard.removeObject(forKey: key)
+            NagramSettingsCloudSync.shared.removeObject(forKey: key)
             return
         }
-        UserDefaults.standard.set(Int(folderId), forKey: key)
+        NagramSettingsCloudSync.shared.set(Int(folderId), forKey: key)
     }
 }

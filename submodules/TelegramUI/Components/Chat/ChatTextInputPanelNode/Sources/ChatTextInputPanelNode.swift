@@ -217,6 +217,351 @@ private func makeTextInputTheme(context: AccountContext, interfaceState: ChatPre
     )
 }
 
+// MARK: NAGRAM — 可视化文本样式工具栏
+private enum ChatTextFormattingToolbarAction: Int, CaseIterable, Hashable {
+    case quote
+    case spoiler
+    case bold
+    case italic
+    case monospace
+    case link
+    case date
+    case strikethrough
+    case underline
+    case code
+
+    static func visibleActions(hasSpoilers: Bool, hasQuotes: Bool) -> [ChatTextFormattingToolbarAction] {
+        var result: [ChatTextFormattingToolbarAction] = []
+        if hasQuotes {
+            result.append(.quote)
+        }
+        if hasSpoilers {
+            result.append(.spoiler)
+        }
+        result.append(contentsOf: [.bold, .italic, .monospace, .link])
+        if hasSpoilers {
+            result.append(.date)
+        }
+        result.append(contentsOf: [.strikethrough, .underline])
+        if hasQuotes {
+            result.append(.code)
+        }
+        return result
+    }
+
+    var title: String {
+        switch self {
+        case .quote:
+            return "❝"
+        case .spoiler:
+            return "||"
+        case .bold:
+            return "B"
+        case .italic:
+            return "I"
+        case .monospace:
+            return "`"
+        case .link:
+            return "↗"
+        case .date:
+            return "◷"
+        case .strikethrough:
+            return "S"
+        case .underline:
+            return "U"
+        case .code:
+            return "</>"
+        }
+    }
+
+    func accessibilityLabel(strings: PresentationStrings) -> String {
+        switch self {
+        case .quote:
+            return strings.TextFormat_Quote
+        case .spoiler:
+            return strings.TextFormat_Spoiler
+        case .bold:
+            return strings.TextFormat_Bold
+        case .italic:
+            return strings.TextFormat_Italic
+        case .monospace:
+            return strings.TextFormat_Monospace
+        case .link:
+            return strings.TextFormat_Link
+        case .date:
+            return strings.TextFormat_Date
+        case .strikethrough:
+            return strings.TextFormat_Strikethrough
+        case .underline:
+            return strings.TextFormat_Underline
+        case .code:
+            return strings.TextFormat_Code
+        }
+    }
+
+}
+
+// MARK: NAGRAM — 键盘区域文本格式面板
+private final class ChatTextFormattingActionButton: UIControl {
+    let action: ChatTextFormattingToolbarAction
+
+    private let iconBackgroundView = UIView()
+    private let iconLabel = UILabel()
+    private let titleLabel = UILabel()
+
+    init(action: ChatTextFormattingToolbarAction) {
+        self.action = action
+
+        super.init(frame: CGRect())
+
+        self.isAccessibilityElement = true
+        self.accessibilityTraits = [.button]
+        self.layer.cornerRadius = 16.0
+        self.clipsToBounds = true
+
+        self.iconBackgroundView.isUserInteractionEnabled = false
+        self.iconBackgroundView.layer.cornerRadius = 18.0
+        self.addSubview(self.iconBackgroundView)
+
+        self.iconLabel.isUserInteractionEnabled = false
+        self.iconLabel.textAlignment = .center
+        self.iconBackgroundView.addSubview(self.iconLabel)
+
+        self.titleLabel.isUserInteractionEnabled = false
+        self.titleLabel.textAlignment = .center
+        self.titleLabel.numberOfLines = 2
+        self.titleLabel.adjustsFontSizeToFitWidth = true
+        self.titleLabel.minimumScaleFactor = 0.72
+        self.addSubview(self.titleLabel)
+    }
+
+    required init?(coder: NSCoder) {
+        preconditionFailure()
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            self.alpha = self.isHighlighted ? 0.55 : 1.0
+        }
+    }
+
+    func update(theme: PresentationTheme, strings: PresentationStrings, isEnabled: Bool, isSelected: Bool) {
+        self.isEnabled = isEnabled
+        self.accessibilityLabel = self.action.accessibilityLabel(strings: strings)
+        self.accessibilityTraits = isSelected ? [.button, .selected] : [.button]
+
+        let accentColor = theme.chat.inputPanel.panelControlAccentColor
+        let foregroundColor = theme.chat.inputPanel.inputControlColor
+        let disabledColor = foregroundColor.withAlphaComponent(0.35)
+        let effectiveForegroundColor = isEnabled ? (isSelected ? accentColor : foregroundColor) : disabledColor
+
+        self.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.16 : 0.10) : UIColor.clear
+        self.iconBackgroundView.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.26 : 0.15) : theme.chat.inputPanel.inputBackgroundColor.withAlphaComponent(theme.overallDarkAppearance ? 0.65 : 0.82)
+        self.iconLabel.attributedText = self.attributedIcon(color: effectiveForegroundColor)
+        self.titleLabel.attributedText = NSAttributedString(string: self.action.accessibilityLabel(strings: strings), font: Font.regular(11.0), textColor: effectiveForegroundColor)
+        self.alpha = isEnabled ? 1.0 : 0.55
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+
+        let size = self.bounds.size
+        let iconSize = CGSize(width: 46.0, height: 36.0)
+        let iconFrame = CGRect(
+            x: floor((size.width - iconSize.width) * 0.5),
+            y: 8.0,
+            width: iconSize.width,
+            height: iconSize.height
+        )
+        self.iconBackgroundView.frame = iconFrame
+        self.iconLabel.frame = CGRect(origin: CGPoint(), size: iconFrame.size)
+
+        let titleTop = iconFrame.maxY + 6.0
+        self.titleLabel.frame = CGRect(x: 4.0, y: titleTop, width: max(1.0, size.width - 8.0), height: max(1.0, size.height - titleTop - 4.0))
+    }
+
+    private func attributedIcon(color: UIColor) -> NSAttributedString {
+        let font: UIFont
+        switch self.action {
+        case .bold:
+            font = UIFont.boldSystemFont(ofSize: 20.0)
+        case .italic:
+            font = UIFont.italicSystemFont(ofSize: 20.0)
+        case .code:
+            font = UIFont.systemFont(ofSize: 14.0, weight: .semibold)
+        case .monospace:
+            font = Font.monospace(20.0)
+        default:
+            font = UIFont.systemFont(ofSize: 20.0, weight: .semibold)
+        }
+
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color
+        ]
+        switch self.action {
+        case .underline:
+            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        case .strikethrough:
+            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        default:
+            break
+        }
+        return NSAttributedString(string: self.action.title, attributes: attributes)
+    }
+}
+
+// MARK: NAGRAM — 键盘区域文本格式面板
+private final class ChatTextFormattingInputView: UIInputView, UIInputViewAudioFeedback {
+    static let preferredHeight: CGFloat = 284.0
+    private let sheetCornerRadius: CGFloat = 30.0
+
+    private let backgroundView: BlurredBackgroundView
+    private let tintView = UIView()
+    private let separatorView = UIView()
+    private let titleLabel = UILabel()
+    private let gridView = UIView()
+    private var buttons: [ChatTextFormattingToolbarAction: ChatTextFormattingActionButton] = [:]
+
+    private var theme: PresentationTheme?
+    private var strings: PresentationStrings?
+    private var hasSpoilers = true
+    private var hasQuotes = true
+    private var enabledActions = Set<ChatTextFormattingToolbarAction>()
+    private var selectedActions = Set<ChatTextFormattingToolbarAction>()
+
+    var enableInputClicksWhenVisible: Bool {
+        return true
+    }
+
+    var pressed: ((ChatTextFormattingToolbarAction) -> Void)?
+
+    init() {
+        self.backgroundView = BlurredBackgroundView(color: .clear, enableBlur: true)
+
+        super.init(frame: CGRect(x: 0.0, y: 0.0, width: 0.0, height: ChatTextFormattingInputView.preferredHeight), inputViewStyle: .default)
+
+        self.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.allowsSelfSizing = true
+        self.backgroundColor = .clear
+        self.clipsToBounds = true
+        self.layer.cornerRadius = self.sheetCornerRadius
+        self.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        if #available(iOS 13.0, *) {
+            self.layer.cornerCurve = .continuous
+        }
+
+        self.addSubview(self.backgroundView)
+        self.addSubview(self.tintView)
+        self.addSubview(self.separatorView)
+        self.addSubview(self.titleLabel)
+        self.addSubview(self.gridView)
+
+        self.tintView.isUserInteractionEnabled = false
+        self.separatorView.isUserInteractionEnabled = false
+
+        self.titleLabel.font = Font.semibold(17.0)
+        self.titleLabel.textAlignment = .center
+        self.titleLabel.isUserInteractionEnabled = false
+    }
+
+    required init?(coder: NSCoder) {
+        preconditionFailure()
+    }
+
+    override var intrinsicContentSize: CGSize {
+        return CGSize(width: UIView.noIntrinsicMetric, height: ChatTextFormattingInputView.preferredHeight)
+    }
+
+    func update(theme: PresentationTheme, strings: PresentationStrings, hasSpoilers: Bool, hasQuotes: Bool, enabledActions: Set<ChatTextFormattingToolbarAction>, selectedActions: Set<ChatTextFormattingToolbarAction>) {
+        self.theme = theme
+        self.strings = strings
+        self.hasSpoilers = hasSpoilers
+        self.hasQuotes = hasQuotes
+        self.enabledActions = enabledActions
+        self.selectedActions = selectedActions
+
+        self.backgroundView.updateColor(color: .clear, forceKeepBlur: true, transition: .immediate)
+        self.tintView.backgroundColor = theme.chat.inputMediaPanel.backgroundColor
+        self.separatorView.backgroundColor = theme.chat.inputPanel.panelSeparatorColor
+        self.titleLabel.text = strings.TextFormat_Format
+        self.titleLabel.textColor = theme.chat.inputPanel.primaryTextColor
+
+        let actions = ChatTextFormattingToolbarAction.visibleActions(hasSpoilers: hasSpoilers, hasQuotes: hasQuotes)
+        let visibleActions = Set(actions)
+        for action in actions {
+            let button: ChatTextFormattingActionButton
+            if let current = self.buttons[action] {
+                button = current
+            } else {
+                button = ChatTextFormattingActionButton(action: action)
+                button.addTarget(self, action: #selector(self.buttonPressed(_:)), for: .touchUpInside)
+                self.buttons[action] = button
+                self.gridView.addSubview(button)
+            }
+            button.isHidden = false
+            button.update(theme: theme, strings: strings, isEnabled: enabledActions.contains(action), isSelected: selectedActions.contains(action))
+        }
+        for (action, button) in self.buttons where !visibleActions.contains(action) {
+            button.isHidden = true
+        }
+
+        self.setNeedsLayout()
+        self.layoutIfNeeded()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+
+        let size = self.bounds.size
+        self.backgroundView.frame = CGRect(origin: CGPoint(), size: size)
+        self.backgroundView.update(size: size, cornerRadius: self.sheetCornerRadius, maskedCorners: [.layerMinXMinYCorner, .layerMaxXMinYCorner], transition: .immediate)
+        self.tintView.frame = CGRect(origin: CGPoint(), size: size)
+        self.separatorView.frame = CGRect(x: 0.0, y: 0.0, width: size.width, height: UIScreenPixel)
+
+        let sideInset: CGFloat = 14.0
+        let titleHeight: CGFloat = 46.0
+        self.titleLabel.frame = CGRect(x: sideInset, y: 0.0, width: max(0.0, size.width - sideInset * 2.0), height: titleHeight)
+
+        let gridFrame = CGRect(x: sideInset, y: titleHeight + 4.0, width: max(1.0, size.width - sideInset * 2.0), height: max(1.0, size.height - titleHeight - 14.0))
+        self.gridView.frame = gridFrame
+
+        let actions = ChatTextFormattingToolbarAction.visibleActions(hasSpoilers: self.hasSpoilers, hasQuotes: self.hasQuotes)
+        guard !actions.isEmpty else {
+            return
+        }
+
+        let columns = gridFrame.width >= 390.0 ? 5 : 4
+        let horizontalSpacing: CGFloat = 4.0
+        let verticalSpacing: CGFloat = 6.0
+        let buttonWidth = floor((gridFrame.width - CGFloat(columns - 1) * horizontalSpacing) / CGFloat(columns))
+        let rows = Int(ceil(Double(actions.count) / Double(columns)))
+        let buttonHeight = min(82.0, floor((gridFrame.height - CGFloat(max(0, rows - 1)) * verticalSpacing) / CGFloat(max(1, rows))))
+
+        for (index, action) in actions.enumerated() {
+            guard let button = self.buttons[action] else {
+                continue
+            }
+            let row = index / columns
+            let column = index % columns
+            let rowWidth: CGFloat
+            if row == rows - 1 {
+                let itemsInLastRow = actions.count - row * columns
+                rowWidth = CGFloat(itemsInLastRow) * buttonWidth + CGFloat(max(0, itemsInLastRow - 1)) * horizontalSpacing
+            } else {
+                rowWidth = CGFloat(columns) * buttonWidth + CGFloat(columns - 1) * horizontalSpacing
+            }
+            let xOrigin = floor((gridFrame.width - rowWidth) * 0.5) + CGFloat(column) * (buttonWidth + horizontalSpacing)
+            let yOrigin = CGFloat(row) * (buttonHeight + verticalSpacing)
+            button.frame = CGRect(x: xOrigin, y: yOrigin, width: buttonWidth, height: buttonHeight)
+        }
+    }
+
+    @objc private func buttonPressed(_ button: ChatTextFormattingActionButton) {
+        self.pressed?(button.action)
+    }
+}
+
 public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, ChatInputTextNodeDelegate {
     private enum AudioRecordingRemoveAnimationState {
         case recordingToAttachButton
@@ -334,6 +679,9 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     private var recordingPaused = false
     
     private let inputMenu: TextInputMenu
+    // MARK: NAGRAM — 键盘区域文本格式面板
+    private var textFormattingInputView: ChatTextFormattingInputView?
+    private var isTextFormattingPanelExpanded = false
     
     private var theme: PresentationTheme?
     private var strings: PresentationStrings?
@@ -422,6 +770,24 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     private var liveMicrophoneButton: ComponentView<Empty>?
     private var settingsButton: ComponentView<Empty>?
     
+    // MARK: NAGRAM — 文本格式面板按钮插在 emoji / stickers 按钮旁边。
+    private func effectiveAccessoryItems(_ accessoryItems: [ChatTextInputAccessoryItem]) -> [ChatTextInputAccessoryItem] {
+        guard NagramSettings.shared.showTextStyleToolbar else {
+            return accessoryItems
+        }
+        var result = accessoryItems
+        guard let inputItemIndex = result.lastIndex(where: { item in
+            if case let .input(_, inputMode) = item, inputMode != .keyboard {
+                return true
+            }
+            return false
+        }) else {
+            return result
+        }
+        result.insert(.format(isExpanded: self.isTextFormattingPanelExpanded), at: inputItemIndex)
+        return result
+    }
+
     public func insertText(text: NSAttributedString) {
         guard let textInputState = self.presentationInterfaceState?.interfaceState.effectiveInputState else {
             return
@@ -470,10 +836,11 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
         
         if let currentState = self.presentationInterfaceState {
+            let effectiveAccessoryItems = self.effectiveAccessoryItems(accessoryItems)
             var updateAccessoryButtons = false
-            if accessoryItems.count == self.accessoryItemButtons.count {
-                for i in 0 ..< accessoryItems.count {
-                    if accessoryItems[i] != self.accessoryItemButtons[i].0 {
+            if effectiveAccessoryItems.count == self.accessoryItemButtons.count {
+                for i in 0 ..< effectiveAccessoryItems.count {
+                    if effectiveAccessoryItems[i] != self.accessoryItemButtons[i].0 {
                         updateAccessoryButtons = true
                         break
                     }
@@ -484,7 +851,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             
             if updateAccessoryButtons {
                 var updatedButtons: [(ChatTextInputAccessoryItem, AccessoryItemIconButton)] = []
-                for item in accessoryItems {
+                for item in effectiveAccessoryItems {
                     var itemAndButton: (ChatTextInputAccessoryItem, AccessoryItemIconButton)?
                     for i in 0 ..< self.accessoryItemButtons.count {
                         if self.accessoryItemButtons[i].0.key == item.key {
@@ -1586,6 +1953,11 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
         self.sendingTextDisabled = sendingTextDisabled
         
+        // MARK: NAGRAM — 禁用发送、录音或关闭设置时收起格式面板。
+        if self.isTextFormattingPanelExpanded && (sendingTextDisabled || interfaceState.inputTextPanelState.mediaRecordingState != nil || !NagramSettings.shared.showTextStyleToolbar) {
+            self.collapseTextFormattingPanel(switchToKeyboard: false, requestLayout: false)
+        }
+
         self.textInputNode?.isUserInteractionEnabled = !sendingTextDisabled
         
         var displayBotStartButton = false
@@ -2169,10 +2541,11 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             animatedTransition = false
         }
         
+        let effectiveAccessoryItems = self.effectiveAccessoryItems(interfaceState.inputTextPanelState.accessoryItems)
         var updateAccessoryButtons = false
-        if self.presentationInterfaceState?.inputTextPanelState.accessoryItems.count == self.accessoryItemButtons.count {
-            for i in 0 ..< interfaceState.inputTextPanelState.accessoryItems.count {
-                if interfaceState.inputTextPanelState.accessoryItems[i] != self.accessoryItemButtons[i].0 {
+        if effectiveAccessoryItems.count == self.accessoryItemButtons.count {
+            for i in 0 ..< effectiveAccessoryItems.count {
+                if effectiveAccessoryItems[i] != self.accessoryItemButtons[i].0 {
                     updateAccessoryButtons = true
                     break
                 }
@@ -2184,7 +2557,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         var removeAccessoryButtons: [AccessoryItemIconButton]?
         if updateAccessoryButtons {
             var updatedButtons: [(ChatTextInputAccessoryItem, AccessoryItemIconButton)] = []
-            for item in interfaceState.inputTextPanelState.accessoryItems {
+            for item in effectiveAccessoryItems {
                 var itemAndButton: (ChatTextInputAccessoryItem, AccessoryItemIconButton)?
                 for i in 0 ..< self.accessoryItemButtons.count {
                     if self.accessoryItemButtons[i].0.key == item.key {
@@ -3972,6 +4345,287 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     
     private var dismissedEmojiSuggestionPosition: EmojiSuggestionPosition?
     
+    // MARK: NAGRAM — 键盘区域文本格式面板
+    public var textFormattingKeyboardInputView: UIView? {
+        guard self.isTextFormattingPanelExpanded else {
+            return nil
+        }
+        return self.ensureTextFormattingInputView()
+    }
+
+    private func ensureTextFormattingInputView() -> ChatTextFormattingInputView {
+        if let current = self.textFormattingInputView {
+            return current
+        }
+        let inputView = ChatTextFormattingInputView()
+        inputView.pressed = { [weak self] action in
+            self?.performTextFormattingToolbarAction(action)
+        }
+        self.textFormattingInputView = inputView
+        return inputView
+    }
+
+    private func expandTextFormattingPanel() {
+        guard NagramSettings.shared.showTextStyleToolbar, !self.sendingTextDisabled else {
+            return
+        }
+        if self.textInputNode == nil {
+            self.loadTextInputNode()
+        }
+        guard let textInputNode = self.textInputNode else {
+            return
+        }
+
+        self.isTextFormattingPanelExpanded = true
+        self.updateTextFormattingInputView()
+
+        let inputView = self.ensureTextFormattingInputView()
+        if textInputNode.textView.inputView !== inputView {
+            textInputNode.textView.inputView = inputView
+        }
+        self.interfaceInteraction?.updateInputModeAndDismissedButtonKeyboardMessageId { state in
+            return (.text, state.keyboardButtonsMessage?.id)
+        }
+        if textInputNode.textView.isFirstResponder {
+            textInputNode.textView.reloadInputViews()
+        } else {
+            textInputNode.becomeFirstResponder()
+        }
+        self.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
+    }
+
+    private func collapseTextFormattingPanel(switchToKeyboard: Bool, requestLayout: Bool = true) {
+        guard self.isTextFormattingPanelExpanded else {
+            return
+        }
+        self.isTextFormattingPanelExpanded = false
+
+        if let textInputNode = self.textInputNode, textInputNode.textView.inputView === self.textFormattingInputView {
+            textInputNode.textView.inputView = nil
+            if switchToKeyboard && textInputNode.textView.isFirstResponder {
+                textInputNode.textView.reloadInputViews()
+            }
+        }
+        if requestLayout {
+            self.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
+        }
+    }
+
+    private func toggleTextFormattingPanel() {
+        if self.isTextFormattingPanelExpanded {
+            self.collapseTextFormattingPanel(switchToKeyboard: true)
+        } else {
+            self.expandTextFormattingPanel()
+        }
+    }
+
+    // MARK: NAGRAM — 可视化文本样式工具栏
+    private func textFormattingToolbarState(selectedRange: NSRange, hasSpoilers: Bool, hasQuotes: Bool) -> (enabledActions: Set<ChatTextFormattingToolbarAction>, selectedActions: Set<ChatTextFormattingToolbarAction>) {
+        var enabledActions = Set(ChatTextFormattingToolbarAction.visibleActions(hasSpoilers: hasSpoilers, hasQuotes: hasQuotes))
+        var selectedActions = Set<ChatTextFormattingToolbarAction>()
+
+        let inputText = self.inputTextState.inputText
+        guard selectedRange.location >= 0, selectedRange.length > 0, selectedRange.location + selectedRange.length <= inputText.length else {
+            return (Set(), selectedActions)
+        }
+
+        var intersectsMonospace = false
+        var intersectsSpoiler = false
+        inputText.enumerateAttributes(in: selectedRange, options: [], using: { attributes, _, _ in
+            if attributes[ChatTextInputAttributes.bold] != nil {
+                selectedActions.insert(.bold)
+            }
+            if attributes[ChatTextInputAttributes.italic] != nil {
+                selectedActions.insert(.italic)
+            }
+            if attributes[ChatTextInputAttributes.monospace] != nil {
+                intersectsMonospace = true
+                selectedActions.insert(.monospace)
+            }
+            if attributes[ChatTextInputAttributes.textUrl] != nil {
+                selectedActions.insert(.link)
+            }
+            if attributes[ChatTextInputAttributes.date] != nil {
+                selectedActions.insert(.date)
+            }
+            if attributes[ChatTextInputAttributes.strikethrough] != nil {
+                selectedActions.insert(.strikethrough)
+            }
+            if attributes[ChatTextInputAttributes.underline] != nil {
+                selectedActions.insert(.underline)
+            }
+            if attributes[ChatTextInputAttributes.spoiler] != nil {
+                intersectsSpoiler = true
+                selectedActions.insert(.spoiler)
+            }
+            if let quote = attributes[ChatTextInputAttributes.block] as? ChatTextInputTextQuoteAttribute {
+                switch quote.kind {
+                case .quote:
+                    selectedActions.insert(.quote)
+                case .code:
+                    selectedActions.insert(.code)
+                }
+            }
+        })
+
+        if intersectsMonospace && !selectedActions.contains(.spoiler) {
+            enabledActions.remove(.spoiler)
+        }
+        if intersectsSpoiler && !selectedActions.contains(.monospace) {
+            enabledActions.remove(.monospace)
+        }
+
+        return (enabledActions, selectedActions)
+    }
+
+    // MARK: NAGRAM — 选区内只要已有某样式，再点一次就移除选区内该样式。
+    private func removeTextFormattingAction(_ action: ChatTextFormattingToolbarAction, from state: ChatTextInputState) -> ChatTextInputState {
+        guard !state.selectionRange.isEmpty else {
+            return state
+        }
+        let nsRange = NSRange(location: state.selectionRange.lowerBound, length: state.selectionRange.count)
+        guard nsRange.location >= 0, nsRange.upperBound <= state.inputText.length else {
+            return state
+        }
+
+        let result = NSMutableAttributedString(attributedString: state.inputText)
+        let removeAttribute: NSAttributedString.Key?
+        switch action {
+        case .bold:
+            removeAttribute = ChatTextInputAttributes.bold
+        case .italic:
+            removeAttribute = ChatTextInputAttributes.italic
+        case .monospace:
+            removeAttribute = ChatTextInputAttributes.monospace
+        case .link:
+            removeAttribute = ChatTextInputAttributes.textUrl
+        case .date:
+            removeAttribute = ChatTextInputAttributes.date
+        case .strikethrough:
+            removeAttribute = ChatTextInputAttributes.strikethrough
+        case .underline:
+            removeAttribute = ChatTextInputAttributes.underline
+        case .spoiler:
+            removeAttribute = ChatTextInputAttributes.spoiler
+        case .quote, .code:
+            removeAttribute = nil
+        }
+
+        if let removeAttribute {
+            result.removeAttribute(removeAttribute, range: nsRange)
+        } else {
+            var rangesToRemove: [NSRange] = []
+            state.inputText.enumerateAttribute(ChatTextInputAttributes.block, in: nsRange, options: []) { value, range, _ in
+                guard let quote = value as? ChatTextInputTextQuoteAttribute else {
+                    return
+                }
+                let shouldRemove: Bool
+                switch (action, quote.kind) {
+                case (.quote, .quote):
+                    shouldRemove = true
+                case (.code, .code):
+                    shouldRemove = true
+                default:
+                    shouldRemove = false
+                }
+                if shouldRemove {
+                    let intersection = NSIntersectionRange(nsRange, range)
+                    if intersection.length > 0 {
+                        rangesToRemove.append(intersection)
+                    }
+                }
+            }
+            for range in rangesToRemove {
+                result.removeAttribute(ChatTextInputAttributes.block, range: range)
+            }
+        }
+
+        return ChatTextInputState(inputText: result, selectionRange: state.selectionRange)
+    }
+
+    // MARK: NAGRAM — 键盘区域文本格式面板
+    private func updateTextFormattingInputView() {
+        guard self.isTextFormattingPanelExpanded, let textInputNode = self.textInputNode, let presentationInterfaceState = self.presentationInterfaceState else {
+            return
+        }
+
+        var hasSpoilers = true
+        var hasQuotes = true
+        if presentationInterfaceState.chatLocation.peerId?.namespace == Namespaces.Peer.SecretChat {
+            hasSpoilers = false
+            hasQuotes = false
+        }
+        let toolbarState = self.textFormattingToolbarState(selectedRange: textInputNode.selectedRange, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes)
+        self.ensureTextFormattingInputView().update(theme: presentationInterfaceState.theme, strings: presentationInterfaceState.strings, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes, enabledActions: toolbarState.enabledActions, selectedActions: toolbarState.selectedActions)
+    }
+
+    // MARK: NAGRAM — 可视化文本样式工具栏
+    private func performTextFormattingToolbarAction(_ action: ChatTextFormattingToolbarAction) {
+        guard let textInputNode = self.textInputNode, let presentationInterfaceState = self.presentationInterfaceState else {
+            return
+        }
+
+        var hasSpoilers = true
+        var hasQuotes = true
+        if presentationInterfaceState.chatLocation.peerId?.namespace == Namespaces.Peer.SecretChat {
+            hasSpoilers = false
+            hasQuotes = false
+        }
+        let toolbarState = self.textFormattingToolbarState(selectedRange: textInputNode.selectedRange, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes)
+        guard toolbarState.enabledActions.contains(action) else {
+            return
+        }
+
+        textInputNode.textView.becomeFirstResponder()
+        if #available(iOS 13.0, *) {
+            UIMenuController.shared.hideMenu()
+        } else {
+            UIMenuController.shared.isMenuVisible = false
+            UIMenuController.shared.update()
+        }
+
+        if toolbarState.selectedActions.contains(action) {
+            self.inputMenu.back()
+            self.interfaceInteraction?.updateTextInputStateAndMode { [weak self] current, inputMode in
+                guard let self else {
+                    return (current, inputMode)
+                }
+                return (self.removeTextFormattingAction(action, from: current), inputMode)
+            }
+            if action == .spoiler {
+                self.updateSpoilersRevealed(animated: true)
+            }
+        } else {
+            switch action {
+            case .quote:
+                self.formatAttributesQuote(self)
+            case .spoiler:
+                self.formatAttributesSpoiler(self)
+            case .bold:
+                self.formatAttributesBold(self)
+            case .italic:
+                self.formatAttributesItalic(self)
+            case .monospace:
+                self.formatAttributesMonospace(self)
+            case .link:
+                self.formatAttributesLink(self)
+            case .date:
+                self.formatAttributesDate(self)
+            case .strikethrough:
+                self.formatAttributesStrikethrough(self)
+            case .underline:
+                self.formatAttributesUnderline(self)
+            case .code:
+                self.formatAttributesCodeBlock(self)
+            }
+        }
+
+        Queue.mainQueue().after(0.05) { [weak self] in
+            self?.updateTextFormattingInputView()
+            self?.requestLayout(transition: .immediate)
+        }
+    }
+
     private func updateInputField(textInputFrame: CGRect, transition: ComponentTransition) {
         guard let textInputNode = self.textInputNode, let context = self.context else {
             return
@@ -4802,6 +5456,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             
             self.updateSpoilersRevealed()
             
+            // MARK: NAGRAM — 键盘区域文本格式面板
+            if self.isTextFormattingPanelExpanded {
+                self.updateTextFormattingInputView()
+            }
             self.updateInputField(textInputFrame: textInputNode.frame, transition: .immediate)
         }
     }
@@ -4848,6 +5506,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.storedInputLanguage = editableTextNode.textInputMode?.primaryLanguage
         self.inputMenu.deactivate()
         self.dismissedEmojiSuggestionPosition = nil
+        // MARK: NAGRAM — 键盘区域文本格式面板
+        self.collapseTextFormattingPanel(switchToKeyboard: false)
         
         if let presentationInterfaceState = self.presentationInterfaceState, !self.skipPresentationInterfaceStateUpdate {
             if let peer = presentationInterfaceState.renderedPeer?.peer as? TelegramUser, peer.botInfo != nil, let keyboardButtonsMessage = presentationInterfaceState.keyboardButtonsMessage, let keyboardMarkup = keyboardButtonsMessage.visibleButtonKeyboardMarkup, keyboardMarkup.flags.contains(.persistent) {
@@ -5539,6 +6199,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                 case let .input(isEnabled, inputMode), let .botInput(isEnabled, inputMode):
                     switch inputMode {
                         case .keyboard:
+                            self.collapseTextFormattingPanel(switchToKeyboard: false)
                             if let customSwitchToKeyboard = self.customSwitchToKeyboard {
                                 customSwitchToKeyboard()
                             } else {
@@ -5547,12 +6208,14 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                                 })
                             }
                         case .stickers, .emoji:
+                            self.collapseTextFormattingPanel(switchToKeyboard: false)
                             if isEnabled {
                                 self.interfaceInteraction?.openStickers()
                             } else {
                                 self.interfaceInteraction?.displayRestrictedInfo(.stickers, .tooltip)
                             }
                         case .bot:
+                            self.collapseTextFormattingPanel(switchToKeyboard: false)
                             self.interfaceInteraction?.updateInputModeAndDismissedButtonKeyboardMessageId({ state in
                                 return (.inputButtons(persistent: state.keyboardButtonsMessage?.visibleButtonKeyboardMarkup?.flags.contains(.persistent) ?? false), nil)
                             })
@@ -5571,6 +6234,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                     self.interfaceInteraction?.openPremiumGift()
                 case .suggestPost:
                     self.interfaceInteraction?.openSuggestPost(nil, .default)
+                case .format:
+                    self.toggleTextFormattingPanel()
                 }
                 break
             }

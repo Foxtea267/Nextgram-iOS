@@ -73,6 +73,10 @@ private extension MessageHistoryInput {
                     case highToLow
                 }
                 func processItem(index: Int, direction: Direction) {
+                    // MARK: NAGRAM — processItem mutates/trims items while callers iterate an earlier count; skip stale indices instead of trapping.
+                    guard items.indices.contains(index) else {
+                        return
+                    }
                     guard let _ = items[index].groupInfo else {
                         return
                     }

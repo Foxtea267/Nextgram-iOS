@@ -1527,6 +1527,17 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                     }
                 } else if case .tap = gesture {
                     self.item?.controllerInteraction.clickThroughMessage(self.view, location)
+                } else if case .doubleTap = gesture {
+                    // MARK: NAGRAM
+                    guard let item = self.item else {
+                        return
+                    }
+                    if self.nagramHandleMessageDoubleTap(message: item.message, selectAll: false, subFrame: self.imageNode.frame) {
+                        return
+                    }
+                    if canAddMessageReactions(message: EngineMessage(item.message)) {
+                        item.controllerInteraction.updateMessageReaction(item.message, .default, false, nil)
+                    }
                 }
             }
         default:

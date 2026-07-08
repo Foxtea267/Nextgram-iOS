@@ -9,6 +9,8 @@ import AccountContext
 import MultilineTextComponent
 import BundleIconComponent
 import TelegramCore
+// MARK: NAGRAM — manual single-message translation uses the unified Nagram provider facade.
+import NagramTranslate
 import TranslateUI
 import TooltipComponent
 import Markdown
@@ -223,54 +225,83 @@ final class TextProcessingTranslateContentComponent: Component {
             }
             
             if let result = component.externalState.result, result.text == nil, self.processDisposable == nil {
-                let mappedMode: TelegramComposeAIMessageMode?
-                
                 switch component.mode {
                 case .translate:
-                    mappedMode = .translate(toLanguage: result.language, emojify: component.externalState.emojify, style: component.externalState.style)
-                case .stylize:
-                    if !component.externalState.emojify && component.externalState.style == .neutral {
-                        mappedMode = nil
-                        component.externalState.isProcessing = false
-                        component.externalState.result = (result.language, component.inputText, [])
-                        if !self.isUpdating {
-                            self.state?.updated(transition: .spring(duration: 0.4))
-                        }
-                    } else {
-                        mappedMode = .stylize(emojify: component.externalState.emojify, style: component.externalState.style)
-                    }
-                case .preview:
-                    mappedMode = nil
-                case .fix:
-                    mappedMode = .proofread
-                }
-                
-                if let mappedMode {
+                    let translationService = NagramTranslateService(context: component.context)
                     component.externalState.isProcessing = true
-                    self.processDisposable = (component.context.engine.messages.composeAIMessage(
-                        text: component.inputText,
-                        mode: mappedMode
-                    ) |> deliverOnMainQueue).startStrict(next: { [weak self] processedText in
+                    self.processDisposable = (translationService.translate(
+                        text: component.inputText.text,
+                        toLang: result.language,
+                        entities: component.inputText.entities,
+                        fromLang: component.externalState.sourceLanguage
+                    ) |> deliverOnMainQueue).startStrict(next: { [weak self] translatedText in
                         guard let self, let component = self.component else {
                             return
                         }
                         component.externalState.isProcessing = false
-                        component.externalState.result = (result.language, processedText.text, processedText.diffRanges)
+                        let text = translatedText.map { TextWithEntities(text: $0.0, entities: $0.1) } ?? component.inputText
+                        component.externalState.result = (result.language, text, [])
                         if !self.isUpdating {
                             self.state?.updated(transition: .spring(duration: 0.4))
                         }
-                    }, error: { [weak self] error in
+                    }, error: { [weak self] _ in
                         guard let self, let component = self.component else {
                             return
                         }
                         component.externalState.isProcessing = false
-                        if case .nonPremiumFlood = error {
-                            component.externalState.nonPremiumFloodTriggered = true
-                        }
                         if !self.isUpdating {
                             self.state?.updated(transition: .spring(duration: 0.4))
                         }
                     })
+                default:
+                    let mappedMode: TelegramComposeAIMessageMode?
+                    switch component.mode {
+                    case .translate:
+                        mappedMode = nil
+                    case .stylize:
+                        if !component.externalState.emojify && component.externalState.style == .neutral {
+                            mappedMode = nil
+                            component.externalState.isProcessing = false
+                            component.externalState.result = (result.language, component.inputText, [])
+                            if !self.isUpdating {
+                                self.state?.updated(transition: .spring(duration: 0.4))
+                            }
+                        } else {
+                            mappedMode = .stylize(emojify: component.externalState.emojify, style: component.externalState.style)
+                        }
+                    case .preview:
+                        mappedMode = nil
+                    case .fix:
+                        mappedMode = .proofread
+                    }
+                    
+                    if let mappedMode {
+                        component.externalState.isProcessing = true
+                        self.processDisposable = (component.context.engine.messages.composeAIMessage(
+                            text: component.inputText,
+                            mode: mappedMode
+                        ) |> deliverOnMainQueue).startStrict(next: { [weak self] processedText in
+                            guard let self, let component = self.component else {
+                                return
+                            }
+                            component.externalState.isProcessing = false
+                            component.externalState.result = (result.language, processedText.text, processedText.diffRanges)
+                            if !self.isUpdating {
+                                self.state?.updated(transition: .spring(duration: 0.4))
+                            }
+                        }, error: { [weak self] error in
+                            guard let self, let component = self.component else {
+                                return
+                            }
+                            component.externalState.isProcessing = false
+                            if case .nonPremiumFlood = error {
+                                component.externalState.nonPremiumFloodTriggered = true
+                            }
+                            if !self.isUpdating {
+                                self.state?.updated(transition: .spring(duration: 0.4))
+                            }
+                        })
+                    }
                 }
             }
         }

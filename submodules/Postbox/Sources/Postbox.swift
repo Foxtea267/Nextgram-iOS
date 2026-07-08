@@ -4501,11 +4501,12 @@ final class PostboxImpl {
     }
     
     public func clearCaches() {
-        let _ = self.transaction({ _ in
+        // MARK: NAGRAM — cache eviction is memory-only; avoid starting a sqlite transaction during backgrounding.
+        self.queue.justDispatch {
             for table in self.tables {
                 table.clearMemoryCache()
             }
-        }).start()
+        }
     }
     
     public func optimizeStorage() -> Signal<Never, NoError> {

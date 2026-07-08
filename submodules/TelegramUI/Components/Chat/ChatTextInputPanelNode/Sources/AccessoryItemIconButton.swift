@@ -140,6 +140,29 @@ final class AccessoryItemIconButton: HighlightTrackingButton, GlassBackgroundVie
         fatalError("init(coder:) has not been implemented")
     }
     
+    // MARK: NAGRAM — 文本格式面板按钮图标
+    private static func formatImage() -> UIImage? {
+        return generateImage(CGSize(width: 24.0, height: 24.0), rotatedContext: { size, context in
+            context.clear(CGRect(origin: .zero, size: size))
+            context.setStrokeColor(UIColor.black.cgColor)
+            context.setLineWidth(2.0)
+            context.setLineCap(.round)
+            context.setLineJoin(.round)
+
+            context.move(to: CGPoint(x: 6.0, y: 6.0))
+            context.addLine(to: CGPoint(x: 18.0, y: 6.0))
+            context.strokePath()
+
+            context.move(to: CGPoint(x: 12.0, y: 6.5))
+            context.addLine(to: CGPoint(x: 12.0, y: 17.5))
+            context.strokePath()
+
+            context.move(to: CGPoint(x: 8.0, y: 20.0))
+            context.addLine(to: CGPoint(x: 16.0, y: 20.0))
+            context.strokePath()
+        })?.withRenderingMode(.alwaysTemplate)
+    }
+
     private static func imageAndInsets(item: ChatTextInputAccessoryItem, theme: PresentationTheme, strings: PresentationStrings) -> (UIImage?, String?, String, CGFloat, UIEdgeInsets) {
         switch item {
             case let .input(isEnabled, inputMode), let .botInput(isEnabled, inputMode):
@@ -171,12 +194,18 @@ final class AccessoryItemIconButton: HighlightTrackingButton, GlassBackgroundVie
                 return (PresentationResourcesChat.chatInputTextFieldScheduleImage(theme), nil, strings.VoiceOver_ScheduledMessages, 1.0, UIEdgeInsets())
             case .gift:
                 return (PresentationResourcesChat.chatInputTextFieldGiftImage(theme), nil, strings.VoiceOver_GiftPremium, 1.0, UIEdgeInsets())
+            case let .format(isExpanded):
+                if isExpanded {
+                    return (PresentationResourcesChat.chatInputTextFieldKeyboardImage(theme), nil, strings.VoiceOver_Keyboard, 1.0, UIEdgeInsets())
+                } else {
+                    return (AccessoryItemIconButton.formatImage(), nil, strings.TextFormat_Format, 1.0, UIEdgeInsets())
+                }
         }
     }
     
     private static func calculateWidth(item: ChatTextInputAccessoryItem, image: UIImage?, text: String?, strings: PresentationStrings) -> CGFloat {
         switch item {
-        case .input, .botInput, .silentPost, .commands, .scheduledMessages, .gift, .suggestPost:
+        case .input, .botInput, .silentPost, .commands, .scheduledMessages, .gift, .suggestPost, .format:
             return 32.0
         case let .messageAutoremoveTimeout(timeout):
             var imageWidth = (image?.size.width ?? 0.0) + CGFloat(8.0)
@@ -192,9 +221,12 @@ final class AccessoryItemIconButton: HighlightTrackingButton, GlassBackgroundVie
         let previousItem = self.item
         self.item = item
         
-        let (updatedImage, text, _, _, _) = AccessoryItemIconButton.imageAndInsets(item: item, theme: self.theme, strings: self.strings)
+        let (updatedImage, text, accessibilityLabel, alpha, _) = AccessoryItemIconButton.imageAndInsets(item: item, theme: self.theme, strings: self.strings)
+        self.accessibilityLabel = accessibilityLabel
+        self.iconImageView.alpha = alpha * self.theme.chat.inputPanel.inputControlColor.alpha
+        self.iconImageView.tintMask.alpha = alpha * self.theme.chat.inputPanel.inputControlColor.alpha
         
-        if let image = self.iconImageView.image {
+        if let image = updatedImage ?? self.iconImageView.image {
             self.iconImageView.image = updatedImage
             
             let bottomInset: CGFloat = 0.0

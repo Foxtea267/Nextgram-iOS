@@ -1632,7 +1632,8 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                         isActive: translationState.isEnabled,
                         fromLang: translationState.fromLang,
                         toLang: translationState.toLang,
-                        peer: (self.chatPresentationInterfaceState.renderedPeer?.chatMainPeer).flatMap(EnginePeer.init)
+                        peer: (self.chatPresentationInterfaceState.renderedPeer?.chatMainPeer).flatMap(EnginePeer.init),
+                        isNagramAutoTranslateEnabled: translationState.isNagramAutoTranslateEnabled
                     ),
                     close: { [weak self] in
                         guard let self else {
@@ -3611,6 +3612,10 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
     private func chatPresentationInterfaceStateInputView(_ state: ChatPresentationInterfaceState) -> UIView? {
         switch state.inputMode {
         case .text:
+            // MARK: NAGRAM — 文本格式面板复用系统键盘区域；展开时不要被状态刷新切回系统键盘。
+            if let textFormattingKeyboardInputView = self.textInputPanelNode?.textFormattingKeyboardInputView {
+                return textFormattingKeyboardInputView
+            }
             return nil
         case .media:
             return self.emptyInputView

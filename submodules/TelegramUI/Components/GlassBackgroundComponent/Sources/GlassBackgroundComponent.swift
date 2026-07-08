@@ -8,6 +8,22 @@ import CoreImage
 import AppBundle
 import NagramSettings // MARK: NAGRAM
 
+// MARK: NAGRAM
+private func nagramReduceGlassTransparencyEnabled(settings: GlassOverlayTransparencySettings) -> Bool {
+    return settings.followsSystemTransparency && isReduceTransparencyEnabled()
+}
+
+private func nagramAdjustedNativeGlassTintColor(_ color: UIColor, settings: GlassOverlayTransparencySettings) -> UIColor {
+    if settings.followsSystemTransparency {
+        return color
+    }
+    return color.withAlphaComponent(color.alpha * settings.tintStrength)
+}
+
+private func nagramUseClearNativeGlass(settings: GlassOverlayTransparencySettings) -> Bool {
+    return !settings.followsSystemTransparency && settings.tintStrength <= CGFloat.ulpOfOne
+}
+
 private final class ContentContainer: UIView {
     private let maskContentView: UIView
     
@@ -455,13 +471,17 @@ public class GlassBackgroundView: UIView {
         public let tintColor: TintColor
         public let isInteractive: Bool
         public let isVisible: Bool
+        public let transparencySettings: GlassOverlayTransparencySettings // MARK: NAGRAM
+        public let reduceTransparencyEnabled: Bool // MARK: NAGRAM
         
-        init(shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool, isVisible: Bool) {
+        init(shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool, isVisible: Bool, transparencySettings: GlassOverlayTransparencySettings, reduceTransparencyEnabled: Bool) {
             self.shape = shape
             self.isDark = isDark
             self.tintColor = tintColor
             self.isInteractive = isInteractive
             self.isVisible = isVisible
+            self.transparencySettings = transparencySettings
+            self.reduceTransparencyEnabled = reduceTransparencyEnabled
         }
     }
     
@@ -607,6 +627,8 @@ public class GlassBackgroundView: UIView {
 
     func update(size: CGSize, shape: Shape, isDark: Bool, tintColor: TintColor, isInteractive: Bool = false, isVisible: Bool = true, transition: ComponentTransition) {
         let effectiveIsInteractive = isInteractive && NagramSettings.shared.controlHighlightEnabled // MARK: NAGRAM
+        let transparencySettings = currentGlassOverlayTransparencySettings() // MARK: NAGRAM
+        let reduceTransparencyEnabled = nagramReduceGlassTransparencyEnabled(settings: transparencySettings) // MARK: NAGRAM
         
         if let glassHighlightRecognizer = self.glassHighlightRecognizer {
             glassHighlightRecognizer.isEnabled = effectiveIsInteractive
@@ -692,7 +714,7 @@ public class GlassBackgroundView: UIView {
             innerBackgroundView.removeFromSuperview()
         }
         
-        let params = Params(shape: shape, isDark: isDark, tintColor: tintColor, isInteractive: effectiveIsInteractive, isVisible: isVisible)
+        let params = Params(shape: shape, isDark: isDark, tintColor: tintColor, isInteractive: effectiveIsInteractive, isVisible: isVisible, transparencySettings: transparencySettings, reduceTransparencyEnabled: reduceTransparencyEnabled) // MARK: NAGRAM
         if self.params != params {
             self.params = params
             
@@ -748,26 +770,27 @@ public class GlassBackgroundView: UIView {
                             let glassEffectValue: UIGlassEffect
                             switch tintColor.kind {
                             case .panel:
+                                let style: UIGlassEffect.Style = nagramUseClearNativeGlass(settings: transparencySettings) ? .clear : .regular
                                 if isDark {
-                                    glassEffectValue = UIGlassEffect(style: .regular)
-                                    glassEffectValue.tintColor = UIColor(white: 1.0, alpha: 0.025)
+                                    glassEffectValue = UIGlassEffect(style: style)
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(UIColor(white: 1.0, alpha: 0.025), settings: transparencySettings) // MARK: NAGRAM
                                 } else {
-                                    glassEffectValue = UIGlassEffect(style: .regular)
-                                    glassEffectValue.tintColor = UIColor(white: 1.0, alpha: 0.1)
+                                    glassEffectValue = UIGlassEffect(style: style)
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(UIColor(white: 1.0, alpha: 0.1), settings: transparencySettings) // MARK: NAGRAM
                                 }
                             case let .custom(style, color):
                                 switch style {
                                 case .default:
-                                    glassEffectValue = UIGlassEffect(style: .regular)
-                                    glassEffectValue.tintColor = color
+                                    glassEffectValue = UIGlassEffect(style: nagramUseClearNativeGlass(settings: transparencySettings) ? .clear : .regular)
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(color, settings: transparencySettings) // MARK: NAGRAM
                                 case .clear:
                                     glassEffectValue = UIGlassEffect(style: .clear)
-                                    glassEffectValue.tintColor = color
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(color, settings: transparencySettings) // MARK: NAGRAM
                                 }
                             case .clear:
                                 glassEffectValue = UIGlassEffect(style: .clear)
                                 if isDark {
-                                    glassEffectValue.tintColor = UIColor(white: 0.0, alpha: 0.28)
+                                    glassEffectValue.tintColor = nagramAdjustedNativeGlassTintColor(UIColor(white: 0.0, alpha: 0.28), settings: transparencySettings) // MARK: NAGRAM
                                 } else {
                                     glassEffectValue.tintColor = nil
                                 }
