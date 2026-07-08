@@ -76,7 +76,7 @@ public final class NagramTelegramSettingsCloudSync {
     }
 
     private func updateEnabledState() {
-        if NagramSettings.shared.iCloudSyncEnabled {
+        if NagramSettings.isICloudSyncEnabled() {
             self.startSyncingIfNeeded()
         } else {
             self.stopSyncing()
@@ -178,7 +178,7 @@ public final class NagramTelegramSettingsCloudSync {
     }
 
     private func handleCloudChange(_ notification: Notification) {
-        guard self.currentlySyncing, NagramSettings.shared.iCloudSyncEnabled else {
+        guard self.currentlySyncing, NagramSettings.isICloudSyncEnabled() else {
             return
         }
         guard let accountManager = self.accountManager else {

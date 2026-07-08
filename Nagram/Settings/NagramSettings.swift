@@ -118,6 +118,11 @@ public enum NagramTranslationLLMAPIFormat: String, CaseIterable {
 public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
+
+    public static func isICloudSyncEnabled(defaults: UserDefaults = .standard) -> Bool {
+        return NagramSettingsCloudSync.isEnabled(defaults: defaults)
+    }
+
     private init() {
         NagramSettingsCloudSync.shared.start()
     }
@@ -125,7 +130,7 @@ public final class NagramSettings {
     /// iCloud KVS 同步开关。保持本地-only,避免关闭同步的选择被云端覆盖。
     public var iCloudSyncEnabled: Bool {
         get {
-            return NagramSettingsCloudSync.isEnabled()
+            return Self.isICloudSyncEnabled()
         }
         set {
             NagramSettingsCloudSync.shared.setEnabled(newValue)
