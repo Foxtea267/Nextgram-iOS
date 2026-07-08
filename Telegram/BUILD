@@ -605,7 +605,9 @@ official_notification_filtering_fragment = """
 """
 # MARK: NAGRAM
 # Only add Nagram bundle ids after Apple grants com.apple.developer.usernotifications.filtering.
-nagram_notification_filtering_bundle_ids = []
+nagram_notification_filtering_bundle_ids = [
+    "xyz.nextalone.nagram",
+]
 
 notification_filtering_bundle_ids = ["ph.telegra.Telegraph"] + nagram_notification_filtering_bundle_ids
 notification_filtering_fragment = official_notification_filtering_fragment if telegram_bundle_id in notification_filtering_bundle_ids else ""
@@ -646,7 +648,7 @@ plist_fragment(
         unrestricted_voip_fragment,
         carplay_fragment,
         communication_notifications_fragment,
-        notification_filtering_fragment,
+        official_notification_filtering_fragment if telegram_bundle_id == "ph.telegra.Telegraph" else "",
         signin_fragment,
         background_gpu_fragment,
     ])
