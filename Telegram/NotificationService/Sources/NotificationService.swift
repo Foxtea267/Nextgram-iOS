@@ -21,6 +21,9 @@ import CoreServices
 import ImageIO
 import UniformTypeIdentifiers
 
+// MARK: NAGRAM
+private let canFilterEmptyControlNotifications = (Bundle.main.object(forInfoDictionaryKey: "NagramNotificationFilteringEnabled") as? Bool) == true
+
 private let queue = Queue()
 
 private let emptyControlNotificationThreadIdentifier = "nagram-empty-control-notification"
@@ -712,13 +715,16 @@ private struct NotificationContent: CustomStringConvertible {
             }
         }
 
+        // MARK: NAGRAM
         if self.shouldSuppressAsEmptyControlNotification && content.title.isEmpty && content.subtitle.isEmpty && content.body.isEmpty {
-            content.title = " "
-            content.threadIdentifier = emptyControlNotificationThreadIdentifier
             content.sound = nil
-            if #available(iOSApplicationExtension 15.0, iOS 15.0, *) {
-                content.interruptionLevel = .passive
-                content.relevanceScore = 0.0
+            if !canFilterEmptyControlNotifications {
+                content.title = " "
+                content.threadIdentifier = emptyControlNotificationThreadIdentifier
+                if #available(iOSApplicationExtension 15.0, iOS 15.0, *) {
+                    content.interruptionLevel = .passive
+                    content.relevanceScore = 0.0
+                }
             }
         }
 

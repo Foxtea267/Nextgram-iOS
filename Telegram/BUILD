@@ -574,6 +574,19 @@ app_groups_fragment = """
     telegram_bundle_id=telegram_bundle_id
 )
 
+# MARK: NAGRAM
+notification_service_app_groups_fragment = """
+    <key>com.apple.security.application-groups</key>
+    <array>
+        <string>group.{telegram_bundle_id}</string>
+    </array>
+    <key>application-identifier</key>
+    <string>{telegram_team_id}.{telegram_bundle_id}.NotificationService</string>
+""".format(
+    telegram_team_id=telegram_team_id,
+    telegram_bundle_id=telegram_bundle_id
+)
+
 official_communication_notifications_fragment = """
 <key>com.apple.developer.usernotifications.communication</key>
 <true/>
@@ -590,7 +603,21 @@ official_notification_filtering_fragment = """
 <key>com.apple.developer.usernotifications.filtering</key>
 <true/>
 """
-notification_filtering_fragment = official_notification_filtering_fragment if telegram_bundle_id == "ph.telegra.Telegraph" else ""
+# MARK: NAGRAM
+# Only add Nagram bundle ids after Apple grants com.apple.developer.usernotifications.filtering.
+nagram_notification_filtering_bundle_ids = []
+
+notification_filtering_bundle_ids = ["ph.telegra.Telegraph"] + nagram_notification_filtering_bundle_ids
+notification_filtering_fragment = official_notification_filtering_fragment if telegram_bundle_id in notification_filtering_bundle_ids else ""
+
+# MARK: NAGRAM
+notification_filtering_info_plist_fragment = """
+<key>NagramNotificationFilteringEnabled</key>
+<true/>
+""" if notification_filtering_fragment != "" else """
+<key>NagramNotificationFilteringEnabled</key>
+<false/>
+"""
 
 store_signin_fragment = """
 <key>com.apple.developer.applesignin</key>
@@ -622,6 +649,23 @@ plist_fragment(
         notification_filtering_fragment,
         signin_fragment,
         background_gpu_fragment,
+    ])
+)
+
+# MARK: NAGRAM
+plist_fragment(
+    name = "NotificationFilteringInfoPlist",
+    extension = "plist",
+    template = notification_filtering_info_plist_fragment,
+)
+
+# MARK: NAGRAM
+plist_fragment(
+    name = "NotificationServiceEntitlements",
+    extension = "entitlements",
+    template = "".join([
+        notification_service_app_groups_fragment,
+        notification_filtering_fragment,
     ])
 )
 
@@ -1576,7 +1620,10 @@ ios_extension(
         "iphone",
         "ipad",
     ],
+    # MARK: NAGRAM
+    entitlements = ":NotificationServiceEntitlements.entitlements",
     infoplists = [
+        ":NotificationFilteringInfoPlist",
         ":NotificationServiceInfoPlist",
         ":VersionInfoPlist",
         ":RequiredDeviceCapabilitiesPlist",
