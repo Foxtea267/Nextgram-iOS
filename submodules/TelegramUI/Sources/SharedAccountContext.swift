@@ -8,6 +8,7 @@ import Display
 import TelegramPresentationData
 import TelegramCallsUI
 import TelegramUIPreferences
+import NagramTelegramSettingsCloudSync
 import AccountContext
 import DeviceLocationManager
 import ItemListUI
@@ -341,6 +342,8 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         if applicationBindings.isMainApp {
             self.locationManager = DeviceLocationManager(queue: Queue.mainQueue())
             self.contactDataManager = DeviceContactDataManagerImpl(accountManager: accountManager)
+            // MARK: NAGRAM — 复用 Nagram iCloud 开关同步 Telegram 原生本地配置。
+            NagramTelegramSettingsCloudSync.shared.start(accountManager: accountManager)
         } else {
             self.locationManager = nil
             self.contactDataManager = nil

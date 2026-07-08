@@ -75,7 +75,7 @@
 "Nagram.DisableFiltering" = "Disable Filtering";
 "Nagram.DisableFiltering.Footer" = "When available, show sensitive content instead of filtering it. This is an account setting synced by Telegram.";
 "Nagram.ICloudSync" = "iCloud Sync";
-"Nagram.ICloudSync.Footer" = "When enabled, Nagram settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
+"Nagram.ICloudSync.Footer" = "When enabled, Nagram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
 "Nagram.ForceCopy" = "Force Copy";
 "Nagram.ForceCopy.Footer" = "Allow copying message text even in chats with content protection (no copy / no forward) enabled.";
 "Nagram.MessageMenu" = "Message Menu";
