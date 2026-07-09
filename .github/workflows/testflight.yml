@@ -196,12 +196,15 @@ jobs:
       - name: Distribute to external TestFlight group
         env:
           # Repository VARIABLES (Settings -> Secrets and variables -> Actions -> Variables):
-          #   TESTFLIGHT_GROUPS  - name of the EXTERNAL group in App Store Connect (must already exist)
+          #   TESTFLIGHT_GROUPS  - optional name of the EXTERNAL group in App Store Connect
           TESTFLIGHT_GROUPS: ${{ vars.TESTFLIGHT_GROUPS }}
           APPSTORE_ID: "6781000861"
         run: |
           set -euo pipefail
-          : "${TESTFLIGHT_GROUPS:?set the TESTFLIGHT_GROUPS repository variable to your external group name}"
+          if [ -z "${TESTFLIGHT_GROUPS:-}" ]; then
+            echo "TESTFLIGHT_GROUPS is not set; skipping external TestFlight group distribution."
+            exit 0
+          fi
           # Use the ASC REST API to find the processed build and add it to the external
           # group — avoids re-uploading the IPA and decouples distribution from upload,
           # so BETA_CONTRACT_MISSING or group misconfig cannot abort the upload step.
@@ -259,7 +262,11 @@ jobs:
           s, r = api("GET", f"/v1/apps/{app_id}/betaGroups?filter[isInternalGroup]=false")
           groups = [g for g in r.get("data", []) if g["attributes"]["name"] == group_name]
           if not groups:
-              print(f"ERROR: external group '{group_name}' not found", file=sys.stderr); sys.exit(1)
+              available = ", ".join(g["attributes"]["name"] for g in r.get("data", []))
+              print(f"WARNING: external group '{group_name}' not found; uploaded build remains in TestFlight.", file=sys.stderr)
+              if available:
+                  print(f"Available external groups: {available}", file=sys.stderr)
+              sys.exit(0)
           group_id = groups[0]["id"]
           print(f"Group: {group_name} ({group_id})")
 
