@@ -13,10 +13,32 @@ if [ ! -d "${RUNFILES_ROOT}" ]; then
 	RUNFILES_ROOT="${0}.runfiles/__main__"
 fi
 
-ACTOOL="${NAGRAM_ACTOOL:-/Applications/Xcode-beta.app/Contents/Developer/usr/bin/actool}"
-if [ ! -x "${ACTOOL}" ]; then
-	echo "Nagram Icon Composer export requires Xcode 27 actool at ${ACTOOL}" >&2
-	exit 1
+find_composer_actool() {
+	local candidate
+
+	for candidate in \
+		/Applications/Xcode-beta.app/Contents/Developer/usr/bin/actool \
+		/Applications/Xcode_27*.app/Contents/Developer/usr/bin/actool
+	do
+		if [ -x "${candidate}" ]; then
+			printf '%s\n' "${candidate}"
+			return 0
+		fi
+	done
+}
+
+ACTOOL=""
+if [ -n "${NAGRAM_ACTOOL:-}" ]; then
+	if [ -x "${NAGRAM_ACTOOL}" ]; then
+		ACTOOL="${NAGRAM_ACTOOL}"
+	else
+		echo "NAGRAM_ACTOOL is not executable: ${NAGRAM_ACTOOL}; falling back to legacy PNG icons" >&2
+	fi
+else
+	ACTOOL="$(find_composer_actool)"
+	if [ -z "${ACTOOL}" ]; then
+		echo "Nagram Icon Composer export requires Xcode 27 actool; falling back to legacy PNG icons" >&2
+	fi
 fi
 
 case "${APPLE_SDK_PLATFORM:-iPhoneOS}" in
@@ -45,39 +67,41 @@ real_file_dir() {
 	dirname "$(realpath "${path}/icon.json")"
 }
 
-ICONS_XCASSETS="$(real_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/Icons.xcassets")"
-LEGACY_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/LegacyComponents/LegacyImages.xcassets")"
-PASSWORD_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/PasswordSetupUI/PasswordSetupUIImages.xcassets")"
-TELEGRAM_UI_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/TelegramUI/Images.xcassets")"
-CALL_SCREEN_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/TelegramUI/Components/Calls/CallScreen/CallScreenAssets.xcassets")"
-NAGRAM_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/Nagram.icon")"
-NAGRAM_BLOCK_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlock.icon")"
-NAGRAM_COLORFUL_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramColorful.icon")"
+if [ -n "${ACTOOL}" ]; then
+	ICONS_XCASSETS="$(real_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/Icons.xcassets")"
+	LEGACY_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/LegacyComponents/LegacyImages.xcassets")"
+	PASSWORD_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/PasswordSetupUI/PasswordSetupUIImages.xcassets")"
+	TELEGRAM_UI_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/TelegramUI/Images.xcassets")"
+	CALL_SCREEN_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/TelegramUI/Components/Calls/CallScreen/CallScreenAssets.xcassets")"
+	NAGRAM_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/Nagram.icon")"
+	NAGRAM_BLOCK_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlock.icon")"
+	NAGRAM_COLORFUL_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramColorful.icon")"
 
-mkdir -p "${WORK_DIR}/out"
-"${ACTOOL}" \
-	--compile "${WORK_DIR}/out" \
-	--errors --warnings --notices \
-	--output-format human-readable-text \
-	--platform "${ACTOOL_PLATFORM}" \
-	--minimum-deployment-target 15.0 \
-	--compress-pngs \
-	--app-icon Nagram \
-	--alternate-app-icon NagramBlock \
-	--alternate-app-icon NagramColorful \
-	--target-device iphone \
-	--target-device ipad \
-	--output-partial-info-plist "${WORK_DIR}/xcassets-info.plist" \
-	"${ICONS_XCASSETS}" \
-	"${LEGACY_XCASSETS}" \
-	"${PASSWORD_XCASSETS}" \
-	"${TELEGRAM_UI_XCASSETS}" \
-	"${CALL_SCREEN_XCASSETS}" \
-	"${NAGRAM_ICON}" \
-	"${NAGRAM_BLOCK_ICON}" \
-	"${NAGRAM_COLORFUL_ICON}"
+	mkdir -p "${WORK_DIR}/out"
+	"${ACTOOL}" \
+		--compile "${WORK_DIR}/out" \
+		--errors --warnings --notices \
+		--output-format human-readable-text \
+		--platform "${ACTOOL_PLATFORM}" \
+		--minimum-deployment-target 15.0 \
+		--compress-pngs \
+		--app-icon Nagram \
+		--alternate-app-icon NagramBlock \
+		--alternate-app-icon NagramColorful \
+		--target-device iphone \
+		--target-device ipad \
+		--output-partial-info-plist "${WORK_DIR}/xcassets-info.plist" \
+		"${ICONS_XCASSETS}" \
+		"${LEGACY_XCASSETS}" \
+		"${PASSWORD_XCASSETS}" \
+		"${TELEGRAM_UI_XCASSETS}" \
+		"${CALL_SCREEN_XCASSETS}" \
+		"${NAGRAM_ICON}" \
+		"${NAGRAM_BLOCK_ICON}" \
+		"${NAGRAM_COLORFUL_ICON}"
 
-ditto "${WORK_DIR}/out" "${APP_DIR}"
+	ditto "${WORK_DIR}/out" "${APP_DIR}"
+fi
 
 ensure_dict() {
 	local path="$1"
@@ -86,14 +110,17 @@ ensure_dict() {
 
 reset_primary_icon() {
 	local root="$1"
-	local ipad="$2"
+	shift
+	ensure_dict "${root}"
 	/usr/libexec/PlistBuddy -c "Delete ${root}:CFBundlePrimaryIcon" "${INFO_PLIST}" >/dev/null 2>&1 || true
 	/usr/libexec/PlistBuddy -c "Add ${root}:CFBundlePrimaryIcon dict" "${INFO_PLIST}"
 	/usr/libexec/PlistBuddy -c "Add ${root}:CFBundlePrimaryIcon:CFBundleIconFiles array" "${INFO_PLIST}"
-	/usr/libexec/PlistBuddy -c "Add ${root}:CFBundlePrimaryIcon:CFBundleIconFiles:0 string Nagram60x60" "${INFO_PLIST}"
-	if [ "${ipad}" = "true" ]; then
-		/usr/libexec/PlistBuddy -c "Add ${root}:CFBundlePrimaryIcon:CFBundleIconFiles:1 string Nagram76x76" "${INFO_PLIST}"
-	fi
+	local index=0
+	local icon_file
+	for icon_file in "$@"; do
+		/usr/libexec/PlistBuddy -c "Add ${root}:CFBundlePrimaryIcon:CFBundleIconFiles:${index} string ${icon_file}" "${INFO_PLIST}"
+		index=$((index + 1))
+	done
 	/usr/libexec/PlistBuddy -c "Add ${root}:CFBundlePrimaryIcon:CFBundleIconName string Nagram" "${INFO_PLIST}"
 }
 
@@ -106,10 +133,55 @@ set_icon_name() {
 	/usr/libexec/PlistBuddy -c "Add ${root}:CFBundleAlternateIcons:${icon}:CFBundleIconName string ${icon}" "${INFO_PLIST}"
 }
 
-reset_primary_icon ":CFBundleIcons" false
-reset_primary_icon ":CFBundleIcons~ipad" true
+set_icon_files() {
+	local root="$1"
+	local icon="$2"
+	shift 2
+	ensure_dict "${root}:CFBundleAlternateIcons"
+	/usr/libexec/PlistBuddy -c "Delete ${root}:CFBundleAlternateIcons:${icon}" "${INFO_PLIST}" >/dev/null 2>&1 || true
+	/usr/libexec/PlistBuddy -c "Add ${root}:CFBundleAlternateIcons:${icon} dict" "${INFO_PLIST}"
+	/usr/libexec/PlistBuddy -c "Add ${root}:CFBundleAlternateIcons:${icon}:CFBundleIconFiles array" "${INFO_PLIST}"
+	local index=0
+	local icon_file
+	for icon_file in "$@"; do
+		/usr/libexec/PlistBuddy -c "Add ${root}:CFBundleAlternateIcons:${icon}:CFBundleIconFiles:${index} string ${icon_file}" "${INFO_PLIST}"
+		index=$((index + 1))
+	done
+}
 
-for icon in NagramBlock NagramColorful; do
-	set_icon_name ":CFBundleIcons" "${icon}"
-	set_icon_name ":CFBundleIcons~ipad" "${icon}"
-done
+require_legacy_icon_pngs() {
+	local icon="$1"
+	local missing=0
+	local file
+	for file in "${icon}@2x.png" "${icon}@3x.png" "${icon}Ipad.png" "${icon}Ipad@2x.png" "${icon}LargeIpad@2x.png"; do
+		if [ ! -f "${APP_DIR}/${file}" ]; then
+			echo "Missing legacy Nagram icon PNG: ${APP_DIR}/${file}" >&2
+			missing=1
+		fi
+	done
+	if [ "${missing}" -ne 0 ]; then
+		exit 1
+	fi
+}
+
+if [ -n "${ACTOOL}" ]; then
+	reset_primary_icon ":CFBundleIcons" Nagram60x60
+	reset_primary_icon ":CFBundleIcons~ipad" Nagram60x60 Nagram76x76
+
+	for icon in NagramBlock NagramColorful; do
+		set_icon_name ":CFBundleIcons" "${icon}"
+		set_icon_name ":CFBundleIcons~ipad" "${icon}"
+	done
+else
+	for icon in Nagram NagramBlock NagramColorful; do
+		require_legacy_icon_pngs "${icon}"
+	done
+
+	reset_primary_icon ":CFBundleIcons" Nagram
+	reset_primary_icon ":CFBundleIcons~ipad" Nagram NagramIpad NagramLargeIpad
+
+	for icon in NagramBlock NagramColorful; do
+		set_icon_files ":CFBundleIcons" "${icon}" "${icon}"
+		set_icon_files ":CFBundleIcons~ipad" "${icon}" "${icon}" "${icon}Ipad" "${icon}LargeIpad"
+	done
+fi
