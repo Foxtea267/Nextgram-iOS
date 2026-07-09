@@ -173,12 +173,9 @@ if [ -n "${ACTOOL}" ]; then
 		set_icon_name ":CFBundleIcons~ipad" "${icon}"
 	done
 else
-	for icon in Nagram NagramBlock NagramColorful; do
+	for icon in NagramBlock NagramColorful; do
 		require_legacy_icon_pngs "${icon}"
 	done
-
-	reset_primary_icon ":CFBundleIcons" Nagram
-	reset_primary_icon ":CFBundleIcons~ipad" Nagram NagramIpad NagramLargeIpad
 
 	for icon in NagramBlock NagramColorful; do
 		set_icon_files ":CFBundleIcons" "${icon}" "${icon}"
