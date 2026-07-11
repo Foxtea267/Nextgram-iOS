@@ -185,6 +185,10 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["ShowArchiveInFolders", "ArchiveInFolders", "ShowArchiveInTabs"]
     case "Nagram.ChatListStartupFolder":
         return ["DefaultFolder", "StartupFolder", "RememberLastFolder"]
+    case "Nagram.ChatListFolderTabDisplayMode":
+        return ["TabMenu", "TabTitleType"]
+    case "Nagram.ChatListFolderTabsCompact":
+        return ["CompactFolderTabs"]
     case "Nagram.DisableScrollToNextChannel":
         return ["DisableScrollToNextChannel"]
     case "Nagram.DisableScrollToNextTopic":
@@ -379,6 +383,8 @@ private func nagramGroups(
         NagramGroup(tab: .general, headerKey: "Nagram.Section.Interface", footerKey: "Nagram.GlassTransparency.Footer", rows: [
             .navigation(titleKey: "Nagram.BottomBarLayout", action: bottomBarLayoutAction),
             .startupFolder(titleKey: "Nagram.ChatListStartupFolder"),
+            .choice(titleKey: "Nagram.ChatListFolderTabDisplayMode", prefix: "Nagram.ChatListFolderTabDisplayMode", options: ["text", "icon", "both"], current: { NagramSettings.shared.chatListFolderTabDisplayModeValue.rawValue }, set: { NagramSettings.shared.chatListFolderTabDisplayMode = $0 }),
+            .toggle(titleKey: "Nagram.ChatListFolderTabsCompact", get: { NagramSettings.shared.chatListFolderTabsCompact }, set: { NagramSettings.shared.chatListFolderTabsCompact = $0 }),
             .choice(titleKey: "Nagram.ChatListMessagePreviewStyle", prefix: "Nagram.ChatListMessagePreviewStyle", options: ["three", "two"], current: { NagramSettings.shared.chatListMessagePreviewStyleMode.rawValue }, set: { value in
                 if NagramSettings.shared.chatListCompact && value == NagramChatListMessagePreviewStyle.three.rawValue {
                     return

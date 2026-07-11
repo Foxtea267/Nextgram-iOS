@@ -68,6 +68,12 @@ public enum NagramChatListStartupFolderMode: String {
     case specific
 }
 
+public enum NagramChatListFolderTabDisplayMode: String {
+    case text
+    case icon
+    case iconAndText = "both"
+}
+
 public enum NagramChatListMessagePreviewStyle: String {
     case three
     case two
@@ -300,6 +306,12 @@ public final class NagramSettings {
     /// 对话列表启动分组（"telegram" / "last" / "specific"）
     @NagramDefault("nagram.chatListStartupFolderMode", NagramChatListStartupFolderMode.telegramDefault.rawValue)
     public var chatListStartupFolderMode: String
+    /// 首页分组标签紧凑布局
+    @NagramDefault("nagram.chatListFolderTabsCompact", false)
+    public var chatListFolderTabsCompact: Bool
+    /// 首页分组标签显示方式（"text" / "icon" / "both"）
+    @NagramDefault("nagram.chatListFolderTabDisplayMode", NagramChatListFolderTabDisplayMode.text.rawValue)
+    public var chatListFolderTabDisplayMode: String
     /// 对话列表消息预览样式（"three" / "two"）
     @NagramDefault("nagram.chatListMessagePreviewStyle", NagramChatListMessagePreviewStyle.three.rawValue)
     public var chatListMessagePreviewStyle: String
@@ -423,6 +435,10 @@ public extension NagramSettings {
 
     var chatListStartupFolderModeValue: NagramChatListStartupFolderMode {
         return NagramChatListStartupFolderMode(rawValue: self.chatListStartupFolderMode) ?? .telegramDefault
+    }
+
+    var chatListFolderTabDisplayModeValue: NagramChatListFolderTabDisplayMode {
+        return NagramChatListFolderTabDisplayMode(rawValue: self.chatListFolderTabDisplayMode) ?? .text
     }
 
     var chatListMessagePreviewStyleMode: NagramChatListMessagePreviewStyle {

@@ -161,6 +161,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     private let isReorderingTabsValue = ValuePromise<Bool>(false)
     
     private(set) var tabContainerData: ([ChatListFilterTabEntry], Bool, Int32?)?
+    private(set) var nagramFolderTabIcons: [ChatListFilterTabEntryId: String] = [:] // MARK: NAGRAM — 首页文件夹标签图标。
     var hasTabs: Bool {
         if let tabContainerData = self.tabContainerData {
             let isEmpty = tabContainerData.0.count <= 1 || tabContainerData.1
@@ -190,7 +191,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     private(set) var isPremium: Bool = false
     private(set) var storyPostingAvailability: StoriesConfiguration.PostingAvailability = .disabled
     private var storiesPostingAvailabilityDisposable: Disposable?
-    private var nagramTabBarSearchDisposable: Disposable?
+    private var nagramLayoutSettingsDisposable: Disposable?
     private let storyPostingAvailabilityValue = ValuePromise<StoriesConfiguration.PostingAvailability>(.disabled)
     
     private var didSetupTabs = false
@@ -797,7 +798,11 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
 
         self.updateTabBarSearchState(ViewController.TabBarSearchState(isActive: false), transition: .immediate)
         // MARK: NAGRAM
-        self.nagramTabBarSearchDisposable = (nagramBottomBarSettingsSignal()
+        self.nagramLayoutSettingsDisposable = (combineLatest(
+            nagramBottomBarSettingsSignal(),
+            nagramBoolSignal("nagram.chatListFolderTabsCompact", defaultValue: false),
+            nagramStringSignal("nagram.chatListFolderTabDisplayMode", defaultValue: NagramChatListFolderTabDisplayMode.text.rawValue)
+        )
         |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
             self?.requestLayout(transition: .animated(duration: 0.3, curve: .linear))
         })
@@ -839,7 +844,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         self.preloadStorySubscriptionsDisposable?.dispose()
         self.storyProgressDisposable?.dispose()
         self.storiesPostingAvailabilityDisposable?.dispose()
-        self.nagramTabBarSearchDisposable?.dispose() // MARK: NAGRAM
+        self.nagramLayoutSettingsDisposable?.dispose() // MARK: NAGRAM
         self.sharedOpenStoryProgressDisposable.dispose()
         for (_, disposable) in self.preloadStoryResourceDisposables {
             disposable.dispose()
@@ -3999,17 +4004,25 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             
             let (_, items) = countAndFilterItems
             var filterItems: [ChatListFilterTabEntry] = []
+            var nagramFolderTabIcons: [ChatListFilterTabEntryId: String] = [:] // MARK: NAGRAM
             
             for (filter, unreadCount, hasUnmutedUnread) in items {
                 switch filter {
                     case .allChats:
+                        nagramFolderTabIcons[.all] = "💬" // MARK: NAGRAM
                         if let isPremium = isPremium, !isPremium && filterItems.count > 0 {
                             filterItems.insert(.all(unreadCount: 0), at: 0)
                         } else {
                             filterItems.append(.all(unreadCount: 0))
                         }
-                    case let .filter(id, title, _, _):
+                    case let .filter(id, title, emoticon, _):
                         filterItems.append(.filter(id: id, text: title, unread: ChatListFilterTabEntryUnreadCount(value: unreadCount, hasUnmuted: hasUnmutedUnread)))
+                        let trimmedEmoticon = emoticon?.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if let trimmedEmoticon, trimmedEmoticon.count == 1 {
+                            nagramFolderTabIcons[.filter(id)] = trimmedEmoticon // MARK: NAGRAM
+                        } else {
+                            nagramFolderTabIcons[.filter(id)] = "📁" // MARK: NAGRAM
+                        }
                 }
             }
             
@@ -4066,6 +4079,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 }
             }
             let filtersLimit = isPremium == false ? limits.maxFoldersCount : nil
+            strongSelf.nagramFolderTabIcons = nagramFolderTabIcons // MARK: NAGRAM
             strongSelf.tabContainerData = (resolvedItems, false, filtersLimit)
             var availableFilters: [ChatListContainerNodeFilter] = []
             var hasAllChats = false

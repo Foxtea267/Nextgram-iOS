@@ -31,6 +31,32 @@ import ChatListFilterTabContainerNode
 import GlassControls
 import NagramSettings
 
+// MARK: NAGRAM — 首页文件夹标签支持仅文字、仅图标和图标加文字。
+private func nagramFolderTabTitle(
+    text: String,
+    entities: [MessageTextEntity],
+    enableAnimations: Bool,
+    icon: String,
+    displayMode: NagramChatListFolderTabDisplayMode
+) -> HorizontalTabsComponent.Tab.Title {
+    switch displayMode {
+    case .text:
+        return HorizontalTabsComponent.Tab.Title(text: text, entities: entities, enableAnimations: enableAnimations)
+    case .icon:
+        return HorizontalTabsComponent.Tab.Title(text: icon, entities: [], enableAnimations: false)
+    case .iconAndText:
+        let prefix = "\(icon) "
+        let offset = prefix.utf16.count
+        let shiftedEntities = entities.map { entity in
+            return MessageTextEntity(
+                range: (entity.range.lowerBound + offset) ..< (entity.range.upperBound + offset),
+                type: entity.type
+            )
+        }
+        return HorizontalTabsComponent.Tab.Title(text: prefix + text, entities: shiftedEntities, enableAnimations: enableAnimations)
+    }
+}
+
 public enum ChatListContainerNodeFilter: Equatable {
     case all
     case filter(ChatListFilter)
@@ -1544,6 +1570,8 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         if self.controller?.tabContainerData != nil || !panels.isEmpty {
             var tabs: AnyComponent<Empty>?
             if let tabContainerData = self.controller?.tabContainerData, tabContainerData.0.count > 1 {
+                let nagramFolderTabDisplayMode = NagramSettings.shared.chatListFolderTabDisplayModeValue // MARK: NAGRAM
+                let nagramFolderTabIcons = self.controller?.nagramFolderTabIcons ?? [:] // MARK: NAGRAM
                 let folderFilterIndex: (ChatListFilterTabEntryId, [ChatListFilterTabEntry]) -> Int? = { id, entries in
                     var index = 0
                     for entry in entries {
@@ -1583,11 +1611,23 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                         switch entry {
                         case .all:
                             id = Int32.min
-                            title = HorizontalTabsComponent.Tab.Title(text: self.presentationData.strings.ChatList_Tabs_All, entities: [], enableAnimations: false)
+                            title = nagramFolderTabTitle(
+                                text: self.presentationData.strings.ChatList_Tabs_All,
+                                entities: [],
+                                enableAnimations: false,
+                                icon: nagramFolderTabIcons[entry.id] ?? "💬",
+                                displayMode: nagramFolderTabDisplayMode
+                            )
                             isMainTab = true
                         case let .filter(idValue, text, unread):
                             id = AnyHashable(idValue)
-                            title = HorizontalTabsComponent.Tab.Title(text: text.text, entities: text.entities, enableAnimations: text.enableAnimations)
+                            title = nagramFolderTabTitle(
+                                text: text.text,
+                                entities: text.entities,
+                                enableAnimations: text.enableAnimations,
+                                icon: nagramFolderTabIcons[entry.id] ?? "📁",
+                                displayMode: nagramFolderTabDisplayMode
+                            )
                             if unread.value != 0 {
                                 badge = HorizontalTabsComponent.Tab.Badge(
                                     title: "\(unread.value)",
@@ -1675,6 +1715,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                     },
                     selectedTab: selectedTab,
                     isEditing: isEditing,
+                    layout: NagramSettings.shared.chatListFolderTabsCompact ? .fit : .fill, // MARK: NAGRAM
                     liftWhileSwitching: layout.deviceMetrics.type != .tablet
                 ))
             }

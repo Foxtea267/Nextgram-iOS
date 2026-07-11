@@ -22,6 +22,24 @@ public func nagramBoolSignal(_ key: String, defaultValue: Bool) -> Signal<Bool, 
     }
     return (initial |> then(changes)) |> distinctUntilChanged
 }
+
+public func nagramStringSignal(_ key: String, defaultValue: String) -> Signal<String, NoError> {
+    let initial = Signal<String, NoError>.single(UserDefaults.standard.string(forKey: key) ?? defaultValue)
+    let changes = Signal<String, NoError> { subscriber in
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: nil
+        ) { _ in
+            subscriber.putNext(UserDefaults.standard.string(forKey: key) ?? defaultValue)
+        }
+        return ActionDisposable {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    return (initial |> then(changes)) |> distinctUntilChanged
+}
+
 public func nagramAutoTranslateSignal(accountPeerId: Int64, peerId: Int64, threadId: Int64?) -> Signal<Bool, NoError> {
     return nagramBoolSignal(NagramSettings.autoTranslateKey(accountPeerId: accountPeerId, peerId: peerId, threadId: threadId), defaultValue: false)
 }

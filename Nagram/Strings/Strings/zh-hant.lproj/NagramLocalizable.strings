@@ -262,6 +262,11 @@
 "Nagram.ChatListStartupFolder.last" = "上次所在分組";
 "Nagram.ChatListStartupFolder.specific" = "指定分組";
 "Nagram.ChatListStartupFolder.notSet" = "未指定";
+"Nagram.ChatListFolderTabDisplayMode" = "分組標籤顯示方式";
+"Nagram.ChatListFolderTabDisplayMode.text" = "僅文字";
+"Nagram.ChatListFolderTabDisplayMode.icon" = "僅圖示";
+"Nagram.ChatListFolderTabDisplayMode.both" = "圖示和文字";
+"Nagram.ChatListFolderTabsCompact" = "緊湊分組標籤";
 "Nagram.Section.Translation" = "翻譯";
 "Nagram.Section.Translation.Footer" = "只替換翻譯 provider，目標語言跟隨 Telegram 原生翻譯按鈕選擇。LLM 支援 OpenAI-compatible 和 Anthropic API 格式；API Key 僅保存在本機。其他 provider 不保留富文字格式。";
 "Nagram.TranslationProvider" = "翻譯 Provider";

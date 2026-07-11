@@ -262,6 +262,11 @@
 "Nagram.ChatListStartupFolder.last" = "Last Opened Folder";
 "Nagram.ChatListStartupFolder.specific" = "Specific Folder";
 "Nagram.ChatListStartupFolder.notSet" = "Not Set";
+"Nagram.ChatListFolderTabDisplayMode" = "Folder Tab Display";
+"Nagram.ChatListFolderTabDisplayMode.text" = "Text Only";
+"Nagram.ChatListFolderTabDisplayMode.icon" = "Icon Only";
+"Nagram.ChatListFolderTabDisplayMode.both" = "Icon and Text";
+"Nagram.ChatListFolderTabsCompact" = "Compact Folder Tabs";
 "Nagram.Section.Translation" = "Translation";
 "Nagram.Section.Translation.Footer" = "Only the translation provider is replaced; target language follows Telegram's native translate button. LLM supports OpenAI-compatible and Anthropic API formats; API Key is stored locally only. Other providers do not preserve formatting entities.";
 "Nagram.TranslationProvider" = "Translation Provider";
