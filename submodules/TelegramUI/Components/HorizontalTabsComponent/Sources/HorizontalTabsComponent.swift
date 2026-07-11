@@ -694,6 +694,7 @@ public final class HorizontalTabsComponent: Component {
                         theme: component.theme,
                         tab: tab,
                         isSelected: false,
+                        isCompact: component.layout == .fit, // MARK: NAGRAM
                         editing: itemEditing
                     )),
                     environment: {},
@@ -706,6 +707,7 @@ public final class HorizontalTabsComponent: Component {
                         theme: component.theme,
                         tab: tab,
                         isSelected: true,
+                        isCompact: component.layout == .fit, // MARK: NAGRAM
                         editing: itemEditing
                     )),
                     environment: {},
@@ -920,13 +922,15 @@ private final class ItemComponent: Component {
     let theme: PresentationTheme
     let tab: HorizontalTabsComponent.Tab
     let isSelected: Bool
+    let isCompact: Bool // MARK: NAGRAM
     let editing: Editing?
     
-    init(context: AccountContext?, theme: PresentationTheme, tab: HorizontalTabsComponent.Tab, isSelected: Bool, editing: Editing?) {
+    init(context: AccountContext?, theme: PresentationTheme, tab: HorizontalTabsComponent.Tab, isSelected: Bool, isCompact: Bool, editing: Editing?) {
         self.context = context
         self.theme = theme
         self.tab = tab
         self.isSelected = isSelected
+        self.isCompact = isCompact
         self.editing = editing
     }
     
@@ -938,6 +942,9 @@ private final class ItemComponent: Component {
             return false
         }
         if lhs.isSelected != rhs.isSelected {
+            return false
+        }
+        if lhs.isCompact != rhs.isCompact {
             return false
         }
         if lhs.editing != rhs.editing {
@@ -1075,7 +1082,7 @@ private final class ItemComponent: Component {
             self.containerView.isGestureEnabled = component.editing == nil
             self.tapRecognizer?.isEnabled = component.editing == nil
             
-            let sideInset: CGFloat = 16.0
+            let sideInset: CGFloat = component.isCompact ? 8.0 : 16.0 // MARK: NAGRAM
             let badgeSpacing: CGFloat = 5.0
             
             var size = CGSize(width: sideInset, height: availableSize.height)
