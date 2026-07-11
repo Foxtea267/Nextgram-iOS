@@ -52,6 +52,8 @@
 "Nagram.VideoPIPSwipeUp" = "上滑打开画中画";
 "Nagram.TapMessageRowToOpenContextMenu" = "点击消息行打开菜单";
 "Nagram.MessageDoubleTapAction" = "双击消息动作";
+"Nagram.MessageDoubleTapActionWithoutEditPermission" = "无编辑权限的消息";
+"Nagram.MessageDoubleTapAction.sameAsUnified" = "跟随统一动作";
 "Nagram.MessageDoubleTapAction.disabled" = "禁用";
 "Nagram.MessageDoubleTapAction.sendReaction" = "发送回应";
 "Nagram.MessageDoubleTapAction.showReactions" = "显示回应";

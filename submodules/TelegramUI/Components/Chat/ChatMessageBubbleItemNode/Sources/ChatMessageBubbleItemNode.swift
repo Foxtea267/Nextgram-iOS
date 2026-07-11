@@ -5577,7 +5577,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         if item.controllerInteraction.selectionState != nil {
             return true
         }
-        let action = NagramSettings.shared.messageDoubleTapActionValue
+        let action = NagramSettings.shared.resolvedMessageDoubleTapAction(canEditMessage: item.controllerInteraction.nagramCanEditMessage(message))
         switch action {
         case .sendReaction:
             return false

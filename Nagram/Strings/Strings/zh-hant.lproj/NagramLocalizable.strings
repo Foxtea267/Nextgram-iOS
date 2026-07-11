@@ -52,6 +52,8 @@
 "Nagram.VideoPIPSwipeUp" = "上滑開啟子母畫面";
 "Nagram.TapMessageRowToOpenContextMenu" = "點按訊息列開啟選單";
 "Nagram.MessageDoubleTapAction" = "雙擊訊息動作";
+"Nagram.MessageDoubleTapActionWithoutEditPermission" = "無編輯權限的訊息";
+"Nagram.MessageDoubleTapAction.sameAsUnified" = "跟隨統一動作";
 "Nagram.MessageDoubleTapAction.disabled" = "停用";
 "Nagram.MessageDoubleTapAction.sendReaction" = "傳送回應";
 "Nagram.MessageDoubleTapAction.showReactions" = "顯示回應";

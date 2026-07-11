@@ -33,6 +33,7 @@ enum NagramSettingsSyncKeys {
         "nagram.recentChatsEnabled",
         "nagram.tapMessageRowToOpenContextMenu",
         "nagram.messageDoubleTapAction",
+        "nagram.messageDoubleTapActionWithoutEditPermission",
         "nagram.showProfileId",
         "nagram.uploadSpeedBoost",
         "nagram.downloadSpeedBoost",

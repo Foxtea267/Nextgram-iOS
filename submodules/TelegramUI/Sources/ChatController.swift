@@ -2169,6 +2169,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 }
             })
         // MARK: NAGRAM
+        }, nagramCanEditMessage: { [weak self] message in
+            guard let self else {
+                return false
+            }
+            return self.nagramCanEditMessage(message)
         }, nagramPerformMessageDoubleTapAction: { [weak self] message, actionRawValue in
             guard let self else {
                 return false
@@ -11134,14 +11139,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             }
             return self.nagramRepeatMessages(messages: [message], hideNames: hideNames)
         case .edit:
-            if case .pinnedMessages = self.subject {
-                return false
-            }
-            let isMigrated = self.presentationInterfaceState.renderedPeer?.peer is TelegramChannel && message.id.peerId.namespace == Namespaces.Peer.CloudGroup
-            guard !isMigrated else {
-                return false
-            }
-            guard canEditMessage(context: self.context, limitsConfiguration: self.context.currentLimitsConfiguration.with { EngineConfiguration.Limits($0) }, message: message) else {
+            guard self.nagramCanEditMessage(message) else {
                 return false
             }
             if message.media.contains(where: { $0 is TelegramMediaTodo }) {
@@ -11151,6 +11149,17 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             }
             return true
         }
+    }
+
+    private func nagramCanEditMessage(_ message: EngineRawMessage) -> Bool {
+        if case .pinnedMessages = self.subject {
+            return false
+        }
+        let isMigrated = self.presentationInterfaceState.renderedPeer?.peer is TelegramChannel && message.id.peerId.namespace == Namespaces.Peer.CloudGroup
+        guard !isMigrated else {
+            return false
+        }
+        return canEditMessage(context: self.context, limitsConfiguration: self.context.currentLimitsConfiguration.with { EngineConfiguration.Limits($0) }, message: message)
     }
     
     public var contentContainerNode: ASDisplayNode {

@@ -52,6 +52,8 @@
 "Nagram.VideoPIPSwipeUp" = "Swipe Up for Picture-in-Picture";
 "Nagram.TapMessageRowToOpenContextMenu" = "Tap Message Row for Menu";
 "Nagram.MessageDoubleTapAction" = "Double Tap Message";
+"Nagram.MessageDoubleTapActionWithoutEditPermission" = "Messages Without Edit Permission";
+"Nagram.MessageDoubleTapAction.sameAsUnified" = "Use Unified Action";
 "Nagram.MessageDoubleTapAction.disabled" = "Disable";
 "Nagram.MessageDoubleTapAction.sendReaction" = "Send Reaction";
 "Nagram.MessageDoubleTapAction.showReactions" = "Show Reactions";

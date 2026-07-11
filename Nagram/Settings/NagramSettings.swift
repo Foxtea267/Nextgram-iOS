@@ -118,6 +118,7 @@ public enum NagramTranslationLLMAPIFormat: String, CaseIterable {
 public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
+    public static let messageDoubleTapSameAsUnified = "sameAsUnified"
 
     public static func isICloudSyncEnabled(defaults: UserDefaults = .standard) -> Bool {
         return NagramSettingsCloudSync.isEnabled(defaults: defaults)
@@ -314,6 +315,9 @@ public final class NagramSettings {
     /// 双击消息动作（默认发送回应 = 保持 iOS 原生行为）
     @NagramDefault("nagram.messageDoubleTapAction", NagramMessageDoubleTapAction.sendReaction.rawValue)
     public var messageDoubleTapAction: String
+    /// 无编辑权限消息的双击动作（默认跟随统一动作）
+    @NagramDefault("nagram.messageDoubleTapActionWithoutEditPermission", NagramSettings.messageDoubleTapSameAsUnified)
+    public var messageDoubleTapActionWithoutEditPermission: String
     /// 资料页显示用户数字 ID（默认关 = 保持原生）
     @NagramDefault("nagram.showProfileId", false)
     public var showProfileId: Bool
@@ -459,6 +463,25 @@ public extension NagramSettings {
             return .sendReaction
         }
         return value
+    }
+
+    var messageDoubleTapActionWithoutEditPermissionValue: String {
+        let value = self.messageDoubleTapActionWithoutEditPermission
+        if value == NagramSettings.messageDoubleTapSameAsUnified {
+            return value
+        }
+        guard let action = NagramMessageDoubleTapAction(rawValue: value), action != .edit else {
+            self.messageDoubleTapActionWithoutEditPermission = NagramSettings.messageDoubleTapSameAsUnified
+            return NagramSettings.messageDoubleTapSameAsUnified
+        }
+        return action.rawValue
+    }
+
+    func resolvedMessageDoubleTapAction(canEditMessage: Bool) -> NagramMessageDoubleTapAction {
+        if !canEditMessage, let action = NagramMessageDoubleTapAction(rawValue: self.messageDoubleTapActionWithoutEditPermissionValue) {
+            return action
+        }
+        return self.messageDoubleTapActionValue
     }
 
     var translationProviderValue: NagramTranslationProvider {

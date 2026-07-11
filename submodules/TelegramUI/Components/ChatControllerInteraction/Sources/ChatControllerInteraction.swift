@@ -202,6 +202,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
     public let openMessageReactionContextMenu: (EngineRawMessage, ContextExtractedContentContainingView, ContextGesture?, MessageReaction.Reaction) -> Void
     public let activateMessagePinch: (PinchSourceContainerNode) -> Void
     // MARK: NAGRAM
+    public let nagramCanEditMessage: (EngineRawMessage) -> Bool
     public let nagramPerformMessageDoubleTapAction: (EngineRawMessage, String) -> Bool
     public let nagramRepeatMessages: ([EngineRawMessage], Bool) -> Bool
     public let openMessageContextActions: (EngineRawMessage, ASDisplayNode, CGRect, ContextGesture?) -> Void
@@ -384,6 +385,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         openMessageReactionContextMenu: @escaping (EngineRawMessage, ContextExtractedContentContainingView, ContextGesture?, MessageReaction.Reaction) -> Void,
         updateMessageReaction: @escaping (EngineRawMessage, ChatControllerInteractionReaction, Bool, ContextExtractedContentContainingView?) -> Void,
         // MARK: NAGRAM
+        nagramCanEditMessage: @escaping (EngineRawMessage) -> Bool = { _ in false },
         nagramPerformMessageDoubleTapAction: @escaping (EngineRawMessage, String) -> Bool = { _, _ in false },
         nagramRepeatMessages: @escaping ([EngineRawMessage], Bool) -> Bool = { _, _ in false },
         activateMessagePinch: @escaping (PinchSourceContainerNode) -> Void,
@@ -520,6 +522,7 @@ public final class ChatControllerInteraction: ChatControllerInteractionProtocol 
         self.updateMessageReaction = updateMessageReaction
         self.activateMessagePinch = activateMessagePinch
         // MARK: NAGRAM
+        self.nagramCanEditMessage = nagramCanEditMessage
         self.nagramPerformMessageDoubleTapAction = nagramPerformMessageDoubleTapAction
         self.nagramRepeatMessages = nagramRepeatMessages
         self.openMessageContextActions = openMessageContextActions

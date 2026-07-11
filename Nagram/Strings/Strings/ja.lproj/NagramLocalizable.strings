@@ -52,6 +52,8 @@
 "Nagram.VideoPIPSwipeUp" = "上スワイプでピクチャインピクチャ";
 "Nagram.TapMessageRowToOpenContextMenu" = "メッセージ行タップでメニュー";
 "Nagram.MessageDoubleTapAction" = "メッセージのダブルタップ";
+"Nagram.MessageDoubleTapActionWithoutEditPermission" = "編集できないメッセージ";
+"Nagram.MessageDoubleTapAction.sameAsUnified" = "統一アクションに従う";
 "Nagram.MessageDoubleTapAction.disabled" = "無効";
 "Nagram.MessageDoubleTapAction.sendReaction" = "リアクション送信";
 "Nagram.MessageDoubleTapAction.showReactions" = "リアクション表示";
