@@ -118,7 +118,7 @@ public struct NagramBottomBarSettings: Equatable {
         if item == .search || !self.activeBottomItems.contains(item) {
             return true
         }
-        return self.activeBottomItems.count > Self.minimumVisibleNonSearchBottomItems
+        return item != .chats
     }
 
     public mutating func toggleHidden(_ item: NagramBottomBarItemId) {
@@ -144,20 +144,21 @@ public struct NagramBottomBarSettings: Equatable {
                 self.bottomItems.append(item)
             }
         } else {
-            guard self.canHide(item) else {
-                return
-            }
-            self.hiddenItems.insert(item)
-            self.bottomItems.removeAll(where: { $0 == item })
-            if self.externalItem == item {
-                self.externalItem = nil
-            }
+            self.hide(item)
+            return
         }
         self.normalize()
     }
 
     public mutating func hide(_ item: NagramBottomBarItemId) {
         guard self.canHide(item) else {
+            return
+        }
+        if self.activeBottomItems.contains(item) && self.activeBottomItems.count <= Self.minimumVisibleNonSearchBottomItems {
+            let activeItems = Set(self.activeBottomItems)
+            self.hiddenItems.formUnion(activeItems)
+            self.bottomItems.removeAll(where: { activeItems.contains($0) })
+            self.normalize()
             return
         }
         if !self.hiddenItems.contains(item) {
@@ -305,6 +306,12 @@ public struct NagramBottomBarSettings: Equatable {
         for item in NagramBottomBarItemId.allCases where !seen.contains(item) && item != .search {
             self.bottomItems.append(item)
             seen.insert(item)
+        }
+        if !self.activeBottomItems.isEmpty && !self.activeBottomItems.contains(.chats) {
+            self.hiddenItems.remove(.chats)
+            if !self.bottomItems.contains(.chats) {
+                self.bottomItems.append(.chats)
+            }
         }
         if self.activeBottomItems.count == 1, let restoredItem = Self.defaultBottomItems.first(where: { self.hiddenItems.contains($0) }) {
             self.hiddenItems.remove(restoredItem)
