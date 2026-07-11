@@ -17,6 +17,16 @@ import WebKit
 import InAppPurchaseManager
 import TelegramVoip
 
+// MARK: NAGRAM
+private let emptyControlNotificationLoggingKey = "nagram.debug.emptyControlNotificationLogging"
+
+private func emptyControlNotificationLoggingDefaults() -> UserDefaults? {
+    guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+        return nil
+    }
+    return UserDefaults(suiteName: "group.\(bundleIdentifier)")
+}
+
 @objc private final class DebugControllerMailComposeDelegate: NSObject, MFMailComposeViewControllerDelegate {
     public func mailComposeController(_ controller: MFMailComposeViewController, didFinishWith result: MFMailComposeResult, error: Error?) {
         controller.dismiss(animated: true, completion: nil)
@@ -69,6 +79,7 @@ private enum DebugControllerEntry: ItemListNodeEntry {
     case logToFile(PresentationTheme, Bool)
     case logToConsole(PresentationTheme, Bool)
     case redactSensitiveData(PresentationTheme, Bool)
+    case emptyControlNotificationLogging(Bool) // MARK: NAGRAM
     case keepChatNavigationStack(PresentationTheme, Bool)
     case skipReadHistory(PresentationTheme, Bool)
     case alwaysDisplayTyping(Bool)
@@ -131,7 +142,7 @@ private enum DebugControllerEntry: ItemListNodeEntry {
             return DebugControllerSection.logs.rawValue
         case .accounts:
             return DebugControllerSection.logs.rawValue
-        case .logToFile, .logToConsole, .redactSensitiveData:
+        case .logToFile, .logToConsole, .redactSensitiveData, .emptyControlNotificationLogging:
             return DebugControllerSection.logging.rawValue
         case .webViewInspection, .resetWebViewCache:
             return DebugControllerSection.web.rawValue
@@ -178,6 +189,8 @@ private enum DebugControllerEntry: ItemListNodeEntry {
             return 11
         case .redactSensitiveData:
             return 12
+        case .emptyControlNotificationLogging:
+            return 105
         case .webViewInspection:
             return 13
         case .resetWebViewCache:
@@ -957,6 +970,10 @@ private enum DebugControllerEntry: ItemListNodeEntry {
                     $0.withUpdatedRedactSensitiveData(value)
                 }).start()
             })
+        case let .emptyControlNotificationLogging(value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Log Empty Notification Filtering", value: value, sectionId: self.section, style: .blocks, updated: { value in
+                emptyControlNotificationLoggingDefaults()?.set(value, forKey: emptyControlNotificationLoggingKey)
+            })
         case let .keepChatNavigationStack(_, value):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Keep Chat Stack", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 let _ = updateExperimentalUISettingsInteractively(accountManager: arguments.sharedContext.accountManager, { settings in
@@ -1558,6 +1575,7 @@ private func debugControllerEntries(context: AccountContext?, sharedContext: Sha
     entries.append(.logToFile(presentationData.theme, loggingSettings.logToFile))
     entries.append(.logToConsole(presentationData.theme, loggingSettings.logToConsole))
     entries.append(.redactSensitiveData(presentationData.theme, loggingSettings.redactSensitiveData))
+    entries.append(.emptyControlNotificationLogging(emptyControlNotificationLoggingDefaults()?.bool(forKey: emptyControlNotificationLoggingKey) ?? false)) // MARK: NAGRAM
 
     if isMainApp {
         entries.append(.webViewInspection(experimentalSettings.allowWebViewInspection))

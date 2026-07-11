@@ -23,14 +23,18 @@ import UniformTypeIdentifiers
 
 // MARK: NAGRAM
 private let canFilterEmptyControlNotifications = (Bundle.main.object(forInfoDictionaryKey: "NagramNotificationFilteringEnabled") as? Bool) == true
+private let emptyControlNotificationLoggingKey = "nagram.debug.emptyControlNotificationLogging"
 
 private let queue = Queue()
 
-private let emptyControlNotificationThreadIdentifier = "nagram-empty-control-notification"
-private let emptyControlNotificationRemovalMaxAttempts: Int32 = 30
-private let emptyControlNotificationRemovalRetryDelay: Double = 0.1
-
 private var installedSharedLogger = false
+
+private func isEmptyControlNotificationLoggingEnabled() -> Bool {
+    guard let bundleIdentifier = Bundle.main.bundleIdentifier, let suffixRange = bundleIdentifier.range(of: ".NotificationService", options: [.backwards]) else {
+        return false
+    }
+    return UserDefaults(suiteName: "group.\(bundleIdentifier[..<suffixRange.lowerBound])")?.bool(forKey: emptyControlNotificationLoggingKey) == true
+}
 
 private func setupSharedLogger(rootPath: String, path: String) {
     if !installedSharedLogger {
@@ -716,16 +720,11 @@ private struct NotificationContent: CustomStringConvertible {
         }
 
         // MARK: NAGRAM
+        if isEmptyControlNotificationLoggingEnabled() {
+            Logger.shared.log("NotificationService", "Nagram empty control notification check: filterEntitlement=\(canFilterEmptyControlNotifications), shouldSuppress=\(self.shouldSuppressAsEmptyControlNotification), titleEmpty=\(content.title.isEmpty), subtitleEmpty=\(content.subtitle.isEmpty), bodyEmpty=\(content.body.isEmpty), dismissAfterDelivery=\(self.dismissAfterDelivery), hasAttachments=\(!self.attachments.isEmpty), hasSender=\(self.senderPerson != nil), category=\(self.category ?? "nil")")
+        }
         if self.shouldSuppressAsEmptyControlNotification && content.title.isEmpty && content.subtitle.isEmpty && content.body.isEmpty {
             content.sound = nil
-            if !canFilterEmptyControlNotifications {
-                content.title = " "
-                content.threadIdentifier = emptyControlNotificationThreadIdentifier
-                if #available(iOSApplicationExtension 15.0, iOS 15.0, *) {
-                    content.interruptionLevel = .passive
-                    content.relevanceScore = 0.0
-                }
-            }
         }
 
         return content
@@ -939,7 +938,7 @@ private final class NotificationServiceHandler {
         
         Logger.shared.log("NotificationService \(episode)", "Logging settings: (logToFile: \(loggingSettings.logToFile))")
         
-        Logger.shared.logToFile = loggingSettings.logToFile
+        Logger.shared.logToFile = loggingSettings.logToFile || isEmptyControlNotificationLoggingEnabled()
         Logger.shared.logToConsole = loggingSettings.logToConsole
         Logger.shared.redactSensitiveData = loggingSettings.redactSensitiveData
 
@@ -2678,64 +2677,14 @@ final class NotificationService: UNNotificationServiceExtension {
     private let content = Atomic<NotificationContent?>(value: nil)
     private var contentHandler: ((UNNotificationContent) -> Void)?
     private var episode: String?
-    private var emptyControlNotificationsRemoved = false
-    private var emptyControlNotificationRemovalTries: Int32 = 0
     
     override init() {
         super.init()
     }
 
-    private func removeEmptyControlNotificationsOnce() {
-        UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: { notifications in
-            let identifiers = notifications.compactMap { notification -> String? in
-                if notification.request.content.threadIdentifier == emptyControlNotificationThreadIdentifier {
-                    return notification.request.identifier
-                }
-                return nil
-            }
-
-            if !identifiers.isEmpty {
-                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
-            }
-        })
-    }
-
-    private func removeEmptyControlNotifications() {
-        self.emptyControlNotificationRemovalTries += 1
-        let attempt = self.emptyControlNotificationRemovalTries
-        if self.emptyControlNotificationsRemoved || attempt > emptyControlNotificationRemovalMaxAttempts {
-            return
-        }
-
-        UNUserNotificationCenter.current().getDeliveredNotifications(completionHandler: { [weak self] notifications in
-            guard let strongSelf = self else {
-                return
-            }
-
-            let identifiers = notifications.compactMap { notification -> String? in
-                if notification.request.content.threadIdentifier == emptyControlNotificationThreadIdentifier {
-                    return notification.request.identifier
-                }
-                return nil
-            }
-
-            if !identifiers.isEmpty {
-                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: identifiers)
-                strongSelf.emptyControlNotificationsRemoved = true
-            } else {
-                queue.after(emptyControlNotificationRemovalRetryDelay, {
-                    strongSelf.removeEmptyControlNotifications()
-                })
-            }
-        })
-    }
-    
     override func didReceive(_ request: UNNotificationRequest, withContentHandler contentHandler: @escaping (UNNotificationContent) -> Void) {
         let episode = String(UInt32.random(in: 0 ..< UInt32.max), radix: 16)
         self.episode = episode
-        self.emptyControlNotificationsRemoved = false
-        self.emptyControlNotificationRemovalTries = 0
-        
         self.initialContent = request.content
         self.contentHandler = contentHandler
 
@@ -2762,20 +2711,7 @@ final class NotificationService: UNNotificationServiceExtension {
                         strongSelf.contentHandler = nil
                         
                         if let content = content.with({ $0 }) {
-                            let dismissAfterDelivery = content.shouldSuppressAsEmptyControlNotification
-                            if dismissAfterDelivery {
-                                strongSelf.removeEmptyControlNotificationsOnce()
-                            }
                             contentHandler(content.generate())
-                            if dismissAfterDelivery {
-                                let requestIdentifier = request.identifier
-                                UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [requestIdentifier])
-                                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [requestIdentifier])
-                                queue.after(0.5, {
-                                    UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [requestIdentifier])
-                                })
-                                strongSelf.removeEmptyControlNotifications()
-                            }
                         } else if let initialContent = strongSelf.initialContent {
                             contentHandler(initialContent)
                         }
@@ -2795,14 +2731,7 @@ final class NotificationService: UNNotificationServiceExtension {
             Logger.shared.log("NotificationService \(self.episode ?? "???")", "Completing due to serviceExtensionTimeWillExpire")
             
             if let content = self.content.with({ $0 }) {
-                let dismissAfterDelivery = content.shouldSuppressAsEmptyControlNotification
-                if dismissAfterDelivery {
-                    self.removeEmptyControlNotificationsOnce()
-                }
                 contentHandler(content.generate())
-                if dismissAfterDelivery {
-                    self.removeEmptyControlNotifications()
-                }
             } else if let initialContent = self.initialContent {
                 contentHandler(initialContent)
             }
