@@ -380,6 +380,7 @@ public final class TabBarComponent: Component {
     public let layoutItemCount: Int?
     public let isAdaptiveWidth: Bool
     public let alignItemsToLeft: Bool
+    public let centerItemsInAvailableWidth: Bool // MARK: NAGRAM
     public let showItemTitles: Bool
     public let buttonWidthFillRatio: CGFloat?
 
@@ -405,6 +406,7 @@ public final class TabBarComponent: Component {
         layoutItemCount: Int? = nil,
         isAdaptiveWidth: Bool = false,
         alignItemsToLeft: Bool = false,
+        centerItemsInAvailableWidth: Bool = false, // MARK: NAGRAM
         showItemTitles: Bool = true,
         buttonWidthFillRatio: CGFloat? = nil
     ) {
@@ -420,6 +422,7 @@ public final class TabBarComponent: Component {
         self.layoutItemCount = layoutItemCount
         self.isAdaptiveWidth = isAdaptiveWidth
         self.alignItemsToLeft = alignItemsToLeft
+        self.centerItemsInAvailableWidth = centerItemsInAvailableWidth
         self.showItemTitles = showItemTitles
         self.buttonWidthFillRatio = buttonWidthFillRatio
     }
@@ -459,6 +462,9 @@ public final class TabBarComponent: Component {
             return false
         }
         if lhs.alignItemsToLeft != rhs.alignItemsToLeft {
+            return false
+        }
+        if lhs.centerItemsInAvailableWidth != rhs.centerItemsInAvailableWidth {
             return false
         }
         if lhs.showItemTitles != rhs.showItemTitles {
@@ -1043,6 +1049,8 @@ public final class TabBarComponent: Component {
                     let availableTabsWidth = max(0.0, availableSize.width - (barHeight + 8.0))
                     if component.alignItemsToLeft {
                         tabsFrame.origin.x = 0.0
+                    } else if component.centerItemsInAvailableWidth {
+                        tabsFrame.origin.x = floor((availableSize.width - tabsFrame.width) * 0.5)
                     } else {
                         tabsFrame.origin.x = floor((availableTabsWidth - tabsFrame.width) * 0.5)
                     }

@@ -245,8 +245,9 @@
 "Nagram.BottomBarLayout.Slots.visibleOnly" = "按可見按鈕重排";
 "Nagram.BottomBarLayout.Slots.preserveHidden" = "保留隱藏槽位";
 "Nagram.BottomBarLayout.Alignment" = "對齊";
-"Nagram.BottomBarLayout.Alignment.center" = "置中";
-"Nagram.BottomBarLayout.Alignment.left" = "靠左";
+"Nagram.BottomBarLayout.Alignment.spaceBetween" = "兩端對齊";
+"Nagram.BottomBarLayout.Alignment.leftCenter" = "左側置中";
+"Nagram.BottomBarLayout.Alignment.center" = "整體置中";
 "Nagram.BottomBarLayout.Alignment.disabled" = "佔滿時不適用";
 "Nagram.BottomBarLayout.Reset" = "重置底欄佈局";
 "Nagram.BottomBarLayout.Footer" = "預覽區用於拖動排序與右側獨立按鈕調整；實際顯示隱藏在狀態區域切換。搜尋可在按鈕與搜尋列間切換，搜尋列僅在其他底欄按鈕隱藏時可用。按鈕寬度 0% 為四按鈕寬度，100% 為填滿目前底欄寬度。";

@@ -353,7 +353,8 @@ final class TabBarControllerNode: ASDisplayNode {
                 outerInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: tabBarBottomInset, right: sideInset),
                 layoutItemCount: nagramLayoutItemCount,
                 isAdaptiveWidth: false,
-                alignItemsToLeft: bottomBarSettings.alignment == .left,
+                alignItemsToLeft: bottomBarSettings.alignment == .spaceBetween,
+                centerItemsInAvailableWidth: bottomBarSettings.alignment == .center,
                 showItemTitles: bottomBarSettings.showLabels,
                 buttonWidthFillRatio: CGFloat(bottomBarSettings.buttonWidthFillRatio) / 100.0
             )),
@@ -366,7 +367,7 @@ final class TabBarControllerNode: ASDisplayNode {
         if onlySearchButton {
             tabBarOriginX = params.layout.size.width - sideInset - tabBarSize.width
         } else if !fillsAvailableWidth && tabBarSearchState?.isActive != true {
-            if bottomBarSettings.alignment == .left {
+            if bottomBarSettings.alignment == .spaceBetween { // MARK: NAGRAM
                 tabBarOriginX = sideInset
             } else {
                 tabBarOriginX = floor((params.layout.size.width - tabBarSize.width) * 0.5)

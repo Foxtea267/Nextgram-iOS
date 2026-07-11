@@ -277,10 +277,10 @@ public final class NagramSettings {
             settings.widthMode = newValue ? .full : .adaptive
             if newValue {
                 settings.slotMode = .visibleOnly
-                settings.alignment = .center
+                settings.alignment = .leftCenter
             } else {
                 settings.slotMode = .preserveHidden
-                settings.alignment = .left
+                settings.alignment = .spaceBetween
             }
             self.bottomBarSettings = settings
         }

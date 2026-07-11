@@ -245,8 +245,9 @@
 "Nagram.BottomBarLayout.Slots.visibleOnly" = "表示ボタンで再配置";
 "Nagram.BottomBarLayout.Slots.preserveHidden" = "非表示スロットを保持";
 "Nagram.BottomBarLayout.Alignment" = "配置";
-"Nagram.BottomBarLayout.Alignment.center" = "中央";
-"Nagram.BottomBarLayout.Alignment.left" = "左";
+"Nagram.BottomBarLayout.Alignment.spaceBetween" = "両端揃え";
+"Nagram.BottomBarLayout.Alignment.leftCenter" = "左側中央";
+"Nagram.BottomBarLayout.Alignment.center" = "全体中央";
 "Nagram.BottomBarLayout.Alignment.disabled" = "全幅では使用しません";
 "Nagram.BottomBarLayout.Reset" = "下部バーをリセット";
 "Nagram.BottomBarLayout.Footer" = "プレビューでは並べ替えと右側の独立ボタン調整を行います。実際の表示切り替えは状態セクションで行います。検索はボタンと検索バーを切り替えられ、検索バーは他の下部ボタンが非表示の場合のみ使用できます。ボタン幅 0% は4ボタン幅、100% は現在の下部バー幅いっぱいです。";

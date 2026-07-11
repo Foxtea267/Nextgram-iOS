@@ -274,8 +274,9 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
         case .alignment:
             titleKey = "Nagram.BottomBarLayout.Alignment"
             items = [
+                ("Nagram.BottomBarLayout.Alignment.spaceBetween", { $0.alignment = .spaceBetween }),
+                ("Nagram.BottomBarLayout.Alignment.leftCenter", { $0.alignment = .leftCenter }),
                 ("Nagram.BottomBarLayout.Alignment.center", { $0.alignment = .center }),
-                ("Nagram.BottomBarLayout.Alignment.left", { $0.alignment = .left })
             ]
         case .searchMode:
             titleKey = "Nagram.BottomBarLayout.SearchStyle"
@@ -339,10 +340,12 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
 
         let alignmentLabel: String
         switch settings.alignment {
+        case .spaceBetween:
+            alignmentLabel = ngI18n("Nagram.BottomBarLayout.Alignment.spaceBetween", lang)
+        case .leftCenter:
+            alignmentLabel = ngI18n("Nagram.BottomBarLayout.Alignment.leftCenter", lang)
         case .center:
             alignmentLabel = ngI18n("Nagram.BottomBarLayout.Alignment.center", lang)
-        case .left:
-            alignmentLabel = ngI18n("Nagram.BottomBarLayout.Alignment.left", lang)
         }
 
         let entries: [NagramBottomBarEntry] = [
@@ -832,7 +835,8 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
                 outerInsets: .zero,
                 layoutItemCount: layoutItemCount,
                 isAdaptiveWidth: false,
-                alignItemsToLeft: previewSettings.alignment == .left,
+                alignItemsToLeft: previewSettings.alignment == .spaceBetween,
+                centerItemsInAvailableWidth: previewSettings.alignment == .center,
                 showItemTitles: previewSettings.showLabels,
                 buttonWidthFillRatio: CGFloat(previewSettings.buttonWidthFillRatio) / 100.0
             )),
@@ -851,7 +855,7 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
             let tabBarX: CGFloat
             if onlySearchButton {
                 tabBarX = previewSideInset + availableWidth - tabBarSize.width
-            } else if previewSettings.alignment == .left && !fillsAvailableWidth {
+            } else if previewSettings.alignment == .spaceBetween && !fillsAvailableWidth {
                 tabBarX = previewSideInset
             } else {
                 tabBarX = previewSideInset + floor((availableWidth - tabBarSize.width) * 0.5)

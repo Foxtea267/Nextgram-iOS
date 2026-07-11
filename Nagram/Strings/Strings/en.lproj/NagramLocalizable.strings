@@ -245,8 +245,9 @@
 "Nagram.BottomBarLayout.Slots.visibleOnly" = "Reflow Visible Buttons";
 "Nagram.BottomBarLayout.Slots.preserveHidden" = "Preserve Hidden Slots";
 "Nagram.BottomBarLayout.Alignment" = "Alignment";
-"Nagram.BottomBarLayout.Alignment.center" = "Center";
-"Nagram.BottomBarLayout.Alignment.left" = "Left";
+"Nagram.BottomBarLayout.Alignment.spaceBetween" = "Space Between";
+"Nagram.BottomBarLayout.Alignment.leftCenter" = "Center Left Side";
+"Nagram.BottomBarLayout.Alignment.center" = "Center All";
 "Nagram.BottomBarLayout.Alignment.disabled" = "Not used in full width";
 "Nagram.BottomBarLayout.Reset" = "Reset Bottom Bar Layout";
 "Nagram.BottomBarLayout.Footer" = "Use the preview to reorder buttons and adjust the right standalone button. Toggle actual visibility in the State section. Search can switch between button and bar; the bar is available only when other bottom buttons are hidden. Button width 0% matches four buttons; 100% fills the current bottom bar width.";

@@ -28,8 +28,20 @@ public enum NagramBottomBarSlotMode: String {
 }
 
 public enum NagramBottomBarAlignment: String {
-    case left
-    case center
+    case spaceBetween
+    case leftCenter
+    case center = "overallCenter"
+
+    init?(storedValue: String) {
+        switch storedValue {
+        case "left":
+            self = .spaceBetween
+        case "center":
+            self = .leftCenter
+        default:
+            self.init(rawValue: storedValue)
+        }
+    }
 }
 
 public enum NagramBottomBarSearchMode: String {
@@ -64,7 +76,7 @@ public struct NagramBottomBarSettings: Equatable {
         widthMode: NagramBottomBarWidthMode = .full,
         slotMode: NagramBottomBarSlotMode = .visibleOnly,
         buttonWidthFillRatio: Int32 = 100,
-        alignment: NagramBottomBarAlignment = .center,
+        alignment: NagramBottomBarAlignment = .leftCenter,
         searchMode: NagramBottomBarSearchMode = .button
     ) {
         self.isBottomBarVisible = isBottomBarVisible
@@ -369,7 +381,7 @@ public extension NagramBottomBarSettings {
             widthMode: widthMode,
             slotMode: defaults.string(forKey: Keys.slotMode).flatMap(NagramBottomBarSlotMode.init(rawValue:)) ?? .visibleOnly,
             buttonWidthFillRatio: buttonWidthFillRatio,
-            alignment: defaults.string(forKey: Keys.alignment).flatMap(NagramBottomBarAlignment.init(rawValue:)) ?? .center,
+            alignment: defaults.string(forKey: Keys.alignment).flatMap(NagramBottomBarAlignment.init(storedValue:)) ?? .leftCenter,
             searchMode: hiddenItems.contains(.search) ? .hidden : searchMode
         )
     }
@@ -447,7 +459,7 @@ public extension NagramBottomBarSettings {
             widthMode: wideTabBar ? .full : .adaptive,
             slotMode: wideTabBar ? .visibleOnly : .preserveHidden,
             buttonWidthFillRatio: wideTabBar ? 100 : 0,
-            alignment: wideTabBar ? .center : .left,
+            alignment: wideTabBar ? .leftCenter : .spaceBetween,
             searchMode: .button
         )
     }

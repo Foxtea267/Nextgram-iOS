@@ -245,8 +245,9 @@
 "Nagram.BottomBarLayout.Slots.visibleOnly" = "按可见按钮重排";
 "Nagram.BottomBarLayout.Slots.preserveHidden" = "保留隐藏槽位";
 "Nagram.BottomBarLayout.Alignment" = "对齐";
-"Nagram.BottomBarLayout.Alignment.center" = "居中";
-"Nagram.BottomBarLayout.Alignment.left" = "居左";
+"Nagram.BottomBarLayout.Alignment.spaceBetween" = "两端对齐";
+"Nagram.BottomBarLayout.Alignment.leftCenter" = "左侧居中";
+"Nagram.BottomBarLayout.Alignment.center" = "整体居中";
 "Nagram.BottomBarLayout.Alignment.disabled" = "占满时不适用";
 "Nagram.BottomBarLayout.Reset" = "重置底栏布局";
 "Nagram.BottomBarLayout.Footer" = "预览区用于拖动排序和右侧独立按钮调整；真实显示隐藏在状态区域切换。搜索可在按钮和搜索条间切换，搜索条仅在其他底栏按钮隐藏时可用。按钮宽度 0% 为四按钮宽度，100% 为填满当前底栏宽度。";
