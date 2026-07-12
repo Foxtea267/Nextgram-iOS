@@ -10,6 +10,9 @@ import SwiftSignalKit
 import TextFormat
 import ChatContextQuery
 import ChatTextInputPanelNode
+// MARK: NAGRAM
+import NagramLinkMetadata
+import NagramSettings
 
 func serviceTasksForChatPresentationIntefaceState(context: AccountContext, chatPresentationInterfaceState: ChatPresentationInterfaceState, updateState: @escaping ((ChatPresentationInterfaceState) -> ChatPresentationInterfaceState) -> Void) -> [AnyHashable: () -> Disposable] {
     var missingEmoji = Set<Int64>()
@@ -88,6 +91,14 @@ func inputContextQueriesForChatPresentationIntefaceState(_ chatPresentationInter
             result.append(.contextRequest(addressName: query, query: additionalString))
         } else if possibleTypes == [.emojiSearch], !query.isEmpty, let inputLanguage = chatPresentationInterfaceState.interfaceState.inputLanguage {
             result.append(.emojiSearch(query: query, languageCode: inputLanguage, range: possibleQueryRange))
+        }
+    }
+    // MARK: NAGRAM — Query a configured inline bot for recognized links while
+    // keeping the URL itself in the compose field.
+    if NagramSettings.shared.autoInlineBotEnabled, !result.contains(where: { $0.kind == .contextRequest }) {
+        let text = inputState.inputText.string
+        if let rule = NagramLinkMetadata.shared.inlineBot(for: text) {
+            result.append(.contextRequest(addressName: rule.username, query: text))
         }
     }
     return result

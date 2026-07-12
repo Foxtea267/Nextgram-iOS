@@ -22,6 +22,7 @@ swift_library(
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/UndoUI:UndoUI",
         "//Nagram/Settings:NagramSettings",
+        "//Nagram/LinkMetadata:NagramLinkMetadata",
         "//Nagram/Strings:NagramStrings",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         # MARK: NAGRAM — 贴纸尺寸滑杆(SliderComponent,复刻省电模式粗轨道)

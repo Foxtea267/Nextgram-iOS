@@ -44,7 +44,7 @@ public final class NagramLinkMetadata {
     private init() {
         let cached = Self.decodeMessages(UserDefaults.standard.stringArray(forKey: Self.cacheKey) ?? [])
         self.pagePreviewDomains = cached.pages.isEmpty ? Self.defaultPagePreviewDomains : cached.pages
-        self.inlineRules = cached.inline
+        self.inlineRules = cached.inline.isEmpty ? Self.defaultInlineBotRules : cached.inline
     }
 
     public func previewUrl(_ value: String) -> String {
@@ -81,6 +81,17 @@ public final class NagramLinkMetadata {
         let result = self.inlineRules
         self.lock.unlock()
         return result
+    }
+
+    public func inlineBot(for text: String) -> NagramInlineBotRule? {
+        for item in self.currentInlineBotRules() {
+            for pattern in item.rules {
+                if let expression = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]), expression.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil {
+                    return item
+                }
+            }
+        }
+        return nil
     }
 
     public func refreshIfNeeded(engine: TelegramEngine) {
@@ -161,5 +172,14 @@ public final class NagramLinkMetadata {
         .init(domain: "www.hoyolab.com", rules: [.init(regex: "www\\.hoyolab\\.com", replace: "www.hoyolab.pp.ua")], regex: false),
         .init(domain: "m.moec.top", rules: [.init(regex: "m\\.moec\\.top/notes", replace: "t.me/iv?rhash=06c9960651c612&url=https://m.moec.top/notes")], regex: false),
         .init(domain: "sir.social", rules: [.init(regex: "sir\\.social", replace: "t.me/iv?rhash=f71a01ee06ddcd&url=https://sir.social")], regex: false),
+    ]
+
+    private static let defaultInlineBotRules: [NagramInlineBotRule] = [
+        .init(username: "twitter_loli_bot", rules: ["https?://(?:www\\.)?twitter\\.com/(\\w+/status/\\d+)", "https?://(?:www\\.)?x\\.com/(\\w+/status/\\d+)"]),
+        .init(username: "Pixiv_bot", rules: ["https?://www\\.pixiv\\.net(?:/\\w+)?/artworks/\\S+"]),
+        .init(username: "Music163bot", rules: ["https?://music\\.163\\.com/song\\?id=(\\d+)"]),
+        .init(username: "autoivbot", rules: [
+            "https?://www\\.ithome\\.com/\\S+", "https?://(?:.*?\\.)?v2ex\\.com/t/\\S+", "https?://www\\.nodeseek\\.com/\\S+", "https?://linux\\.do/t/topic/\\S+", "(?!\\S+\\.git)https?://github\\.com/[\\w-]+/[\\w.\\-]+(?:\\?\\S+)?$", "https?://(?:www\\.)?instagram\\.com/(p|reel)/([\\w-]+)/?", "https?://bsky\\.app/(profile/\\S+/post/\\S+)", "https?://(www\\.hoyolab|www\\.miyoushe)\\.com((?:/\\w+)?/article/\\d+)", "https?://m\\.(hoyolab|miyoushe)\\.com(/\\w+)?(?:\\?)?.*#(.*)"
+        ]),
     ]
 }

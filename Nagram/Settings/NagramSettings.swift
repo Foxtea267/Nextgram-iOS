@@ -406,6 +406,10 @@ public final class NagramSettings {
 
     @NagramDefault("nagram.fixLinkPreviews", false)
     public var fixLinkPreviews: Bool
+
+    @NagramDefault("nagram.autoInlineBotEnabled", false)
+    public var autoInlineBotEnabled: Bool
+
 }
 
 private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, defaultBaseURL: String, defaultEndpoint: String) -> URL? {
