@@ -57,6 +57,8 @@ swift_library(
         "//submodules/TelegramUI/Components/EdgeEffect",
         "//submodules/TelegramUI/Components/LiquidLens",
         "//submodules/TelegramUI/Components/TabSelectionRecognizer",
+        # MARK: NAGRAM
+        "//Nagram/SettingsSignal:NagramSettingsSignal",
     ],
     visibility = [
         "//visibility:public",

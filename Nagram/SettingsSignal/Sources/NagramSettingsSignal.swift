@@ -40,6 +40,23 @@ public func nagramStringSignal(_ key: String, defaultValue: String) -> Signal<St
     return (initial |> then(changes)) |> distinctUntilChanged
 }
 
+public func nagramRecentStickerLimitSignal() -> Signal<Int, NoError> {
+    let initial = Signal<Int, NoError>.single(NagramSettings.shared.recentStickerLimitValue)
+    let changes = Signal<Int, NoError> { subscriber in
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: nil
+        ) { _ in
+            subscriber.putNext(NagramSettings.shared.recentStickerLimitValue)
+        }
+        return ActionDisposable {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    return (initial |> then(changes)) |> distinctUntilChanged
+}
+
 public func nagramAutoTranslateSignal(accountPeerId: Int64, peerId: Int64, threadId: Int64?) -> Signal<Bool, NoError> {
     return nagramBoolSignal(NagramSettings.autoTranslateKey(accountPeerId: accountPeerId, peerId: peerId, threadId: threadId), defaultValue: false)
 }

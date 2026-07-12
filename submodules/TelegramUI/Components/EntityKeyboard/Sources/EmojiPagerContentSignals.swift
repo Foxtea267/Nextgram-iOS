@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import NagramSettingsSignal // MARK: NAGRAM
 import AccountContext
 import TelegramCore
 import Postbox
@@ -1730,9 +1731,10 @@ public extension EmojiPagerContentComponent {
             context.engine.data.get(TelegramEngine.EngineData.Item.ItemCache.Item(collectionId: Namespaces.CachedItemCollection.featuredStickersConfiguration, id: ValueBoxKey(length: 0))),
             ApplicationSpecificNotice.dismissedTrendingStickerPacks(accountManager: context.sharedContext.accountManager),
             peerSpecificPack,
-            searchCategories
+            searchCategories,
+            nagramRecentStickerLimitSignal() // MARK: NAGRAM
         )
-        |> map { view, hasPremium, featuredStickerPacks, featuredStickersConfiguration, dismissedTrendingStickerPacks, peerSpecificPack, searchCategories -> EmojiPagerContentComponent in
+        |> map { view, hasPremium, featuredStickerPacks, featuredStickersConfiguration, dismissedTrendingStickerPacks, peerSpecificPack, searchCategories, recentStickerLimit -> EmojiPagerContentComponent in
             let hasPremium = forceHasPremium || hasPremium
             struct ItemGroup {
                 var supergroupId: AnyHashable
@@ -1890,6 +1892,7 @@ public extension EmojiPagerContentComponent {
             var addedCreateStickerButton = false
             if let recentStickers = recentStickers {
                 let groupId = "recent"
+                var displayedRecentStickerCount = 0 // MARK: NAGRAM
                 for item in recentStickers.items {
                     guard let item = item.contents.get(RecentMediaItem.self) else {
                         continue
@@ -1897,6 +1900,10 @@ public extension EmojiPagerContentComponent {
                     if isPremiumDisabled && item.media.isPremiumSticker {
                         continue
                     }
+                    guard displayedRecentStickerCount < recentStickerLimit else { // MARK: NAGRAM
+                        break
+                    }
+                    displayedRecentStickerCount += 1
                     
                     var tintMode: Item.TintMode = .none
                     if item.media.isCustomTemplateEmoji {

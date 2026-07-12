@@ -124,6 +124,7 @@ public enum NagramTranslationLLMAPIFormat: String, CaseIterable {
 public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
+    public static let recentStickerLimitOptions: [Int32] = [20, 30, 40, 50, 60, 80, 100, 120, 150, 200]
     public static let messageDoubleTapSameAsUnified = "sameAsUnified"
 
     public static func isICloudSyncEnabled(defaults: UserDefaults = .standard) -> Bool {
@@ -291,6 +292,9 @@ public final class NagramSettings {
     /// 显示贴纸时间戳（默认开 = 原生行为）
     @NagramDefault("nagram.stickerTimestamp", true)
     public var stickerTimestamp: Bool
+    /// 最近贴纸数量上限（默认 20 = Telegram 原生行为）
+    @NagramDefault("nagram.recentStickerLimit", Int32(20))
+    public var recentStickerLimit: Int32
     /// 上滑视频开启画中画（"up" / "none"）
     @NagramDefault("nagram.videoPIPSwipeDirection", "up")
     public var videoPIPSwipeDirection: String
@@ -429,6 +433,14 @@ private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, de
 }
 
 public extension NagramSettings {
+    var recentStickerLimitValue: Int {
+        guard NagramSettings.recentStickerLimitOptions.contains(self.recentStickerLimit) else {
+            self.recentStickerLimit = 20
+            return 20
+        }
+        return Int(self.recentStickerLimit)
+    }
+
     var chatListSwipeActionMode: NagramChatListSwipeAction {
         return NagramChatListSwipeAction(rawValue: self.chatListSwipeAction) ?? .both
     }

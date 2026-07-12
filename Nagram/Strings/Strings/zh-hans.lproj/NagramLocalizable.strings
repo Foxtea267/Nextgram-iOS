@@ -280,3 +280,15 @@
 "Nagram.Section.Channels" = "频道";
 "Nagram.HideChannelForwardButton" = "隐藏频道转发按钮";
 "Nagram.HideChannelForwardButton.Footer" = "隐藏频道消息旁的转发按钮，为消息内容释放更多横向空间，提升阅读体验。";
+
+"Nagram.RecentStickerLimit" = "最近贴纸数量上限";
+"Nagram.RecentStickerLimit.20" = "20";
+"Nagram.RecentStickerLimit.30" = "30";
+"Nagram.RecentStickerLimit.40" = "40";
+"Nagram.RecentStickerLimit.50" = "50";
+"Nagram.RecentStickerLimit.60" = "60";
+"Nagram.RecentStickerLimit.80" = "80";
+"Nagram.RecentStickerLimit.100" = "100";
+"Nagram.RecentStickerLimit.120" = "120";
+"Nagram.RecentStickerLimit.150" = "150";
+"Nagram.RecentStickerLimit.200" = "200";

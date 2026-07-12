@@ -50,6 +50,7 @@ enum NagramSettingsSyncKeys {
         "nagram.enablePanguOnEditing",
         "nagram.enablePanguOnReceiving",
         "nagram.wideChannelPosts",
+        "nagram.recentStickerLimit",
         "nagram.hideStories",
         "nagram.showRegDate",
         "nagram.hidePhoneInSettings",

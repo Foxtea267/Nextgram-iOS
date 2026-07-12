@@ -169,6 +169,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["StickerTimestamp", "StickerTime"]
     case "Nagram.HideChannelForwardButton":
         return ["HideChannelForwardButton", "WideChannelPosts", "UnlockChannelMessageWidth"]
+    case "Nagram.RecentStickerLimit":
+        return ["RecentStickerLimit", "RecentStickersCount"]
     case "Nagram.DisableSendAsButton":
         return ["hideSendAsChannel", "DisableSendAsButton"]
     case "Nagram.TextStyleToolbar":
@@ -445,6 +447,11 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Stickers", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.StickerTimestamp", get: { NagramSettings.shared.stickerTimestamp }, set: { NagramSettings.shared.stickerTimestamp = $0 }),
+            .choice(titleKey: "Nagram.RecentStickerLimit", prefix: "Nagram.RecentStickerLimit", options: NagramSettings.recentStickerLimitOptions.map { String($0) }, current: { String(NagramSettings.shared.recentStickerLimitValue) }, set: { value in
+                if let limit = Int32(value) {
+                    NagramSettings.shared.recentStickerLimit = limit
+                }
+            }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Sending", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.DisableSendAsButton", get: { NagramSettings.shared.disableSendAsButton }, set: { NagramSettings.shared.disableSendAsButton = $0 }),

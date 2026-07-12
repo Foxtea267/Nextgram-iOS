@@ -280,3 +280,15 @@
 "Nagram.Section.Channels" = "Channels";
 "Nagram.HideChannelForwardButton" = "Hide Channel Forward Button";
 "Nagram.HideChannelForwardButton.Footer" = "Hides the forward button beside channel posts, leaving more horizontal space for easier reading.";
+
+"Nagram.RecentStickerLimit" = "Recent Sticker Limit";
+"Nagram.RecentStickerLimit.20" = "20";
+"Nagram.RecentStickerLimit.30" = "30";
+"Nagram.RecentStickerLimit.40" = "40";
+"Nagram.RecentStickerLimit.50" = "50";
+"Nagram.RecentStickerLimit.60" = "60";
+"Nagram.RecentStickerLimit.80" = "80";
+"Nagram.RecentStickerLimit.100" = "100";
+"Nagram.RecentStickerLimit.120" = "120";
+"Nagram.RecentStickerLimit.150" = "150";
+"Nagram.RecentStickerLimit.200" = "200";
