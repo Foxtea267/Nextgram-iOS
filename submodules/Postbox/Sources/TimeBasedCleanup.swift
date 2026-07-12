@@ -28,6 +28,7 @@ public func printOpenFiles() {
             if errno != EBADF {
                 return
             } else {
+                fd += 1 // MARK: NAGRAM — Do not spin forever on the first closed descriptor.
                 continue
             }
         }

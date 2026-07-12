@@ -1941,7 +1941,8 @@ public final class ChatHistoryListNodeImpl: ListViewImpl, ChatHistoryNode, ChatH
                         let displayRange = strongSelf.displayedItemRange
                         if let filteredEntries = historyView?.filteredEntries, let visibleRange = displayRange.visibleRange {
                             var anchorIndex: MessageIndex?
-                            loop: for index in visibleRange.firstIndex ..< filteredEntries.count {
+                            // MARK: NAGRAM — The visible range can briefly refer to the previous list while this closure hops to the main queue.
+                            loop: for index in min(visibleRange.firstIndex, filteredEntries.count) ..< filteredEntries.count {
                                 switch filteredEntries[filteredEntries.count - 1 - index] {
                                 case let .MessageEntry(message, _, _, _, _, _):
                                     if message.adAttribute == nil {

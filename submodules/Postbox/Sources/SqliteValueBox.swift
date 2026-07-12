@@ -282,6 +282,13 @@ public final class SqliteValueBox: ValueBox {
                 postboxLog("Readonly, exiting")
                 return nil
             }
+
+            // MARK: NAGRAM — Extension callers provide non-destructive fallbacks for transient database failures.
+            if !self.removeDatabaseOnError {
+                postboxLog("Database removal is disabled, exiting")
+                postboxLogSync()
+                return nil
+            }
             
             let tempPath = basePath + "_test\(arc4random())"
             enum TempError: Error {
@@ -575,13 +582,17 @@ public final class SqliteValueBox: ValueBox {
         let databasePath = self.databasePath
         DispatchQueue.global().asyncAfter(deadline: .now() + 15.0, execute: {
             if allIsOk.with({ $0 }) == false {
-                postboxLog("Timeout reached, discarding database")
+                postboxLog("Timeout reached while opening database")
                 if removeDatabaseOnError {
+                    postboxLog("Discarding database")
                     try? FileManager.default.removeItem(atPath: databasePath)
-                }
 
-                postboxLogSync()
-                preconditionFailure()
+                    postboxLogSync()
+                    preconditionFailure()
+                } else {
+                    // MARK: NAGRAM — Extension callers must not crash while protected shared data is temporarily unavailable.
+                    postboxLogSync()
+                }
             }
         })
         let status = sqlite3_prepare_v2(database.handle, "SELECT * FROM sqlite_master LIMIT 1", -1, &statement, nil)
