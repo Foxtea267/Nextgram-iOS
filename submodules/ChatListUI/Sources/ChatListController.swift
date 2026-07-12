@@ -2461,6 +2461,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             return
         }
         
+        // MARK: NAGRAM — 保留计数用于诊断，不向用户显示内部控制器数量。
+        /*
         #if true && DEBUG
         DispatchQueue.main.asyncAfter(deadline: DispatchTime.now() + 1.0, execute: { [weak self] in
             guard let strongSelf = self else {
@@ -2472,6 +2474,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
         })
         #endif
+        */
 
         if let componentView = self.chatListHeaderView(), let storyPeerListView = componentView.storyPeerListView(), let _ = storyPeerListView.lockViewFrame(), !self.didShowPasscodeLockTooltipController, !"".isEmpty {
             self.passcodeLockTooltipDisposable.set(combineLatest(queue: .mainQueue(), ApplicationSpecificNotice.getPasscodeLockTips(accountManager: self.context.sharedContext.accountManager), self.context.sharedContext.accountManager.accessChallengeData() |> take(1)).startStrict(next: { [weak self] tooltipValue, passcodeView in
