@@ -724,6 +724,33 @@ public final class SqliteValueBox: ValueBox {
             return resultTable
         }
     }
+
+    // MARK: NAGRAM — Let disposable stores verify existing table schemas before a write can trap.
+    func canPrepareWrite(to table: ValueBoxTable) -> Bool {
+        precondition(self.queue.isCurrent())
+        guard let sqliteTable = self.tables[table.id] else {
+            return true
+        }
+        guard sqliteTable.table.keyType == table.keyType else {
+            return false
+        }
+
+        let query: String
+        if table.keyType == .int64 || sqliteTable.hasPrimaryKey {
+            query = "INSERT INTO t\(table.id) (key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value"
+        } else {
+            query = "INSERT INTO t\(table.id) (key, value) VALUES(?, ?)"
+        }
+
+        var statement: OpaquePointer?
+        let status = sqlite3_prepare_v3(self.database.handle, query, -1, SQLITE_PREPARE_PERSISTENT, &statement, nil)
+        sqlite3_finalize(statement)
+        if status != SQLITE_OK {
+            postboxLog("Could not prepare write for t\(table.id): \(self.database.currentError() ?? "Unknown error")")
+            return false
+        }
+        return true
+    }
     
     private func createTable(database: Database, table: ValueBoxTable) {
         switch table.keyType {

@@ -211,6 +211,12 @@ public final class StorageBox {
             self.peerContentTypeStatsTable = ValueBoxTable(id: 19, keyType: .binary, compactValuesOnCreation: true)
             self.contentTypeStatsTable = ValueBoxTable(id: 20, keyType: .binary, compactValuesOnCreation: true)
             self.metadataTable = ValueBoxTable(id: 21, keyType: .binary, compactValuesOnCreation: true)
+
+            if isMainProcess && [self.hashIdToInfoTable, self.idToReferenceTable, self.peerIdToIdTable, self.peerContentTypeStatsTable, self.contentTypeStatsTable, self.metadataTable].contains(where: { !valueBox.canPrepareWrite(to: $0) }) {
+                // MARK: NAGRAM — StorageBox is a disposable media index; rebuild only this cache when its schema cannot prepare writes.
+                postboxLog("Rebuilding invalid storage value box at \(basePath + "/db")")
+                valueBox.drop()
+            }
             
             self.performUpdatesIfNeeded()
             
