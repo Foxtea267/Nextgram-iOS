@@ -1937,7 +1937,7 @@ private final class NotificationServiceHandler {
                                                     return
                                                 }
 
-                                                if isCurrentAccount {
+                                                if isCurrentAccount && !content.dismissAfterDelivery { // MARK: NAGRAM — 空通知过滤时不附带 badge。
                                                     content.badge = Int(value.0)
                                                 }
 
@@ -2117,6 +2117,7 @@ private final class NotificationServiceHandler {
                                                             if maxIncomingReadId >= messageId.id {
                                                                 Logger.shared.log("NotificationService \(episode)", "maxIncomingReadId: \(maxIncomingReadId), messageId: \(messageId.id), skipping")
                                                                 content = NotificationContent(isLockedMessage: nil)
+                                                                content.dismissAfterDelivery = true // MARK: NAGRAM — 已读消息复用现有空通知过滤路径。
                                                             } else {
                                                                 Logger.shared.log("NotificationService \(episode)", "maxIncomingReadId: \(maxIncomingReadId), messageId: \(messageId.id), not skipping")
                                                             }
