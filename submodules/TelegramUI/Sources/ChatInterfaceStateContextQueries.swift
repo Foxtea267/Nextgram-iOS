@@ -12,6 +12,8 @@ import DeviceLocationManager
 import TelegramNotices
 import ChatPresentationInterfaceState
 import ChatContextQuery
+// MARK: NAGRAM
+import NagramSettings
 
 func contextQueryResultStateForChatInterfacePresentationState(_ chatPresentationInterfaceState: ChatPresentationInterfaceState, context: AccountContext, currentQueryStates: inout [ChatPresentationInputQueryKind: (ChatPresentationInputQuery, Disposable)], requestBotLocationStatus: @escaping (EnginePeer.Id) -> Void) -> [ChatPresentationInputQueryKind: ChatContextQueryUpdate] {
     let inputQueries = inputContextQueriesForChatPresentationIntefaceState(chatPresentationInterfaceState).filter({ query in
@@ -567,13 +569,21 @@ func urlPreviewStateForInputText(_ inputText: NSAttributedString?, context: Acco
         let detectedUrls = detectUrls(inputText)
         if detectedUrls != (currentQuery?.detectedUrls ?? []) {
             if !detectedUrls.isEmpty {
-                return (UrlPreviewState(detectedUrls: detectedUrls), webpagePreview(account: context.account, urls: detectedUrls, forPeerId: forPeerId)
+                // MARK: NAGRAM — Request improved X previews without altering the URL in the message text.
+                let previewUrls = detectedUrls.map(nagramLinkPreviewUrl)
+                return (UrlPreviewState(detectedUrls: detectedUrls), webpagePreview(account: context.account, urls: previewUrls, forPeerId: forPeerId)
                 |> mapToSignal { result -> Signal<(TelegramMediaWebpage, String)?, NoError> in
                     guard case let .result(webpageResult) = result else {
                         return .complete()
                     }
                     if let webpageResult {
-                        return .single((webpageResult.webpage, webpageResult.sourceUrl))
+                        var sourceUrl = webpageResult.sourceUrl
+                        if let index = previewUrls.firstIndex(of: sourceUrl) {
+                            sourceUrl = detectedUrls[index]
+                        } else if detectedUrls.count == 1, previewUrls[0] != detectedUrls[0] {
+                            sourceUrl = detectedUrls[0]
+                        }
+                        return .single((webpageResult.webpage, sourceUrl))
                     } else {
                         return .single(nil)
                     }
