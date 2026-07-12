@@ -2,6 +2,9 @@
 "Nagram.Tab.General" = "通用";
 "Nagram.Tab.Chat" = "消息";
 "Nagram.Tab.Other" = "其他";
+"Nagram.Section.Experimental" = "实验性功能";
+"Nagram.MediaMetadata" = "显示媒体 metadata";
+"Nagram.MediaMetadata.Footer" = "在图片和视频查看器菜单中显示媒体分辨率、大小、时长、帧率、码率和编码等信息。";
 
 "Nagram.Section.Camera" = "相机";
 "Nagram.Section.Camera.Footer" = "聊天附件面板中的相机入口与实时预览。";

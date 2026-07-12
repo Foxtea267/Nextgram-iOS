@@ -2,6 +2,9 @@
 "Nagram.Tab.General" = "General";
 "Nagram.Tab.Chat" = "Messages";
 "Nagram.Tab.Other" = "Other";
+"Nagram.Section.Experimental" = "Experimental";
+"Nagram.MediaMetadata" = "Show Media Metadata";
+"Nagram.MediaMetadata.Footer" = "Shows resolution, size, duration, frame rate, bitrate, codec, and related details in image and video viewer menus.";
 
 "Nagram.Section.Camera" = "Camera";
 "Nagram.Section.Camera.Footer" = "Camera entry and live preview in the attachment menu.";

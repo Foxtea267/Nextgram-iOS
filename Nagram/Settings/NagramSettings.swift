@@ -400,6 +400,9 @@ public final class NagramSettings {
     /// 设置/资料页隐藏手机号（默认关 = 保持原生）
     @NagramDefault("nagram.hidePhoneInSettings", false)
     public var hidePhoneInSettings: Bool
+
+    @NagramDefault("nagram.mediaMetadataEnabled", true)
+    public var mediaMetadataEnabled: Bool
 }
 
 private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, defaultBaseURL: String, defaultEndpoint: String) -> URL? {

@@ -30,6 +30,7 @@ import ComponentFlow
 import ComponentDisplayAdapters
 // MARK: NAGRAM
 import NagramMediaMetadata
+import NagramSettings
 
 enum ChatMediaGalleryThumbnail: Equatable {
     case image(ImageMediaReference)
@@ -801,7 +802,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             }
             
             // MARK: NAGRAM — 媒体信息菜单项
-            if let media = self.contextAndMedia?.1 {
+            if NagramSettings.shared.mediaMetadataEnabled, let media = self.contextAndMedia?.1 {
                 items.append(.action(ContextMenuActionItem(text: "查看信息", icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.actionSheet.primaryTextColor) }, action: { [weak self] _, f in
                     f(.default)
                     guard let self, let controller = self.galleryController() else {
