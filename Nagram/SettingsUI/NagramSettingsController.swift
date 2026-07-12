@@ -167,6 +167,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["stickerSize"]
     case "Nagram.StickerTimestamp":
         return ["StickerTimestamp", "StickerTime"]
+    case "Nagram.HideChannelForwardButton":
+        return ["HideChannelForwardButton", "WideChannelPosts", "UnlockChannelMessageWidth"]
     case "Nagram.DisableSendAsButton":
         return ["hideSendAsChannel", "DisableSendAsButton"]
     case "Nagram.TextStyleToolbar":
@@ -416,6 +418,9 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.HideReactions", get: { NagramSettings.shared.hideReactions }, set: { NagramSettings.shared.hideReactions = $0 }),
             .toggle(titleKey: "Nagram.HideChannelBottomButton", get: { NagramSettings.shared.hideChannelBottomButton }, set: { NagramSettings.shared.hideChannelBottomButton = $0 }),
             .toggle(titleKey: "Nagram.HideSponsoredMessages", get: { NagramSettings.shared.hideSponsoredMessages }, set: { NagramSettings.shared.hideSponsoredMessages = $0 }),
+        ]),
+        NagramGroup(tab: .chat, headerKey: "Nagram.Section.Channels", footerKey: "Nagram.HideChannelForwardButton.Footer", rows: [
+            .toggle(titleKey: "Nagram.HideChannelForwardButton", get: { NagramSettings.shared.wideChannelPosts }, set: { NagramSettings.shared.wideChannelPosts = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Translation", footerKey: "Nagram.Section.Translation.Footer", rows: [
             .choice(titleKey: "Nagram.TranslationProvider", prefix: "Nagram.TranslationProvider", options: NagramTranslationProvider.allCases.map { $0.rawValue }, current: { NagramSettings.shared.translationProviderValue.rawValue }, set: { NagramSettings.shared.translationProvider = $0 }),

@@ -277,3 +277,6 @@
 "Nagram.TranslationProvider.microsoft" = "Microsoft";
 "Nagram.TranslationProvider.yandex" = "Yandex";
 "Nagram.TranslationProvider.transmart" = "TranSmart";
+"Nagram.Section.Channels" = "Channels";
+"Nagram.HideChannelForwardButton" = "Hide Channel Forward Button";
+"Nagram.HideChannelForwardButton.Footer" = "Hides the forward button beside channel posts, leaving more horizontal space for easier reading.";

@@ -277,3 +277,6 @@
 "Nagram.TranslationProvider.microsoft" = "Microsoft";
 "Nagram.TranslationProvider.yandex" = "Yandex";
 "Nagram.TranslationProvider.transmart" = "TranSmart";
+"Nagram.Section.Channels" = "チャンネル";
+"Nagram.HideChannelForwardButton" = "チャンネルの転送ボタンを非表示";
+"Nagram.HideChannelForwardButton.Footer" = "チャンネル投稿の横にある転送ボタンを隠し、本文の横幅を広げて読みやすくします。";

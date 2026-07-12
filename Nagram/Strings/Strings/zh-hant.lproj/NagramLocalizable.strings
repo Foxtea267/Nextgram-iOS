@@ -277,3 +277,6 @@
 "Nagram.TranslationProvider.microsoft" = "Microsoft";
 "Nagram.TranslationProvider.yandex" = "Yandex";
 "Nagram.TranslationProvider.transmart" = "TranSmart";
+"Nagram.Section.Channels" = "頻道";
+"Nagram.HideChannelForwardButton" = "隱藏頻道轉傳按鈕";
+"Nagram.HideChannelForwardButton.Footer" = "隱藏頻道訊息旁的轉傳按鈕，為訊息內容釋放更多橫向空間，提升閱讀體驗。";

@@ -1931,6 +1931,11 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         if let subject = item.associatedData.subject, case .messageOptions = subject {
             needsShareButton = false
         }
+
+        // MARK: NAGRAM — Hide the channel forward button to free horizontal space for posts.
+        if NagramSettings.shared.wideChannelPosts, !isPreview, !isAd, let channel = firstMessage.peers[firstMessage.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
+            needsShareButton = false
+        }
         
         /*if isInlinePage {
             needsShareButton = false

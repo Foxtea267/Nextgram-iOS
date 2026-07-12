@@ -277,3 +277,6 @@
 "Nagram.TranslationProvider.microsoft" = "Microsoft";
 "Nagram.TranslationProvider.yandex" = "Yandex";
 "Nagram.TranslationProvider.transmart" = "TranSmart";
+"Nagram.Section.Channels" = "频道";
+"Nagram.HideChannelForwardButton" = "隐藏频道转发按钮";
+"Nagram.HideChannelForwardButton.Footer" = "隐藏频道消息旁的转发按钮，为消息内容释放更多横向空间，提升阅读体验。";
