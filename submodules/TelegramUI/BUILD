@@ -69,6 +69,7 @@ swift_library(
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         # MARK: NAGRAM — Nagram 增强开关模块
         "//Nagram/Settings:NagramSettings",
+        "//Nagram/LinkMetadata:NagramLinkMetadata",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/TelegramSettingsCloudSync:NagramTelegramSettingsCloudSync",
         "//Nagram/Strings:NagramStrings",

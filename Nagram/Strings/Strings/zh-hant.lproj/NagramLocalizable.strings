@@ -5,6 +5,8 @@
 "Nagram.Section.Experimental" = "實驗性功能";
 "Nagram.MediaMetadata" = "顯示媒體 metadata";
 "Nagram.MediaMetadata.Footer" = "在圖片和影片檢視器選單中顯示解析度、大小、時長、影格率、位元率和編碼等資訊。";
+"Nagram.FixLinkPreviews" = "修復連結預覽";
+"Nagram.FixLinkPreviews.Footer" = "會將移除查詢參數和片段後的連結傳送至經驗證的 Nagram metadata 規則所指定的第三方預覽服務；訊息仍使用原始連結。";
 
 "Nagram.Section.Camera" = "相機";
 "Nagram.Section.Camera.Footer" = "聊天附件面板中的相機入口與即時預覽。";

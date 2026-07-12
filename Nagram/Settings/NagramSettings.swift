@@ -403,6 +403,9 @@ public final class NagramSettings {
 
     @NagramDefault("nagram.mediaMetadataEnabled", true)
     public var mediaMetadataEnabled: Bool
+
+    @NagramDefault("nagram.fixLinkPreviews", false)
+    public var fixLinkPreviews: Bool
 }
 
 private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, defaultBaseURL: String, defaultEndpoint: String) -> URL? {

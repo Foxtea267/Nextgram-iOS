@@ -1,4 +1,5 @@
 import Foundation
+import NagramLinkMetadata
 import UIKit
 import SwiftSignalKit
 import TelegramCore
@@ -570,7 +571,13 @@ func urlPreviewStateForInputText(_ inputText: NSAttributedString?, context: Acco
         if detectedUrls != (currentQuery?.detectedUrls ?? []) {
             if !detectedUrls.isEmpty {
                 // MARK: NAGRAM — Request improved X previews without altering the URL in the message text.
-                let previewUrls = detectedUrls.map(nagramLinkPreviewUrl)
+                let previewUrls: [String]
+                if NagramSettings.shared.fixLinkPreviews {
+                    NagramLinkMetadata.shared.refreshIfNeeded(engine: context.engine)
+                    previewUrls = detectedUrls.map(NagramLinkMetadata.shared.previewUrl)
+                } else {
+                    previewUrls = detectedUrls
+                }
                 return (UrlPreviewState(detectedUrls: detectedUrls), webpagePreview(account: context.account, urls: previewUrls, forPeerId: forPeerId)
                 |> mapToSignal { result -> Signal<(TelegramMediaWebpage, String)?, NoError> in
                     guard case let .result(webpageResult) = result else {

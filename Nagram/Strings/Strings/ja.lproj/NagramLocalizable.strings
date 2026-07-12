@@ -5,6 +5,8 @@
 "Nagram.Section.Experimental" = "実験的機能";
 "Nagram.MediaMetadata" = "メディア metadata を表示";
 "Nagram.MediaMetadata.Footer" = "画像・動画ビューアのメニューに解像度、サイズ、再生時間、フレームレート、ビットレート、コーデックなどを表示します。";
+"Nagram.FixLinkPreviews" = "リンクプレビューを修正";
+"Nagram.FixLinkPreviews.Footer" = "クエリとフラグメントを除去したリンクを、検証済みの Nagram metadata ルールが選ぶ外部プレビューサービスへ送信します。メッセージには元のリンクを使用します。";
 
 "Nagram.Section.Camera" = "カメラ";
 "Nagram.Section.Camera.Footer" = "添付メニュー内のカメラ入口とライブプレビュー。";
