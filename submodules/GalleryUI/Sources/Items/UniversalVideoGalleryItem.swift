@@ -746,6 +746,8 @@ private final class NativePictureInPictureContentImpl: NSObject, AVPictureInPict
     private let expand: (@escaping () -> Void) -> Void
     private var pictureInPictureTimer: SwiftSignalKit.Timer?
     private var didExpand: Bool = false
+    private var isCentral = false
+    private var pictureInPicturePossibleObservation: NSKeyValueObservation?
 
     private var hiddenMediaManagerIndex: Int?
 
@@ -778,6 +780,13 @@ private final class NativePictureInPictureContentImpl: NSObject, AVPictureInPict
             pictureInPictureController.requiresLinearPlayback = !canSkip
             pictureInPictureController.delegate = self
             self.pictureInPictureController = pictureInPictureController
+            // MARK: NAGRAM — Reapply automatic PiP after AVKit marks the controller as ready.
+            self.pictureInPicturePossibleObservation = pictureInPictureController.observe(\.isPictureInPicturePossible, options: [.new]) { [weak self] pictureInPictureController, _ in
+                guard let self, pictureInPictureController.isPictureInPicturePossible else {
+                    return
+                }
+                pictureInPictureController.canStartPictureInPictureAutomaticallyFromInline = self.isCentral
+            }
         }
 
         if let (messageId, _) = hiddenMedia {
@@ -821,6 +830,7 @@ private final class NativePictureInPictureContentImpl: NSObject, AVPictureInPict
     }
     
     func updateIsCentral(isCentral: Bool) {
+        self.isCentral = isCentral
         guard let pictureInPictureController = self.pictureInPictureController else {
             return
         }
@@ -1538,6 +1548,18 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                 if let strongSelf = self {
                     strongSelf.updateDisplayPlaceholder(!value)
                     
+                    // MARK: NAGRAM — Wait for MediaPlayerNode to attach its asynchronously-created video layer.
+                    if value && strongSelf.nativePictureInPictureContent == nil {
+                        DispatchQueue.main.async { [weak strongSelf] in
+                            DispatchQueue.main.async { [weak strongSelf] in
+                                guard let strongSelf, strongSelf.isCentral == true, strongSelf.nativePictureInPictureContent == nil else {
+                                    return
+                                }
+                                strongSelf.setupNativePictureInPicture()
+                            }
+                        }
+                    }
+
                     if strongSelf.playOnContentOwnership {
                         strongSelf.playOnContentOwnership = false
                         strongSelf.initiallyActivated = true
@@ -2283,6 +2305,10 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
             }
             
             if #available(iOS 15.0, *) {
+                // MARK: NAGRAM — Create the controller before the app enters the background.
+                if isCentral && self.nativePictureInPictureContent == nil {
+                    self.setupNativePictureInPicture()
+                }
                 if let nativePictureInPictureContent = self.nativePictureInPictureContent as? NativePictureInPictureContentImpl {
                     nativePictureInPictureContent.updateIsCentral(isCentral: isCentral)
                 }
@@ -3220,6 +3246,8 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                 completion()
             })
             
+            // MARK: NAGRAM — Synchronize centrality when PiP is created after the centrality callback.
+            content.updateIsCentral(isCentral: self.isCentral == true)
             self.nativePictureInPictureContent = content
         }
     }
