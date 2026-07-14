@@ -30,6 +30,8 @@ objc_library(
     ]),
     copts = [
         "-Werror",
+        # MARK: NAGRAM — Xcode 26 deprecates APIs still used throughout this legacy target.
+        "-Wno-error=deprecated-declarations",
     ],
     includes = [
         "PublicHeaders",

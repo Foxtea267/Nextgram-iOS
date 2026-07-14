@@ -8,6 +8,15 @@
 UIKIT_EXTERN float UIAnimationDragCoefficient();
 #endif
 
+// MARK: NAGRAM — Keep the suppression scoped to the two APIs whose semantics we need.
+void disableAutomaticButtonImageAdjustment(UIButton * _Nonnull button) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    button.adjustsImageWhenHighlighted = NO;
+    button.adjustsImageWhenDisabled = NO;
+#pragma clang diagnostic pop
+}
+
 double animationDurationFactorImpl() {
 #if TARGET_IPHONE_SIMULATOR
     return (double)UIAnimationDragCoefficient();

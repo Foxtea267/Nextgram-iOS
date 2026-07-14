@@ -2,7 +2,8 @@ import Foundation
 import UIKit
 import Display
 import TelegramCore
-import MobileCoreServices
+// MARK: NAGRAM — Use modern type identifiers for Xcode 26 warnings-as-errors.
+import UniformTypeIdentifiers
 import TextFormat
 
 private func rtfStringWithAppliedEntities(_ text: String, entities: [MessageTextEntity]) -> String {
@@ -306,10 +307,10 @@ public func chatInputStateStringFromAppSpecificString(data: Data) -> NSAttribute
 
 public func storeMessageTextInPasteboard(_ text: String, entities: [MessageTextEntity]?) {
     var items: [String: Any] = [:]
-    items[kUTTypeUTF8PlainText as String] = text
+    items[UTType.utf8PlainText.identifier] = text
     
     if let entities = entities {
-        items[kUTTypeRTF as String] = rtfStringWithAppliedEntities(text, entities: entities)
+        items[UTType.rtf.identifier] = rtfStringWithAppliedEntities(text, entities: entities)
         items["private.telegramtext"] = appSpecificStringWithAppliedEntities(text, entities: entities)
     }
     UIPasteboard.general.items = [items]

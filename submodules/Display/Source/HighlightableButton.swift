@@ -1,13 +1,14 @@
 import Foundation
 import UIKit
 import AsyncDisplayKit
+import UIKitRuntimeUtils
 
 open class HighlightableButton: HighlightTrackingButton {
     override public init(frame: CGRect) {
         super.init(frame: frame)
         
-        self.adjustsImageWhenHighlighted = false
-        self.adjustsImageWhenDisabled = false
+        // MARK: NAGRAM — Preserve the original image behavior through a narrowly suppressed ObjC helper.
+        disableAutomaticButtonImageAdjustment(self)
         self.internalHighligthedChanged = { [weak self] highlighted in
             if let strongSelf = self {
                 if highlighted {

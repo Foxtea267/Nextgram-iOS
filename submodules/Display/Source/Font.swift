@@ -178,11 +178,12 @@ public struct Font {
             }
             var updatedDescriptor: UIFontDescriptor? = descriptor.withSymbolicTraits(symbolicTraits)
             if traits.contains(.monospacedNumbers) {
+                // MARK: NAGRAM — Use the iOS 15 replacement keys to keep warnings-as-errors enabled.
                 updatedDescriptor = updatedDescriptor?.addingAttributes([
                 UIFontDescriptor.AttributeName.featureSettings: [
-                  [UIFontDescriptor.FeatureKey.featureIdentifier:
+                  [UIFontDescriptor.FeatureKey.selector:
                    kNumberSpacingType,
-                   UIFontDescriptor.FeatureKey.typeIdentifier:
+                   UIFontDescriptor.FeatureKey.type:
                    kMonospacedNumbersSelector]
                 ]])
             }

@@ -5,7 +5,6 @@ import Display
 import AsyncDisplayKit
 import SwiftSignalKit
 import TelegramCore
-import MobileCoreServices
 import TelegramPresentationData
 import TextFormat
 import AccountContext
@@ -6015,15 +6014,16 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                     images.append(image)
                     isPNG = true
                     isMemoji = true
-                } else if let image = item[kUTTypePNG as String] as? UIImage {
+                // MARK: NAGRAM
+                } else if let image = item[UTType.png.identifier] as? UIImage {
                     images.append(image)
                     isPNG = true
                 } else if let image = item["com.apple.uikit.image"] as? UIImage {
                     images.append(image)
                     isPNG = true
-                } else if let image = item[kUTTypeJPEG as String] as? UIImage {
+                } else if let image = item[UTType.jpeg.identifier] as? UIImage {
                     images.append(image)
-                } else if let image = item[kUTTypeGIF as String] as? UIImage {
+                } else if let image = item[UTType.gif.identifier] as? UIImage {
                     images.append(image)
                 }
             }

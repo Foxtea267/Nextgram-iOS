@@ -1,6 +1,6 @@
 import Foundation
 import UIKit
-import CoreServices
+import UniformTypeIdentifiers
 import AsyncDisplayKit
 import Display
 import ComponentFlow
@@ -2963,7 +2963,8 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
     
     @available(iOSApplicationExtension 11.0, iOS 11.0, *)
     public func dropInteraction(_ interaction: UIDropInteraction, canHandle session: UIDropSession) -> Bool {
-        return session.hasItemsConforming(toTypeIdentifiers: [kUTTypeImage as String])
+        // MARK: NAGRAM
+        return session.hasItemsConforming(toTypeIdentifiers: [UTType.image.identifier])
     }
     
     @available(iOSApplicationExtension 11.0, iOS 11.0, *)

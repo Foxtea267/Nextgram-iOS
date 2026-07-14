@@ -421,7 +421,6 @@ private func nagramRegexFilterEditEntries(presentationData: PresentationData, st
     entries.append(.pattern(stableId: stableId, section: 0, text: state.pattern, placeholder: ngI18n("Nagram.RegexFilters.Pattern.Placeholder", lang)))
     stableId += 1
     let authorPeerIdText = state.authorPeerId.trimmingCharacters(in: .whitespacesAndNewlines)
-    let authorPeerId = nagramRegexFilterAuthorPeerId(authorPeerIdText)
     if nagramRegexFilterHasInvalidAuthorPeerId(authorPeerIdText) {
         entries.append(.error(stableId: stableId, section: 0, text: ngI18n("Nagram.RegexFilters.InvalidAuthorPeerId", lang)))
         stableId += 1

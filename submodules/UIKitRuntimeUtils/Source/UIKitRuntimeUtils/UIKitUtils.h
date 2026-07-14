@@ -42,3 +42,6 @@ bool getLayerDisableScreenshots(CALayer * _Nonnull layer);
 void setLayerContentsMaskMode(CALayer * _Nonnull layer, bool maskMode);
 
 void setMonochromaticEffectImpl(UIView * _Nonnull view, bool isEnabled);
+
+// MARK: NAGRAM — Preserve legacy UIButton image-state behavior without broad warning suppression.
+void disableAutomaticButtonImageAdjustment(UIButton * _Nonnull button);

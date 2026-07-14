@@ -123,7 +123,8 @@ private class ApplicationStatusBarHost: StatusBarHost {
             return UIApplication.shared.internalGetKeyboard()
         }
         
-        for window in UIApplication.shared.windows {
+        // MARK: NAGRAM
+        for window in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).flatMap(\.windows) {
             if isKeyboardWindow(window: window) {
                 return window
             }
@@ -848,12 +849,14 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 return false
             }
         }, getTopWindow: {
-            for window in application.windows.reversed() {
+            // MARK: NAGRAM
+            let windows = application.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+            for window in windows.reversed() {
                 if window === self.window || window === statusBarHost.keyboardWindow {
                     return window
                 }
             }
-            return application.windows.last
+            return windows.last
         }, displayNotification: { text in
         }, applicationInForeground: self.isInForegroundPromise.get(),
            applicationIsActive: self.isActivePromise.get(),
@@ -2989,9 +2992,6 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     if #available(iOS 12.0, *) {
                         authorizationOptions.insert(.providesAppNotificationSettings)
                     }
-                    if #available(iOS 13.0, *) {
-                        authorizationOptions.insert(.announcement)
-                    }
                     Logger.shared.log("App \(self.episodeId)", "register for notifications: request authorization")
                     notificationCenter.requestAuthorization(options: authorizationOptions, completionHandler: { result, _ in
                         Logger.shared.log("App \(self.episodeId)", "register for notifications: received authorization: \(result)")
@@ -3017,9 +3017,6 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                                 
                                 var carPlayOptions = options
                                 carPlayOptions.insert(.allowInCarPlay)
-                                if #available(iOS 13.2, *) {
-                                    carPlayOptions.insert(.allowAnnouncement)
-                                }
                                 
                                 unknownMessageCategory = UNNotificationCategory(identifier: "unknown", actions: [], intentIdentifiers: [], hiddenPreviewsBodyPlaceholder: hiddenContentString, options: options)
                                 repliableMessageCategory = UNNotificationCategory(identifier: "r", actions: [reply], intentIdentifiers: [INSearchForMessagesIntentIdentifier], hiddenPreviewsBodyPlaceholder: hiddenContentString, options: carPlayOptions)
@@ -3060,7 +3057,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         |> deliverOnMainQueue).start(next: { accountId in
             if let context = self.contextValue {
                 if let accountId = accountId, context.context.account.id != accountId || notification.request.content.userInfo["url"] != nil {
-                    completionHandler([.alert])
+                    // MARK: NAGRAM
+                    completionHandler([.banner, .list])
                 }
             }
         })

@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import UniformTypeIdentifiers
 import Display
 import TelegramPresentationData
 import LegacyUI
@@ -53,17 +54,6 @@ public enum LegacyICloudFilePickerMode {
     case `default`
     case `import`
     case `export`
-    
-    var documentPickerMode: UIDocumentPickerMode {
-        switch self {
-        case .default:
-            return .open
-        case .import:
-            return .import
-        case .export:
-            return .exportToService
-        }
-    }
 }
 
 public func legacyICloudFilePicker(theme: PresentationTheme, mode: LegacyICloudFilePickerMode = .default, hasMultiselection: Bool = false, url: URL? = nil, documentTypes: [String] = ["public.item"], forceDarkTheme: Bool = false, dismissed: @escaping () -> Void = {}, completion: @escaping ([URL]) -> Void) -> ViewController {
@@ -75,14 +65,12 @@ public func legacyICloudFilePicker(theme: PresentationTheme, mode: LegacyICloudF
     legacyController.statusBar.statusBarStyle = .Black
     
     let controller: DocumentPickerViewController
+    // MARK: NAGRAM
     if case .export = mode, let url {
-        if #available(iOS 14.0, *) {
-            controller = DocumentPickerViewController(forExporting: [url], asCopy: true)
-        } else {
-            controller = DocumentPickerViewController(url: url, in: mode.documentPickerMode)
-        }
+        controller = DocumentPickerViewController(forExporting: [url], asCopy: true)
     } else {
-        controller = DocumentPickerViewController(documentTypes: documentTypes, in: mode.documentPickerMode)
+        let contentTypes = documentTypes.compactMap(UTType.init)
+        controller = DocumentPickerViewController(forOpeningContentTypes: contentTypes.isEmpty ? [.item] : contentTypes, asCopy: mode == .import)
     }
     controller.forceDarkTheme = forceDarkTheme || theme.overallDarkAppearance
     controller.didDisappear = {

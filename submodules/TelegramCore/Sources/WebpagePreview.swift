@@ -7,7 +7,8 @@ import LinkPresentation
 #if os(iOS)
 import UIKit
 #endif
-import CoreServices
+// MARK: NAGRAM — Use the modern type API so Xcode 26 warnings remain errors.
+import UniformTypeIdentifiers
 
 public enum WebpagePreviewResult: Equatable {
     public struct Result: Equatable {
@@ -127,7 +128,7 @@ public func webpagePreviewWithProgress(account: Account, urls: [String], webpage
                                     }
                                     
                                     if let imageProvider = metadata.imageProvider {
-                                        imageProvider.loadFileRepresentation(forTypeIdentifier: kUTTypeImage as String, completionHandler: { imageUrl, _ in
+                                        imageProvider.loadFileRepresentation(forTypeIdentifier: UTType.image.identifier, completionHandler: { imageUrl, _ in
                                             guard let imageUrl, let imageData = try? Data(contentsOf: imageUrl) else {
                                                 completeWithImage(nil)
                                                 return

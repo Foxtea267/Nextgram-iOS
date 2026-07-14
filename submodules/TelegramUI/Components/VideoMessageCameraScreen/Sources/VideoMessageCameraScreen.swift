@@ -1498,11 +1498,8 @@ public class VideoMessageCameraScreen: ViewController {
             let previewFrame: CGRect
             if layout.metrics.isTablet {
                 let statusBarOrientation: UIInterfaceOrientation
-                if #available(iOS 13.0, *) {
-                    statusBarOrientation = UIApplication.shared.windows.first?.windowScene?.interfaceOrientation ?? .portrait
-                } else {
-                    statusBarOrientation = UIApplication.shared.statusBarOrientation
-                }
+                // MARK: NAGRAM
+                statusBarOrientation = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first?.interfaceOrientation ?? .portrait
                 
                 if statusBarOrientation == .landscapeLeft {
                     previewFrame = CGRect(origin: CGPoint(x: layout.size.width - 44.0 - previewSide, y: floorToScreenPixels((layout.size.height - previewSide) / 2.0)), size: CGSize(width: previewSide, height: previewSide))

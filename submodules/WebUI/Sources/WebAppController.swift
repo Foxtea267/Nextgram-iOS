@@ -2790,7 +2790,8 @@ public final class WebAppController: ViewController, AttachmentContainable {
                 var effectiveIsAbsolute = false
                 let referenceFrame: CMAttitudeReferenceFrame
                 
-                if absolute && [.authorizedWhenInUse, .authorizedAlways].contains(CLLocationManager.authorizationStatus()) && CMMotionManager.availableAttitudeReferenceFrames().contains(.xTrueNorthZVertical) {
+                // MARK: NAGRAM
+                if absolute && [.authorizedWhenInUse, .authorizedAlways].contains(CLLocationManager().authorizationStatus) && CMMotionManager.availableAttitudeReferenceFrames().contains(.xTrueNorthZVertical) {
                     referenceFrame = .xTrueNorthZVertical
                     effectiveIsAbsolute = true
                 } else if absolute && CMMotionManager.availableAttitudeReferenceFrames().contains(.xMagneticNorthZVertical) {

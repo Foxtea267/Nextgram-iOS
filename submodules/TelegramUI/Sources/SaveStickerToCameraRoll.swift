@@ -2,7 +2,7 @@ import Foundation
 import UIKit
 import Photos
 import ImageIO
-import MobileCoreServices
+import UniformTypeIdentifiers
 import SwiftSignalKit
 import TelegramCore
 import AccountContext
@@ -29,9 +29,10 @@ private enum StickerCameraRollFile {
     var uniformTypeIdentifier: String {
         switch self {
         case .png:
-            return kUTTypePNG as String
+            // MARK: NAGRAM
+            return UTType.png.identifier
         case .gif:
-            return kUTTypeGIF as String
+            return UTType.gif.identifier
         }
     }
 }
@@ -197,7 +198,7 @@ private func generateVideoStickerGif(file: TelegramMediaFile, path: String, queu
 }
 
 private func writeGif(url: URL, frameCount: Int, frameRate: Int, frameImage: (Int) -> CGImage?) -> Bool {
-    guard frameCount > 0, let destination = CGImageDestinationCreateWithURL(url as CFURL, kUTTypeGIF, frameCount, nil) else {
+    guard frameCount > 0, let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.gif.identifier as CFString, frameCount, nil) else {
         return false
     }
     let gifProperties: [CFString: Any] = [
