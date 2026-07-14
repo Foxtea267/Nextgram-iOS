@@ -1208,14 +1208,20 @@ public class SearchBarNode: ASDisplayNode, UITextFieldDelegate {
             transition.updateFrame(node: activityIndicator, frame: CGRect(origin: CGPoint(x: textBackgroundFrame.minX + 9.0 + UIScreenPixel, y: textBackgroundFrame.minY + floor((textBackgroundFrame.size.height - indicatorSize.height) / 2.0)), size: indicatorSize))
         }
         
+        let searchPlaceholderFrame = CGRect(origin: CGPoint(x: leftInset + 16.0, y: 0.0), size: CGSize(width: max(0.0, boundingSize.width - 16.0 * 2.0 - leftInset - rightInset), height: 44.0))
+        let clearButtonMaxX: CGFloat
+        if case .glass = self.fieldStyle {
+            // MARK: NAGRAM — Keep the clear button inside the active glass field.
+            clearButtonMaxX = searchPlaceholderFrame.maxX - 44.0 - 8.0
+        } else {
+            clearButtonMaxX = textBackgroundFrame.maxX
+        }
         let clearSize = self.clearButton.measure(CGSize(width: 100.0, height: 100.0))
-        transition.updateFrame(node: self.clearButton, frame: CGRect(origin: CGPoint(x: textBackgroundFrame.maxX - 6.0 - clearSize.width, y: textBackgroundFrame.minY + floor((textBackgroundFrame.size.height - clearSize.height) / 2.0)), size: clearSize))
+        transition.updateFrame(node: self.clearButton, frame: CGRect(origin: CGPoint(x: clearButtonMaxX - 6.0 - clearSize.width, y: textBackgroundFrame.minY + floor((textBackgroundFrame.size.height - clearSize.height) / 2.0)), size: clearSize))
         
         self.textField.frame = textFrame
         
         let additionalPlaceholderInset = self.textField.tokensInsetWidth
-        
-        let searchPlaceholderFrame = CGRect(origin: CGPoint(x: leftInset + 16.0, y: 0.0), size: CGSize(width: max(0.0, boundingSize.width - 16.0 * 2.0 - leftInset - rightInset), height: 44.0))
         
         if case .glass = self.fieldStyle, self.takenSearchPlaceholderContentView == nil {
             transition.updateFrame(node: self.inlineSearchPlaceholder, frame: searchPlaceholderFrame)
