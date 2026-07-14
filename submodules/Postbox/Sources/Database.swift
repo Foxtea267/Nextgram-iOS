@@ -38,7 +38,11 @@ public final class Database {
         let _ = ensureInitialized
         
         if location != ":memory:" {
-            let _ = open(location + "-guard", O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)
+            // MARK: NAGRAM
+            let guardFile = open(location + "-guard", O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)
+            if guardFile >= 0 {
+                close(guardFile)
+            }
         }
         let flags: Int32
         if readOnly {
