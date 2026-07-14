@@ -216,6 +216,10 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
             guard let self, let item = self.item else {
                 return
             }
+
+            // MARK: NAGRAM
+            cancelParentGestures(view: self.view)
+
             if self.expandedBlockIds.contains(blockId) {
                 self.expandedBlockIds.remove(blockId)
             } else {
