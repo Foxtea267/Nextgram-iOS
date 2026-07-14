@@ -7251,6 +7251,15 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
     }
     
     override public func tabBarItemContextAction(sourceView: ContextExtractedContentContainingView, gesture: ContextGesture) {
+        self.presentAccountSwitcher(source: .reference(SettingsTabBarContextReferenceContentSource(controller: self, sourceView: sourceView)), gesture: gesture)
+    }
+
+    // MARK: NAGRAM — expose the existing account switcher for the chat-list header settings button.
+    public func presentAccountSwitcher(sourceView: UIView, gesture: ContextGesture, addAccount: (() -> Void)? = nil) {
+        self.presentAccountSwitcher(source: .reference(SettingsHeaderContextReferenceContentSource(controller: self, sourceView: sourceView)), gesture: gesture, addAccount: addAccount)
+    }
+
+    private func presentAccountSwitcher(source: ContextContentSource, gesture: ContextGesture, addAccount: (() -> Void)? = nil) {
         guard let (maybePrimary, other) = self.accountsAndPeersValue, let primary = maybePrimary else {
             return
         }
@@ -7258,15 +7267,25 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
         let strings = self.presentationData.strings
         
         var items: [ContextMenuItem] = []
-        items.append(.action(ContextMenuActionItem(text: strings.Settings_AddAccount, icon: { theme in
-            return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Add"), color: theme.contextMenu.primaryColor)
-        }, action: { [weak self] _, f in
-            guard let strongSelf = self else {
-                return
-            }
-            strongSelf.controllerNode.openSettings(section: .addAccount)
-            f(.dismissWithoutContent)
-        })))
+        // MARK: NAGRAM — The hidden Settings tab has no navigation controller, so start auth directly.
+        let productionAccountCount = other.reduce(1, { count, account in
+            return account.0.account.testingEnvironment ? count : count + 1
+        })
+        if addAccount == nil || productionAccountCount < maximumNumberOfAccounts {
+            items.append(.action(ContextMenuActionItem(text: strings.Settings_AddAccount, icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Add"), color: theme.contextMenu.primaryColor)
+            }, action: { [weak self] _, f in
+                guard let strongSelf = self else {
+                    return
+                }
+                if let addAccount {
+                    addAccount()
+                } else {
+                    strongSelf.controllerNode.openSettings(section: .addAccount)
+                }
+                f(.dismissWithoutContent)
+            })))
+        }
         
         
         //let avatarSize = CGSize(width: 28.0, height: 28.0)
@@ -7301,7 +7320,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             })))*/
         }
         
-        let controller = makeContextController(presentationData: self.presentationData, source: .reference(SettingsTabBarContextReferenceContentSource(controller: self, sourceView: sourceView)), items: .single(ContextController.Items(content: .list(items))), recognizer: nil, gesture: gesture)
+        let controller = makeContextController(presentationData: self.presentationData, source: source, items: .single(ContextController.Items(content: .list(items))), recognizer: nil, gesture: gesture)
         self.context.sharedContext.mainWindow?.presentInGlobalOverlay(controller)
     }
     
@@ -7458,6 +7477,27 @@ final class SettingsTabBarContextReferenceContentSource: ContextReferenceContent
             referenceView: self.sourceView.contentView,
             contentAreaInScreenSpace: UIScreen.main.bounds,
             actionsPosition: .top
+        )
+    }
+}
+
+// MARK: NAGRAM
+final class SettingsHeaderContextReferenceContentSource: ContextReferenceContentSource {
+    let keepInPlace: Bool = true
+
+    private let controller: ViewController
+    private let sourceView: UIView
+
+    init(controller: ViewController, sourceView: UIView) {
+        self.controller = controller
+        self.sourceView = sourceView
+    }
+
+    func transitionInfo() -> ContextControllerReferenceViewInfo? {
+        return ContextControllerReferenceViewInfo(
+            referenceView: self.sourceView,
+            contentAreaInScreenSpace: UIScreen.main.bounds,
+            actionsPosition: .bottom
         )
     }
 }

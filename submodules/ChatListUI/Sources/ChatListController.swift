@@ -95,6 +95,9 @@ private final class ContextControllerContentSourceImpl: ContextControllerContent
 }
 
 public class ChatListControllerImpl: TelegramBaseController, ChatListController {
+    // MARK: NAGRAM
+    public var settingsContextAction: ((UIView, ContextGesture) -> Void)?
+
     private var validLayout: ContainerViewLayout?
     
     public let context: AccountContext
@@ -7389,6 +7392,12 @@ private final class ChatListLocationContext {
                         content: .more,
                         pressed: { [weak self] _ in
                             self?.parentController?.settingsPressed()
+                        },
+                        contextAction: { [weak self] sourceView, gesture in
+                            guard let self, let gesture else {
+                                return
+                            }
+                            self.parentController?.settingsContextAction?(sourceView, gesture)
                         }
                     )))
                 } else {

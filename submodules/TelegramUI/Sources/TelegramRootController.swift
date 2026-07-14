@@ -291,6 +291,15 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         }
         
         let accountSettingsController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil, peerId: self.context.account.peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false, reactionSourceMessageId: nil, callMessages: [], isSettings: true)
+        // MARK: NAGRAM — reuse the settings tab account switcher from the hidden-tab-bar header button.
+        (chatListController as? ChatListControllerImpl)?.settingsContextAction = { [weak self, weak accountSettingsController] sourceView, gesture in
+            accountSettingsController?.presentAccountSwitcher(sourceView: sourceView, gesture: gesture, addAccount: { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.context.sharedContext.beginNewAuth(testingEnvironment: self.context.account.testingEnvironment)
+            })
+        }
         accountSettingsController.tabBarItemDebugTapAction = { [weak self] in
             guard let strongSelf = self else {
                 return
