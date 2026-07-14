@@ -70,6 +70,7 @@
 "Nagram.MessageDoubleTapAction.reply" = "返信";
 "Nagram.MessageDoubleTapAction.repeatMessage" = "リピート送信";
 "Nagram.MessageDoubleTapAction.repeatWithoutQuote" = "引用なしリピート送信";
+"Nagram.MessageDoubleTapAction.translate" = "翻訳";
 "Nagram.MessageDoubleTapAction.edit" = "編集";
 "Nagram.ChatListSwipeAction" = "チャットリスト横スワイプ";
 "Nagram.ChatListSwipeAction.both" = "切替 + クイック";

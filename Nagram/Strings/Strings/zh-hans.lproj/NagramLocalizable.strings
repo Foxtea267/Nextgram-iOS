@@ -70,6 +70,7 @@
 "Nagram.MessageDoubleTapAction.reply" = "回复";
 "Nagram.MessageDoubleTapAction.repeatMessage" = "复读";
 "Nagram.MessageDoubleTapAction.repeatWithoutQuote" = "无引用复读";
+"Nagram.MessageDoubleTapAction.translate" = "翻译";
 "Nagram.MessageDoubleTapAction.edit" = "编辑";
 "Nagram.ChatListSwipeAction" = "对话列表横滑";
 "Nagram.ChatListSwipeAction.both" = "切换 + 快捷";

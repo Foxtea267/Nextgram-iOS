@@ -7,6 +7,7 @@ public enum NagramMessageDoubleTapAction: String {
     case reply
     case repeatMessage
     case repeatWithoutQuote
+    case translate
     case edit
 
     public static let allCases: [NagramMessageDoubleTapAction] = [
@@ -16,6 +17,7 @@ public enum NagramMessageDoubleTapAction: String {
         .reply,
         .repeatMessage,
         .repeatWithoutQuote,
+        .translate,
         .edit
     ]
 }

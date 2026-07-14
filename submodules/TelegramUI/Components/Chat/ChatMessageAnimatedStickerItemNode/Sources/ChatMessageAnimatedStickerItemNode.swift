@@ -2130,7 +2130,7 @@ public class ChatMessageAnimatedStickerItemNode: ChatMessageItemView {
                 item.controllerInteraction.setupReply(message.id)
             }
             return true
-        case .repeatMessage, .repeatWithoutQuote, .edit:
+        case .repeatMessage, .repeatWithoutQuote, .translate, .edit:
             let _ = item.controllerInteraction.nagramPerformMessageDoubleTapAction(message, action.rawValue)
             return true
         }

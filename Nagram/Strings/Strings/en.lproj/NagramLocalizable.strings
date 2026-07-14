@@ -70,6 +70,7 @@
 "Nagram.MessageDoubleTapAction.reply" = "Reply";
 "Nagram.MessageDoubleTapAction.repeatMessage" = "Repeat";
 "Nagram.MessageDoubleTapAction.repeatWithoutQuote" = "Repeat Without Quote";
+"Nagram.MessageDoubleTapAction.translate" = "Translate";
 "Nagram.MessageDoubleTapAction.edit" = "Edit";
 "Nagram.ChatListSwipeAction" = "Chat List Swipe";
 "Nagram.ChatListSwipeAction.both" = "Switch + Quick Actions";

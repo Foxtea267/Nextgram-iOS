@@ -11139,6 +11139,18 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 hideNames = false
             }
             return self.nagramRepeatMessages(messages: [message], hideNames: hideNames)
+        case .translate:
+            guard !message.text.isEmpty, message.id.peerId.namespace != Namespaces.Peer.SecretChat else {
+                return true
+            }
+            self.controllerInteraction?.performTextSelectionAction(
+                message,
+                !message.isCopyProtected(),
+                NSAttributedString(string: message.text),
+                message.textEntitiesAttribute?.entities,
+                .translate
+            )
+            return true
         case .edit:
             guard self.nagramCanEditMessage(message) else {
                 return false
