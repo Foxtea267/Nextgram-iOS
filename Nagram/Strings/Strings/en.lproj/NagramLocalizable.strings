@@ -280,6 +280,7 @@
 "Nagram.ChatListFolderTabDisplayMode.icon" = "Icon Only";
 "Nagram.ChatListFolderTabDisplayMode.both" = "Icon and Text";
 "Nagram.ChatListFolderTabsCompact" = "Compact Folder Tabs";
+"Nagram.HideAllChatsFolder" = "Hide All Chats Folder";
 "Nagram.Section.Translation" = "Translation";
 "Nagram.Section.Translation.Footer" = "Only the translation provider is replaced; target language follows Telegram's native translate button. LLM supports OpenAI-compatible and Anthropic API formats; API Key is stored locally only. Other providers do not preserve formatting entities.";
 "Nagram.TranslationProvider" = "Translation Provider";

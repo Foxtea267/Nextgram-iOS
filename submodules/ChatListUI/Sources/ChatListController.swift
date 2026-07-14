@@ -804,10 +804,12 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         self.nagramLayoutSettingsDisposable = (combineLatest(
             nagramBottomBarSettingsSignal(),
             nagramBoolSignal("nagram.chatListFolderTabsCompact", defaultValue: false),
-            nagramStringSignal("nagram.chatListFolderTabDisplayMode", defaultValue: NagramChatListFolderTabDisplayMode.text.rawValue)
+            nagramStringSignal("nagram.chatListFolderTabDisplayMode", defaultValue: NagramChatListFolderTabDisplayMode.text.rawValue),
+            nagramBoolSignal("nagram.hideAllChatsFolder", defaultValue: false)
         )
         |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
             self?.requestLayout(transition: .animated(duration: 0.3, curve: .linear))
+            self?.reloadFilters()
         })
         
         self.globalControlPanelsContextStateDisposable = (self.globalControlPanelsContext.state
@@ -4011,11 +4013,21 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             let (_, items) = countAndFilterItems
             var filterItems: [ChatListFilterTabEntry] = []
             var nagramFolderTabIcons: [ChatListFilterTabEntryId: String] = [:] // MARK: NAGRAM
+            // MARK: NAGRAM — Keep All Chats available when it is the only folder.
+            let hideAllChats = NagramSettings.shared.hideAllChatsFolder && items.contains(where: {
+                if case .filter = $0.0 {
+                    return true
+                }
+                return false
+            })
             
             for (filter, unreadCount, hasUnmutedUnread) in items {
                 switch filter {
                     case .allChats:
                         nagramFolderTabIcons[.all] = "💬" // MARK: NAGRAM
+                        if hideAllChats {
+                            continue
+                        }
                         if let isPremium = isPremium, !isPremium && filterItems.count > 0 {
                             filterItems.insert(.all(unreadCount: 0), at: 0)
                         } else {
@@ -4038,14 +4050,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 resolvedItems = []
             }
             
-            let firstItem = countAndFilterItems.1.first?.0 ?? .allChats
-            var firstItemEntryId: ChatListFilterTabEntryId // MARK: NAGRAM
-            switch firstItem {
-                case .allChats:
-                    firstItemEntryId = .all
-                case let .filter(id, _, _, _):
-                    firstItemEntryId = .filter(id)
-            }
+            var firstItemEntryId = resolvedItems.first?.id ?? .all // MARK: NAGRAM
             if !strongSelf.initializedFilters {
                 let accountPeerId = strongSelf.context.account.peerId.toInt64()
                 let configuredFolderId: Int32?
@@ -4069,7 +4074,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 if let tabContainerData = strongSelf.tabContainerData {
                     var found = false
                     if let index = tabContainerData.0.firstIndex(where: { $0.id == selectedEntryId }) {
-                        for i in (0 ..< index - 1).reversed() {
+                        // MARK: NAGRAM — Search preceding visible tabs without forming a negative range.
+                        for i in (0 ..< index).reversed() {
                             if resolvedItems.contains(where: { $0.id == tabContainerData.0[i].id }) {
                                 selectedEntryId = tabContainerData.0[i].id
                                 found = true
@@ -4078,10 +4084,10 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         }
                     }
                     if !found {
-                        selectedEntryId = .all
+                        selectedEntryId = resolvedItems.first?.id ?? .all // MARK: NAGRAM
                     }
                 } else {
-                    selectedEntryId = .all
+                    selectedEntryId = resolvedItems.first?.id ?? .all // MARK: NAGRAM
                 }
             }
             let filtersLimit = isPremium == false ? limits.maxFoldersCount : nil
@@ -4093,6 +4099,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 switch item.0 {
                     case .allChats:
                         hasAllChats = true
+                        if hideAllChats {
+                            continue
+                        }
                         if let isPremium = isPremium, !isPremium && availableFilters.count > 0 {
                             availableFilters.insert(.all, at: 0)
                         } else {
@@ -4102,7 +4111,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         availableFilters.append(.filter(item.0))
                 }
             }
-            if !hasAllChats {
+            if !hasAllChats && !hideAllChats {
                 availableFilters.insert(.all, at: 0)
             }
             strongSelf.chatListDisplayNode.mainContainerNode.updateAvailableFilters(availableFilters, limit: filtersLimit)

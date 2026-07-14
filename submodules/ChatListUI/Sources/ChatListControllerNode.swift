@@ -905,9 +905,13 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                 }
             }
             if !availableFilters.contains(where: { $0.id == self.selectedId }) {
-                self.switchToFilter(id: .all, completion: {
+                // MARK: NAGRAM — Fall back to a filter that remains visible when All Chats is hidden.
+                if let fallbackId = availableFilters.first?.id {
                     apply()
-                })
+                    self.switchToFilter(id: fallbackId, animated: false)
+                } else {
+                    apply()
+                }
             } else {
                 apply()
             }

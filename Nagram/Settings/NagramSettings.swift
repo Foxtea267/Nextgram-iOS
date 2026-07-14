@@ -316,6 +316,9 @@ public final class NagramSettings {
     /// 首页分组标签紧凑布局
     @NagramDefault("nagram.chatListFolderTabsCompact", false)
     public var chatListFolderTabsCompact: Bool
+    /// 隐藏首页的“全部会话”分组（至少存在一个自定义分组时生效）
+    @NagramDefault("nagram.hideAllChatsFolder", false)
+    public var hideAllChatsFolder: Bool
     /// 首页分组标签显示方式（"text" / "icon" / "both"）
     @NagramDefault("nagram.chatListFolderTabDisplayMode", NagramChatListFolderTabDisplayMode.text.rawValue)
     public var chatListFolderTabDisplayMode: String

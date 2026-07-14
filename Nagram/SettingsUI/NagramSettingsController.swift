@@ -390,6 +390,7 @@ private func nagramGroups(
             .startupFolder(titleKey: "Nagram.ChatListStartupFolder"),
             .choice(titleKey: "Nagram.ChatListFolderTabDisplayMode", prefix: "Nagram.ChatListFolderTabDisplayMode", options: ["text", "icon", "both"], current: { NagramSettings.shared.chatListFolderTabDisplayModeValue.rawValue }, set: { NagramSettings.shared.chatListFolderTabDisplayMode = $0 }),
             .toggle(titleKey: "Nagram.ChatListFolderTabsCompact", get: { NagramSettings.shared.chatListFolderTabsCompact }, set: { NagramSettings.shared.chatListFolderTabsCompact = $0 }),
+            .toggle(titleKey: "Nagram.HideAllChatsFolder", get: { NagramSettings.shared.hideAllChatsFolder }, set: { NagramSettings.shared.hideAllChatsFolder = $0 }),
             .choice(titleKey: "Nagram.ChatListMessagePreviewStyle", prefix: "Nagram.ChatListMessagePreviewStyle", options: ["three", "two"], current: { NagramSettings.shared.chatListMessagePreviewStyleMode.rawValue }, set: { value in
                 if NagramSettings.shared.chatListCompact && value == NagramChatListMessagePreviewStyle.three.rawValue {
                     return
