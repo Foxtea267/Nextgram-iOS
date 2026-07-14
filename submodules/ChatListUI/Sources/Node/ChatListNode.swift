@@ -2765,10 +2765,18 @@ public final class ChatListNode: ListViewImpl {
         let engine = context.engine
         let previousPeerCache = Atomic<[EnginePeer.Id: EnginePeer]>(value: [:])
         let previousActivities = Atomic<ChatListNodePeerInputActivities?>(value: nil)
-        self.activityStatusesDisposable = (context.account.allPeerInputActivities()
-        |> mapToSignal { activitiesByPeerId -> Signal<[ChatListNodePeerInputActivities.ItemId: [(EnginePeer, PeerInputActivity)]], NoError> in
+        // MARK: NAGRAM — 私聊 activity 隐藏设置需即时刷新聊天列表状态。
+        self.activityStatusesDisposable = (combineLatest(
+            context.account.allPeerInputActivities(),
+            nagramBoolSignal("nagram.hidePrivateChatActivities", defaultValue: false)
+        )
+        |> mapToSignal { activitiesByPeerId, hidePrivateChatActivities -> Signal<[ChatListNodePeerInputActivities.ItemId: [(EnginePeer, PeerInputActivity)]], NoError> in
             var activitiesByPeerId = activitiesByPeerId
             for key in activitiesByPeerId.keys {
+                if hidePrivateChatActivities && (key.peerId.namespace == Namespaces.Peer.CloudUser || key.peerId.namespace == Namespaces.Peer.SecretChat) {
+                    activitiesByPeerId[key] = nil
+                    continue
+                }
                 activitiesByPeerId[key]?.removeAll(where: { _, activity in
                     switch activity {
                     case .interactingWithEmoji:

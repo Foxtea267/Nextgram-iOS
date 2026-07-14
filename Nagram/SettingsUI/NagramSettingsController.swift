@@ -421,6 +421,7 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.HideReactions", get: { NagramSettings.shared.hideReactions }, set: { NagramSettings.shared.hideReactions = $0 }),
             .toggle(titleKey: "Nagram.HideChannelBottomButton", get: { NagramSettings.shared.hideChannelBottomButton }, set: { NagramSettings.shared.hideChannelBottomButton = $0 }),
             .toggle(titleKey: "Nagram.HideSponsoredMessages", get: { NagramSettings.shared.hideSponsoredMessages }, set: { NagramSettings.shared.hideSponsoredMessages = $0 }),
+            .toggle(titleKey: "Nagram.HidePrivateChatActivities", get: { NagramSettings.shared.hidePrivateChatActivities }, set: { NagramSettings.shared.hidePrivateChatActivities = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Channels", footerKey: "Nagram.HideChannelForwardButton.Footer", rows: [
             .toggle(titleKey: "Nagram.HideChannelForwardButton", get: { NagramSettings.shared.wideChannelPosts }, set: { NagramSettings.shared.wideChannelPosts = $0 }),

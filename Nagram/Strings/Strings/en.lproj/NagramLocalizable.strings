@@ -16,6 +16,7 @@
 "Nagram.Section.Camera" = "Camera";
 "Nagram.Section.Camera.Footer" = "Camera entry and live preview in the attachment menu.";
 "Nagram.Section.MessageDisplay" = "Message Display";
+"Nagram.HidePrivateChatActivities" = "Hide Activity Status in Private Chats";
 "Nagram.TranslationProvider.llm" = "LLM";
 "Nagram.TranslationLLMSettings" = "LLM Settings";
 "Nagram.TranslationLLMSettings.Footer" = "Empty Base URL and Endpoint use the selected format defaults; Endpoint may also be a full URL. API Key is stored locally only.";

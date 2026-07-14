@@ -180,6 +180,9 @@ public final class NagramSettings {
     /// 隐藏赞助消息和代理赞助频道入口
     @NagramDefault("nagram.hideSponsoredMessages", false)
     public var hideSponsoredMessages: Bool
+    /// 隐藏一对一私聊中对方的输入、上传和选贴纸状态
+    @NagramDefault("nagram.hidePrivateChatActivities", false)
+    public var hidePrivateChatActivities: Bool
     /// 通话前确认（默认关 = 保持原生无确认）
     @NagramDefault("nagram.confirmCalls", false)
     public var confirmCalls: Bool

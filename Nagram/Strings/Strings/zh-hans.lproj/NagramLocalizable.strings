@@ -16,6 +16,7 @@
 "Nagram.Section.Camera" = "相机";
 "Nagram.Section.Camera.Footer" = "聊天附件面板中的相机入口与实时预览。";
 "Nagram.Section.MessageDisplay" = "消息显示";
+"Nagram.HidePrivateChatActivities" = "隐藏私聊活动状态";
 "Nagram.TranslationProvider.llm" = "LLM";
 "Nagram.TranslationLLMSettings" = "LLM 设置";
 "Nagram.TranslationLLMSettings.Footer" = "Base URL 和 Endpoint 为空时使用所选格式的默认地址；Endpoint 也可以填完整 URL。API Key 仅保存在本机。";

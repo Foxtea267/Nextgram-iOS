@@ -80,6 +80,7 @@ import StickerPackPreviewUI
 import TextNodeWithEntities
 // MARK: NAGRAM
 import NagramSettings
+import NagramSettingsSignal
 import EntityKeyboard
 import ChatTitleView
 import EmojiStatusComponent
@@ -5107,8 +5108,9 @@ extension ChatControllerImpl {
                 
                 if let activitySpace = activitySpace, let peerId = peerId {
                     self.peerInputActivitiesDisposable?.dispose()
-                    self.peerInputActivitiesDisposable = (self.context.account.peerInputActivities(peerId: activitySpace)
-                    |> mapToSignal { activities -> Signal<[(EnginePeer, PeerInputActivity)], NoError> in
+                    self.peerInputActivitiesDisposable = (combineLatest(
+                        self.context.account.peerInputActivities(peerId: activitySpace)
+                        |> mapToSignal { activities -> Signal<[(EnginePeer, PeerInputActivity)], NoError> in
                         var foundAllPeers = true
                         var cachedResult: [(EnginePeer, PeerInputActivity)] = []
                         previousPeerCache.with { dict -> Void in
@@ -5140,10 +5142,15 @@ extension ChatControllerImpl {
                                 return result
                             }
                         }
-                    }
-                    |> deliverOnMainQueue).startStrict(next: { [weak self] activities in
+                        },
+                        // MARK: NAGRAM — 私聊 activity 隐藏设置需即时刷新标题状态。
+                        nagramBoolSignal("nagram.hidePrivateChatActivities", defaultValue: false)
+                    )
+                    |> deliverOnMainQueue).startStrict(next: { [weak self] activities, hidePrivateChatActivities in
                         if let strongSelf = self {
-                            let displayActivities = activities.filter({
+                            let isPrivateChat = peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.SecretChat
+                            let visibleActivities = hidePrivateChatActivities && isPrivateChat ? [] : activities
+                            let displayActivities = visibleActivities.filter({
                                 switch $0.1 {
                                     case .speakingInGroupCall, .interactingWithEmoji:
                                         return false
