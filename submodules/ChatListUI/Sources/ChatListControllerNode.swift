@@ -892,7 +892,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         }
     }
     
-    public func updateAvailableFilters(_ availableFilters: [ChatListContainerNodeFilter], limit: Int32?) {
+    public func updateAvailableFilters(_ availableFilters: [ChatListContainerNodeFilter], limit: Int32?, fallbackId: ChatListFilterTabEntryId? = nil) {
         if self.availableFilters != availableFilters {
             let apply: () -> Void = { [weak self] in
                 guard let strongSelf = self else {
@@ -904,13 +904,20 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                     strongSelf.update(layout: layout, navigationBarHeight: navigationBarHeight, visualNavigationHeight: visualNavigationHeight, originalNavigationHeight: originalNavigationHeight, cleanNavigationBarHeight: cleanNavigationBarHeight, insets: insets, isReorderingFilters: isReorderingFilters, isEditing: isEditing, inlineNavigationLocation: inlineNavigationLocation, inlineNavigationTransitionFraction: inlineNavigationTransitionFraction, storiesInset: storiesInset, transition: .immediate)
                 }
             }
+            if let pendingId = self.pendingItemNode?.0, !availableFilters.contains(where: { $0.id == pendingId }) {
+                self.pendingItemNode?.2.dispose()
+                self.pendingItemNode = nil
+            }
             if !availableFilters.contains(where: { $0.id == self.selectedId }) {
-                // MARK: NAGRAM — Fall back to a filter that remains visible when All Chats is hidden.
-                if let fallbackId = availableFilters.first?.id {
-                    apply()
-                    self.switchToFilter(id: fallbackId, animated: false)
-                } else {
-                    apply()
+                // MARK: NAGRAM — Apply the controller's resolved fallback and cancel stale pending switches.
+                let resolvedFallbackId = fallbackId.flatMap { id in
+                    return availableFilters.contains(where: { $0.id == id }) ? id : nil
+                } ?? availableFilters.first?.id
+                self.pendingItemNode?.2.dispose()
+                self.pendingItemNode = nil
+                apply()
+                if let resolvedFallbackId {
+                    self.switchToFilter(id: resolvedFallbackId, animated: false)
                 }
             } else {
                 apply()
@@ -930,6 +937,10 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     
     public func switchToFilter(id: ChatListFilterTabEntryId, animated: Bool = true, completion: (() -> Void)? = nil) {
         self.onFilterSwitch?()
+        if let pendingItemNode = self.pendingItemNode, pendingItemNode.0 != id {
+            pendingItemNode.2.dispose()
+            self.pendingItemNode = nil
+        }
         if id != self.selectedId, let index = self.availableFilters.firstIndex(where: { $0.id == id }) {
             if let itemNode = self.itemNodes[id] {
                 guard let (layout, navigationBarHeight, visualNavigationHeight, originalNavigationHeight, cleanNavigationBarHeight, insets, isReorderingFilters, isEditing, inlineNavigationLocation, inlineNavigationTransitionFraction, storiesInset) = self.validLayout else {

@@ -4068,9 +4068,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             }
             
             var selectedEntryId = !strongSelf.initializedFilters ? firstItemEntryId : strongSelf.chatListDisplayNode.mainContainerNode.currentItemFilter
-            var resetCurrentEntry = false
             if !resolvedItems.contains(where: { $0.id == selectedEntryId }) {
-                resetCurrentEntry = true
                 if let tabContainerData = strongSelf.tabContainerData {
                     var found = false
                     if let index = tabContainerData.0.firstIndex(where: { $0.id == selectedEntryId }) {
@@ -4114,7 +4112,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             if !hasAllChats && !hideAllChats {
                 availableFilters.insert(.all, at: 0)
             }
-            strongSelf.chatListDisplayNode.mainContainerNode.updateAvailableFilters(availableFilters, limit: filtersLimit)
+            strongSelf.chatListDisplayNode.mainContainerNode.updateAvailableFilters(availableFilters, limit: filtersLimit, fallbackId: selectedEntryId)
             
             if isPremium == nil && items.isEmpty {
                 strongSelf.mainReady.set(strongSelf.chatListDisplayNode.mainContainerNode.currentItemNode.ready)
@@ -4143,10 +4141,6 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             if !notifiedFirstUpdate {
                 notifiedFirstUpdate = true
                 firstUpdate?()
-            }
-            
-            if resetCurrentEntry {
-                strongSelf.selectTab(id: selectedEntryId, switchToChatsIfNeeded: false)
             }
         }))
     }
