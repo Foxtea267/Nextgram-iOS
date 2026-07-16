@@ -418,7 +418,8 @@ private final class MediaToolsScreenComponent: Component {
                 component: AnyComponent(
                     GlassBarButtonComponent(
                         size: CGSize(width: 44.0, height: 44.0),
-                        backgroundColor: UIColor(rgb: 0x0088ff),
+                        // MARK: NAGRAM: Follow the themed chat send button color.
+                        backgroundColor: environment.theme.chat.inputPanel.actionControlFillColor,
                         isDark: true,
                         state: .tintedGlass,
                         component: AnyComponentWithIdentity(

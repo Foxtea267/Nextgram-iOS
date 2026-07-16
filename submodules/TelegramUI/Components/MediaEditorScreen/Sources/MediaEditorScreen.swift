@@ -940,7 +940,8 @@ final class MediaEditorScreenComponent: Component {
                 component: AnyComponent(
                     GlassBarButtonComponent(
                         size: doneButtonExplicitSize,
-                        backgroundColor: UIColor(rgb: 0x0088ff),
+                        // MARK: NAGRAM: Follow the themed chat send button color.
+                        backgroundColor: environment.theme.chat.inputPanel.actionControlFillColor,
                         isDark: true,
                         state: .tintedGlass,
                         isVisible: !buttonsAreHidden && bottomButtonsAlpha > 0.0,
