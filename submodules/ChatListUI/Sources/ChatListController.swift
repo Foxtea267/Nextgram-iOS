@@ -801,18 +801,22 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
 
         self.updateTabBarSearchState(ViewController.TabBarSearchState(isActive: false), transition: .immediate)
         // MARK: NAGRAM
-        if case .chatList(.root) = self.location {
-            self.nagramLayoutSettingsDisposable = (combineLatest(
-                nagramBottomBarSettingsSignal(),
-                nagramBoolSignal("nagram.chatListFolderTabsCompact", defaultValue: false),
-                nagramStringSignal("nagram.chatListFolderTabDisplayMode", defaultValue: NagramChatListFolderTabDisplayMode.text.rawValue),
-                nagramBoolSignal("nagram.hideAllChatsFolder", defaultValue: false)
-            )
-            |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
-                self?.requestLayout(transition: .animated(duration: 0.3, curve: .linear))
-                self?.reloadFilters()
-            })
-        }
+        self.nagramLayoutSettingsDisposable = (combineLatest(
+            nagramBottomBarSettingsSignal(),
+            nagramBoolSignal("nagram.chatListFolderTabsCompact", defaultValue: false),
+            nagramStringSignal("nagram.chatListFolderTabDisplayMode", defaultValue: NagramChatListFolderTabDisplayMode.text.rawValue),
+            nagramBoolSignal("nagram.hideAllChatsFolder", defaultValue: false)
+        )
+        |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
+            guard let self else {
+                return
+            }
+            self.requestLayout(transition: .animated(duration: 0.3, curve: .linear))
+            // MARK: NAGRAM — Folder filters only belong to the root chat list. Loading them in archive creates empty adjacent nodes that dismiss the archive controller.
+            if case .chatList(.root) = self.location {
+                self.reloadFilters()
+            }
+        })
         
         self.globalControlPanelsContextStateDisposable = (self.globalControlPanelsContext.state
         |> deliverOnMainQueue).startStrict(next: { [weak self] state in
@@ -3997,6 +4001,12 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     private var initializedFilters = false
     private func reloadFilters(firstUpdate: (() -> Void)? = nil) {
+        // MARK: NAGRAM — Folder filters are only valid in the root chat list.
+        guard case .chatList(.root) = self.location else {
+            firstUpdate?()
+            return
+        }
+
         let filterItems = chatListFilterItems(context: self.context)
         var notifiedFirstUpdate = false
         self.filterDisposable.set((combineLatest(queue: .mainQueue(),

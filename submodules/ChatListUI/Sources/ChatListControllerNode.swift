@@ -1310,11 +1310,13 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         
         self.addSubnode(self.debugListView)
         
-        filterBecameEmpty = { [weak self] _ in
+        filterBecameEmpty = { [weak self] filter in
             guard let strongSelf = self else {
                 return
             }
-            if case .chatList(.archive) = strongSelf.location {
+            // MARK: NAGRAM — Only the unfiltered archive becoming empty may
+            // close the archive controller. Empty adjacent folder nodes must not.
+            if filter == nil, case .chatList(.archive) = strongSelf.location {
                 strongSelf.dismissSelfIfCompletedPresentation?()
             }
         }
