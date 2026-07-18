@@ -265,9 +265,10 @@ private func nagramSettingsDeepLink(tab: NagramTab, row: NagramRow) -> String {
     components.host = "t.me"
     components.path = "/nasettings/\(tab.deepLinkSection)"
     components.queryItems = [
+        URLQueryItem(name: "p", value: "ios"),
         URLQueryItem(name: "r", value: nagramRowDeepLinkKey(row))
     ]
-    return components.url?.absoluteString ?? "https://t.me/nasettings/\(tab.deepLinkSection)?r=\(nagramRowDeepLinkKey(row))"
+    return components.url?.absoluteString ?? "https://t.me/nasettings/\(tab.deepLinkSection)?p=ios&r=\(nagramRowDeepLinkKey(row))"
 }
 
 private func nagramTabForDeepLinkSection(_ section: String?) -> NagramTab? {
