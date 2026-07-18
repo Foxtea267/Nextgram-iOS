@@ -33,6 +33,7 @@ private let nagramDeveloperUserIds: Set<Int64> = [
     784901712,   // NextAlone
     1711019015,  // Lagrio
     554072292,  // NahidaBuer
+    676660002,  // xtao
 ]
 
 private let nagramSponsorUserIds: Set<Int64> = [
