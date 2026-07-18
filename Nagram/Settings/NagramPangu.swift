@@ -88,6 +88,46 @@ public enum NagramPangu {
         return lowerBound ..< max(lowerBound, upperBound)
     }
 
+    /// Map a display-string UTF-16 range back to the original string before pangu spaces were inserted.
+    /// `insertedUtf16Offsets` uses the same convention as `transform` (original offsets, ascending).
+    public static func reverseTransformRange(_ range: Range<Int>, insertedUtf16Offsets: [Int], originalLength: Int) -> Range<Int> {
+        guard !insertedUtf16Offsets.isEmpty else {
+            return range
+        }
+
+        // Display index of each inserted space is originalOffset + insertionIndex.
+        let displayInsertPositions: [Int] = insertedUtf16Offsets.enumerated().map { index, originalOffset in
+            return originalOffset + index
+        }
+        let displayInsertSet = Set(displayInsertPositions)
+        let displayLength = originalLength + insertedUtf16Offsets.count
+
+        func originalBoundary(fromDisplay displayIndex: Int, isEnd: Bool) -> Int {
+            var index = min(max(displayIndex, 0), displayLength)
+            if isEnd {
+                while index > 0 && displayInsertSet.contains(index - 1) {
+                    index -= 1
+                }
+            } else {
+                while index < displayLength && displayInsertSet.contains(index) {
+                    index += 1
+                }
+            }
+            let insertsBefore = displayInsertPositions.filter { $0 < index }.count
+            let original = index - insertsBefore
+            return min(max(original, 0), originalLength)
+        }
+
+        let lowerBound = originalBoundary(fromDisplay: range.lowerBound, isEnd: false)
+        let upperBound = originalBoundary(fromDisplay: range.upperBound, isEnd: true)
+        return lowerBound ..< max(lowerBound, upperBound)
+    }
+
+    public static func reverseTransformRange(_ range: NSRange, insertedUtf16Offsets: [Int], originalLength: Int) -> NSRange {
+        let swiftRange = reverseTransformRange(range.location ..< (range.location + range.length), insertedUtf16Offsets: insertedUtf16Offsets, originalLength: originalLength)
+        return NSRange(location: swiftRange.lowerBound, length: swiftRange.upperBound - swiftRange.lowerBound)
+    }
+
     private static func protectedUtf16Ranges(_ attributedText: NSAttributedString) -> [Range<Int>] {
         var ranges: [Range<Int>] = []
         attributedText.enumerateAttributes(in: NSRange(location: 0, length: attributedText.length), options: []) { attributes, range, _ in

@@ -149,6 +149,10 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
     private var cachedChatMessageText: CachedChatMessageText?
     
     private var textSelectionState: Promise<ChatControllerSubject.MessageOptionsInfo.SelectionState>?
+
+    // MARK: NAGRAM — pangu display mapping for quote selection
+    private var nagramPanguInsertedUtf16Offsets: [Int] = []
+    private var nagramPanguSourceText: String?
     
     private var linkPreviewHighlightText: String?
     private var linkPreviewOptionsDisposable: Disposable?
@@ -510,9 +514,14 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                 }
                 
                 // MARK: NAGRAM — 接收 / 历史展示时盘古之白
+                self.nagramPanguInsertedUtf16Offsets = []
+                self.nagramPanguSourceText = nil
                 if NagramSettings.shared.enablePanguOnReceiving {
+                    let panguSourceText = rawText
                     let transform = NagramPangu.transform(rawText, protectedUtf16Ranges: nagramPanguProtectedRanges(rawText: rawText, messageEntities: messageEntities))
                     if !transform.insertedUtf16Offsets.isEmpty {
+                        self.nagramPanguSourceText = panguSourceText
+                        self.nagramPanguInsertedUtf16Offsets = transform.insertedUtf16Offsets
                         rawText = transform.text
                         messageEntities = nagramPanguTransformEntities(messageEntities, insertedUtf16Offsets: transform.insertedUtf16Offsets)
                     }
@@ -1870,18 +1879,43 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
             return NSRange(location: location, length: upperBound - location)
         }
         
-        let range = normalizedSelectionRange(rawRange, length: string.length)
-        guard range.length > 0 else {
+        let displayRange = normalizedSelectionRange(rawRange, length: string.length)
+        guard displayRange.length > 0 else {
             return nil
         }
 
-        let nsString = string.string as NSString
-        let substring = nsString.substring(with: range)
-        let offset = range.location
+        // MARK: NAGRAM — quote must match the underlying message text.
+        // Receiving pangu inserts display-only spaces; map selection back before quoting.
+        var range = displayRange
+        var substring = (string.string as NSString).substring(with: displayRange)
+        var offset = displayRange.location
+        var entitySource: [MessageTextEntity]? = item.message.textEntitiesAttribute?.entities
+
+        if !self.nagramPanguInsertedUtf16Offsets.isEmpty, let sourceText = self.nagramPanguSourceText {
+            let sourceNSString = sourceText as NSString
+            let mapped = NagramPangu.reverseTransformRange(displayRange, insertedUtf16Offsets: self.nagramPanguInsertedUtf16Offsets, originalLength: sourceNSString.length)
+            let mappedRange = normalizedSelectionRange(mapped, length: sourceNSString.length)
+            guard mappedRange.length > 0 else {
+                return nil
+            }
+
+            range = mappedRange
+            substring = sourceNSString.substring(with: mappedRange)
+            offset = mappedRange.location
+
+            if sourceText == item.message.text {
+                entitySource = item.message.textEntitiesAttribute?.entities
+            } else if let updatingMedia = item.attributes.updatingMedia, sourceText == updatingMedia.text {
+                entitySource = updatingMedia.entities?.entities
+            } else {
+                // Translation / summary text is not what the server validates quotes against.
+                entitySource = nil
+            }
+        }
         
         var entities: [MessageTextEntity] = []
-        if let textEntitiesAttribute = item.message.textEntitiesAttribute {
-            entities = messageTextEntitiesInRange(entities: textEntitiesAttribute.entities, range: range, onlyQuoteable: true)
+        if let entitySource {
+            entities = messageTextEntitiesInRange(entities: entitySource, range: range, onlyQuoteable: true)
         }
         
         return (substring, entities, offset)
