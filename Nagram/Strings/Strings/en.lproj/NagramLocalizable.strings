@@ -1,4 +1,5 @@
 "Nagram.Title" = "Nagram";
+"Nagram.DeepLink.UnsupportedPlatform" = "This setting is not available on this platform.";
 "Nagram.Tab.General" = "General";
 "Nagram.Tab.Chat" = "Messages";
 "Nagram.Tab.Other" = "Other";

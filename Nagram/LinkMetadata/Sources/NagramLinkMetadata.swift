@@ -161,6 +161,7 @@ public final class NagramLinkMetadata {
     private static let defaultPagePreviewDomains: [NagramPagePreviewDomain] = [
         .init(domain: "x.com", rules: [.init(regex: "x\\.com", replace: "fixupx.com")], regex: false),
         .init(domain: "twitter.com", rules: [.init(regex: "twitter\\.com", replace: "fxtwitter.com")], regex: false),
+        .init(domain: "coolapk.com", rules: [.init(regex: "coolapk\\.com", replace: "coolapk1s.com")], regex: false),
         .init(domain: "www.coolapk.com", rules: [.init(regex: "coolapk\\.com", replace: "coolapk1s.com")], regex: false),
         .init(domain: "www.instagram.com", rules: [.init(regex: "www\\.instagram\\.com", replace: "ddinstagram.com")], regex: false),
         .init(domain: "vm.tiktok.com", rules: [.init(regex: "vm\\.tiktok\\.com", replace: "vm.vxtiktok.com")], regex: false),

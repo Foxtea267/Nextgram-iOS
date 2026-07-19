@@ -45,6 +45,7 @@ import AuthConfirmationScreen
 import OpenInExternalAppUI
 import CreateBotScreen
 import NagramSettingsUI // MARK: NAGRAM — open Nagram settings from nasettings deep links
+import NagramStrings // MARK: NAGRAM — localize Nagram deep-link errors
 
 private func defaultNavigationForPeerId(_ peerId: PeerId?, navigation: ChatControllerInteractionNavigateToPeer) -> ChatControllerInteractionNavigateToPeer {
     if case .default = navigation {
@@ -69,6 +70,13 @@ private func nagramSettingsDeepLinkPath(_ path: String) -> String? {
         return path
     }
     return nil
+}
+
+private func nagramSettingsDeepLinkSupportsCurrentPlatform(_ path: String) -> Bool {
+    guard let platformItem = URLComponents(string: path)?.queryItems?.first(where: { $0.name.lowercased() == "p" }) else {
+        return true
+    }
+    return platformItem.value?.lowercased() == "ios"
 }
 
 func openResolvedUrlImpl(
@@ -979,11 +987,19 @@ func openResolvedUrlImpl(
             dismissInput()
             switch section {
             case let .path(path):
-                if let navigationController {
-                    if let nagramPath = nagramSettingsDeepLinkPath(path) {
-                        navigationController.pushViewController(nagramSettingsController(context: context, deepLinkPath: nagramPath), animated: true)
+                if let nagramPath = nagramSettingsDeepLinkPath(path) {
+                    guard nagramSettingsDeepLinkSupportsCurrentPlatform(nagramPath) else {
+                        present(textAlertController(context: context, updatedPresentationData: updatedPresentationData, title: nil, text: ngI18n("Nagram.DeepLink.UnsupportedPlatform", presentationData.strings.baseLanguageCode), actions: [
+                            TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+                        ]), nil)
                         return
                     }
+                    if let navigationController {
+                        navigationController.pushViewController(nagramSettingsController(context: context, deepLinkPath: nagramPath), animated: true)
+                    }
+                    return
+                }
+                if let navigationController {
                     if path.isEmpty {
                         if let rootController = context.sharedContext.mainWindow?.viewController as? TelegramRootController {
                             rootController.openSettings(edit: false)
