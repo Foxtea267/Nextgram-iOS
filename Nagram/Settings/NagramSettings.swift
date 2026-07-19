@@ -441,6 +441,9 @@ public final class NagramSettings {
     /// 隐藏动态（Stories）
     @NagramDefault("nagram.hideStories", false)
     public var hideStories: Bool
+    /// 隐藏标签栏上的权限警告
+    @NagramDefault("nagram.hideTabBarPermissionWarnings", false)
+    public var hideTabBarPermissionWarnings: Bool
     /// 资料页显示注册日期（默认关 = 保持原生）
     @NagramDefault("nagram.showRegDate", false)
     public var showRegDate: Bool

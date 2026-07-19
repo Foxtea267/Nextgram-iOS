@@ -249,6 +249,7 @@
 "Nagram.Section.Calls" = "Calls";
 "Nagram.ConfirmCalls" = "Confirm Before Calling";
 "Nagram.Section.Interface" = "Interface";
+"Nagram.HideTabBarPermissionWarnings" = "Hide Tab Bar Permission Warnings";
 "Nagram.HideStories" = "Hide Stories";
 "Nagram.ControlHighlight" = "Control Highlight";
 "Nagram.GlassTransparency" = "Liquid Glass";

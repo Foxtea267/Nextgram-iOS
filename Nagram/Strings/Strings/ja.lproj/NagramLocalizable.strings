@@ -249,6 +249,7 @@
 "Nagram.Section.Calls" = "通話";
 "Nagram.ConfirmCalls" = "通話前に確認";
 "Nagram.Section.Interface" = "インターフェース";
+"Nagram.HideTabBarPermissionWarnings" = "タブバーの権限警告を非表示";
 "Nagram.HideStories" = "ストーリーズを非表示";
 "Nagram.ControlHighlight" = "コントロールのハイライト";
 "Nagram.GlassTransparency" = "Liquid Glass";

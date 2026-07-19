@@ -249,6 +249,7 @@
 "Nagram.Section.Calls" = "通话";
 "Nagram.ConfirmCalls" = "通话前确认";
 "Nagram.Section.Interface" = "界面";
+"Nagram.HideTabBarPermissionWarnings" = "隐藏标签栏权限警告";
 "Nagram.HideStories" = "隐藏动态";
 "Nagram.ControlHighlight" = "控件高亮";
 "Nagram.GlassTransparency" = "Liquid Glass";
