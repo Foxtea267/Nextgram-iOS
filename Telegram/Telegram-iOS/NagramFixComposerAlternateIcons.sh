@@ -8,9 +8,21 @@ else
 fi
 
 INFO_PLIST="${APP_DIR}/Info.plist"
-RUNFILES_ROOT="${0}.runfiles/_main"
+RUNFILES_ROOT="${NAGRAM_RUNFILES_ROOT:-${0}.runfiles/_main}"
 if [ ! -d "${RUNFILES_ROOT}" ]; then
 	RUNFILES_ROOT="${0}.runfiles/__main__"
+fi
+
+PRECOMPILED_ICONS_DIR="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramPrecompiledComposerIcons"
+if [ -d "${PRECOMPILED_ICONS_DIR}" ]; then
+	for file in Assets.car Nagram60x60@2x.png Nagram76x76@2x~ipad.png; do
+		if [ ! -f "${PRECOMPILED_ICONS_DIR}/${file}" ]; then
+			echo "Missing precompiled Nagram Composer icon artifact: ${PRECOMPILED_ICONS_DIR}/${file}" >&2
+			exit 1
+		fi
+	done
+else
+	PRECOMPILED_ICONS_DIR=""
 fi
 
 find_composer_actool() {
@@ -28,16 +40,18 @@ find_composer_actool() {
 }
 
 ACTOOL=""
-if [ -n "${NAGRAM_ACTOOL:-}" ]; then
-	if [ -x "${NAGRAM_ACTOOL}" ]; then
-		ACTOOL="${NAGRAM_ACTOOL}"
+if [ -z "${PRECOMPILED_ICONS_DIR}" ]; then
+	if [ -n "${NAGRAM_ACTOOL:-}" ]; then
+		if [ -x "${NAGRAM_ACTOOL}" ]; then
+			ACTOOL="${NAGRAM_ACTOOL}"
+		else
+			echo "NAGRAM_ACTOOL is not executable: ${NAGRAM_ACTOOL}; falling back to legacy PNG icons" >&2
+		fi
 	else
-		echo "NAGRAM_ACTOOL is not executable: ${NAGRAM_ACTOOL}; falling back to legacy PNG icons" >&2
-	fi
-else
-	ACTOOL="$(find_composer_actool)"
-	if [ -z "${ACTOOL}" ]; then
-		echo "Nagram Icon Composer export requires Xcode 27 actool; falling back to legacy PNG icons" >&2
+		ACTOOL="$(find_composer_actool)"
+		if [ -z "${ACTOOL}" ]; then
+			echo "Nagram Icon Composer export requires Xcode 27 actool; falling back to legacy PNG icons" >&2
+		fi
 	fi
 fi
 
@@ -67,7 +81,8 @@ real_file_dir() {
 	dirname "$(realpath "${path}/icon.json")"
 }
 
-if [ -n "${ACTOOL}" ]; then
+COMPILED_ICONS_DIR="${PRECOMPILED_ICONS_DIR}"
+if [ -z "${COMPILED_ICONS_DIR}" ] && [ -n "${ACTOOL}" ]; then
 	ICONS_XCASSETS="$(real_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/Icons.xcassets")"
 	LEGACY_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/LegacyComponents/LegacyImages.xcassets")"
 	PASSWORD_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/PasswordSetupUI/PasswordSetupUIImages.xcassets")"
@@ -77,9 +92,10 @@ if [ -n "${ACTOOL}" ]; then
 	NAGRAM_BLOCK_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlock.icon")"
 	NAGRAM_COLORFUL_ICON="$(real_file_dir "${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramColorful.icon")"
 
-	mkdir -p "${WORK_DIR}/out"
+	COMPILED_ICONS_DIR="${WORK_DIR}/out"
+	mkdir -p "${COMPILED_ICONS_DIR}"
 	"${ACTOOL}" \
-		--compile "${WORK_DIR}/out" \
+		--compile "${COMPILED_ICONS_DIR}" \
 		--errors --warnings --notices \
 		--output-format human-readable-text \
 		--platform "${ACTOOL_PLATFORM}" \
@@ -99,8 +115,10 @@ if [ -n "${ACTOOL}" ]; then
 		"${NAGRAM_ICON}" \
 		"${NAGRAM_BLOCK_ICON}" \
 		"${NAGRAM_COLORFUL_ICON}"
+fi
 
-	ditto "${WORK_DIR}/out" "${APP_DIR}"
+if [ -n "${COMPILED_ICONS_DIR}" ]; then
+	ditto "${COMPILED_ICONS_DIR}" "${APP_DIR}"
 fi
 
 ensure_dict() {
@@ -164,7 +182,7 @@ require_legacy_icon_pngs() {
 	fi
 }
 
-if [ -n "${ACTOOL}" ]; then
+if [ -n "${COMPILED_ICONS_DIR}" ]; then
 	reset_primary_icon ":CFBundleIcons" Nagram60x60
 	reset_primary_icon ":CFBundleIcons~ipad" Nagram60x60 Nagram76x76
 

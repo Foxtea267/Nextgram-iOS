@@ -353,6 +353,14 @@ composer_source_icon_folders = ["Nagram", "NagramBlock", "NagramColorful"]
 composer_build_icon_folders = ["NagramBuild"]
 
 filegroup(
+    name = "NagramPrecompiledComposerIcons",
+    srcs = glob(
+        ["Telegram-iOS/NagramPrecompiledComposerIcons/*"],
+        allow_empty = True,
+    ),
+)
+
+filegroup(
     name = "NagramIconPreviews",
     srcs = glob([
         "Telegram-iOS/NagramBlock*.png",
@@ -1009,6 +1017,7 @@ sh_binary(
         ":Nagram_icon",
         ":NagramBlock_icon",
         ":NagramColorful_icon",
+        ":NagramPrecompiledComposerIcons",
         "//submodules/LegacyComponents:LegacyComponentsAssets",
         "//submodules/PasswordSetupUI:PasswordSetupUIAssets",
         "//submodules/TelegramUI:TelegramUIAssets",

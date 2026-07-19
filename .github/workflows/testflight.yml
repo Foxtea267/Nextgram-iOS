@@ -24,7 +24,38 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  composer-icons:
+    runs-on: xcode-27
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Export Nagram Composer icons with Xcode 27
+        run: |
+          set -euo pipefail
+          STAGE_DIR="${RUNNER_TEMP}/nagram-icon-stage"
+          OUTPUT_DIR="${RUNNER_TEMP}/nagram-composer-icons"
+          mkdir -p "${STAGE_DIR}/Telegram.app" "${OUTPUT_DIR}"
+          plutil -create xml1 "${STAGE_DIR}/Telegram.app/Info.plist"
+          NAGRAM_RUNFILES_ROOT="${GITHUB_WORKSPACE}" \
+            NAGRAM_ACTOOL="$(xcrun --find actool)" \
+            Telegram/Telegram-iOS/NagramFixComposerAlternateIcons.sh "${STAGE_DIR}"
+          cp "${STAGE_DIR}/Telegram.app/Assets.car" "${OUTPUT_DIR}/"
+          cp "${STAGE_DIR}/Telegram.app"/Nagram*.png "${OUTPUT_DIR}/"
+
+      - name: Upload Nagram Composer icons
+        uses: actions/upload-artifact@v4
+        with:
+          name: nagram-composer-icons
+          path: ${{ runner.temp }}/nagram-composer-icons
+          if-no-files-found: error
+          retention-days: 1
+
   build-upload:
+    needs: composer-icons
     runs-on: macos-26
     timeout-minutes: 180
     env:
@@ -45,6 +76,12 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+
+      - name: Download Nagram Composer icons
+        uses: actions/download-artifact@v4
+        with:
+          name: nagram-composer-icons
+          path: Telegram/Telegram-iOS/NagramPrecompiledComposerIcons
 
       - name: Select Xcode 26.x
         run: |
