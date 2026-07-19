@@ -514,17 +514,22 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                 }
                 
                 // MARK: NAGRAM — 接收 / 历史展示时盘古之白
-                self.nagramPanguInsertedUtf16Offsets = []
-                self.nagramPanguSourceText = nil
+                let nagramPanguSourceText: String?
+                let nagramPanguInsertedUtf16Offsets: [Int]
                 if NagramSettings.shared.enablePanguOnReceiving {
-                    let panguSourceText = rawText
                     let transform = NagramPangu.transform(rawText, protectedUtf16Ranges: nagramPanguProtectedRanges(rawText: rawText, messageEntities: messageEntities))
                     if !transform.insertedUtf16Offsets.isEmpty {
-                        self.nagramPanguSourceText = panguSourceText
-                        self.nagramPanguInsertedUtf16Offsets = transform.insertedUtf16Offsets
+                        nagramPanguSourceText = rawText
+                        nagramPanguInsertedUtf16Offsets = transform.insertedUtf16Offsets
                         rawText = transform.text
                         messageEntities = nagramPanguTransformEntities(messageEntities, insertedUtf16Offsets: transform.insertedUtf16Offsets)
+                    } else {
+                        nagramPanguSourceText = nil
+                        nagramPanguInsertedUtf16Offsets = []
                     }
+                } else {
+                    nagramPanguSourceText = nil
+                    nagramPanguInsertedUtf16Offsets = []
                 }
                 
                 var formattedDateUpdatePeriod: Int32?
@@ -957,6 +962,9 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                                     }
                                 )
                             ))
+                            // MARK: NAGRAM
+                            strongSelf.nagramPanguSourceText = nagramPanguSourceText
+                            strongSelf.nagramPanguInsertedUtf16Offsets = nagramPanguInsertedUtf16Offsets
                             animation.animator.updatePosition(layer: strongSelf.textNode.textNode.layer, position: realTextFrame.center, completion: nil)
                             animation.animator.updateBounds(layer: strongSelf.textNode.textNode.layer, bounds: CGRect(origin: CGPoint(), size: realTextFrame.size), completion: nil)
                             
