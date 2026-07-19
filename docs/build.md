@@ -20,6 +20,26 @@
 | 免费 Apple ID 自签 | 通常只有主 app profile | 允许禁用扩展 | 必须启用 provisioning |
 | 模拟器免签 | 不需要 profile | 允许禁用扩展 | 允许禁用 provisioning |
 
+## 真机构建强制预检
+
+收到“真机打包”“真机构建”或“安装到 iPhone”请求时，必须先完成以下检查，再选择签名模式：
+
+1. 完整阅读本页的“签名模式选择”、本节、“在 workspace / worktree 构建真机包”和对应签名模式章节。
+2. 检查目标设备是否已连接且 paired。
+3. 检查 Keychain 中的 Apple Development identity。
+4. 检查主 app 与 6 个扩展的 provisioning profiles；必须核对 profile 类型、Team ID、Application Identifier 和有效期，不能只按文件数量判断。
+5. 检查当前 jj workspace 的 `build-input/local-configuration.json`、`build-input/codesigning-development/` 和 `local.bazelrc`。
+6. 检查 `build-system/bazel-rules/` 等构建依赖目录是否已物化。
+7. 只有以上事实明确后，才能选择完整签名、免费 Apple ID 自签或模拟器免签。
+
+硬规则：
+
+- 隔离 jj workspace 中缺少 gitignored `build-input`，**不等于**只能免费自签。应先从操作者明确许可的私有来源恢复签名输入；未经许可不得访问其他 workspace。
+- 如果主 app 与 6 个扩展 profile 齐全，必须走完整签名，不得设置 `disableExtensions` 或 `disableProvisioningProfiles`。
+- 只有完整 profiles 确实不可用且用户明确要求免费 Apple ID 自签时，才允许禁用扩展；真机包始终不得禁用 provisioning。
+- Bazel rule/submodule 目录为空属于依赖未物化，不能通过切换签名模式规避。若恢复依赖需要 `git` 命令，jj-only agent 必须先取得该具体命令的当次授权。
+- 完成标准是 IPA 生成、`devicectl` 安装成功且设备端安装结果已验证；仅构建成功不算完成。
+
 完整签名至少需要这些 provisioning 目标：
 
 - `Telegram`
@@ -30,7 +50,7 @@
 - `Widget`
 - `BroadcastUpload`
 
-当前仓库的 `build-input/codesigning-development/profiles/` 已有一套完整 development profiles；使用它时就是“正式/完整签名真机包”模式，不能禁用扩展。
+`build-input/*` 已被 gitignore，新建的隔离 jj workspace 不保证自带签名输入。若当前 workspace 缺失，应先按“在 workspace / worktree 构建真机包”从操作者许可的私有来源恢复；恢复后主 app 与 6 个扩展 development profiles 齐全时，必须使用“正式/完整签名真机包”模式，不能禁用扩展。
 
 ## local.bazelrc 模板
 

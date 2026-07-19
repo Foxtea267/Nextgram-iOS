@@ -43,6 +43,18 @@ Important files:
 
 Full app builds are the only reliable validation path for app changes. There is no supported per-module build workflow for this fork.
 
+### Device build hard gate
+
+For any request to build for or install on a physical iPhone, follow this order before selecting a signing mode or starting a build:
+
+1. Read `docs/build.md` sections “签名模式选择”, “真机构建强制预检”, “在 workspace / worktree 构建真机包”, and the matching signing-mode section.
+2. Check the connected device, Apple Development identity, main-app and all 6 extension profiles, `build-input/local-configuration.json`, `build-input/codesigning-development/`, Bazel rule/submodule directories, and signing flags in `local.bazelrc`.
+3. If the app and all 6 extension profiles are available, use full signing. Never set `disableExtensions` or `disableProvisioningProfiles`.
+4. Missing gitignored `build-input` files in an isolated jj workspace do **not** imply free-signing mode. Restore them from the operator-approved private source first; do not inspect another workspace without explicit permission.
+5. Use free Apple ID signing only when complete profiles are genuinely unavailable and the user requested that mode. It may disable extensions, but never provisioning profiles.
+6. Empty Bazel rule/submodule directories are dependency failures, not signing failures. Do not change signing mode to work around them. If recovery requires a `git` command, request explicit authorization for that exact command under the jj-only policy.
+7. Do not claim a device build succeeded until the IPA is produced, installed with `devicectl`, and the install result is verified.
+
 ### Build
 
 Simulator-only, codesigning-free setup:
