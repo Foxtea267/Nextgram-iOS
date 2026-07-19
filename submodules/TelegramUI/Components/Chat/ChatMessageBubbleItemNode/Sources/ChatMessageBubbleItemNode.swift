@@ -1933,7 +1933,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         }
 
         // MARK: NAGRAM — Hide the channel forward button to free horizontal space for posts.
+        var useWideChannelPostLayout = false
         if NagramSettings.shared.wideChannelPosts, !isPreview, !isAd, let channel = firstMessage.peers[firstMessage.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
+            useWideChannelPostLayout = true
             needsShareButton = false
         }
         
@@ -1988,6 +1990,12 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             }
         }
         maximumContentWidth = max(0.0, maximumContentWidth)
+
+        var contentLayoutConstants = layoutConstants
+        if useWideChannelPostLayout {
+            // MARK: NAGRAM — Let channel media use the space freed by the hidden forward button.
+            contentLayoutConstants.image.maxDimensions.width = maximumContentWidth
+        }
         
         var contentPropertiesAndPrepareLayouts: [(Message, Bool, ChatMessageEntryAttributes, BubbleItemAttributes, (_ item: ChatMessageBubbleContentItem, _ layoutConstants: ChatMessageItemLayoutConstants, _ preparePosition: ChatMessageBubblePreparePosition, _ messageSelection: Bool?, _ constrainedSize: CGSize, _ avatarInset: CGFloat) -> (ChatMessageBubbleContentProperties, CGSize?, CGFloat, (CGSize, ChatMessageBubbleContentPosition) -> (CGFloat, (CGFloat) -> (CGSize, (ListViewItemUpdateAnimation, Bool, ListViewItemApply?) -> Void))))] = []
         var addedContentNodes: [(Message, Bool, ChatMessageBubbleContentNode, Int?)]?
@@ -2263,7 +2271,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
                     }
             }
             
-            let (properties, unboundSize, maxNodeWidth, nodeLayout) = prepareLayout(contentItem, layoutConstants, prepareContentPosition, itemSelection, CGSize(width: maximumContentWidth, height: CGFloat.greatestFiniteMagnitude), avatarInset)
+            let (properties, unboundSize, maxNodeWidth, nodeLayout) = prepareLayout(contentItem, contentLayoutConstants, prepareContentPosition, itemSelection, CGSize(width: maximumContentWidth, height: CGFloat.greatestFiniteMagnitude), avatarInset)
             maximumNodeWidth = min(maximumNodeWidth, maxNodeWidth)
             
             if let offset = properties.shareButtonOffset {
@@ -2504,7 +2512,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
         var mosaicStatusSizeAndApply: (CGSize, (ListViewItemUpdateAnimation) -> ChatMessageDateAndStatusNode)?
         
         if let mosaicRange = mosaicRange {
-            let maxSize = layoutConstants.image.maxDimensions.fittedToWidthOrSmaller(maximumContentWidth - layoutConstants.image.bubbleInsets.left - layoutConstants.image.bubbleInsets.right)
+            let maxSize = contentLayoutConstants.image.maxDimensions.fittedToWidthOrSmaller(maximumContentWidth - contentLayoutConstants.image.bubbleInsets.left - contentLayoutConstants.image.bubbleInsets.right)
             let (innerFramesAndPositions, innerSize) = chatMessageBubbleMosaicLayout(maxSize: maxSize, itemSizes: contentPropertiesAndLayouts[mosaicRange].map { item in
                 guard let size = item.0, size.width > 0.0, size.height > 0 else {
                     return CGSize(width: 256.0, height: 256.0)
