@@ -377,6 +377,15 @@ public final class NagramSettings {
     /// OpenAI-compatible model name for LLM translation.
     @NagramDefault("nagram.translationLLMModel", "")
     public var translationLLMModel: String
+    /// Optional user prompt template. Empty uses `defaultTranslationLLMPrompt`.
+    @NagramDefault("nagram.translationLLMPrompt", "")
+    public var translationLLMPrompt: String
+    /// Include recent messages when translating chat messages with an LLM.
+    @NagramDefault("nagram.translationLLMUseContext", false)
+    public var translationLLMUseContext: Bool
+    /// OpenAI-compatible LLM temperature in tenths (0...20).
+    @NagramDefault("nagram.translationLLMTemperatureTenths", 7)
+    public var translationLLMTemperatureTenths: Int32
 
     // MARK: 波次 3 批 D — 需新逻辑
     /// 回车键发送消息
@@ -449,6 +458,8 @@ private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, de
 }
 
 public extension NagramSettings {
+    static let defaultTranslationLLMPrompt = "Translate to @toLang:\n\n@text"
+
     var recentStickerLimitValue: Int {
         guard NagramSettings.recentStickerLimitOptions.contains(self.recentStickerLimit) else {
             self.recentStickerLimit = 20
@@ -558,6 +569,18 @@ public extension NagramSettings {
 
     var translationLLMModelValue: String {
         return self.translationLLMModel.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    var translationLLMPromptValue: String {
+        return self.translationLLMPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? Self.defaultTranslationLLMPrompt : self.translationLLMPrompt
+    }
+
+    var translationLLMTemperatureTenthsValue: Int32 {
+        return max(0, min(20, self.translationLLMTemperatureTenths))
+    }
+
+    var translationLLMTemperatureValue: Double {
+        return Double(self.translationLLMTemperatureTenthsValue) / 10.0
     }
 
     func translationLLMTranslationURL() -> URL? {

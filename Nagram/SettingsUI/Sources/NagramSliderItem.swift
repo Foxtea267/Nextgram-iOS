@@ -9,10 +9,10 @@ import PresentationDataUtils
 import ComponentFlow
 import SliderComponent
 
-// MARK: NAGRAM — 行内单值百分比滑杆,完全复刻省电模式 EnergyUsageBatteryLevelItem 的视觉:
-// 上排 左「min%」/ 中「当前%」/ 右「max%」,下方 SliderComponent(useNative: true)粗轨道。
-// 用于贴纸尺寸(50–200%),参数化 minValue/maxValue。
-// 关键:拖动时 valueUpdated 回调里本节点自更新中央「X%」并回写设置;宿主只写值、不重建列表,
+// MARK: NAGRAM — 行内单值滑杆,完全复刻省电模式 EnergyUsageBatteryLevelItem 的视觉:
+// 上排显示范围和当前值,下方使用 SliderComponent(useNative: true) 粗轨道。
+// 默认显示百分比,也可通过 valueText 自定义显示格式。
+// 关键:拖动时 valueUpdated 回调里本节点自更新当前值并回写设置;宿主只写值、不重建列表,
 // 从而彻底避开「setter → UserDefaults.didChange 同步 → 重入同一属性 getter」的 Swift 独占访问崩溃。
 final class NagramSliderItem: ListViewItem, ItemListItem {
     let theme: PresentationTheme
@@ -20,18 +20,20 @@ final class NagramSliderItem: ListViewItem, ItemListItem {
     let maxValue: Int32
     let value: Int32
     let title: String?
+    let valueText: (Int32) -> String
     let systemStyle: ItemListSystemStyle
     let sectionId: ItemListSectionId
     let updated: (Int32) -> Void
     let longTapAction: (() -> Void)?
     let tag: ItemListItemTag?
 
-    init(theme: PresentationTheme, minValue: Int32, maxValue: Int32, value: Int32, title: String? = nil, sectionId: ItemListSectionId, systemStyle: ItemListSystemStyle = .glass, updated: @escaping (Int32) -> Void, longTapAction: (() -> Void)? = nil, tag: ItemListItemTag? = nil) {
+    init(theme: PresentationTheme, minValue: Int32, maxValue: Int32, value: Int32, title: String? = nil, valueText: @escaping (Int32) -> String = { "\($0)%" }, sectionId: ItemListSectionId, systemStyle: ItemListSystemStyle = .glass, updated: @escaping (Int32) -> Void, longTapAction: (() -> Void)? = nil, tag: ItemListItemTag? = nil) {
         self.theme = theme
         self.minValue = minValue
         self.maxValue = maxValue
         self.value = value
         self.title = title
+        self.valueText = valueText
         self.systemStyle = systemStyle
         self.sectionId = sectionId
         self.updated = updated
@@ -219,14 +221,14 @@ private final class NagramSliderItemNode: ListViewItemNode, ItemListItemNode {
 
                 if let title = item.title {
                     strongSelf.leftTextNode.attributedText = NSAttributedString(string: title, font: Font.regular(17.0), textColor: item.theme.list.itemPrimaryTextColor)
-                    strongSelf.rightTextNode.attributedText = NSAttributedString(string: "\(item.value)%", font: Font.regular(17.0), textColor: item.theme.list.itemSecondaryTextColor)
+                    strongSelf.rightTextNode.attributedText = NSAttributedString(string: item.valueText(item.value), font: Font.regular(17.0), textColor: item.theme.list.itemSecondaryTextColor)
                     strongSelf.centerTextNode.attributedText = nil
                 } else {
-                    strongSelf.leftTextNode.attributedText = NSAttributedString(string: "\(item.minValue)%", font: Font.regular(13.0), textColor: item.theme.list.itemSecondaryTextColor)
-                    strongSelf.rightTextNode.attributedText = NSAttributedString(string: "\(item.maxValue)%", font: Font.regular(13.0), textColor: item.theme.list.itemSecondaryTextColor)
-                    strongSelf.centerTextNode.attributedText = NSAttributedString(string: "\(item.value)%", font: Font.regular(16.0), textColor: item.theme.list.itemPrimaryTextColor)
+                    strongSelf.leftTextNode.attributedText = NSAttributedString(string: item.valueText(item.minValue), font: Font.regular(13.0), textColor: item.theme.list.itemSecondaryTextColor)
+                    strongSelf.rightTextNode.attributedText = NSAttributedString(string: item.valueText(item.maxValue), font: Font.regular(13.0), textColor: item.theme.list.itemSecondaryTextColor)
+                    strongSelf.centerTextNode.attributedText = NSAttributedString(string: item.valueText(item.value), font: Font.regular(16.0), textColor: item.theme.list.itemPrimaryTextColor)
                 }
-                strongSelf.centerMeasureTextNode.attributedText = NSAttributedString(string: "\(item.maxValue)%", font: Font.regular(16.0), textColor: item.theme.list.itemPrimaryTextColor)
+                strongSelf.centerMeasureTextNode.attributedText = NSAttributedString(string: item.valueText(item.maxValue), font: Font.regular(16.0), textColor: item.theme.list.itemPrimaryTextColor)
 
                 let sideInset: CGFloat = 18.0
                 let availableTitleWidth = max(0.0, params.width - params.leftInset - params.rightInset - sideInset * 2.0 - 72.0)
@@ -298,12 +300,12 @@ private final class NagramSliderItemNode: ListViewItemNode, ItemListItemNode {
             verticalInset = 4.0
         }
         if item.title != nil {
-            self.rightTextNode.attributedText = NSAttributedString(string: "\(value)%", font: Font.regular(17.0), textColor: item.theme.list.itemSecondaryTextColor)
+            self.rightTextNode.attributedText = NSAttributedString(string: item.valueText(value), font: Font.regular(17.0), textColor: item.theme.list.itemSecondaryTextColor)
             let rightTextSize = self.rightTextNode.updateLayout(CGSize(width: 100.0, height: 100.0))
             let sideInset: CGFloat = 18.0
             self.rightTextNode.frame = CGRect(origin: CGPoint(x: params.width - params.leftInset - sideInset - rightTextSize.width, y: 13.0 + verticalInset), size: rightTextSize)
         } else {
-            self.centerTextNode.attributedText = NSAttributedString(string: "\(value)%", font: Font.regular(16.0), textColor: item.theme.list.itemPrimaryTextColor)
+            self.centerTextNode.attributedText = NSAttributedString(string: item.valueText(value), font: Font.regular(16.0), textColor: item.theme.list.itemPrimaryTextColor)
             let centerTextSize = self.centerTextNode.updateLayout(CGSize(width: 200.0, height: 100.0))
             let centerMeasureTextSize = self.centerMeasureTextNode.updateLayout(CGSize(width: 200.0, height: 100.0))
             self.centerTextNode.frame = CGRect(origin: CGPoint(x: floor((params.width - centerMeasureTextSize.width) / 2.0), y: 11.0 + verticalInset), size: centerTextSize)

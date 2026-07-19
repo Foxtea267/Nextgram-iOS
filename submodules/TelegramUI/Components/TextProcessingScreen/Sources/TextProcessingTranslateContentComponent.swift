@@ -107,6 +107,7 @@ final class TextProcessingTranslateContentComponent: Component {
     let strings: PresentationStrings
     let styles: [TextProcessingScreen.Style]
     let inputText: TextWithEntities
+    let messageId: EngineMessage.Id? // MARK: NAGRAM — chat context for manual translation.
     let externalState: ExternalState
     let mode: Mode
     let copyAction: (() -> Void)?
@@ -125,6 +126,7 @@ final class TextProcessingTranslateContentComponent: Component {
         styles: [TextProcessingScreen.Style],
         externalState: ExternalState,
         inputText: TextWithEntities,
+        messageId: EngineMessage.Id?,
         mode: Mode,
         copyAction: (() -> Void)?,
         displayLanguageSelectionMenu: @escaping (UIView, String, TelegramComposeAIMessageMode.StyleId, Bool, @escaping (String, TelegramComposeAIMessageMode.StyleReference) -> Void) -> Void,
@@ -141,6 +143,7 @@ final class TextProcessingTranslateContentComponent: Component {
         self.styles = styles
         self.externalState = externalState
         self.inputText = inputText
+        self.messageId = messageId
         self.mode = mode
         self.copyAction = copyAction
         self.displayLanguageSelectionMenu = displayLanguageSelectionMenu
@@ -169,6 +172,9 @@ final class TextProcessingTranslateContentComponent: Component {
             return false
         }
         if lhs.inputText != rhs.inputText {
+            return false
+        }
+        if lhs.messageId != rhs.messageId {
             return false
         }
         if lhs.mode != rhs.mode {
@@ -233,6 +239,7 @@ final class TextProcessingTranslateContentComponent: Component {
                         text: component.inputText.text,
                         toLang: result.language,
                         entities: component.inputText.entities,
+                        messageId: component.messageId,
                         fromLang: component.externalState.sourceLanguage
                     ) |> deliverOnMainQueue).startStrict(next: { [weak self] translatedText in
                         guard let self, let component = self.component else {

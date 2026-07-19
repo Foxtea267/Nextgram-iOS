@@ -36,6 +36,11 @@
 "Nagram.TranslationLLMFetchingModels" = "Fetching Models…";
 "Nagram.TranslationLLMFetchedModels" = "Fetched Models";
 "Nagram.TranslationLLMFetchModelsFailed" = "Failed to fetch models. Check API format, Base URL, and API Key.";
+"Nagram.TranslationLLMPrompt" = "User Prompt";
+"Nagram.TranslationLLMPrompt.Footer" = "Use @toLang for the target language and @text for the source text. If @text is omitted, the source text is appended.";
+"Nagram.TranslationLLMUseContext" = "Use Context";
+"Nagram.TranslationLLMUseContext.Footer" = "When translating chat messages, includes up to five earlier messages to improve quality, but uses more tokens.";
+"Nagram.TranslationLLMTemperature" = "Precision and Creativity";
 "Nagram.Section.Pangu" = "Pangu Spacing";
 "Nagram.Section.MessageMenu" = "Message Menu";
 "Nagram.Section.Filtering" = "Filtering";

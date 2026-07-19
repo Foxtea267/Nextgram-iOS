@@ -45,6 +45,7 @@ final class TextProcessingContentComponent: Component {
     let previewIconFile: TelegramMediaFile?
     let styles: [TextProcessingScreen.Style]
     let inputText: TextWithEntities
+    let messageId: EngineMessage.Id? // MARK: NAGRAM — chat context for manual translation.
     let initialEditState: TextProcessingScreen.EditState?
     let ignoredTranslationLanguages: [String]
     let shouldDisplayStyleNotice: Bool
@@ -64,6 +65,7 @@ final class TextProcessingContentComponent: Component {
         previewIconFile: TelegramMediaFile?,
         styles: [TextProcessingScreen.Style],
         inputText: TextWithEntities,
+        messageId: EngineMessage.Id?,
         initialEditState: TextProcessingScreen.EditState?,
         ignoredTranslationLanguages: [String],
         shouldDisplayStyleNotice: Bool,
@@ -82,6 +84,7 @@ final class TextProcessingContentComponent: Component {
         self.mode = mode
         self.previewIconFile = previewIconFile
         self.inputText = inputText
+        self.messageId = messageId
         self.initialEditState = initialEditState
         self.ignoredTranslationLanguages = ignoredTranslationLanguages
         self.shouldDisplayStyleNotice = shouldDisplayStyleNotice
@@ -731,6 +734,7 @@ final class TextProcessingContentComponent: Component {
                     styles: component.styles,
                     externalState: self.translateState,
                     inputText: component.inputText,
+                    messageId: component.messageId,
                     mode: .translate(ignoredLanguages: component.ignoredTranslationLanguages),
                     copyAction: component.copyCurrentResult,
                     displayLanguageSelectionMenu: component.displayLanguageSelectionMenu,
@@ -777,6 +781,7 @@ final class TextProcessingContentComponent: Component {
                     styles: component.styles,
                     externalState: self.stylizeState,
                     inputText: inputText,
+                    messageId: component.messageId,
                     mode: isPreview ? .preview(from: fromText, to: toText, authorPeer: authorPeer, userCount: userCount, isRequesting: isRequestingPreview) : .stylize,
                     copyAction: component.copyCurrentResult,
                     displayLanguageSelectionMenu: component.displayLanguageSelectionMenu,
@@ -898,6 +903,7 @@ final class TextProcessingContentComponent: Component {
                     styles: component.styles,
                     externalState: self.fixState,
                     inputText: component.inputText,
+                    messageId: component.messageId,
                     mode: .fix,
                     copyAction: component.copyCurrentResult,
                     displayLanguageSelectionMenu: component.displayLanguageSelectionMenu,
@@ -1149,6 +1155,7 @@ private final class TextProcessingSheetComponent: Component {
     let ignoredTranslationLanguages: [String]
     let initialStyles: [TextProcessingScreen.Style]
     let inputText: TextWithEntities
+    let messageId: EngineMessage.Id? // MARK: NAGRAM — chat context for manual translation.
     let initialEditState: TextProcessingScreen.EditState?
     let shouldDisplayStyleNotice: Bool
     let previewIconFile: TelegramMediaFile?
@@ -1161,6 +1168,7 @@ private final class TextProcessingSheetComponent: Component {
         ignoredTranslationLanguages: [String],
         initialStyles: [TextProcessingScreen.Style],
         inputText: TextWithEntities,
+        messageId: EngineMessage.Id?,
         initialEditState: TextProcessingScreen.EditState?,
         shouldDisplayStyleNotice: Bool,
         previewIconFile: TelegramMediaFile?,
@@ -1172,6 +1180,7 @@ private final class TextProcessingSheetComponent: Component {
         self.ignoredTranslationLanguages = ignoredTranslationLanguages
         self.initialStyles = initialStyles
         self.inputText = inputText
+        self.messageId = messageId
         self.initialEditState = initialEditState
         self.shouldDisplayStyleNotice = shouldDisplayStyleNotice
         self.previewIconFile = previewIconFile
@@ -1512,6 +1521,7 @@ private final class TextProcessingSheetComponent: Component {
                         previewIconFile: component.previewIconFile,
                         styles: self.styles,
                         inputText: component.inputText,
+                        messageId: component.messageId,
                         initialEditState: component.initialEditState,
                         ignoredTranslationLanguages: component.ignoredTranslationLanguages,
                         shouldDisplayStyleNotice: component.shouldDisplayStyleNotice,
@@ -2048,6 +2058,7 @@ public class TextProcessingScreen: ViewControllerComponentContainer {
         theme: PresentationTheme? = nil,
         mode: Mode,
         inputText: TextWithEntities,
+        messageId: EngineMessage.Id? = nil, // MARK: NAGRAM — chat context for manual translation.
         copyResult: ((TextWithEntities) -> Void)?,
         translateChat: ((String) -> Void)?
     ) async {
@@ -2129,6 +2140,7 @@ public class TextProcessingScreen: ViewControllerComponentContainer {
                 ignoredTranslationLanguages: translationSettings.ignoredLanguages ?? [],
                 initialStyles: styles,
                 inputText: inputText,
+                messageId: messageId,
                 initialEditState: initialEditState,
                 shouldDisplayStyleNotice: shouldDisplayStyleNotice,
                 previewIconFile: previewIconFile,

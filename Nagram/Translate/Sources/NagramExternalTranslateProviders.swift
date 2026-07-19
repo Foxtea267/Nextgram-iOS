@@ -4,7 +4,7 @@ import SwiftSignalKit
 import TelegramCore
 
 // MARK: NAGRAM — External translation providers imported from Android Nagram/Nnngram patterns.
-func nagramExternalTranslate(provider: NagramTranslationProvider, text: String, fromLang: String?, toLang: String) -> Signal<(String, [MessageTextEntity])?, TranslationError> {
+func nagramExternalTranslate(provider: NagramTranslationProvider, text: String, fromLang: String?, toLang: String, context: [String] = []) -> Signal<(String, [MessageTextEntity])?, TranslationError> {
     guard !text.isEmpty else {
         return .fail(.textIsEmpty)
     }
@@ -19,7 +19,7 @@ func nagramExternalTranslate(provider: NagramTranslationProvider, text: String, 
     case .transmart:
         return nagramTranSmartTranslate(text: text, fromLang: fromLang, toLang: toLang)
     case .llm:
-        return nagramLLMTranslate(text: text, fromLang: fromLang, toLang: toLang)
+        return nagramLLMTranslate(text: text, fromLang: fromLang, toLang: toLang, context: context)
     case .telegram:
         return .fail(.generic)
     }

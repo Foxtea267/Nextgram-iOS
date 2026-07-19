@@ -13,6 +13,7 @@ private enum NagramLLMTranslationInputField: Int32, Hashable {
     case endpoint
     case apiKey
     case model
+    case prompt
 }
 
 private final class NagramLLMTranslationArguments {
@@ -20,12 +21,16 @@ private final class NagramLLMTranslationArguments {
     let chooseFormat: () -> Void
     let fetchModels: () -> Void
     let selectFetchedModel: () -> Void
+    let updateUseContext: (Bool) -> Void
+    let updateTemperature: (Int32) -> Void
 
-    init(inputUpdated: @escaping (NagramLLMTranslationInputField, String) -> Void, chooseFormat: @escaping () -> Void, fetchModels: @escaping () -> Void, selectFetchedModel: @escaping () -> Void) {
+    init(inputUpdated: @escaping (NagramLLMTranslationInputField, String) -> Void, chooseFormat: @escaping () -> Void, fetchModels: @escaping () -> Void, selectFetchedModel: @escaping () -> Void, updateUseContext: @escaping (Bool) -> Void, updateTemperature: @escaping (Int32) -> Void) {
         self.inputUpdated = inputUpdated
         self.chooseFormat = chooseFormat
         self.fetchModels = fetchModels
         self.selectFetchedModel = selectFetchedModel
+        self.updateUseContext = updateUseContext
+        self.updateTemperature = updateTemperature
     }
 }
 
@@ -35,6 +40,8 @@ private enum NagramLLMTranslationEntryStableId: Hashable {
     case input(NagramLLMTranslationInputField)
     case fetchModels
     case fetchedModels
+    case useContext
+    case temperature
     case footer(Int32)
 }
 
@@ -42,13 +49,16 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
     case header(section: Int32, text: String)
     case format(section: Int32, title: String, label: String)
     case input(section: Int32, field: NagramLLMTranslationInputField, title: String, text: String, placeholder: String, isSecret: Bool)
+    case prompt(section: Int32, text: String, placeholder: String)
+    case useContext(section: Int32, title: String, value: Bool)
+    case temperature(section: Int32, title: String, minValue: Int32, maxValue: Int32, value: Int32)
     case fetchModels(section: Int32, title: String)
     case fetchedModels(section: Int32, title: String, label: String)
     case footer(section: Int32, text: String)
 
     var section: ItemListSectionId {
         switch self {
-        case let .header(section, _), let .format(section, _, _), let .input(section, _, _, _, _, _), let .fetchModels(section, _), let .fetchedModels(section, _, _), let .footer(section, _):
+        case let .header(section, _), let .format(section, _, _), let .input(section, _, _, _, _, _), let .prompt(section, _, _), let .useContext(section, _, _), let .temperature(section, _, _, _, _), let .fetchModels(section, _), let .fetchedModels(section, _, _), let .footer(section, _):
             return section
         }
     }
@@ -61,6 +71,12 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
             return .format
         case let .input(_, field, _, _, _, _):
             return .input(field)
+        case .prompt:
+            return .input(.prompt)
+        case .useContext:
+            return .useContext
+        case .temperature:
+            return .temperature
         case .fetchModels:
             return .fetchModels
         case .fetchedModels:
@@ -78,6 +94,8 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
             return 10
         case let .input(_, field, _, _, _, _):
             return 20 + field.rawValue
+        case let .prompt(section, _, _), let .useContext(section, _, _), let .temperature(section, _, _, _, _):
+            return section * 1000 + 10
         case .fetchModels:
             return 1010
         case .fetchedModels:
@@ -97,6 +115,15 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
             return false
         case let .input(lSection, lField, lTitle, lText, lPlaceholder, lIsSecret):
             if case let .input(rSection, rField, rTitle, rText, rPlaceholder, rIsSecret) = rhs { return lSection == rSection && lField == rField && lTitle == rTitle && lText == rText && lPlaceholder == rPlaceholder && lIsSecret == rIsSecret }
+            return false
+        case let .prompt(lSection, lText, lPlaceholder):
+            if case let .prompt(rSection, rText, rPlaceholder) = rhs { return lSection == rSection && lText == rText && lPlaceholder == rPlaceholder }
+            return false
+        case let .useContext(lSection, lTitle, lValue):
+            if case let .useContext(rSection, rTitle, rValue) = rhs { return lSection == rSection && lTitle == rTitle && lValue == rValue }
+            return false
+        case let .temperature(lSection, lTitle, lMinValue, lMaxValue, lValue):
+            if case let .temperature(rSection, rTitle, rMinValue, rMaxValue, rValue) = rhs { return lSection == rSection && lTitle == rTitle && lMinValue == rMinValue && lMaxValue == rMaxValue && lValue == rValue }
             return false
         case let .fetchModels(lSection, lTitle):
             if case let .fetchModels(rSection, rTitle) = rhs { return lSection == rSection && lTitle == rTitle }
@@ -127,6 +154,20 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
             return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), clearType: .onFocus, sectionId: section, textUpdated: { value in
                 arguments.inputUpdated(field, value)
             }, action: {
+            })
+        case let .prompt(section, text, placeholder):
+            return ItemListMultilineInputItem(presentationData: presentationData, systemStyle: .glass, text: text, placeholder: placeholder, maxLength: nil, sectionId: section, style: .blocks, capitalization: false, autocorrection: false, returnKeyType: .default, minimalHeight: 96.0, textUpdated: { value in
+                arguments.inputUpdated(.prompt, value)
+            })
+        case let .useContext(section, title, value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { value in
+                arguments.updateUseContext(value)
+            })
+        case let .temperature(section, title, minValue, maxValue, value):
+            return NagramSliderItem(theme: presentationData.theme, minValue: minValue, maxValue: maxValue, value: value, title: title, valueText: { value in
+                return String(format: "%.1f", Double(value) / 10.0)
+            }, sectionId: section, updated: { value in
+                arguments.updateTemperature(value)
             })
         case let .fetchModels(section, title):
             return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: {
@@ -226,6 +267,17 @@ private func nagramLLMTranslationEntries(presentationData: PresentationData, isF
     if let fetchErrorKey {
         entries.append(.footer(section: 1, text: ngI18n(fetchErrorKey, lang)))
     }
+
+    entries.append(.header(section: 2, text: ngI18n("Nagram.TranslationLLMPrompt", lang)))
+    entries.append(.prompt(section: 2, text: settings.translationLLMPrompt, placeholder: NagramSettings.defaultTranslationLLMPrompt))
+    entries.append(.footer(section: 2, text: ngI18n("Nagram.TranslationLLMPrompt.Footer", lang)))
+
+    entries.append(.useContext(section: 3, title: ngI18n("Nagram.TranslationLLMUseContext", lang), value: settings.translationLLMUseContext))
+    entries.append(.footer(section: 3, text: ngI18n("Nagram.TranslationLLMUseContext.Footer", lang)))
+
+    if format == .openai {
+        entries.append(.temperature(section: 4, title: ngI18n("Nagram.TranslationLLMTemperature", lang), minValue: 0, maxValue: 20, value: settings.translationLLMTemperatureTenthsValue))
+    }
     return entries
 }
 
@@ -275,6 +327,8 @@ public func nagramLLMTranslationSettingsController(context: AccountContext) -> V
             NagramSettings.shared.translationLLMAPIKey = value
         case .model:
             NagramSettings.shared.translationLLMModel = value
+        case .prompt:
+            NagramSettings.shared.translationLLMPrompt = value
         }
     }, chooseFormat: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
@@ -322,6 +376,11 @@ public func nagramLLMTranslationSettingsController(context: AccountContext) -> V
         if !fetchedModels.isEmpty {
             presentModels(fetchedModels)
         }
+    }, updateUseContext: { value in
+        NagramSettings.shared.translationLLMUseContext = value
+        bump()
+    }, updateTemperature: { value in
+        NagramSettings.shared.translationLLMTemperatureTenths = value
     })
 
     let signal = combineLatest(queue: .mainQueue(),

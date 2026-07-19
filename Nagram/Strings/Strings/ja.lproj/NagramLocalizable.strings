@@ -36,6 +36,11 @@
 "Nagram.TranslationLLMFetchingModels" = "モデルを取得中…";
 "Nagram.TranslationLLMFetchedModels" = "取得済みモデル";
 "Nagram.TranslationLLMFetchModelsFailed" = "モデルの取得に失敗しました。API 形式、Base URL、API Key を確認してください。";
+"Nagram.TranslationLLMPrompt" = "ユーザープロンプト";
+"Nagram.TranslationLLMPrompt.Footer" = "@toLang は翻訳先の言語、@text は原文を表します。@text を省略すると、原文が末尾に追加されます。";
+"Nagram.TranslationLLMUseContext" = "コンテキストを使用";
+"Nagram.TranslationLLMUseContext.Footer" = "チャットメッセージの翻訳時に直前のメッセージを最大 5 件含めて品質を高めますが、より多くの Token を消費します。";
+"Nagram.TranslationLLMTemperature" = "厳密さと創造性";
 "Nagram.Section.Pangu" = "盤古の白";
 "Nagram.Section.MessageMenu" = "メッセージメニュー";
 "Nagram.Section.Filtering" = "フィルター";

@@ -23,7 +23,7 @@ public final class NagramTranslateService {
         case .telegram:
             return self.context.engine.messages.translate(text: text, toLang: nagramTargetLanguage(toLang, provider: provider), entities: entities, tone: tone, messageId: messageId)
         case .google, .googleCN, .microsoft, .yandex, .transmart, .llm:
-            return nagramExternalTranslate(provider: provider, text: text, fromLang: fromLang, toLang: toLang)
+            return self.translateExternally(provider: provider, text: text, fromLang: fromLang, toLang: toLang, messageId: messageId)
         }
     }
 
@@ -34,6 +34,52 @@ public final class NagramTranslateService {
             return self.context.engine.messages.translateMessages(messageIds: messageIds, fromLang: fromLang, toLang: nagramTargetLanguage(toLang, provider: provider), enableLocalIfPossible: enableLocalIfPossible, tone: tone)
         case .google, .googleCN, .microsoft, .yandex, .transmart, .llm:
             return self.translateMessagesExternally(provider: provider, messageIds: messageIds, fromLang: fromLang, toLang: toLang)
+        }
+    }
+
+    private func translateExternally(provider: NagramTranslationProvider, text: String, fromLang: String?, toLang: String, messageId: EngineMessage.Id?) -> Signal<(String, [MessageTextEntity])?, TranslationError> {
+        guard provider == .llm, NagramSettings.shared.translationLLMUseContext, let messageId else {
+            return nagramExternalTranslate(provider: provider, text: text, fromLang: fromLang, toLang: toLang)
+        }
+        return self.translationContext(messageId: messageId)
+        |> castError(TranslationError.self)
+        |> mapToSignal { context in
+            return nagramExternalTranslate(provider: provider, text: text, fromLang: fromLang, toLang: toLang, context: context)
+        }
+    }
+
+    private func translationContext(messageId: EngineMessage.Id) -> Signal<[String], NoError> {
+        return self.context.account.postbox.transaction { transaction -> Message? in
+            return transaction.getMessage(messageId)
+        }
+        |> mapToSignal { target -> Signal<[String], NoError> in
+            guard let target else {
+                return .single([])
+            }
+            return self.context.account.postbox.aroundMessageHistoryViewForLocation(
+                .peer(peerId: messageId.peerId, threadId: target.threadId),
+                anchor: .message(messageId),
+                ignoreMessagesInTimestampRange: nil,
+                ignoreMessageIds: Set(),
+                count: 32,
+                trackHoles: false,
+                clipHoles: true,
+                ignoreRelatedChats: true,
+                fixedCombinedReadStates: nil,
+                topTaggedMessageIdNamespaces: [Namespaces.Message.Cloud],
+                tag: nil,
+                appendMessagesFromTheSameGroup: false,
+                namespaces: .not(Namespaces.Message.allNonRegular),
+                orderStatistics: []
+            )
+            |> take(1)
+            |> map { view, _, _ -> [String] in
+                return view.entries.map(\.message)
+                    .filter { $0.index < target.index }
+                    .sorted(by: { $0.index < $1.index })
+                    .suffix(5)
+                    .compactMap(nagramTranslationContextText)
+            }
         }
     }
 
@@ -59,7 +105,7 @@ public final class NagramTranslateService {
             }
             let timeoutSeconds: Double = provider == .llm ? 45.0 : 15.0
             let signals: [Signal<(EngineMessage.Id, String)?, NoError>] = items.map { messageId, text in
-                return nagramExternalTranslate(provider: provider, text: text, fromLang: fromLang, toLang: toLang)
+                return self.translateExternally(provider: provider, text: text, fromLang: fromLang, toLang: toLang, messageId: messageId)
                 |> timeout(timeoutSeconds, queue: Queue.concurrentDefaultQueue(), alternate: .fail(.generic))
                 |> map { result -> (EngineMessage.Id, String)? in
                     guard let translatedText = result?.0, !translatedText.isEmpty else {
@@ -92,4 +138,16 @@ public final class NagramTranslateService {
             |> castError(TranslationError.self)
         }
     }
+}
+
+private func nagramTranslationContextText(_ message: Message) -> String? {
+    let text: String
+    if !message.text.isEmpty {
+        text = message.text
+    } else if let audioTranscription = message.attributes.first(where: { $0 is AudioTranscriptionMessageAttribute }) as? AudioTranscriptionMessageAttribute, !audioTranscription.text.isEmpty && !audioTranscription.isPending {
+        text = audioTranscription.text
+    } else {
+        return nil
+    }
+    return String(text.prefix(1000))
 }

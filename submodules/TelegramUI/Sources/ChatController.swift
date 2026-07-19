@@ -634,6 +634,75 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     var globalControlPanelsContextState: GlobalControlPanelsContext.State?
     var globalControlPanelsContextStateDisposable: Disposable?
     
+    // MARK: NAGRAM — Keep manual translation setup out of the large interaction initializer to avoid Swift type-checker timeouts.
+    private func openNagramTextTranslation(messageId: EngineMessage.Id?, canCopy: Bool, text: NSAttributedString, entities: [MessageTextEntity]?) {
+        self.chatDisplayNode.dismissInput()
+        let open: () -> Void = { [weak self] in
+            Task { @MainActor in
+                guard let self else {
+                    return
+                }
+                
+                let sharedDataEntries = await self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.translationSettings]).get()
+                let translationSettings: TranslationSettings
+                if let value = sharedDataEntries.entries[ApplicationSpecificSharedDataKeys.translationSettings], let parsedValue = value.get(TranslationSettings.self) {
+                    translationSettings = parsedValue
+                } else {
+                    translationSettings = .defaultSettings
+                }
+                
+                var showTranslateIfTopical = false
+                if let peer = self.presentationInterfaceState.renderedPeer?.chatMainPeer as? TelegramChannel, !(peer.addressName ?? "").isEmpty {
+                    showTranslateIfTopical = true
+                }
+                
+                let (_, language) = canTranslateText(context: self.context, text: text.string, showTranslate: translationSettings.showTranslate, showTranslateIfTopical: showTranslateIfTopical, ignoredLanguages: translationSettings.ignoredLanguages)
+                let _ = ApplicationSpecificNotice.incrementTranslationSuggestion(accountManager: self.context.sharedContext.accountManager, timestamp: Int32(Date().timeIntervalSince1970)).startStandalone()
+                
+                let copyResult: ((TextWithEntities) -> Void)?
+                if canCopy {
+                    copyResult = { [weak self] text in
+                        guard let self else {
+                            return
+                        }
+                        storeMessageTextInPasteboard(text.text, entities: text.entities)
+                        
+                        let infoText = self.presentationData.strings.Conversation_TextCopied
+                        self.present(UndoOverlayController(presentationData: self.presentationData, content: .copy(text: infoText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in
+                            return true
+                        }), in: .current)
+                    }
+                } else {
+                    copyResult = nil
+                }
+                
+                let translateChat: (String) -> Void = { [weak self] toLang in
+                    guard let self else {
+                        return
+                    }
+                    self.interfaceInteraction?.changeTranslationLanguage(toLang)
+                    self.interfaceInteraction?.toggleTranslation(.translated)
+                }
+                let controller = await TextProcessingScreen(
+                    context: self.context,
+                    mode: .translate(fromLanguage: language, applyResult: nil),
+                    inputText: TextWithEntities(text: text.string, entities: entities ?? []),
+                    messageId: messageId,
+                    copyResult: copyResult,
+                    translateChat: translateChat
+                )
+                self.push(controller)
+            }
+        }
+        if let currentContextController = self.currentContextController {
+            currentContextController.dismiss(completion: {
+                open()
+            })
+        } else {
+            open()
+        }
+    }
+    
     public init(
         context: AccountContext,
         chatLocation: ChatLocation,
@@ -4289,63 +4358,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                     self.currentSpeechHolder = speechHolder
                 }
             case .translate:
-                self.chatDisplayNode.dismissInput()
-                let f: () -> Void = { [weak self] in
-                    Task { @MainActor in
-                        guard let self else {
-                            return
-                        }
-                        
-                        let sharedDataEntries = await self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.translationSettings]).get()
-                        let translationSettings: TranslationSettings
-                        if let value = sharedDataEntries.entries[ApplicationSpecificSharedDataKeys.translationSettings], let parsedValue = value.get(TranslationSettings.self) {
-                            translationSettings = parsedValue
-                        } else {
-                            translationSettings = .defaultSettings
-                        }
-                        
-                        var showTranslateIfTopical = false
-                        if let peer = self.presentationInterfaceState.renderedPeer?.chatMainPeer as? TelegramChannel, !(peer.addressName ?? "").isEmpty {
-                            showTranslateIfTopical = true
-                        }
-                        
-                        let (_, language) = canTranslateText(context: context, text: text.string, showTranslate: translationSettings.showTranslate, showTranslateIfTopical: showTranslateIfTopical, ignoredLanguages: translationSettings.ignoredLanguages)
-                        
-                        let _ = ApplicationSpecificNotice.incrementTranslationSuggestion(accountManager: context.sharedContext.accountManager, timestamp: Int32(Date().timeIntervalSince1970)).startStandalone()
-                        
-                        // MARK: NAGRAM — route manual single-message translation through TextProcessingScreen so it uses NagramTranslateService instead of iOS system translationPresentation.
-                        self.push(await TextProcessingScreen(
-                            context: self.context,
-                            mode: .translate(fromLanguage: language, applyResult: nil),
-                            inputText: TextWithEntities(text: text.string, entities: entities ?? []),
-                            copyResult: canCopy ? { [weak self] text in
-                                guard let self else {
-                                    return
-                                }
-                                storeMessageTextInPasteboard(text.text, entities: text.entities)
-                                
-                                let infoText = self.presentationData.strings.Conversation_TextCopied
-                                self.present(UndoOverlayController(presentationData: self.presentationData, content: .copy(text: infoText), elevatedLayout: false, animateInAsReplacement: false, action: { _ in
-                                        return true
-                                }), in: .current)
-                            } : nil,
-                            translateChat: { [weak self] toLang in
-                                guard let self else {
-                                    return
-                                }
-                                self.interfaceInteraction?.changeTranslationLanguage(toLang)
-                                self.interfaceInteraction?.toggleTranslation(.translated)
-                            }
-                        ))
-                    }
-                }
-                if let currentContextController = self.currentContextController {
-                    currentContextController.dismiss(completion: {
-                        f()
-                    })
-                } else {
-                    f()
-                }
+                self.openNagramTextTranslation(messageId: message?.id, canCopy: canCopy, text: text, entities: entities)
             case let .quote(range):
                 let completion: (ContainedViewLayoutTransition?) -> Void = { [weak self] transition in
                     guard let self else {
