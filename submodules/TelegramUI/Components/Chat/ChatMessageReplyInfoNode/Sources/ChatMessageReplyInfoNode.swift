@@ -217,7 +217,8 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             
             var author = arguments.message?.effectiveAuthor
             
-            if let forwardInfo = arguments.message?.forwardInfo {
+            // MARK: NAGRAM — Show the forwarding sender for regular forwarded-message replies.
+            if let forwardInfo = arguments.message?.forwardInfo, forwardInfo.flags.contains(.isImported) {
                 if let peer = forwardInfo.author {
                     author = peer
                 } else if let authorSignature = forwardInfo.authorSignature {
@@ -288,7 +289,8 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                 let rawTitleString = author.flatMap(EnginePeer.init)?.displayTitle(strings: arguments.strings, displayOrder: arguments.presentationData.nameDisplayOrder) ?? arguments.strings.User_DeletedAccount
                 titleString = NSAttributedString(string: rawTitleString, font: titleFont, textColor: titleColor)
                 
-                if let forwardInfo = message.forwardInfo {
+                // MARK: NAGRAM — Keep imported-history attribution without replacing a regular forwarder.
+                if let forwardInfo = message.forwardInfo, forwardInfo.flags.contains(.isImported) {
                     if let author = forwardInfo.author {
                         let rawTitleString = EnginePeer(author).displayTitle(strings: arguments.strings, displayOrder: arguments.presentationData.nameDisplayOrder)
                         titleString = NSAttributedString(string: rawTitleString, font: titleFont, textColor: titleColor)
