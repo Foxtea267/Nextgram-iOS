@@ -10,13 +10,16 @@ import AvatarNode
 import TextLoadingEffect
 import SwiftSignalKit
 import TelegramStringFormatting
+import TextFormat
 import NagramSettings // MARK: NAGRAM
 
 // MARK: NAGRAM — Match Nnngram's compact original-date suffix for forwarded messages.
-private func stringForForwardedMessageDate(timestamp: Int32, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat) -> String {
+private func stringForForwardedMessageDate(timestamp: Int32, presentationData: ChatPresentationData) -> String {
     let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
     let now = Date()
     let calendar = Calendar.current
+    let strings = presentationData.strings
+    let dateTimeFormat = presentationData.dateTimeFormat
     let time = stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)
     if calendar.isDate(date, inSameDayAs: now) {
         return time
@@ -325,7 +328,7 @@ public class ChatMessageForwardInfoNode: ASDisplayNode {
                 peerString = ""
             }
             if !peerString.isEmpty, let forwardDate, forwardDate != 0, NagramSettings.shared.showForwardedMessageDate {
-                peerString += " · \(stringForForwardedMessageDate(timestamp: forwardDate, strings: strings, dateTimeFormat: presentationData.dateTimeFormat))"
+                peerString += " · \(stringForForwardedMessageDate(timestamp: forwardDate, presentationData: presentationData))"
             }
             
             var hasPsaInfo = false
