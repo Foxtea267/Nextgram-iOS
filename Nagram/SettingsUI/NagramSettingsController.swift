@@ -139,6 +139,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["uploadSpeedBoost"]
     case "Nagram.SecondsInMessages":
         return ["showSeconds", "ShowSeconds"]
+    case "Nagram.ShowForwardedMessageDate":
+        return ["showForwardDate", "dateOfForwardedMsg"]
     case "Nagram.HideReactions":
         return ["disableReactionsWhenSelecting", "HideReactions"]
     case "Nagram.HideChannelBottomButton":
@@ -420,6 +422,7 @@ private func nagramGroups(
         // 消息
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.MessageDisplay", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.SecondsInMessages", get: { NagramSettings.shared.secondsInMessages }, set: { NagramSettings.shared.secondsInMessages = $0 }),
+            .toggle(titleKey: "Nagram.ShowForwardedMessageDate", get: { NagramSettings.shared.showForwardedMessageDate }, set: { NagramSettings.shared.showForwardedMessageDate = $0 }),
             .toggle(titleKey: "Nagram.HideReactions", get: { NagramSettings.shared.hideReactions }, set: { NagramSettings.shared.hideReactions = $0 }),
             .toggle(titleKey: "Nagram.HideChannelBottomButton", get: { NagramSettings.shared.hideChannelBottomButton }, set: { NagramSettings.shared.hideChannelBottomButton = $0 }),
             .toggle(titleKey: "Nagram.HideSponsoredMessages", get: { NagramSettings.shared.hideSponsoredMessages }, set: { NagramSettings.shared.hideSponsoredMessages = $0 }),

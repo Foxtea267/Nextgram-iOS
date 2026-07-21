@@ -51,6 +51,7 @@
 "Nagram.Section.Sync" = "同步";
 
 "Nagram.SecondsInMessages" = "時間戳顯示秒";
+"Nagram.ShowForwardedMessageDate" = "顯示轉發訊息的原始時間";
 "Nagram.ChatListMessagePreviewStyle" = "訊息預覽樣式";
 "Nagram.ChatListMessagePreviewStyle.three" = "三行";
 "Nagram.ChatListMessagePreviewStyle.two" = "兩行";

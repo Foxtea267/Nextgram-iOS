@@ -842,7 +842,8 @@ public class ChatMessageStickerItemNode: ChatMessageItemView {
                     }
                 }
                 let availableForwardWidth = max(60.0, availableWidth + 6.0)
-                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource.flatMap(EnginePeer.init), forwardAuthorSignature, forwardPsaType, nil, CGSize(width: availableForwardWidth, height: CGFloat.greatestFiniteMagnitude))
+                // MARK: NAGRAM — Include the original timestamp in the shared forward header.
+                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource.flatMap(EnginePeer.init), forwardAuthorSignature, forwardPsaType, nil, forwardInfo.date, CGSize(width: availableForwardWidth, height: CGFloat.greatestFiniteMagnitude))
             }
             
             var needsReplyBackground = false

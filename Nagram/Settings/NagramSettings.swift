@@ -174,6 +174,9 @@ public final class NagramSettings {
     /// 消息时间戳显示秒
     @NagramDefault("nagram.secondsInMessages", false)
     public var secondsInMessages: Bool
+    /// 在转发来源后显示原始消息时间
+    @NagramDefault("nagram.showForwardedMessageDate", false)
+    public var showForwardedMessageDate: Bool
     /// 隐藏频道底部面板按钮
     @NagramDefault("nagram.hideChannelBottomButton", false)
     public var hideChannelBottomButton: Bool

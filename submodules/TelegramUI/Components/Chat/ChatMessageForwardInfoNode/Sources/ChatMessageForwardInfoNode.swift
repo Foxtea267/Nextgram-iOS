@@ -9,6 +9,25 @@ import AccountContext
 import AvatarNode
 import TextLoadingEffect
 import SwiftSignalKit
+import TelegramStringFormatting
+import NagramSettings // MARK: NAGRAM
+
+// MARK: NAGRAM — Match Nnngram's compact original-date suffix for forwarded messages.
+private func stringForForwardedMessageDate(timestamp: Int32, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat) -> String {
+    let date = Date(timeIntervalSince1970: TimeInterval(timestamp))
+    let now = Date()
+    let calendar = Calendar.current
+    let time = stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)
+    if calendar.isDate(date, inSameDayAs: now) {
+        return time
+    } else if calendar.isDateInYesterday(date) {
+        return "\(strings.Weekday_Yesterday) \(time)"
+    } else if calendar.component(.year, from: date) == calendar.component(.year, from: now) {
+        return stringForMediumCompactDate(timestamp: timestamp, strings: strings, dateTimeFormat: dateTimeFormat)
+    } else {
+        return stringForFullDate(timestamp: timestamp, strings: strings, dateTimeFormat: dateTimeFormat)
+    }
+}
 
 public enum ChatMessageForwardInfoType: Equatable {
     case bubble(incoming: Bool)
@@ -278,13 +297,14 @@ public class ChatMessageForwardInfoNode: ASDisplayNode {
         }
     }
     
-    public static func asyncLayout(_ maybeNode: ChatMessageForwardInfoNode?) -> (_ context: AccountContext, _ presentationData: ChatPresentationData, _ strings: PresentationStrings, _ type: ChatMessageForwardInfoType, _ peer: EnginePeer?, _ authorName: String?, _ psaType: String?, _ storyData: StoryData?, _ constrainedSize: CGSize) -> (CGSize, (CGFloat) -> ChatMessageForwardInfoNode) {
+    // MARK: NAGRAM — forwardDate carries the original message timestamp into the shared forward header.
+    public static func asyncLayout(_ maybeNode: ChatMessageForwardInfoNode?) -> (_ context: AccountContext, _ presentationData: ChatPresentationData, _ strings: PresentationStrings, _ type: ChatMessageForwardInfoType, _ peer: EnginePeer?, _ authorName: String?, _ psaType: String?, _ storyData: StoryData?, _ forwardDate: Int32?, _ constrainedSize: CGSize) -> (CGSize, (CGFloat) -> ChatMessageForwardInfoNode) {
         let titleNodeLayout = TextNode.asyncLayout(maybeNode?.titleNode)
         let nameNodeLayout = TextNode.asyncLayout(maybeNode?.nameNode)
         
         let previousPeer = maybeNode?.previousPeer
         
-        return { context, presentationData, strings, type, peer, authorName, psaType, storyData, constrainedSize in
+        return { context, presentationData, strings, type, peer, authorName, psaType, storyData, forwardDate, constrainedSize in
             let originalPeer = peer
             let peer = peer ?? previousPeer
             
@@ -292,7 +312,7 @@ public class ChatMessageForwardInfoNode: ASDisplayNode {
             let prefixFont = Font.regular(fontSize)
             let peerFont = Font.medium(fontSize)
             
-            let peerString: String
+            var peerString: String
             if let peer = peer {
                 if let authorName = authorName, originalPeer == peer {
                     peerString = "\(peer.displayTitle(strings: strings, displayOrder: presentationData.nameDisplayOrder)) (\(authorName))"
@@ -303,6 +323,9 @@ public class ChatMessageForwardInfoNode: ASDisplayNode {
                 peerString = authorName
             } else {
                 peerString = ""
+            }
+            if !peerString.isEmpty, let forwardDate, forwardDate != 0, NagramSettings.shared.showForwardedMessageDate {
+                peerString += " · \(stringForForwardedMessageDate(timestamp: forwardDate, strings: strings, dateTimeFormat: presentationData.dateTimeFormat))"
             }
             
             var hasPsaInfo = false
