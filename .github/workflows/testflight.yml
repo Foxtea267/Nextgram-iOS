@@ -24,38 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  composer-icons:
-    runs-on: xcode-27
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Export Nagram Composer icons with Xcode 27
-        run: |
-          set -euo pipefail
-          STAGE_DIR="${RUNNER_TEMP}/nagram-icon-stage"
-          OUTPUT_DIR="${RUNNER_TEMP}/nagram-composer-icons"
-          mkdir -p "${STAGE_DIR}/Telegram.app" "${OUTPUT_DIR}"
-          plutil -create xml1 "${STAGE_DIR}/Telegram.app/Info.plist"
-          NAGRAM_RUNFILES_ROOT="${GITHUB_WORKSPACE}" \
-            NAGRAM_ACTOOL="$(xcrun --find actool)" \
-            Telegram/Telegram-iOS/NagramFixComposerAlternateIcons.sh "${STAGE_DIR}"
-          cp "${STAGE_DIR}/Telegram.app/Assets.car" "${OUTPUT_DIR}/"
-          cp "${STAGE_DIR}/Telegram.app"/Nagram*.png "${OUTPUT_DIR}/"
-
-      - name: Upload Nagram Composer icons
-        uses: actions/upload-artifact@v4
-        with:
-          name: nagram-composer-icons
-          path: ${{ runner.temp }}/nagram-composer-icons
-          if-no-files-found: error
-          retention-days: 1
-
   build-upload:
-    needs: composer-icons
     runs-on: macos-26
     timeout-minutes: 180
     env:
@@ -76,12 +45,6 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-
-      - name: Download Nagram Composer icons
-        uses: actions/download-artifact@v4
-        with:
-          name: nagram-composer-icons
-          path: Telegram/Telegram-iOS/NagramPrecompiledComposerIcons
 
       - name: Select Xcode 26.x
         run: |
@@ -168,40 +131,59 @@ jobs:
                   + base64.urlsafe_b64encode(raw_signature).rstrip(b"=")
               ).decode()
 
-          # Do not filter processingState: App Store Connect rejects a duplicate
-          # bundle version even while an earlier upload is still processing.
-          request = urllib.request.Request(
-              "https://api.appstoreconnect.apple.com/v1/builds"
-              f"?filter[app]={app_id}&sort=-uploadedDate&limit=200",
-              headers={"Authorization": f"Bearer {token()}"},
-          )
-          try:
-              with urllib.request.urlopen(request) as response:
-                  result = json.load(response)
-          except urllib.error.HTTPError as error:
-              details = error.read().decode(errors="replace")
+          def fetch(path):
+              request = urllib.request.Request(
+                  "https://api.appstoreconnect.apple.com" + path,
+                  headers={"Authorization": f"Bearer {token()}"},
+              )
+              try:
+                  with urllib.request.urlopen(request) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  details = error.read().decode(errors="replace")
+                  print(
+                      f"ERROR: App Store Connect returned {error.code}: {details}",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+
+          # A processing upload does not have a /v1/builds resource yet. Read
+          # buildUploads as well so its CFBundleVersion cannot be reused.
+          uploads = fetch(
+              f"/v1/apps/{app_id}/buildUploads"
+              "?fields[buildUploads]=cfBundleVersion,state,uploadedDate&limit=200"
+          ).get("data", [])
+          builds = fetch(
+              "/v1/builds"
+              f"?filter[app]={app_id}&sort=-uploadedDate&limit=200"
+          ).get("data", [])
+
+          candidates = []
+          for upload in uploads:
+              attributes = upload.get("attributes", {})
+              version = str(attributes.get("cfBundleVersion", ""))
+              state = attributes.get("state", {}).get("state", "UNKNOWN")
+              if version.isdigit():
+                  candidates.append((int(version), f"upload {state}"))
+          for build in builds:
+              attributes = build.get("attributes", {})
+              version = str(attributes.get("version", ""))
+              if version.isdigit():
+                  candidates.append((
+                      int(version),
+                      f"build {attributes.get('processingState', 'UNKNOWN')}",
+                  ))
+
+          if not candidates:
               print(
-                  f"ERROR: App Store Connect returned {error.code}: {details}",
+                  "ERROR: App Store Connect returned no numeric build or upload versions",
                   file=sys.stderr,
               )
               sys.exit(1)
 
-          builds = result.get("data", [])
-          numeric_builds = [
-              (int(build["attributes"]["version"]), build["attributes"]["processingState"])
-              for build in builds
-              if str(build.get("attributes", {}).get("version", "")).isdigit()
-          ]
-          if not numeric_builds:
-              print(
-                  "ERROR: App Store Connect returned no numeric build versions",
-                  file=sys.stderr,
-              )
-              sys.exit(1)
-
-          latest, state = max(numeric_builds)
+          latest, state = max(candidates)
           print(
-              f"Latest App Store Connect build: {latest} ({state}); "
+              f"Latest App Store Connect version: {latest} ({state}); "
               f"next build: {latest + 1}",
               file=sys.stderr,
           )
@@ -310,6 +292,7 @@ jobs:
             --ipa bazel-bin/Telegram/Telegram.ipa \
             --app_identifier "$BUNDLE_ID" \
             --skip_submission true \
+            --skip_waiting_for_build_processing true \
             --uses_non_exempt_encryption "$USES_NON_EXEMPT_ENCRYPTION"
           rm -f /tmp/asc_key.json
 
