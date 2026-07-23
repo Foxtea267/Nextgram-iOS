@@ -24,38 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  composer-icons:
-    runs-on: xcode-27
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Export Nagram Composer icons with Xcode 27
-        run: |
-          set -euo pipefail
-          STAGE_DIR="${RUNNER_TEMP}/nagram-icon-stage"
-          OUTPUT_DIR="${RUNNER_TEMP}/nagram-composer-icons"
-          mkdir -p "${STAGE_DIR}/Telegram.app" "${OUTPUT_DIR}"
-          plutil -create xml1 "${STAGE_DIR}/Telegram.app/Info.plist"
-          NAGRAM_RUNFILES_ROOT="${GITHUB_WORKSPACE}" \
-            NAGRAM_ACTOOL="$(xcrun --find actool)" \
-            Telegram/Telegram-iOS/NagramFixComposerAlternateIcons.sh "${STAGE_DIR}"
-          cp "${STAGE_DIR}/Telegram.app/Assets.car" "${OUTPUT_DIR}/"
-          cp "${STAGE_DIR}/Telegram.app"/Nagram*.png "${OUTPUT_DIR}/"
-
-      - name: Upload Nagram Composer icons
-        uses: actions/upload-artifact@v4
-        with:
-          name: nagram-composer-icons
-          path: ${{ runner.temp }}/nagram-composer-icons
-          if-no-files-found: error
-          retention-days: 1
-
   build-upload:
-    needs: composer-icons
     runs-on: macos-26
     timeout-minutes: 180
     env:
@@ -76,12 +45,6 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
-
-      - name: Download Nagram Composer icons
-        uses: actions/download-artifact@v4
-        with:
-          name: nagram-composer-icons
-          path: Telegram/Telegram-iOS/NagramPrecompiledComposerIcons
 
       - name: Select Xcode 26.x
         run: |
@@ -126,6 +89,108 @@ jobs:
           mkdir -p ~/.appstoreconnect/private_keys
           echo "$ASC_KEY_P8_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+
+      - name: Fetch next App Store Connect build number
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="$(python3 - <<'PY'
+          import base64, json, os, sys, time, urllib.error, urllib.request
+          from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+          from cryptography.hazmat.primitives.hashes import SHA256
+          from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+          kid = os.environ["ASC_KEY_ID"]
+          issuer = os.environ["ASC_ISSUER_ID"]
+          app_id = os.environ["APPSTORE_ID"]
+          key_path = os.path.expanduser(
+              f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8"
+          )
+          key = load_pem_private_key(open(key_path, "rb").read(), password=None)
+
+          def token():
+              header = base64.urlsafe_b64encode(
+                  json.dumps({"alg": "ES256", "kid": kid, "typ": "JWT"}).encode()
+              ).rstrip(b"=")
+              now = int(time.time())
+              payload = base64.urlsafe_b64encode(
+                  json.dumps({
+                      "iss": issuer,
+                      "iat": now,
+                      "exp": now + 600,
+                      "aud": "appstoreconnect-v1",
+                  }).encode()
+              ).rstrip(b"=")
+              message = header + b"." + payload
+              signature = key.sign(message, ECDSA(SHA256()))
+              r, s = decode_dss_signature(signature)
+              raw_signature = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+              return (
+                  message
+                  + b"."
+                  + base64.urlsafe_b64encode(raw_signature).rstrip(b"=")
+              ).decode()
+
+          def fetch(path):
+              request = urllib.request.Request(
+                  "https://api.appstoreconnect.apple.com" + path,
+                  headers={"Authorization": f"Bearer {token()}"},
+              )
+              try:
+                  with urllib.request.urlopen(request) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  details = error.read().decode(errors="replace")
+                  print(
+                      f"ERROR: App Store Connect returned {error.code}: {details}",
+                      file=sys.stderr,
+                  )
+                  sys.exit(1)
+
+          # A processing upload does not have a /v1/builds resource yet. Read
+          # buildUploads as well so its CFBundleVersion cannot be reused.
+          uploads = fetch(
+              f"/v1/apps/{app_id}/buildUploads"
+              "?fields[buildUploads]=cfBundleVersion,state,uploadedDate&limit=200"
+          ).get("data", [])
+          builds = fetch(
+              "/v1/builds"
+              f"?filter[app]={app_id}&sort=-uploadedDate&limit=200"
+          ).get("data", [])
+
+          candidates = []
+          for upload in uploads:
+              attributes = upload.get("attributes", {})
+              version = str(attributes.get("cfBundleVersion", ""))
+              state = attributes.get("state", {}).get("state", "UNKNOWN")
+              if version.isdigit():
+                  candidates.append((int(version), f"upload {state}"))
+          for build in builds:
+              attributes = build.get("attributes", {})
+              version = str(attributes.get("version", ""))
+              if version.isdigit():
+                  candidates.append((
+                      int(version),
+                      f"build {attributes.get('processingState', 'UNKNOWN')}",
+                  ))
+
+          if not candidates:
+              print(
+                  "ERROR: App Store Connect returned no numeric build or upload versions",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          latest, state = max(candidates)
+          print(
+              f"Latest App Store Connect version: {latest} ({state}); "
+              f"next build: {latest + 1}",
+              file=sys.stderr,
+          )
+          print(latest + 1)
+          PY
+          )"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
 
       - name: Write build configuration
         run: |
@@ -196,7 +261,7 @@ jobs:
       - name: Build (release_arm64, signed)
         run: |
           set -euo pipefail
-          BUILD_NUMBER="$(( $(git rev-list --count HEAD) + $(cat build_number_offset 2>/dev/null || echo 0) ))"
+          : "${BUILD_NUMBER:?missing}"
           echo "Build number: $BUILD_NUMBER"
           python3 build-system/Make/Make.py --overrideXcodeVersion \
             --cacheDir "$HOME/telegram-bazel-cache" \
@@ -227,6 +292,7 @@ jobs:
             --ipa bazel-bin/Telegram/Telegram.ipa \
             --app_identifier "$BUNDLE_ID" \
             --skip_submission true \
+            --skip_waiting_for_build_processing true \
             --uses_non_exempt_encryption "$USES_NON_EXEMPT_ENCRYPTION"
           rm -f /tmp/asc_key.json
 
@@ -246,7 +312,7 @@ jobs:
           # group — avoids re-uploading the IPA and decouples distribution from upload,
           # so BETA_CONTRACT_MISSING or group misconfig cannot abort the upload step.
           python3 - <<'PY'
-          import os, sys, time, json, base64, urllib.request, urllib.error, subprocess
+          import os, sys, time, json, base64, urllib.request, urllib.error
           from cryptography.hazmat.primitives.serialization import load_pem_private_key
           from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
           from cryptography.hazmat.primitives.hashes import SHA256
@@ -256,9 +322,7 @@ jobs:
           issuer = os.environ["ASC_ISSUER_ID"]
           app_id = os.environ["APPSTORE_ID"]
           group_name = os.environ["TESTFLIGHT_GROUPS"]
-          offset = int(open("build_number_offset").read().strip()) if os.path.exists("build_number_offset") else 0
-          commit_count = int(subprocess.check_output(["git", "rev-list", "--count", "HEAD"]).strip())
-          build_number = str(commit_count + offset)
+          build_number = os.environ["BUILD_NUMBER"]
           key = load_pem_private_key(
               open(os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8")).read().encode(),
               password=None)
