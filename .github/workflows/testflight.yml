@@ -127,6 +127,89 @@ jobs:
           echo "$ASC_KEY_P8_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
 
+      - name: Fetch next App Store Connect build number
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="$(python3 - <<'PY'
+          import base64, json, os, sys, time, urllib.error, urllib.request
+          from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+          from cryptography.hazmat.primitives.hashes import SHA256
+          from cryptography.hazmat.primitives.serialization import load_pem_private_key
+
+          kid = os.environ["ASC_KEY_ID"]
+          issuer = os.environ["ASC_ISSUER_ID"]
+          app_id = os.environ["APPSTORE_ID"]
+          key_path = os.path.expanduser(
+              f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8"
+          )
+          key = load_pem_private_key(open(key_path, "rb").read(), password=None)
+
+          def token():
+              header = base64.urlsafe_b64encode(
+                  json.dumps({"alg": "ES256", "kid": kid, "typ": "JWT"}).encode()
+              ).rstrip(b"=")
+              now = int(time.time())
+              payload = base64.urlsafe_b64encode(
+                  json.dumps({
+                      "iss": issuer,
+                      "iat": now,
+                      "exp": now + 600,
+                      "aud": "appstoreconnect-v1",
+                  }).encode()
+              ).rstrip(b"=")
+              message = header + b"." + payload
+              signature = key.sign(message, ECDSA(SHA256()))
+              r, s = decode_dss_signature(signature)
+              raw_signature = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+              return (
+                  message
+                  + b"."
+                  + base64.urlsafe_b64encode(raw_signature).rstrip(b"=")
+              ).decode()
+
+          # Do not filter processingState: App Store Connect rejects a duplicate
+          # bundle version even while an earlier upload is still processing.
+          request = urllib.request.Request(
+              "https://api.appstoreconnect.apple.com/v1/builds"
+              f"?filter[app]={app_id}&sort=-uploadedDate&limit=200",
+              headers={"Authorization": f"Bearer {token()}"},
+          )
+          try:
+              with urllib.request.urlopen(request) as response:
+                  result = json.load(response)
+          except urllib.error.HTTPError as error:
+              details = error.read().decode(errors="replace")
+              print(
+                  f"ERROR: App Store Connect returned {error.code}: {details}",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          builds = result.get("data", [])
+          numeric_builds = [
+              (int(build["attributes"]["version"]), build["attributes"]["processingState"])
+              for build in builds
+              if str(build.get("attributes", {}).get("version", "")).isdigit()
+          ]
+          if not numeric_builds:
+              print(
+                  "ERROR: App Store Connect returned no numeric build versions",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          latest, state = max(numeric_builds)
+          print(
+              f"Latest App Store Connect build: {latest} ({state}); "
+              f"next build: {latest + 1}",
+              file=sys.stderr,
+          )
+          print(latest + 1)
+          PY
+          )"
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+
       - name: Write build configuration
         run: |
           set -euo pipefail
@@ -196,7 +279,7 @@ jobs:
       - name: Build (release_arm64, signed)
         run: |
           set -euo pipefail
-          BUILD_NUMBER="$(( $(git rev-list --count HEAD) + $(cat build_number_offset 2>/dev/null || echo 0) ))"
+          : "${BUILD_NUMBER:?missing}"
           echo "Build number: $BUILD_NUMBER"
           python3 build-system/Make/Make.py --overrideXcodeVersion \
             --cacheDir "$HOME/telegram-bazel-cache" \
@@ -246,7 +329,7 @@ jobs:
           # group — avoids re-uploading the IPA and decouples distribution from upload,
           # so BETA_CONTRACT_MISSING or group misconfig cannot abort the upload step.
           python3 - <<'PY'
-          import os, sys, time, json, base64, urllib.request, urllib.error, subprocess
+          import os, sys, time, json, base64, urllib.request, urllib.error
           from cryptography.hazmat.primitives.serialization import load_pem_private_key
           from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
           from cryptography.hazmat.primitives.hashes import SHA256
@@ -256,9 +339,7 @@ jobs:
           issuer = os.environ["ASC_ISSUER_ID"]
           app_id = os.environ["APPSTORE_ID"]
           group_name = os.environ["TESTFLIGHT_GROUPS"]
-          offset = int(open("build_number_offset").read().strip()) if os.path.exists("build_number_offset") else 0
-          commit_count = int(subprocess.check_output(["git", "rev-list", "--count", "HEAD"]).strip())
-          build_number = str(commit_count + offset)
+          build_number = os.environ["BUILD_NUMBER"]
           key = load_pem_private_key(
               open(os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8")).read().encode(),
               password=None)
