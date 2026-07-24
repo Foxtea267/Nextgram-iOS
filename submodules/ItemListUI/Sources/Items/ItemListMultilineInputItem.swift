@@ -49,11 +49,12 @@ public class ItemListMultilineInputItem: ListViewItem, ItemListItem {
     let updatedFocus: ((Bool) -> Void)?
     let maxLength: ItemListMultilineInputItemTextLimit?
     let minimalHeight: CGFloat?
+    let maximalHeight: CGFloat? // MARK: NAGRAM — 超长输入可限制行高并交由内部滚动。
     let inlineAction: ItemListMultilineInputInlineAction?
     let noInsets: Bool
     public let tag: ItemListItemTag?
     
-    public init(presentationData: ItemListPresentationData, systemStyle: ItemListSystemStyle = .legacy, text: String, placeholder: String, maxLength: ItemListMultilineInputItemTextLimit?, sectionId: ItemListSectionId, style: ItemListStyle, capitalization: Bool = true, autocorrection: Bool = true, returnKeyType: UIReturnKeyType = .default, minimalHeight: CGFloat? = nil, textUpdated: @escaping (String) -> Void, shouldUpdateText: @escaping (String) -> Bool = { _ in return true }, processPaste: ((String) -> Void)? = nil, updatedFocus: ((Bool) -> Void)? = nil, tag: ItemListItemTag? = nil, action: (() -> Void)? = nil, inlineAction: ItemListMultilineInputInlineAction? = nil, noInsets: Bool = false) {
+    public init(presentationData: ItemListPresentationData, systemStyle: ItemListSystemStyle = .legacy, text: String, placeholder: String, maxLength: ItemListMultilineInputItemTextLimit?, sectionId: ItemListSectionId, style: ItemListStyle, capitalization: Bool = true, autocorrection: Bool = true, returnKeyType: UIReturnKeyType = .default, minimalHeight: CGFloat? = nil, maximalHeight: CGFloat? = nil, textUpdated: @escaping (String) -> Void, shouldUpdateText: @escaping (String) -> Bool = { _ in return true }, processPaste: ((String) -> Void)? = nil, updatedFocus: ((Bool) -> Void)? = nil, tag: ItemListItemTag? = nil, action: (() -> Void)? = nil, inlineAction: ItemListMultilineInputInlineAction? = nil, noInsets: Bool = false) {
         self.presentationData = presentationData
         self.systemStyle = systemStyle
         self.text = text
@@ -65,6 +66,7 @@ public class ItemListMultilineInputItem: ListViewItem, ItemListItem {
         self.autocorrection = autocorrection
         self.returnKeyType = returnKeyType
         self.minimalHeight = minimalHeight
+        self.maximalHeight = maximalHeight
         self.textUpdated = textUpdated
         self.shouldUpdateText = shouldUpdateText
         self.processPaste = processPaste
@@ -170,6 +172,7 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
             self.textNode.typingAttributes = [NSAttributedString.Key.font.rawValue: Font.regular(17.0), NSAttributedString.Key.foregroundColor.rawValue: textColor]
         }
         self.textNode.clipsToBounds = true
+        self.textNode.textView.isScrollEnabled = false // MARK: NAGRAM — 由外层列表承载滚动，避免长文本自动滚动后裁掉顶部。
         self.textNode.delegate = self
         self.textNode.hitTestSlop = UIEdgeInsets(top: -5.0, left: -5.0, bottom: -5.0, right: -5.0)
     }
@@ -237,7 +240,18 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
             }
             let attributedMeasureText = NSAttributedString(string: measureText, font: Font.regular(item.presentationData.fontSize.itemListBaseFontSize), textColor: .black)
             let attributedText = NSAttributedString(string: item.text, font: Font.regular(item.presentationData.fontSize.itemListBaseFontSize), textColor: item.presentationData.theme.list.itemPrimaryTextColor)
-            let (textLayout, textApply) = makeTextLayout(TextNodeLayoutArguments(attributedString: attributedMeasureText, backgroundColor: nil, maximumNumberOfLines: 0, truncationType: .end, constrainedSize: CGSize(width: params.width - 16.0 - leftInset - rightInset, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, lineSpacing: 0.0, cutout: nil, insets: UIEdgeInsets()))
+            let textWidth = params.width - 16.0 - leftInset - rightInset
+            let (textLayout, textApply) = makeTextLayout(TextNodeLayoutArguments(attributedString: attributedMeasureText, backgroundColor: nil, maximumNumberOfLines: 0, truncationType: .end, constrainedSize: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, lineSpacing: 0.0, cutout: nil, insets: UIEdgeInsets()))
+            
+            // MARK: NAGRAM — 按实际 EditableTextNode 使用的 TextKit 再测一次，避免长文本累计行高不足。
+            let textStorage = NSTextStorage(attributedString: attributedMeasureText)
+            let textLayoutManager = NSLayoutManager()
+            let textContainer = NSTextContainer(size: CGSize(width: max(1.0, textWidth), height: 1000000.0))
+            textContainer.lineFragmentPadding = 0.0
+            textLayoutManager.addTextContainer(textContainer)
+            textStorage.addLayoutManager(textLayoutManager)
+            textLayoutManager.ensureLayout(for: textContainer)
+            let textHeight = max(textLayout.size.height, ceil(textLayoutManager.usedRect(for: textContainer).height))
             
             let separatorHeight = UIScreenPixel
             let separatorRightInset: CGFloat = item.systemStyle == .glass ? 16.0 : 0.0
@@ -253,10 +267,15 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
                 textBottomInset = 11.0
             }
             
-            var contentHeight: CGFloat = textLayout.size.height + textTopInset + textBottomInset
+            var contentHeight: CGFloat = textHeight + textTopInset + textBottomInset
             if let minimalHeight = item.minimalHeight {
                 contentHeight = max(minimalHeight, contentHeight)
             }
+            if let maximalHeight = item.maximalHeight {
+                contentHeight = min(maximalHeight, contentHeight)
+            }
+            let editorHeight = contentHeight - textTopInset - textBottomInset
+            let isTextScrollable = textHeight > editorHeight + UIScreenPixel
             
             let contentSize = CGSize(width: params.width, height: contentHeight)
             let insets = item.noInsets ? UIEdgeInsets() : itemListNeighborsGroupedInsets(neighbors, params)
@@ -299,6 +318,10 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
                     if strongSelf.textNode.textView.returnKeyType != item.returnKeyType {
                         strongSelf.textNode.textView.returnKeyType = item.returnKeyType
                     }
+                    if !isTextScrollable {
+                        strongSelf.textNode.textView.setContentOffset(.zero, animated: false)
+                    }
+                    strongSelf.textNode.textView.isScrollEnabled = isTextScrollable
                     
                     let _ = textApply()
                     if let currentText = strongSelf.textNode.attributedText {
@@ -359,9 +382,9 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
                     if strongSelf.animationForKey("apparentHeight") == nil {
                         strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
                         strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
-                        strongSelf.textClippingNode.frame = CGRect(origin: CGPoint(x: leftInset, y: textTopInset), size: CGSize(width: params.width - leftInset - params.rightInset, height: textLayout.size.height))
+                        strongSelf.textClippingNode.frame = CGRect(origin: CGPoint(x: leftInset, y: textTopInset), size: CGSize(width: params.width - leftInset - params.rightInset, height: editorHeight))
                     }
-                    strongSelf.textNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: params.width - leftInset - 16.0 - rightInset, height: textLayout.size.height + 1.0))
+                    strongSelf.textNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: params.width - leftInset - 16.0 - rightInset, height: editorHeight + 1.0))
                     
                     let _ = limitTextApply()
                     strongSelf.limitTextNode.frame = CGRect(origin: CGPoint(x: params.width - params.rightInset - 16.0 - limitTextLayout.size.width, y: layout.contentSize.height - 15.0 - limitTextLayout.size.height), size: limitTextLayout.size)

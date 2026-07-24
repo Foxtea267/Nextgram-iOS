@@ -156,7 +156,7 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
             }, action: {
             })
         case let .prompt(section, text, placeholder):
-            return ItemListMultilineInputItem(presentationData: presentationData, systemStyle: .glass, text: text, placeholder: placeholder, maxLength: nil, sectionId: section, style: .blocks, capitalization: false, autocorrection: false, returnKeyType: .default, minimalHeight: 96.0, textUpdated: { value in
+            return ItemListMultilineInputItem(presentationData: presentationData, systemStyle: .glass, text: text, placeholder: placeholder, maxLength: nil, sectionId: section, style: .blocks, capitalization: false, autocorrection: false, returnKeyType: .default, minimalHeight: 240.0, maximalHeight: 240.0, textUpdated: { value in
                 arguments.inputUpdated(.prompt, value)
             })
         case let .useContext(section, title, value):
@@ -329,6 +329,7 @@ public func nagramLLMTranslationSettingsController(context: AccountContext) -> V
             NagramSettings.shared.translationLLMModel = value
         case .prompt:
             NagramSettings.shared.translationLLMPrompt = value
+            bump()
         }
     }, chooseFormat: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
