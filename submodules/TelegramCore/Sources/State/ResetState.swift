@@ -41,7 +41,8 @@ func _internal_resetAccountState(postbox: Postbox, network: Network, accountPeer
                 transaction.removeAllChatListEntries(groupId: .group(1), exceptPeerNamespace: Namespaces.Peer.SecretChat)
                 
                 updatePeers(transaction: transaction, accountPeerId: accountPeerId, peers: fetchedChats.peers.union(with: additionalPeers))
-                
+                _internal_applyFetchedChatInputStates(transaction: transaction, accountPeerId: accountPeerId, inputStates: fetchedChats.inputStates)
+
                 for (threadMessageId, data) in fetchedChats.threadInfos {
                     if let entry = StoredMessageHistoryThreadInfo(data.data) {
                         transaction.setMessageHistoryThreadInfo(peerId: threadMessageId.peerId, threadId: threadMessageId.threadId, info: entry)

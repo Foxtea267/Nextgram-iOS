@@ -233,7 +233,7 @@ public final class ChatChannelSubscriberInputPanelNode: ChatInputPanelNode {
                     didJoin = true
                 case let .webView(webView):
                     if let controller = strongSelf.interfaceInteraction?.getNavigationController()?.viewControllers.last as? ViewController {
-                        context.sharedContext.openJoinChatWebView(context: context, parentController: controller, updatedPresentationData: nil, webView: webView)
+                        context.sharedContext.openJoinChatWebView(context: context, parentController: controller, updatedPresentationData: nil, webView: webView, chatTitle: EnginePeer(peer).compactDisplayTitle)
                     }
                 }
             }, error: { [weak self] error in
@@ -491,22 +491,24 @@ public final class ChatChannelSubscriberInputPanelNode: ChatInputPanelNode {
                         self?.buttonPressed()
                     }
                 )],
-                background: centerAction.isAccent ? .activeTint : .panel,
+                background: centerAction.isAccent ? .activeTint(inset: true) : .panel,
                 keepWide: true
             )
         }
         
         var rightPanelItems: [GlassControlGroupComponent.Item] = []
-        rightPanelItems.append(GlassControlGroupComponent.Item(
-            id: "search",
-            content: .icon("Chat List/SearchIcon"),
-            action: { [weak self] in
-                guard let self else {
-                    return
+        if !canJoinInaccessibleCommunityChat(interfaceState) {
+            rightPanelItems.append(GlassControlGroupComponent.Item(
+                id: "search",
+                content: .icon("Chat List/SearchIcon"),
+                action: { [weak self] in
+                    guard let self else {
+                        return
+                    }
+                    self.interfaceInteraction?.beginMessageSearch(.everything, "")
                 }
-                self.interfaceInteraction?.beginMessageSearch(.everything, "")
-            }
-        ))
+            ))
+        }
         
         let panelHeight = defaultHeight(metrics: metrics)
         let _ = isFirstTime

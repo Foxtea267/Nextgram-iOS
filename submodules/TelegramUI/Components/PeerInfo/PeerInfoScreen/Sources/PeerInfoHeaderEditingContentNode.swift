@@ -48,7 +48,21 @@ final class PeerInfoHeaderEditingContentNode: ASDisplayNode {
         self.itemNodes[key]?.layer.addShakeAnimation()
     }
     
-    func update(width: CGFloat, safeInset: CGFloat, statusBarHeight: CGFloat, navigationHeight: CGFloat, isModalOverlay: Bool, peer: EnginePeer?, threadData: MessageHistoryThreadData?, chatLocation: ChatLocation, cachedData: EngineCachedPeerData?, isContact: Bool, isSettings: Bool, presentationData: PresentationData, transition: ContainedViewLayoutTransition) -> CGFloat {
+    func update(
+        width: CGFloat,
+        safeInset: CGFloat,
+        statusBarHeight: CGFloat,
+        navigationHeight: CGFloat,
+        isModalOverlay: Bool,
+        peer: EnginePeer?,
+        threadData: MessageHistoryThreadData?,
+        chatLocation: ChatLocation,
+        cachedData: EngineCachedPeerData?,
+        isContact: Bool,
+        isSettings: Bool,
+        presentationData: PresentationData,
+        transition: ContainedViewLayoutTransition
+    ) -> CGFloat {
         let avatarSize: CGFloat = isModalOverlay ? 200.0 : 100.0
         let avatarFrame = CGRect(origin: CGPoint(x: floor((width - avatarSize) / 2.0), y: statusBarHeight + 22.0), size: CGSize(width: avatarSize, height: avatarSize))
         transition.updateFrameAdditiveToCenter(node: self.avatarNode, frame: CGRect(origin: avatarFrame.center, size: CGSize()))
@@ -59,7 +73,8 @@ final class PeerInfoHeaderEditingContentNode: ASDisplayNode {
             if self.avatarButtonNode.supernode == nil {
                 self.addSubnode(self.avatarButtonNode)
             }
-            self.avatarTextNode.attributedText = NSAttributedString(string: presentationData.strings.Settings_SetNewProfilePhotoOrVideo, font: Font.regular(17.0), textColor: presentationData.theme.list.itemAccentColor)
+            let setPhotoTitle = peer?.smallProfileImage != nil ? presentationData.strings.Settings_ChangePhoto : presentationData.strings.Settings_SetPhoto
+            self.avatarTextNode.attributedText = NSAttributedString(string: setPhotoTitle, font: Font.regular(17.0), textColor: presentationData.theme.list.itemAccentColor)
             self.avatarButtonNode.accessibilityLabel = self.avatarTextNode.attributedText?.string
             
             let avatarTextSize = self.avatarTextNode.updateLayout(CGSize(width: width, height: 32.0))

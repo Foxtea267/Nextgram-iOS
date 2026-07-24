@@ -71,6 +71,12 @@ public enum PeerReference: PostboxCoding, Hashable, Equatable {
                 } else {
                     return nil
                 }
+            case let community as TelegramCommunity:
+                if let accessHash = community.accessHash {
+                    self = .channel(id: community.id.id._internalGetInt64Value(), accessHash: accessHash.value)
+                } else {
+                    return nil
+                }
             default:
                 return nil
         }

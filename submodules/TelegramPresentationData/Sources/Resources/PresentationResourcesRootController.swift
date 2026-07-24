@@ -64,7 +64,7 @@ public struct PresentationResourcesRootController {
     
     public static func navigationSearchIcon(_ theme: PresentationTheme) -> UIImage? {
         return theme.image(PresentationResourceKey.navigationSearchIcon.rawValue, { theme in
-            return generateTintedImage(image: UIImage(bundleImageName: "Chat List/SearchIcon"), color: theme.rootController.navigationBar.accentTextColor)
+            return generateTintedImage(image: UIImage(bundleImageName: "Navigation/Search"), color: theme.chat.inputPanel.panelControlColor)
         })
     }
     

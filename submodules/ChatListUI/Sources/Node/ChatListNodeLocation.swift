@@ -36,6 +36,80 @@ public struct ChatListNodeViewUpdate {
     }
 }
 
+private func communityPeerId(item: EngineChatList.Item) -> EnginePeer.Id? {
+    guard case let .chatList(peerId) = item.id else {
+        return nil
+    }
+    if let peer = item.renderedPeer.peer, case let .community(community) = peer, community.collapsedInDialogs == true {
+        return peerId
+    } else {
+        return nil
+    }
+}
+
+private func filteredCommunityChatListItems(_ items: [EngineChatList.Item]) -> [EngineChatList.Item] {
+    return items.filter { item in
+        if let peer = item.renderedPeer.peer, case let .community(community) = peer {
+            return community.collapsedInDialogs == true
+        } else {
+            return true
+        }
+    }
+}
+
+private func chatListNodeViewUpdateWithCommunitySummaries(account: Account, update: ChatListNodeViewUpdate) -> Signal<ChatListNodeViewUpdate, NoError> {
+    let baseItems = filteredCommunityChatListItems(update.list.items)
+    let baseList = EngineChatList(
+        items: baseItems,
+        groupItems: update.list.groupItems,
+        additionalItems: update.list.additionalItems,
+        hasEarlier: update.list.hasEarlier,
+        hasLater: update.list.hasLater,
+        isLoading: update.list.isLoading
+    )
+    let baseUpdate = ChatListNodeViewUpdate(list: baseList, type: update.type, scrollPosition: update.scrollPosition)
+
+    let communityIds = baseItems.compactMap { item in
+        return communityPeerId(item: item)
+    }
+    if communityIds.isEmpty {
+        return .single(baseUpdate)
+    }
+
+    var isFirstSummary = true
+    return communityChatListItemSummaries(postbox: account.postbox, communityIds: communityIds)
+    |> map { summaries -> ChatListNodeViewUpdate in
+        let updatedType: ViewUpdateType
+        let updatedScrollPosition: ChatListNodeViewScrollPosition?
+        if isFirstSummary {
+            updatedType = update.type
+            updatedScrollPosition = update.scrollPosition
+            isFirstSummary = false
+        } else {
+            updatedType = .Generic
+            updatedScrollPosition = nil
+        }
+
+        let items = baseItems.map { item -> EngineChatList.Item in
+            guard let communityId = communityPeerId(item: item), let summary = summaries[communityId], summary.hasLinkedPeers else {
+                return item
+            }
+            let messages = summary.topMessage.map { [$0] } ?? item.messages
+            return item.withUpdatedCommunitySummary(messages: messages, readCounters: summary.readCounters ?? item.readCounters)
+        }
+
+        let list = EngineChatList(
+            items: items,
+            groupItems: baseList.groupItems,
+            additionalItems: baseList.additionalItems,
+            hasEarlier: baseList.hasEarlier,
+            hasLater: baseList.hasLater,
+            isLoading: baseList.isLoading
+        )
+        return ChatListNodeViewUpdate(list: list, type: updatedType, scrollPosition: updatedScrollPosition)
+    }
+}
+
 public func chatListFilterPredicate(filter: ChatListFilterData, accountPeerId: EnginePeer.Id, includeRecentPeerIds: Set<EnginePeer.Id> = Set()) -> ChatListFilterPredicate {
     var includePeers = Set(filter.includePeers.peers)
     var excludePeers = Set(filter.excludePeers)
@@ -117,6 +191,8 @@ public func chatListFilterPredicate(filter: ChatListFilterData, accountPeerId: E
                 if case .group = channel.info {
                     return false
                 }
+            } else if let _ = peer as? TelegramCommunity {
+                return false
             }
         }
         if !filter.categories.contains(.channels) {
@@ -190,6 +266,9 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
                     return ChatListNodeViewUpdate(list: EngineChatList(view, accountPeerId: accountPeerId), type: updateType, scrollPosition: nil)
                 }
             }
+            |> mapToSignal { update -> Signal<ChatListNodeViewUpdate, NoError> in
+                return chatListNodeViewUpdateWithCommunitySummaries(account: account, update: update)
+            }
         case let .navigation(index, _):
             guard case let .chatList(index) = index else {
                 return .never()
@@ -208,6 +287,9 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
                     }
                     return ChatListNodeViewUpdate(list: EngineChatList(view, accountPeerId: accountPeerId), type: genericType, scrollPosition: nil)
                 }
+            }
+            |> mapToSignal { update -> Signal<ChatListNodeViewUpdate, NoError> in
+                return chatListNodeViewUpdateWithCommunitySummaries(account: account, update: update)
             }
         case let .scroll(index, sourceIndex, scrollPosition, animated, _):
             guard case let .chatList(index) = index else {
@@ -231,6 +313,9 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
                     }
                     return ChatListNodeViewUpdate(list: EngineChatList(view, accountPeerId: accountPeerId), type: genericType, scrollPosition: scrollPosition)
                 }
+            }
+            |> mapToSignal { update -> Signal<ChatListNodeViewUpdate, NoError> in
+                return chatListNodeViewUpdateWithCommunitySummaries(account: account, update: update)
             }
         }
     case let .forum(peerId):

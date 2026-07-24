@@ -330,11 +330,11 @@ final class StarsTransactionsListPanelComponent: Component {
                                 itemTitle = peer.displayTitle(strings: environment.strings, displayOrder: .firstLast)
                                 itemSubtitle = environment.strings.Stars_Intro_Transaction_PrepaidGiftUpgrade
                             } else if item.flags.contains(.isStarGiftDropOriginalDetails), case let .unique(gift) = starGift {
-                                itemTitle = "\(gift.title) #\(presentationStringsFormattedNumber(gift.number, environment.dateTimeFormat.groupingSeparator))"
+                                itemTitle = "\(gift.title) #\(formatCollectibleNumber(gift.number, dateTimeFormat: environment.dateTimeFormat))"
                                 itemSubtitle = environment.strings.Stars_Intro_Transaction_GiftDropOriginalDetails
                                 itemGift = starGift
                             } else if item.flags.contains(.isStarGiftUpgrade), case let .unique(gift) = starGift {
-                                itemTitle = "\(gift.title) #\(presentationStringsFormattedNumber(gift.number, environment.dateTimeFormat.groupingSeparator))"
+                                itemTitle = "\(gift.title) #\(formatCollectibleNumber(gift.number, dateTimeFormat: environment.dateTimeFormat))"
                                 itemSubtitle = environment.strings.Stars_Intro_Transaction_GiftUpgrade
                                 itemGift = starGift
                             } else {
@@ -342,7 +342,11 @@ final class StarsTransactionsListPanelComponent: Component {
                                 switch starGift {
                                 case let .generic(gift):
                                     itemFile = gift.file
-                                    itemSubtitle = item.count.amount > StarsAmount.zero ? environment.strings.Stars_Intro_Transaction_ConvertedGift : environment.strings.Stars_Intro_Transaction_Gift
+                                    if item.flags.contains(.isStarGiftOffer) {
+                                        itemSubtitle = environment.strings.Gift_Offer_Title
+                                    } else {
+                                        itemSubtitle = item.count.amount > StarsAmount.zero ? environment.strings.Stars_Intro_Transaction_ConvertedGift : environment.strings.Stars_Intro_Transaction_Gift
+                                    }
                                 case let .unique(gift):
                                     for attribute in gift.attributes {
                                         if case let .model(_, file, _, _) = attribute {
@@ -350,7 +354,9 @@ final class StarsTransactionsListPanelComponent: Component {
                                             break
                                         }
                                     }
-                                    if item.count.amount > StarsAmount.zero {
+                                    if item.flags.contains(.isStarGiftOffer) {
+                                        itemSubtitle = environment.strings.Gift_Offer_Title
+                                    } else if item.count.amount > StarsAmount.zero {
                                         itemSubtitle = environment.strings.Stars_Intro_Transaction_GiftSale
                                     } else {
                                         if item.flags.contains(.isStarGiftResale) {

@@ -1632,3 +1632,17 @@ public func canSendReactionsToChat(_ state: ChatPresentationInterfaceState) -> B
         return false
     }
 }
+
+public func canJoinInaccessibleCommunityChat(_ chatPresentationInterfaceState: ChatPresentationInterfaceState) -> Bool {
+    guard chatPresentationInterfaceState.isNotAccessible,
+          let renderedPeer = chatPresentationInterfaceState.renderedPeer,
+          let channel = renderedPeer.peer as? TelegramChannel,
+          case .group = channel.info,
+          case .left = channel.participationStatus,
+          let linkedCommunityId = channel.linkedCommunityId,
+          let community = renderedPeer.peers[linkedCommunityId] as? TelegramCommunity,
+          case .member = community.participationStatus else {
+        return false
+    }
+    return true
+}

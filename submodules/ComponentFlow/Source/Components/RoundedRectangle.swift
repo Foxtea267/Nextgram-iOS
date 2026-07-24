@@ -225,7 +225,7 @@ public final class FilledRoundedRectangleComponent: Component {
             let cornerRadius: CGFloat
             switch component.cornerRadius {
             case let .value(value):
-                cornerRadius = value
+                cornerRadius = min(value, availableSize.width * 0.5, availableSize.height * 0.5)
             case .minEdge:
                 cornerRadius = min(availableSize.width, availableSize.height) * 0.5
             }

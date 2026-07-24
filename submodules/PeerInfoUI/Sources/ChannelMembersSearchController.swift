@@ -62,7 +62,7 @@ public final class ChannelMembersSearchControllerImpl: ViewController, ChannelMe
             self.title = title
         }
         
-        self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Cancel, style: .plain, target: self, action: #selector(self.cancelPressed))
+        self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
         
         self.scrollToTop = { [weak self] in
             if let strongSelf = self {

@@ -158,7 +158,7 @@ private enum ContactListNodeEntry: Comparable, Identifiable {
                     style = .generic
                     height = .tall
                 }
-                return ContactListActionItem(presentationData: ItemListPresentationData(presentationData), title: option.title, subtitle: option.subtitle, icon: option.icon, actionStyle: style, height: height, clearHighlightAutomatically: option.clearHighlightAutomatically, header: header, action: option.action)
+                return ContactListActionItem(presentationData: ItemListPresentationData(presentationData), systemStyle: .glass, title: option.title, subtitle: option.subtitle, icon: option.icon, actionStyle: style, height: height, clearHighlightAutomatically: option.clearHighlightAutomatically, header: header, action: option.action)
             case let .header(_, header):
                 var sectionId: Int32 = 0
                 var text = ""
@@ -245,7 +245,7 @@ private enum ContactListNodeEntry: Comparable, Identifiable {
                 if case .blocks = listStyle, let id = header?.id.id.base as? Int64 {
                     sectionId = Int32(clamping: id)
                 }
-                return ContactsPeerItem(presentationData: ItemListPresentationData(presentationData), style: listStyle, systemStyle: listStyle == .blocks ? .glass : .legacy, sectionId: listStyle == .blocks ? sectionId : 0, sortOrder: nameSortOrder, displayOrder: nameDisplayOrder, context: context, peerMode: isSearch ? .generalSearch(isSavedMessages: false) : .peer, peer: itemPeer, status: status, requiresPremiumForMessaging: requiresPremiumForMessaging, enabled: enabled, selection: selection, selectionPosition: .left, editing: ContactsPeerItemEditing(editable: false, editing: false, revealed: false), additionalActions: additionalActions, index: nil, header: listStyle == .blocks ? nil : header, action: { _ in
+                return ContactsPeerItem(presentationData: ItemListPresentationData(presentationData), style: listStyle, systemStyle: .glass, sectionId: listStyle == .blocks ? sectionId : 0, sortOrder: nameSortOrder, displayOrder: nameDisplayOrder, context: context, peerMode: isSearch ? .generalSearch(isSavedMessages: false) : .peer, peer: itemPeer, status: status, requiresPremiumForMessaging: requiresPremiumForMessaging, enabled: enabled, selection: selection, selectionPosition: .left, editing: ContactsPeerItemEditing(editable: false, editing: false, revealed: false), additionalActions: additionalActions, index: nil, header: listStyle == .blocks ? nil : header, action: { _ in
                         interaction.openPeer(peer, .generic, nil, nil)
                 }, disabledAction: { _ in
                     if case let .peer(peer, _, _) = peer {

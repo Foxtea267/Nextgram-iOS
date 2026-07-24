@@ -84,6 +84,7 @@ public enum InstantPageV2LaidOutItem {
     case listMarker(InstantPageV2ListMarkerItem)
     case blockQuoteBar(InstantPageV2BarItem)
     case shape(InstantPageV2ShapeItem)
+    case imageOrnament(InstantPageV2ImageOrnamentItem)
     case mediaPlaceholder(InstantPageV2MediaPlaceholderItem)
     case details(InstantPageV2DetailsItem)
     case table(InstantPageV2TableItem)
@@ -96,6 +97,7 @@ public enum InstantPageV2LaidOutItem {
     case formula(InstantPageV2FormulaItem)
     case thinking(InstantPageV2ThinkingItem)
     case slideshow(InstantPageV2SlideshowItem)
+    case quoteFrame(InstantPageV2QuoteFrameItem)
 
     public var frame: CGRect {
         switch self {
@@ -105,6 +107,7 @@ public enum InstantPageV2LaidOutItem {
         case let .listMarker(item):        return item.frame
         case let .blockQuoteBar(item):     return item.frame
         case let .shape(item):             return item.frame
+        case let .imageOrnament(item):     return item.frame
         case let .mediaPlaceholder(item):  return item.frame
         case let .details(item):           return item.frame
         case let .table(item):             return item.frame
@@ -117,6 +120,7 @@ public enum InstantPageV2LaidOutItem {
         case let .formula(item):           return item.frame
         case let .thinking(item):          return item.frame
         case let .slideshow(item):         return item.frame
+        case let .quoteFrame(item):        return item.frame
         }
     }
 
@@ -131,6 +135,7 @@ public enum InstantPageV2LaidOutItem {
         case var .listMarker(item):       item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .listMarker(item)
         case var .blockQuoteBar(item):    item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .blockQuoteBar(item)
         case var .shape(item):            item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .shape(item)
+        case var .imageOrnament(item):    item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .imageOrnament(item)
         case var .mediaPlaceholder(item): item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .mediaPlaceholder(item)
         case var .details(item):          item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .details(item)
         case var .table(item):            item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .table(item)
@@ -143,6 +148,7 @@ public enum InstantPageV2LaidOutItem {
         case var .formula(item):          item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .formula(item)
         case var .thinking(item):         item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .thinking(item)
         case var .slideshow(item):        item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .slideshow(item)
+        case var .quoteFrame(item):       item.frame = item.frame.offsetBy(dx: delta.x, dy: delta.y); return .quoteFrame(item)
         }
     }
 }
@@ -154,8 +160,13 @@ public struct InstantPageV2TextItem {
 
 public struct InstantPageV2CodeBlockItem {
     public var frame: CGRect
-    public let backgroundColor: UIColor
+    public let accentColor: UIColor
+    public let barWidth: CGFloat
     public let cornerRadius: CGFloat
+    public let fillAlpha: CGFloat
+    public let barOnTrailing: Bool
+    public let language: String?
+    public let languageLabelColor: UIColor
     public let textItem: InstantPageTextItem
     public let inset: UIEdgeInsets
 }
@@ -194,12 +205,23 @@ public struct InstantPageV2ListMarkerItem {
     public var frame: CGRect
     public let kind: InstantPageV2ListMarkerKind
     public let color: UIColor
+    /// Structural path (root→list item) for a `.checklist` marker; nil for bullet/number markers.
+    public let checkboxPath: [Int]?
 }
 
 public struct InstantPageV2BarItem {
     public var frame: CGRect
     public let color: UIColor
     public let cornerRadius: CGFloat
+}
+
+public struct InstantPageV2QuoteFrameItem {
+    public var frame: CGRect
+    public let accentColor: UIColor
+    public let barWidth: CGFloat
+    public let cornerRadius: CGFloat
+    public let fillAlpha: CGFloat
+    public let barOnTrailing: Bool   // RTL: bar on the trailing (right) edge → mirror the fill
 }
 
 public enum InstantPageV2ShapeKind {
@@ -211,6 +233,13 @@ public struct InstantPageV2ShapeItem {
     public var frame: CGRect
     public let kind: InstantPageV2ShapeKind
     public let color: UIColor
+}
+
+public struct InstantPageV2ImageOrnamentItem {
+    public var frame: CGRect
+    public let imageName: String   // e.g. "Chat/Message/ReplyQuoteIcon"
+    public let color: UIColor      // tint
+    public let rotated: Bool       // true → 180° (closing mark)
 }
 
 public struct InstantPageV2FormulaItem {
@@ -240,13 +269,15 @@ public struct InstantPageV2MediaImageItem {
     public let media: InstantPageMedia
     public let webPage: TelegramMediaWebpage
     public let attributes: [InstantPageImageAttribute]   // always empty for image; kept for symmetry
+    public let spoiler: Bool
 
-    public init(frame: CGRect, cornerRadius: CGFloat, media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute]) {
+    public init(frame: CGRect, cornerRadius: CGFloat, media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute], spoiler: Bool = false) {
         self.frame = frame
         self.cornerRadius = cornerRadius
         self.media = media
         self.webPage = webPage
         self.attributes = attributes
+        self.spoiler = spoiler
     }
 }
 
@@ -268,13 +299,15 @@ public struct InstantPageV2MediaVideoItem {
     public let media: InstantPageMedia
     public let webPage: TelegramMediaWebpage
     public let attributes: [InstantPageImageAttribute]   // always empty
+    public let spoiler: Bool
 
-    public init(frame: CGRect, cornerRadius: CGFloat, media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute]) {
+    public init(frame: CGRect, cornerRadius: CGFloat, media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute], spoiler: Bool = false) {
         self.frame = frame
         self.cornerRadius = cornerRadius
         self.media = media
         self.webPage = webPage
         self.attributes = attributes
+        self.spoiler = spoiler
     }
 }
 
@@ -523,6 +556,41 @@ public func lastTextLineFrameIfLastItemIsText(in layout: InstantPageV2Layout) ->
     return (lineFrame, isInflatedByAttachment ? 0.0 : 5.0)
 }
 
+/// Returns the frame of the bottom-most laid-out item when that item is full-width visual media
+/// (image / video / cover image / map / slideshow / media placeholder), else nil. Used by the
+/// rich-message bubble to overlay the date/status as an image-style pill on the media's bottom-right
+/// corner instead of reserving a status strip below the content. The "full-width" gate excludes a
+/// rare narrow/centered trailing media, which keeps the below-content bubble status.
+public func lastFullWidthMediaFrame(in layout: InstantPageV2Layout) -> CGRect? {
+    guard let bottomItem = layout.items.max(by: { $0.frame.maxY < $1.frame.maxY }) else {
+        return nil
+    }
+    switch bottomItem {
+    case .mediaImage, .mediaVideo, .mediaCoverImage, .mediaMap, .slideshow:
+        break
+    case let .mediaPlaceholder(placeholder):
+        // Only a still-loading image/video placeholder should get the overlaid pill (so the style
+        // doesn't flip when it resolves). Web/post-embed, channel-banner, and audio placeholders must
+        // NOT — they aren't visual media the pill is designed for, and the prepare-phase structural
+        // detector doesn't externalize their reactions, which would otherwise make reactions vanish.
+        switch placeholder.kind {
+        case .image, .video:
+            break
+        default:
+            return nil
+        }
+    default:
+        return nil
+    }
+    let frame = bottomItem.frame
+    // Full-width gate: the media must span (approximately) the content width. The tolerance absorbs
+    // the right-margin inset that `contentSize.width` reserves (see the `fitToWidth` maxX computation).
+    if frame.width >= layout.contentSize.width - 12.0 {
+        return frame
+    }
+    return nil
+}
+
 // MARK: - Layout context
 
 private final class DateUpdateAccumulator {
@@ -556,6 +624,7 @@ private func layoutBlockSequence(
     boundingWidth: CGFloat,
     horizontalInset: CGFloat,
     kind: BlockSequenceKind,
+    pathPrefix: [Int] = [],
     context: inout LayoutContext
 ) -> InstantPageV2Layout {
     var items: [InstantPageV2LaidOutItem] = []
@@ -573,6 +642,7 @@ private func layoutBlockSequence(
             isCover: false,
             previousItems: items,
             isLast: i == blocks.count - 1,
+            pathPrefix: pathPrefix + [i],
             context: &context
         )
 
@@ -663,13 +733,14 @@ private func layoutBlock(
     isCover: Bool,
     previousItems: [InstantPageV2LaidOutItem],
     isLast: Bool,
+    pathPrefix: [Int] = [],
     context: inout LayoutContext
 ) -> [InstantPageV2LaidOutItem] {
     let _ = isLast  // reserved for Tasks 7–9
     switch block {
     case let .cover(inner):
         return layoutBlock(inner, boundingWidth: boundingWidth, horizontalInset: horizontalInset, kind: kind,
-                           isCover: true, previousItems: previousItems, isLast: isLast, context: &context)
+                           isCover: true, previousItems: previousItems, isLast: isLast, pathPrefix: pathPrefix, context: &context)
     case let .title(text):
         let titleItems = layoutSimpleText(text, category: .header, boundingWidth: boundingWidth,
                                           horizontalInset: horizontalInset, context: &context)
@@ -706,22 +777,22 @@ private func layoutBlock(
 
     case let .list(items, ordered):
         return layoutList(items, ordered: ordered, boundingWidth: boundingWidth,
-                          horizontalInset: horizontalInset, kind: kind, context: &context)
+                          horizontalInset: horizontalInset, kind: kind, pathPrefix: pathPrefix, context: &context)
 
     case let .preformatted(text, language):
         return layoutCodeBlock(text, language: language, boundingWidth: boundingWidth,
                                horizontalInset: horizontalInset, context: &context)
 
-    case let .blockQuote(blocks, caption):
+    case let .blockQuote(blocks, caption, _):
         return layoutBlockQuote(blocks: blocks, caption: caption,
                                 boundingWidth: boundingWidth, horizontalInset: horizontalInset, kind: kind,
-                                isLast: isLast, context: &context)
+                                isLast: isLast, pathPrefix: pathPrefix, context: &context)
     case let .pullQuote(text, caption):
         return layoutQuoteText(text: text, caption: caption, isPull: true,
                                boundingWidth: boundingWidth, horizontalInset: horizontalInset,
                                context: &context)
 
-    case let .image(id, caption, url, webpageId):
+    case let .image(id, caption, url, webpageId, spoiler):
         if case let .image(image) = context.media[id], let largest = largestImageRepresentation(image.representations) {
             let naturalSize = CGSize(width: CGFloat(largest.dimensions.width), height: CGFloat(largest.dimensions.height))
             let mediaUrl: InstantPageUrlItem? = url.flatMap { InstantPageUrlItem(url: $0, webpageId: webpageId) }
@@ -742,7 +813,8 @@ private func layoutBlock(
                         cornerRadius: cornerRadius,
                         media: instantPageMedia,
                         webPage: webpage,
-                        attributes: []
+                        attributes: [],
+                        spoiler: spoiler
                     ))
                 },
                 naturalSize: naturalSize,
@@ -762,7 +834,7 @@ private func layoutBlock(
             return []
         }
 
-    case let .video(id, caption, _, _):
+    case let .video(id, caption, _, _, spoiler):
         if case let .file(file) = context.media[id], let dimensions = file.dimensions {
             let naturalSize = CGSize(width: CGFloat(dimensions.width), height: CGFloat(dimensions.height))
             let mediaIndex = context.mediaIndexCounter
@@ -782,7 +854,8 @@ private func layoutBlock(
                         cornerRadius: cornerRadius,
                         media: instantPageMedia,
                         webPage: webpage,
-                        attributes: []
+                        attributes: [],
+                        spoiler: spoiler
                     ))
                 },
                 naturalSize: naturalSize,
@@ -995,7 +1068,7 @@ private func layoutBlock(
     case let .details(title, blocks, expanded):
         return layoutDetails(title: title, blocks: blocks, defaultExpanded: expanded,
                              boundingWidth: boundingWidth, horizontalInset: horizontalInset,
-                             context: &context)
+                             pathPrefix: pathPrefix, context: &context)
 
     case let .table(title, rows, bordered, striped):
         return layoutTable(title: title, rows: rows, bordered: bordered, striped: striped,
@@ -1087,6 +1160,7 @@ private func layoutDetails(
     defaultExpanded: Bool,
     boundingWidth: CGFloat,
     horizontalInset: CGFloat,
+    pathPrefix: [Int] = [],
     context: inout LayoutContext
 ) -> [InstantPageV2LaidOutItem] {
     let index = context.detailsIndexCounter
@@ -1124,6 +1198,7 @@ private func layoutDetails(
             boundingWidth: boundingWidth,
             horizontalInset: horizontalInset,
             kind: .detail,
+            pathPrefix: pathPrefix,
             context: &context
         )
         innerLayout = layout
@@ -1866,13 +1941,13 @@ private func layoutCollage(
     var itemSizes: [CGSize] = []
     for block in innerBlocks {
         switch block {
-        case let .image(id, _, _, _):
+        case let .image(id, _, _, _, _):
             if case let .image(image) = context.media[id], let largest = largestImageRepresentation(image.representations) {
                 itemSizes.append(CGSize(width: CGFloat(largest.dimensions.width), height: CGFloat(largest.dimensions.height)))
             } else {
                 itemSizes.append(CGSize())
             }
-        case let .video(id, _, _, _):
+        case let .video(id, _, _, _, _):
             if case let .file(file) = context.media[id], let dimensions = file.dimensions {
                 itemSizes.append(CGSize(width: CGFloat(dimensions.width), height: CGFloat(dimensions.height)))
             } else {
@@ -1898,19 +1973,19 @@ private func layoutCollage(
             frame.size.width += instantPageV2MediaEdgeBleed
         }
         switch block {
-        case let .image(id, blockCaption, url, webpageId):
+        case let .image(id, blockCaption, url, webpageId, spoiler):
             guard case let .image(image) = context.media[id] else { continue }
             let mediaIndex = context.mediaIndexCounter
             context.mediaIndexCounter += 1
             let mediaUrl: InstantPageUrlItem? = url.flatMap { InstantPageUrlItem(url: $0, webpageId: webpageId) }
             let media = InstantPageMedia(index: mediaIndex, media: .image(image), url: mediaUrl, caption: blockCaption.text, credit: blockCaption.credit)
-            result.append(.mediaImage(InstantPageV2MediaImageItem(frame: frame, cornerRadius: 0.0, media: media, webPage: webpage, attributes: [])))
-        case let .video(id, blockCaption, _, _):
+            result.append(.mediaImage(InstantPageV2MediaImageItem(frame: frame, cornerRadius: 0.0, media: media, webPage: webpage, attributes: [], spoiler: spoiler)))
+        case let .video(id, blockCaption, _, _, spoiler):
             guard case let .file(file) = context.media[id] else { continue }
             let mediaIndex = context.mediaIndexCounter
             context.mediaIndexCounter += 1
             let media = InstantPageMedia(index: mediaIndex, media: .file(file), url: nil, caption: blockCaption.text, credit: blockCaption.credit)
-            result.append(.mediaVideo(InstantPageV2MediaVideoItem(frame: frame, cornerRadius: 0.0, media: media, webPage: webpage, attributes: [])))
+            result.append(.mediaVideo(InstantPageV2MediaVideoItem(frame: frame, cornerRadius: 0.0, media: media, webPage: webpage, attributes: [], spoiler: spoiler)))
         default:
             continue
         }
@@ -1948,7 +2023,7 @@ private func layoutSlideshow(
     var height: CGFloat = 0.0
     for block in innerBlocks {
         switch block {
-        case let .image(id, blockCaption, url, webpageId):
+        case let .image(id, blockCaption, url, webpageId, _):
             if case let .image(image) = context.media[id], let imageSize = largestImageRepresentation(image.representations)?.dimensions {
                 let mediaIndex = context.mediaIndexCounter
                 context.mediaIndexCounter += 1
@@ -2192,28 +2267,18 @@ private func layoutCodeBlock(
     horizontalInset: CGFloat,
     context: inout LayoutContext
 ) -> [InstantPageV2LaidOutItem] {
-    let backgroundInset: CGFloat = 15.0
-    let textXOffset: CGFloat = 11.0
+    // Editor parity: plain monospace 15pt (NO syntax highlighting), accent bar + accent-tinted fill,
+    // inset to the content column; leading text inset 16 / trailing 22 / vertical 8.
+    let verticalInset: CGFloat = 6.0
+    let leadingInset: CGFloat = 9.0
+    let trailingInset: CGFloat = 9.0
 
-    let attributedString: NSAttributedString
-    if let language, !language.isEmpty {
-        // V1 line 333: call attributedStringForPreformattedText with language.
-        attributedString = attributedStringForPreformattedText(
-            text,
-            language: language,
-            theme: context.theme,
-            cachedMessageSyntaxHighlight: context.cachedMessageSyntaxHighlight
-        )
-    } else {
-        // V1 lines 335–338: fall back to plain paragraph style when no language.
-        let styleStack = InstantPageTextStyleStack()
-        setupStyleStack(styleStack, theme: context.theme, category: .codeBlock, link: false)
-        attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
-    }
+    let styleStack = InstantPageTextStyleStack()
+    setupStyleStack(styleStack, theme: context.theme, category: .codeBlock, link: false)
+    styleStack.push(.fontSize(15.0))
+    let attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
 
-    // V1 line 341: text bounding width excludes horizontalInset×2 and backgroundInset×2.
-    let innerWidth = boundingWidth - horizontalInset * 2.0 - backgroundInset * 2.0
-    // V1 line 342: offset is (17.0, backgroundInset); V2 lays the text in block-local coords.
+    let innerWidth = boundingWidth - horizontalInset * 2.0 - leadingInset - trailingInset
     let (textItem, _, textSize) = layoutTextItem(
         attributedString,
         boundingWidth: innerWidth,
@@ -2224,39 +2289,55 @@ private func layoutCodeBlock(
     )
     guard let textItem = textItem else { return [] }
     textItem.markdownContext = InstantPageMarkdownBlockContext(kind: .code(language: language))
-
-    // Position text within the block's content area.
-    // V1 line 342: x=17.0, y=backgroundInset (block-local).
+    // The text item is the true font line box (ascent headroom above the caps + descent below the
+    // last baseline). Subtract that overhead so the VISIBLE gap from the fill to the glyphs equals
+    // `verticalInset` (6pt) on top and bottom (the 9pt horizontal inset reads heavier vertically).
+    let overheads = instantPageV2TextBoxOverheads(attributedString)
+    let topPad = max(0.0, verticalInset - overheads.top)
+    let bottomPad = max(0.0, verticalInset - overheads.bottom)
     textItem.frame = CGRect(
-        x: textXOffset,
-        y: backgroundInset,
+        x: context.rtl ? trailingInset : leadingInset,
+        y: topPad,
         width: textItem.frame.width,
         height: textItem.frame.height
     )
 
-    // Top-level (and <details>) code blocks span the full boundingWidth flush (x=0), matching V1
-    // (line 348). Inside a blockquote the child inset is raised above the page inset (by
-    // lineInset), so honor it here — otherwise the full-width background bleeds out under the
-    // quote bar instead of insetting to the quote's content gutter like the quote's text does.
-    let blockHeight = textSize.height + backgroundInset * 2.0
-    let isNestedInQuote = horizontalInset > context.pageHorizontalInset
-    // Inset (quote-nested) code blocks get an 8pt rounded background; flush (top-level / details)
-    // ones stay square — the bubble's own rounded clip handles their edges.
-    let cornerRadius: CGFloat = isNestedInQuote ? 8.0 : 0.0
-    let blockFrame = CGRect(
-        x: isNestedInQuote ? horizontalInset : 0.0,
-        y: 0.0,
-        width: isNestedInQuote ? (boundingWidth - horizontalInset * 2.0) : boundingWidth,
-        height: blockHeight
-    )
+    let blockHeight = topPad + textSize.height + bottomPad
+    let blockFrame = CGRect(x: horizontalInset, y: 0.0, width: boundingWidth - horizontalInset * 2.0, height: blockHeight)
 
     return [.codeBlock(InstantPageV2CodeBlockItem(
         frame: blockFrame,
-        backgroundColor: context.theme.codeBlockBackgroundColor,
-        cornerRadius: cornerRadius,
+        accentColor: context.theme.quoteAccentColor,
+        barWidth: 3.0,
+        cornerRadius: 6.0,
+        fillAlpha: 0.10,
+        barOnTrailing: context.rtl,
+        language: language,
+        languageLabelColor: context.theme.textCategories.caption.color,
         textItem: textItem,
-        inset: UIEdgeInsets(top: backgroundInset, left: textXOffset, bottom: backgroundInset, right: backgroundInset)
+        inset: UIEdgeInsets(top: topPad, left: leadingInset, bottom: bottomPad, right: trailingInset)
     ))]
+}
+
+/// Vertical overhead of a V2 text item's true-font-line-box relative to the visible glyph box:
+/// `.top` = ascent headroom above the cap line, `.bottom` = descent below the last baseline.
+/// Subtracting these from an intended inset makes the VISIBLE fill→glyph gap equal that inset.
+private func instantPageV2TextBoxOverheads(_ string: NSAttributedString) -> (top: CGFloat, bottom: CGFloat) {
+    guard string.length > 0, let font = string.attribute(.font, at: 0, effectiveRange: nil) as? UIFont else {
+        return (0.0, 0.0)
+    }
+    return (max(0.0, font.ascender - font.capHeight), max(0.0, -font.descender))
+}
+
+/// The block-quote corner glyph (mirrors InteractiveTextComponent's `quoteIcon`): the `ReplyQuoteIcon`
+/// (9×7 natural), accent-tinted, inset 4pt from the frame's top corner — top-right for LTR, top-left
+/// for RTL (opposite the leading bar). The quote frame spans `[horizontalInset, boundingWidth − horizontalInset]`.
+private func instantPageV2BlockQuoteIcon(boundingWidth: CGFloat, horizontalInset: CGFloat, color: UIColor, rtl: Bool) -> InstantPageV2LaidOutItem {
+    let iconSize = CGSize(width: 9.0, height: 7.0)
+    let iconX = rtl ? (horizontalInset + 4.0) : (boundingWidth - horizontalInset - 4.0 - iconSize.width)
+    return .imageOrnament(InstantPageV2ImageOrnamentItem(
+        frame: CGRect(x: iconX, y: 4.0, width: iconSize.width, height: iconSize.height),
+        imageName: "Chat/Message/ReplyQuoteIcon", color: color, rotated: false))
 }
 
 private func layoutThinking(
@@ -2306,6 +2387,7 @@ private func layoutBlockQuote(
     horizontalInset: CGFloat,
     kind: BlockSequenceKind,
     isLast: Bool,
+    pathPrefix: [Int] = [],
     context: inout LayoutContext
 ) -> [InstantPageV2LaidOutItem] {
     // Legacy single-paragraph fast path: preserve today's italicized body styling.
@@ -2315,9 +2397,8 @@ private func layoutBlockQuote(
                                context: &context)
     }
 
-    let verticalInset: CGFloat = 4.0
-    let lineInset: CGFloat = context.fitToWidth ? 12.0 : 20.0
-    let barWidth: CGFloat = 3.0
+    let verticalInset: CGFloat = 6.0
+    let lineInset: CGFloat = 9.0
 
     let innerBoundingWidth = boundingWidth - horizontalInset * 2.0 - lineInset
     let innerHorizontalInset = horizontalInset + lineInset
@@ -2343,6 +2424,7 @@ private func layoutBlockQuote(
             isCover: false,
             previousItems: result,
             isLast: i == blocks.count - 1 && isLast,
+            pathPrefix: pathPrefix + [i],
             context: &context
         )
         let dy = contentHeight + spacing
@@ -2356,9 +2438,11 @@ private func layoutBlockQuote(
     if case .empty = caption {
         // no caption
     } else {
-        contentHeight += 14.0
+        // Small gap between the body and the attribution (author) line.
+        contentHeight += 3.0
         let captionStyleStack = InstantPageTextStyleStack()
         setupStyleStack(captionStyleStack, theme: context.theme, category: .caption, link: false)
+        captionStyleStack.push(.bold)
         let attributedCaption = attributedStringForRichText(caption, styleStack: captionStyleStack, formatDate: context.formatDate)
         let (_, captionItems, captionSize) = layoutTextItem(
             attributedCaption,
@@ -2377,13 +2461,12 @@ private func layoutBlockQuote(
 
     contentHeight += verticalInset
 
-    // Vertical bar on the leading edge (matches the blockQuote branch of layoutQuoteText).
-    let bar = InstantPageV2BarItem(
-        frame: CGRect(x: instantPageV2LeadingEdgeX(boundingWidth: boundingWidth, horizontalInset: horizontalInset, elementWidth: barWidth, rtl: context.rtl), y: 0.0, width: barWidth, height: contentHeight),
-        color: context.theme.textCategories.paragraph.color,
-        cornerRadius: barWidth / 2.0
-    )
-    result.append(.blockQuoteBar(bar))
+    // Accent bar + accent-tinted rounded fill spanning the whole quote band (behind child content).
+    let frameItem = InstantPageV2QuoteFrameItem(
+        frame: CGRect(x: horizontalInset, y: 0.0, width: boundingWidth - horizontalInset * 2.0, height: contentHeight),
+        accentColor: context.theme.quoteAccentColor, barWidth: 3.0, cornerRadius: 6.0, fillAlpha: 0.10, barOnTrailing: context.rtl)
+    result.insert(.quoteFrame(frameItem), at: 0)
+    result.append(instantPageV2BlockQuoteIcon(boundingWidth: boundingWidth, horizontalInset: horizontalInset, color: context.theme.quoteAccentColor, rtl: context.rtl))
 
     // Caption items (appended above) are also bumped to quoteDepth 1 and will render with a
     // `>` prefix. The whole-message markdown converter drops blockquote captions entirely, and
@@ -2400,41 +2483,36 @@ private func layoutQuoteText(
     horizontalInset: CGFloat,
     context: inout LayoutContext
 ) -> [InstantPageV2LaidOutItem] {
-    // V1 line 518/553: verticalInset = 4.0 for both variants.
-    let verticalInset: CGFloat = 4.0
-    // V1 line 518: lineInset = 20.0 (blockQuote only; pullQuote uses full width).
-    let lineInset: CGFloat = isPull ? 0.0 : (context.fitToWidth ? 12.0 : 20.0)
+    // Bubble-tuned insets: block-quote text sits 9pt from the frame's left border, 6pt top/bottom;
+    // the trailing inset is larger (16pt) so the text clears the top-right quote icon (9pt wide +
+    // 4pt corner inset). The pull-quote pill uses 12pt top/bottom.
+    let verticalInset: CGFloat = isPull ? 12.0 : 6.0
+    let leadingInset: CGFloat = isPull ? 0.0 : 9.0
+    let trailingInset: CGFloat = isPull ? 0.0 : 16.0
 
     var result: [InstantPageV2LaidOutItem] = []
-    var contentHeight: CGFloat = verticalInset   // V1 line 520/554: starts at verticalInset
 
-    // Body text style: paragraph + italic (V1 lines 524–526 / 558–560).
+    // Body text style: paragraph at 15pt; pull quotes force italic + center.
     let styleStack = InstantPageTextStyleStack()
     setupStyleStack(styleStack, theme: context.theme, category: .paragraph, link: false)
-    styleStack.push(.italic)
-
+    styleStack.push(.fontSize(15.0))
     if isPull {
-        // pullQuote: top horizontal rule (plan-specified; matches V1 divider geometry for caption color).
-        // V1 doesn't emit shape ornaments for pullQuote, but the plan calls for them.
-        // Geometry mirrors V1 divider (InstantPageLayout.swift line 362):
-        //   lineWidth = boundingWidth - horizontalInset * 2.0, x = horizontalInset, h = 1.0.
-        let lineWidth = boundingWidth - horizontalInset * 2.0
-        let topLine = InstantPageV2ShapeItem(
-            frame: CGRect(x: horizontalInset, y: contentHeight, width: lineWidth, height: 1.0),
-            kind: .line(thickness: UIScreenPixel),
-            color: context.theme.separatorColor
-        )
-        result.append(.shape(topLine))
-        contentHeight += 1.0 + verticalInset   // rule + small gap before body text
+        styleStack.push(.italic)
     }
 
-    // Body text (V1 line 528 / 562).
-    let textBoundingWidth = boundingWidth - horizontalInset * 2.0 - lineInset
-    let textX: CGFloat = instantPageV2ContentColumnX(horizontalInset: horizontalInset, gutter: lineInset, rtl: context.rtl)
+    let textBoundingWidth = boundingWidth - horizontalInset * 2.0 - leadingInset - trailingInset
+    let textX: CGFloat = isPull
+        ? horizontalInset
+        : (context.rtl ? horizontalInset + trailingInset : horizontalInset + leadingInset)
     let textAlignment: NSTextAlignment = isPull ? .center : (context.rtl ? .right : .natural)
 
     let attributedBody = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
-    let (_, bodyItems, bodySize) = layoutTextItem(
+    // Subtract the font-box overhead so the VISIBLE top/bottom padding equals verticalInset (6pt),
+    // matching the geometric horizontal inset (see instantPageV2TextBoxOverheads).
+    let bodyOverheads = instantPageV2TextBoxOverheads(attributedBody)
+    var contentHeight: CGFloat = max(0.0, verticalInset - bodyOverheads.top)
+    var lastBottomOverhead = bodyOverheads.bottom
+    let (bodyTextItem, bodyItems, bodySize) = layoutTextItem(
         attributedBody,
         boundingWidth: textBoundingWidth,
         alignment: textAlignment,
@@ -2443,18 +2521,25 @@ private func layoutQuoteText(
         computeRevealCharacterRects: context.computeRevealCharacterRects
     )
     result.append(contentsOf: bodyItems)
-    contentHeight += bodySize.height   // V1 line 530/567
+    contentHeight += bodySize.height
 
-    // Optional caption (V1 lines 533–544 / 570–583).
+    // The quote-text region (marks bracket this; the pull-quote pill also spans any caption below).
+    let quoteRegionBottom = contentHeight + max(0.0, verticalInset - bodyOverheads.bottom)
+
+    // Optional caption (attribution / author line): bold, and bold+italic centered for pull quotes.
     if case .empty = caption {
         // no caption
     } else {
-        contentHeight += 14.0   // V1 lines 535/572: 14pt gap before caption
-
+        // Small gap between the body and the attribution (author) line.
+        contentHeight += 3.0
         let captionStyleStack = InstantPageTextStyleStack()
         setupStyleStack(captionStyleStack, theme: context.theme, category: .caption, link: false)
-
+        captionStyleStack.push(.bold)
+        if isPull {
+            captionStyleStack.push(.italic)
+        }
         let attributedCaption = attributedStringForRichText(caption, styleStack: captionStyleStack, formatDate: context.formatDate)
+        lastBottomOverhead = instantPageV2TextBoxOverheads(attributedCaption).bottom
         let (_, captionItems, captionSize) = layoutTextItem(
             attributedCaption,
             boundingWidth: textBoundingWidth,
@@ -2464,39 +2549,44 @@ private func layoutQuoteText(
             computeRevealCharacterRects: context.computeRevealCharacterRects
         )
         result.append(contentsOf: captionItems)
-        contentHeight += captionSize.height   // V1 lines 542/582
+        contentHeight += captionSize.height
     }
 
-    contentHeight += verticalInset   // V1 lines 545/585
+    contentHeight += max(0.0, verticalInset - lastBottomOverhead)
 
+    let accent = context.theme.quoteAccentColor
     if isPull {
-        // pullQuote: bottom horizontal rule (plan-specified; mirrors top rule).
-        let lineWidth = boundingWidth - horizontalInset * 2.0
-        let bottomLine = InstantPageV2ShapeItem(
-            frame: CGRect(x: horizontalInset, y: contentHeight - 1.0, width: lineWidth, height: 1.0),
-            kind: .line(thickness: 1.0),
-            color: context.theme.textCategories.caption.color
-        )
-        // Insert bottom rule before caption trailing space is consumed — append after final verticalInset.
-        result.append(.shape(bottomLine))
+        // Content-hugging centered pill (behind text) + top-left / bottom-right corner marks.
+        let pad: CGFloat = 30.0
+        let markSize = CGSize(width: 12.0, height: 10.0)
+        let markInset: CGFloat = 6.0
+        // Content-hugging: track the widest wrapped line. `bodySize.width` is the full bounding
+        // width for centered text (layoutTextItem only shrinks to content width for `.natural`),
+        // so it must NOT drive the pill — else the pill spans the whole column instead of hugging.
+        let contentWidth = bodyTextItem?.lines.map { $0.frame.width }.max() ?? bodySize.width
+        let pillWidth = min(contentWidth + pad * 2.0, boundingWidth)
+        let pillX = (boundingWidth - pillWidth) / 2.0
+        let pill = InstantPageV2ShapeItem(
+            frame: CGRect(x: pillX, y: 0.0, width: pillWidth, height: contentHeight),
+            kind: .roundedRect(cornerRadius: 6.0),
+            color: accent.withAlphaComponent(0.10))
+        result.insert(.shape(pill), at: 0)
+        result.append(.imageOrnament(InstantPageV2ImageOrnamentItem(
+            frame: CGRect(x: pillX + markInset, y: markInset, width: markSize.width, height: markSize.height),
+            imageName: "RichText/QuoteOpen", color: accent, rotated: false)))
+        result.append(.imageOrnament(InstantPageV2ImageOrnamentItem(
+            frame: CGRect(x: pillX + pillWidth - markInset - markSize.width, y: quoteRegionBottom - markInset - markSize.height,
+                          width: markSize.width, height: markSize.height),
+            imageName: "RichText/QuoteClose", color: accent, rotated: false)))
     } else {
-        // blockQuote: vertical bar on the leading edge (V1 lines 547–549).
-        // V1: frame = CGRect(x: horizontalInset, y: 0.0, width: 3.0, height: contentSize.height)
-        // V1 shape: .roundLine (rounded caps) → cornerRadius = barWidth / 2 = 1.5.
-        let barWidth: CGFloat = 3.0   // V1 line 547
-        let bar = InstantPageV2BarItem(
-            frame: CGRect(x: instantPageV2LeadingEdgeX(boundingWidth: boundingWidth, horizontalInset: horizontalInset, elementWidth: barWidth, rtl: context.rtl), y: 0.0, width: barWidth, height: contentHeight),
-            color: context.theme.textCategories.paragraph.color,   // V1 line 547
-            cornerRadius: barWidth / 2.0   // V1 .roundLine ≈ half-width rounded caps
-        )
-        result.append(.blockQuoteBar(bar))
+        // Accent bar + accent-tinted rounded fill spanning the whole quote band (behind the text).
+        let frameItem = InstantPageV2QuoteFrameItem(
+            frame: CGRect(x: horizontalInset, y: 0.0, width: boundingWidth - horizontalInset * 2.0, height: contentHeight),
+            accentColor: accent, barWidth: 3.0, cornerRadius: 6.0, fillAlpha: 0.10, barOnTrailing: context.rtl)
+        result.insert(.quoteFrame(frameItem), at: 0)
+        result.append(instantPageV2BlockQuoteIcon(boundingWidth: boundingWidth, horizontalInset: horizontalInset, color: accent, rtl: context.rtl))
     }
 
-    // Tag this quote's produced text items at quote depth 1 so the markdown
-    // converter renders them with a `> ` prefix. Applies to BOTH block quotes
-    // (single-paragraph fast path) and pull quotes — the whole-message markdown
-    // converter renders both flavors as `> `. Nested quotes are lifted further
-    // by the outer multi-block path's own bumpQuoteDepth(result) call.
     bumpQuoteDepth(result)
 
     return result
@@ -2510,6 +2600,7 @@ private func layoutList(
     boundingWidth: CGFloat,
     horizontalInset: CGFloat,
     kind: BlockSequenceKind,
+    pathPrefix: [Int] = [],
     context: inout LayoutContext
 ) -> [InstantPageV2LaidOutItem] {
     // Determine marker characteristics.
@@ -2614,6 +2705,20 @@ private func layoutList(
 
         let markerInfo = markerInfos[i]
 
+        // Path to this list item (root→item), stamped onto checkbox markers only. Matches
+        // InstantPage.togglingCheckbox path semantics: list items are addressed by item index
+        // appended to the list block's own prefix.
+        //
+        // INVARIANT: `pathPrefix` is an absolute-from-root path only because every
+        // `layoutBlockSequence` call that can reach a list is entered from the page root with a
+        // correct prefix (top-level, details body, blockquote children, nested list-item blocks).
+        // The only OTHER `layoutBlockSequence` call sites — table cells (`kind == .cell`, layout
+        // hard-codes `[.paragraph]`) and the details title — contain no lists today, so no
+        // checkbox marker is produced there. The `kind != .cell` guard is belt-and-suspenders: if
+        // cells ever gain list content, their checkboxes stay non-interactive rather than
+        // misrouting an edit to a colliding top-level path.
+        let itemCheckboxPath: [Int]? = (item.checked != nil && kind != .cell) ? (pathPrefix + [i]) : nil
+
         // Effective item: if a .blocks item is empty, treat as a single space.
         var effectiveItem = item
         if case let .blocks(blocks, num, checked) = effectiveItem, blocks.isEmpty {
@@ -2670,7 +2775,8 @@ private func layoutList(
             result.append(.listMarker(InstantPageV2ListMarkerItem(
                 frame: markerFrame,
                 kind: markerInfo.kind,
-                color: context.theme.textCategories.paragraph.color
+                color: context.theme.textCategories.paragraph.color,
+                checkboxPath: itemCheckboxPath
             )))
             stampMarkdownContext(textLaidOutItems, kind: .listItem(ordered: ordered, marker: markdownMarker, checked: markdownChecked))
             result.append(contentsOf: textLaidOutItems)
@@ -2691,6 +2797,7 @@ private func layoutList(
                     isCover: false,
                     previousItems: result,
                     isLast: j == blocks.count - 1,
+                    pathPrefix: pathPrefix + [i, j],
                     context: &context
                 )
                 let subLocalMaxY: CGFloat = subItems.map { $0.frame.maxY }.max() ?? 0.0
@@ -2755,7 +2862,8 @@ private func layoutList(
             result.append(.listMarker(InstantPageV2ListMarkerItem(
                 frame: markerFrame,
                 kind: markerInfo.kind,
-                color: context.theme.textCategories.paragraph.color
+                color: context.theme.textCategories.paragraph.color,
+                checkboxPath: itemCheckboxPath
             )))
 
         default:
@@ -2893,51 +3001,6 @@ private func instantPageFont(style: InstantPageTextAttributes, bold: Bool = fals
             return Font.monospace(size)
         }
     }
-}
-
-// MARK: - Preformatted text (ported from V1 InstantPageLayout.swift lines 91–132)
-
-private func attributedStringForPreformattedText(_ text: RichText, language: String?, theme: InstantPageTheme, cachedMessageSyntaxHighlight: CachedMessageSyntaxHighlight?) -> NSAttributedString {
-    let paragraphAttributes = theme.textCategories.attributes(type: .paragraph, link: false)
-    let textValue = text.plainText
-    guard !textValue.isEmpty else {
-        return NSAttributedString(
-            string: "",
-            attributes: [
-                .font: instantPageFont(style: paragraphAttributes, fixed: true),
-                .foregroundColor: paragraphAttributes.color,
-                NSAttributedString.Key(rawValue: InstantPageLineSpacingFactorAttribute): paragraphAttributes.font.lineSpacingFactor as NSNumber
-            ]
-        )
-    }
-
-    let attributedString = stringWithAppliedEntities(
-        textValue,
-        entities: [
-            MessageTextEntity(range: 0 ..< (textValue as NSString).length, type: .Pre(language: language))
-        ],
-        baseColor: paragraphAttributes.color,
-        linkColor: theme.linkColor,
-        codeBlockTitleColor: paragraphAttributes.color,
-        codeBlockAccentColor: paragraphAttributes.color,
-        codeBlockBackgroundColor: theme.codeBlockBackgroundColor,
-        baseFont: instantPageFont(style: paragraphAttributes),
-        linkFont: instantPageFont(style: paragraphAttributes),
-        boldFont: instantPageFont(style: paragraphAttributes, bold: true),
-        italicFont: instantPageFont(style: paragraphAttributes, italic: true),
-        boldItalicFont: instantPageFont(style: paragraphAttributes, bold: true, italic: true),
-        fixedFont: instantPageFont(style: paragraphAttributes, fixed: true),
-        blockQuoteFont: instantPageFont(style: paragraphAttributes),
-        underlineLinks: false,
-        message: nil,
-        cachedMessageSyntaxHighlight: cachedMessageSyntaxHighlight
-    ).mutableCopy() as! NSMutableAttributedString
-    attributedString.addAttribute(
-        NSAttributedString.Key(rawValue: InstantPageLineSpacingFactorAttribute),
-        value: paragraphAttributes.font.lineSpacingFactor as NSNumber,
-        range: NSRange(location: 0, length: attributedString.length)
-    )
-    return attributedString
 }
 
 // MARK: - V2 text-item layout (ported from V1 InstantPageTextItem.swift layoutTextItemWithString)
@@ -3500,4 +3563,57 @@ func layoutTextItem(
     items.append(contentsOf: additionalItems)
 
     return (textItem, items, textItem.frame.size)
+}
+
+/// Line-level metrics for hosts that apply text-style layout heuristics to a rendered page
+/// (first-line collapse, trailing-line/copy-button overlap). Text items contribute their
+/// laid-out lines (offset into page coordinates); substantive block items (code blocks,
+/// tables, media, …) contribute their whole frame as one "line" and mark the trailing
+/// position as a block; pure decorations (list markers, quote bars, shapes, dividers, image
+/// ornaments) and anchors contribute nothing.
+public struct InstantPageV2TextLineMetrics {
+    public let numberOfLines: Int
+    public let lineRects: [CGRect]
+    public let trailingLineWidth: CGFloat
+    public let trailingLineIsRTL: Bool
+    public let trailingIsBlock: Bool
+}
+
+public extension InstantPageV2Layout {
+    func textLineMetrics() -> InstantPageV2TextLineMetrics {
+        var lineRects: [CGRect] = []
+        var trailingLineWidth: CGFloat = 0.0
+        var trailingLineIsRTL = false
+        var trailingIsBlock = false
+
+        for item in self.items {
+            switch item {
+            case .anchor, .listMarker, .blockQuoteBar, .shape, .divider, .imageOrnament, .quoteFrame:
+                continue
+            case let .text(textItem):
+                if textItem.textItem.lines.isEmpty {
+                    continue
+                }
+                for line in textItem.textItem.lines {
+                    lineRects.append(line.frame.offsetBy(dx: textItem.frame.minX, dy: textItem.frame.minY))
+                    trailingLineWidth = line.frame.maxX + textItem.frame.minX
+                    trailingLineIsRTL = line.isRTL
+                }
+                trailingIsBlock = false
+            default:
+                lineRects.append(item.frame)
+                trailingLineWidth = item.frame.maxX
+                trailingLineIsRTL = false
+                trailingIsBlock = true
+            }
+        }
+
+        return InstantPageV2TextLineMetrics(
+            numberOfLines: lineRects.count,
+            lineRects: lineRects,
+            trailingLineWidth: trailingLineWidth,
+            trailingLineIsRTL: trailingLineIsRTL,
+            trailingIsBlock: trailingIsBlock
+        )
+    }
 }

@@ -5,7 +5,7 @@ import Display
 import LegacyComponents
 import TelegramPresentationData
 
-public struct CheckNodeTheme {
+public struct CheckNodeTheme: Equatable {
     public var backgroundColor: UIColor
     public var strokeColor: UIColor
     public var borderColor: UIColor
@@ -14,9 +14,10 @@ public struct CheckNodeTheme {
     public var hasShadow: Bool
     public var filledBorder: Bool
     public var borderWidth: CGFloat?
+    public var checkmarkLineWidth: CGFloat?
     public var isDottedBorder: Bool
     
-    public init(backgroundColor: UIColor, strokeColor: UIColor, borderColor: UIColor, overlayBorder: Bool, hasInset: Bool, hasShadow: Bool, filledBorder: Bool = false, borderWidth: CGFloat? = nil, isDottedBorder: Bool = false) {
+    public init(backgroundColor: UIColor, strokeColor: UIColor, borderColor: UIColor, overlayBorder: Bool, hasInset: Bool, hasShadow: Bool, filledBorder: Bool = false, borderWidth: CGFloat? = nil, checkmarkLineWidth: CGFloat? = nil, isDottedBorder: Bool = false) {
         self.backgroundColor = backgroundColor
         self.strokeColor = strokeColor
         self.borderColor = borderColor
@@ -25,6 +26,7 @@ public struct CheckNodeTheme {
         self.hasShadow = hasShadow
         self.filledBorder = filledBorder
         self.borderWidth = borderWidth
+        self.checkmarkLineWidth = checkmarkLineWidth
         self.isDottedBorder = isDottedBorder
     }
 }
@@ -481,7 +483,7 @@ public class CheckLayer: CALayer {
             borderWidth = customBorderWidth
         }
 
-        let checkWidth: CGFloat = 1.5
+        let checkWidth = parameters.theme.checkmarkLineWidth ?? 1.5
 
         let inset: CGFloat = parameters.theme.hasInset ? 2.0 - UIScreenPixel : 0.0
 

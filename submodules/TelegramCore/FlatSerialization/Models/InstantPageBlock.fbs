@@ -107,6 +107,7 @@ table InstantPageBlock_Image {
     caption:InstantPageCaption (id: 1, required);
     url:string (id: 2);
     webpageId:MediaId (id: 3);
+    spoiler:bool (id: 4);
 }
 
 table InstantPageBlock_Video {
@@ -114,6 +115,7 @@ table InstantPageBlock_Video {
     caption:InstantPageCaption (id: 1, required);
     autoplay:bool (id: 2);
     loop:bool (id: 3);
+    spoiler:bool (id: 4);
 }
 
 table InstantPageBlock_Audio {

@@ -6,7 +6,6 @@ import TelegramPresentationData
 import AnimatedStickerNode
 import TelegramAnimatedStickerNode
 import AppBundle
-import SolidRoundedButtonNode
 import ActivityIndicator
 import AccountContext
 import TelegramCore
@@ -15,6 +14,7 @@ import ArchiveInfoScreen
 import ComponentDisplayAdapters
 import SwiftSignalKit
 import ChatListHeaderComponent
+import ButtonComponent
 
 final class ChatListEmptyNode: ASDisplayNode {
     enum Subject {
@@ -36,7 +36,10 @@ final class ChatListEmptyNode: ASDisplayNode {
     private let textNode: ImmediateTextNode
     private let descriptionNode: ImmediateTextNode
     private let animationNode: AnimatedStickerNode
-    private let buttonNode: SolidRoundedButtonNode
+    private let button = ComponentView<Empty>()
+    private var buttonText: String?
+    private var buttonFrame: CGRect = .zero
+    private let buttonIsShimmering: Bool
     private let secondaryButtonNode: HighlightableButtonNode
     private let activityIndicator: ActivityIndicator
     
@@ -85,7 +88,7 @@ final class ChatListEmptyNode: ASDisplayNode {
             gloss = false
         }
         
-        self.buttonNode = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(theme: theme), cornerRadius: 11.0, isShimmering: gloss)
+        self.buttonIsShimmering = gloss
         
         self.secondaryButtonNode = HighlightableButtonNode()
         
@@ -110,7 +113,6 @@ final class ChatListEmptyNode: ASDisplayNode {
             self.addSubnode(self.animationNode)
             self.addSubnode(self.textNode)
             self.addSubnode(self.descriptionNode)
-            self.addSubnode(self.buttonNode)
             self.addSubnode(self.secondaryButtonNode)
             self.addSubnode(self.activityIndicator)
             
@@ -121,13 +123,7 @@ final class ChatListEmptyNode: ASDisplayNode {
         self.animationNode.isHidden = self.isLoading
         self.textNode.isHidden = self.isLoading
         self.descriptionNode.isHidden = self.isLoading
-        self.buttonNode.isHidden = self.buttonIsHidden || self.isLoading
         self.activityIndicator.isHidden = !self.isLoading
-        
-        self.buttonNode.hitTestSlop = UIEdgeInsets(top: -10.0, left: -10.0, bottom: -10.0, right: -10.0)
-        self.buttonNode.pressed = { [weak self] in
-            self?.buttonPressed()
-        }
         
         self.secondaryButtonNode.addTarget(self, action: #selector(self.secondaryButtonPressed), forControlEvents: .touchUpInside)
         
@@ -200,18 +196,14 @@ final class ChatListEmptyNode: ASDisplayNode {
                 buttonText = strings.ChatList_EmptyTopicsCreate
                 descriptionText = strings.ChatList_EmptyTopicsDescription
         }
-        let string = NSMutableAttributedString(string: text, font: Font.medium(17.0), textColor: theme.list.itemPrimaryTextColor)
+        let string = NSMutableAttributedString(string: text, font: Font.semibold(17.0), textColor: theme.list.itemPrimaryTextColor)
         let descriptionString = NSAttributedString(string: descriptionText, font: Font.regular(14.0), textColor: theme.list.itemSecondaryTextColor)
        
         self.textNode.attributedText = string
         self.descriptionNode.attributedText = descriptionString
         
-        if let buttonText {
-            self.buttonNode.title = buttonText
-            self.buttonNode.isHidden = false
-        } else {
-            self.buttonNode.isHidden = true
-        }
+        self.buttonText = buttonText
+        self.button.view?.isHidden = buttonText == nil || self.buttonIsHidden || self.isLoading
     
         self.activityIndicator.type = .custom(theme.list.itemAccentColor, 22.0, 1.0, false)
         
@@ -232,7 +224,7 @@ final class ChatListEmptyNode: ASDisplayNode {
         self.animationNode.isHidden = self.isLoading
         self.textNode.isHidden = self.isLoading
         self.descriptionNode.isHidden = self.isLoading
-        self.buttonNode.isHidden = self.buttonIsHidden || self.isLoading
+        self.button.view?.isHidden = self.buttonText == nil || self.buttonIsHidden || self.isLoading
         self.activityIndicator.isHidden = !self.isLoading
     }
     
@@ -250,8 +242,36 @@ final class ChatListEmptyNode: ASDisplayNode {
                 
         let buttonSideInset: CGFloat = 32.0
         let buttonWidth = min(270.0, size.width - buttonSideInset * 2.0)
-        let buttonHeight = self.buttonNode.updateLayout(width: buttonWidth, transition: transition)
+        let buttonHeight: CGFloat = 52.0
         let buttonSize = CGSize(width: buttonWidth, height: buttonHeight)
+        if let buttonText = self.buttonText {
+            let _ = self.button.update(
+                transition: ComponentTransition(transition),
+                component: AnyComponent(ButtonComponent(
+                    background: ButtonComponent.Background(
+                        style: .glass,
+                        color: self.theme.list.itemCheckColors.fillColor,
+                        foreground: self.theme.list.itemCheckColors.foregroundColor,
+                        pressedColor: self.theme.list.itemCheckColors.fillColor.withMultipliedAlpha(0.9),
+                        cornerRadius: buttonHeight * 0.5,
+                        isShimmering: self.buttonIsShimmering
+                    ),
+                    content: AnyComponentWithIdentity(
+                        id: AnyHashable(buttonText),
+                        component: AnyComponent(Text(
+                            text: buttonText,
+                            font: Font.semibold(17.0),
+                            color: self.theme.list.itemCheckColors.foregroundColor
+                        ))
+                    ),
+                    action: { [weak self] in
+                        self?.buttonPressed()
+                    }
+                )),
+                environment: {},
+                containerSize: buttonSize
+            )
+        }
         
         let secondaryButtonSize = self.secondaryButtonNode.measure(CGSize(width: buttonWidth, height: .greatestFiniteMagnitude))
         
@@ -282,7 +302,7 @@ final class ChatListEmptyNode: ASDisplayNode {
         transition.updateFrame(node: self.textNode, frame: textFrame)
         transition.updateFrame(node: self.descriptionNode, frame: descriptionFrame)
         
-        var bottomInset: CGFloat = 16.0
+        var bottomInset: CGFloat = 20.0
         
         let secondaryButtonFrame = CGRect(origin: CGPoint(x: floor((size.width - secondaryButtonSize.width) / 2.0), y: size.height - insets.bottom - secondaryButtonSize.height - bottomInset), size: secondaryButtonSize)
         transition.updateFrame(node: self.secondaryButtonNode, frame: secondaryButtonFrame)
@@ -297,7 +317,14 @@ final class ChatListEmptyNode: ASDisplayNode {
         } else {
             buttonFrame = CGRect(origin: CGPoint(x: floor((size.width - buttonSize.width) / 2.0), y: size.height - insets.bottom - buttonHeight - bottomInset), size: buttonSize)
         }
-        transition.updateFrame(node: self.buttonNode, frame: buttonFrame)
+        self.buttonFrame = buttonFrame
+        if let buttonView = self.button.view {
+            if buttonView.superview == nil {
+                self.view.addSubview(buttonView)
+            }
+            buttonView.isHidden = self.buttonText == nil || self.buttonIsHidden || self.isLoading
+            transition.updateFrame(view: buttonView, frame: buttonFrame)
+        }
     }
     
     func updateScrollingOffset(navigationHeight: CGFloat, offset: CGFloat, transition: ContainedViewLayoutTransition) {
@@ -358,8 +385,8 @@ final class ChatListEmptyNode: ASDisplayNode {
     }
     
     override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
-        if self.buttonNode.frame.contains(point) {
-            return self.buttonNode.view.hitTest(self.view.convert(point, to: self.buttonNode.view), with: event)
+        if let buttonView = self.button.view, !buttonView.isHidden, self.buttonFrame.insetBy(dx: -10.0, dy: -10.0).contains(point) {
+            return buttonView.hitTest(self.view.convert(point, to: buttonView), with: event)
         }
         if self.secondaryButtonNode.frame.contains(point), !self.secondaryButtonNode.isHidden {
             return self.secondaryButtonNode.view.hitTest(self.view.convert(point, to: self.secondaryButtonNode.view), with: event)

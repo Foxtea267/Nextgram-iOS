@@ -69,6 +69,8 @@ public let telegramPostboxSeedConfiguration: SeedConfiguration = {
                 case .group:
                     return .group
                 }
+            } else if let _ = peer as? TelegramCommunity {
+                return .nonContact
             } else {
                 assertionFailure()
                 return .nonContact

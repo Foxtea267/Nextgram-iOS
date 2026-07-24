@@ -78,6 +78,7 @@ swift_library(
         "//submodules/TelegramUI/Components/LottieComponentResourceContent",
         "//submodules/TextSelectionNode",
         "//submodules/Pasteboard",
+        "//submodules/TelegramUI/Components/Chat/ChatRichTextEditorComposer",
         "//submodules/Speak",
         "//submodules/TelegramUI/Components/TextProcessingScreen",
         "//submodules/TranslateUI",

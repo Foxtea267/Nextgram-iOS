@@ -10,15 +10,18 @@ public struct Namespaces {
         public static let ScheduledLocal: Int32 = 4
         public static let QuickReplyCloud: Int32 = 5
         public static let QuickReplyLocal: Int32 = 6
+        public static let EphemeralLocal: Int32 = 7
         
         public static let allScheduled: Set<Int32> = Set([Namespaces.Message.ScheduledCloud, Namespaces.Message.ScheduledLocal])
         public static let allQuickReply: Set<Int32> = Set([Namespaces.Message.QuickReplyCloud, Namespaces.Message.QuickReplyLocal])
+        public static let allEphemeral: Set<Int32> = Set([Namespaces.Message.EphemeralLocal])
         public static let allNonRegular: Set<Int32> = Set([Namespaces.Message.ScheduledCloud, Namespaces.Message.ScheduledLocal, Namespaces.Message.QuickReplyCloud, Namespaces.Message.QuickReplyLocal])
         public static let allLocal: [Int32] = [
             Namespaces.Message.Local,
             Namespaces.Message.SecretIncoming,
             Namespaces.Message.ScheduledLocal,
-            Namespaces.Message.QuickReplyLocal
+            Namespaces.Message.QuickReplyLocal,
+            Namespaces.Message.EphemeralLocal
         ]
     }
     
@@ -151,6 +154,8 @@ public struct Namespaces {
         public static let cachedLiveStorySendAsPeers: Int8 = 51
         public static let cachedGiftUpgradesAttributes: Int8 = 52
         public static let cachedCloudAITextStyles: Int8 = 53
+        public static let cachedCommunityPeerLinkRequests: Int8 = 54
+        public static let richTextComposerDrafts: Int8 = 55
     }
     
     public struct UnorderedItemList {
@@ -330,6 +335,7 @@ private enum PreferencesKeyValues: Int32 {
     case savedMusicIds = 47
     case emojiGameInfo = 48
     case webBrowserSettings = 49
+    case communitiesState = 50
 }
 
 public func applicationSpecificPreferencesKey(_ value: Int32) -> ValueBoxKey {
@@ -435,6 +441,12 @@ public struct PreferencesKeys {
         return key
     }()
     
+    public static let communitiesState: ValueBoxKey = {
+        let key = ValueBoxKey(length: 4)
+        key.setInt32(0, value: PreferencesKeyValues.communitiesState.rawValue)
+        return key
+    }()
+
     public static let chatListFilters: ValueBoxKey = {
         let key = ValueBoxKey(length: 4)
         key.setInt32(0, value: PreferencesKeyValues.chatListFilters.rawValue)

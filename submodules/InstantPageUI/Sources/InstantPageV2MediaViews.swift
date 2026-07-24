@@ -8,12 +8,75 @@ import TelegramCore
 import TelegramPresentationData
 import GalleryUI
 import UniversalMediaPlayer
+import TelegramUniversalVideoContent
+import InvisibleInkDustNode
 
 // Mutable weak box: lets a wrapper hand its `openMedia` closure a back-reference to itself,
 // filled in after `super.init` (when `self` becomes usable). SwiftSignalKit's `Weak<T>` requires
 // a non-optional value at init time, so it can't be used here.
 private final class WrapperRef {
     weak var view: UIView?
+}
+
+// MARK: - Revealable spoiler dust cover
+
+// Manages a revealable "dust" cover over a spoiler photo/video in a SENT/received rich message.
+// Mirrors the message-side `ExtendedMediaOverlayNode` (ChatMessageInteractiveMediaNode): a
+// `MediaDustNode` hosted inside a container node whose view is masked away during the reveal
+// animation. The cover is purely visual (user interaction disabled), so taps fall through to the
+// wrapped media node; the enclosing media view GATES its `openMedia` closure so that while the
+// cover is `concealed` the first tap calls `reveal()` instead of opening the gallery. Once
+// revealed (`concealed == false`) the cover is removed and taps open the gallery as normal.
+final class MediaSpoilerDustOverlay {
+    let containerNode: ASDisplayNode
+    private let dustNode: MediaDustNode
+    // The heavily-blurred cover (from `InstantPageImageNode.makeSpoilerBlurredNode()`), hosted BELOW the
+    // dust in this container. Both sit ABOVE the always-sharp wrapped node, so the dust's reveal mask —
+    // which masks its supernode (this container) away in an expanding circle from the tap — clears blur +
+    // dust TOGETHER and exposes the sharp media beneath, exactly like `ExtendedMediaOverlayNode`.
+    let blurredImageNode: TransformImageNode?
+    // The media id the cover was built for; used so a positionally-reused view resets its reveal
+    // state only when the underlying media actually changes (see `InstantPageV2MediaImageView`).
+    let mediaId: EngineMedia.Id?
+    private(set) var concealed: Bool = true
+
+    init(enableAnimations: Bool, mediaId: EngineMedia.Id?, blurredImageNode: TransformImageNode?) {
+        self.mediaId = mediaId
+        self.dustNode = MediaDustNode(enableAnimations: enableAnimations)
+        self.containerNode = ASDisplayNode()
+        self.blurredImageNode = blurredImageNode
+        // Purely visual: let taps reach the wrapped media node, whose gated openMedia drives reveal.
+        self.containerNode.isUserInteractionEnabled = false
+        self.dustNode.isUserInteractionEnabled = false
+        self.dustNode.revealOnTap = false
+        self.dustNode.isRevealed = false
+        if let blurredImageNode {
+            self.containerNode.addSubnode(blurredImageNode)   // blur below dust
+        }
+        self.containerNode.addSubnode(self.dustNode)
+        self.dustNode.revealed = { [weak self] in
+            guard let self else { return }
+            self.concealed = false
+            self.containerNode.view.removeFromSuperview()
+        }
+    }
+
+    func updateLayout(size: CGSize) {
+        self.containerNode.frame = CGRect(origin: .zero, size: size)
+        self.blurredImageNode?.frame = CGRect(origin: .zero, size: size)
+        self.dustNode.frame = CGRect(origin: .zero, size: size)
+        self.dustNode.update(size: size, color: .white, transition: .immediate)
+    }
+
+    func reveal() {
+        guard self.concealed else { return }
+        self.concealed = false
+        // Mirror ExtendedMediaOverlayNode.reveal(animated:): drive the dust node's own tap-reveal
+        // animation, which masks the container (blur + dust) away over the sharp media and fires
+        // `revealed` on completion.
+        self.dustNode.revealOnTap = true
+        self.dustNode.tap(at: CGPoint(x: self.dustNode.bounds.width / 2.0, y: self.dustNode.bounds.height / 2.0))
+    }
 }
 
 // MARK: - Shared media node factory
@@ -28,7 +91,8 @@ func makeMediaWrapper(
     renderContext: InstantPageV2RenderContext,
     theme: InstantPageTheme,
     openMedia: @escaping (InstantPageMedia) -> Void,
-    longPressMedia: @escaping (InstantPageMedia) -> Void
+    longPressMedia: @escaping (InstantPageMedia) -> Void,
+    emptyColor: UIColor? = nil
 ) -> InstantPageImageNode {
     let imageNode = InstantPageImageNode(
         context: renderContext.context,
@@ -46,6 +110,9 @@ func makeMediaWrapper(
         pinchPreviewFinished: nil,
         imageReferenceForMedia: renderContext.imageReference,
         fileReferenceForMedia: renderContext.fileReference,
+        autoDownloadImage: renderContext.shouldAutoDownloadImage,
+        autoDownloadFile: renderContext.shouldAutoDownloadFile,
+        emptyColor: emptyColor,
         getPreloadedResource: { _ in nil }
     )
     imageNode.frame = CGRect(origin: .zero, size: frame.size)
@@ -112,6 +179,8 @@ final class InstantPageV2MediaImageView: UIView, InstantPageItemView {
     private(set) var item: InstantPageV2MediaImageItem
     var itemFrame: CGRect { return self.item.frame }
     let wrappedNode: InstantPageImageNode
+    // Revealable spoiler dust cover (nil unless `item.spoiler`); see `MediaSpoilerDustOverlay`.
+    private var spoilerOverlay: MediaSpoilerDustOverlay?
 
     init(item: InstantPageV2MediaImageItem, renderContext: InstantPageV2RenderContext, theme: InstantPageTheme) {
         self.item = item
@@ -123,7 +192,13 @@ final class InstantPageV2MediaImageView: UIView, InstantPageItemView {
         let wrapperRef = WrapperRef()
         let renderContextRef = renderContext
         let openMedia: (InstantPageMedia) -> Void = { tapped in
-            guard let wrapper = wrapperRef.view else { return }
+            guard let wrapper = wrapperRef.view as? InstantPageV2MediaImageView else { return }
+            // While a spoiler cover is concealed, the first tap reveals it instead of opening
+            // the gallery; once revealed, taps fall through to the normal open path.
+            if let overlay = wrapper.spoilerOverlay, overlay.concealed {
+                overlay.reveal()
+                return
+            }
             handleOpenMediaTap(tapped: tapped, wrapper: wrapper, renderContext: renderContextRef)
         }
         self.wrappedNode = makeMediaWrapper(
@@ -156,6 +231,13 @@ final class InstantPageV2MediaImageView: UIView, InstantPageItemView {
     override func layoutSubviews() {
         super.layoutSubviews()
         self.wrappedNode.frame = self.bounds
+        if let overlay = self.spoilerOverlay {
+            overlay.updateLayout(size: self.bounds.size)
+            if let blurNode = overlay.blurredImageNode {
+                // Draw the blur (the overlay only sets its frame); reuses the wrapped node's dimension math.
+                self.wrappedNode.layoutSpoilerBlurredNode(blurNode, size: self.bounds.size)
+            }
+        }
     }
 
     func update(item: InstantPageV2MediaImageItem, theme: InstantPageTheme, renderContext: InstantPageV2RenderContext) {
@@ -164,6 +246,29 @@ final class InstantPageV2MediaImageView: UIView, InstantPageItemView {
         self.clipsToBounds = item.cornerRadius > 0.0
         let strings = renderContext.context.sharedContext.currentPresentationData.with { $0 }.strings
         self.wrappedNode.update(strings: strings, theme: theme)
+        self.updateSpoiler(renderContext: renderContext)
+    }
+
+    // Reconciles the spoiler dust cover with the current item. A reused view drops a stale cover
+    // when `spoiler` turns off or the underlying media changes, and keeps its (possibly revealed)
+    // cover when the same spoiler media is re-laid-out.
+    private func updateSpoiler(renderContext: InstantPageV2RenderContext) {
+        if self.item.spoiler {
+            let mediaId = self.item.media.media.id
+            if let overlay = self.spoilerOverlay, overlay.mediaId == mediaId {
+                // Same spoiler medium — preserve the current reveal state.
+            } else {
+                self.spoilerOverlay?.containerNode.view.removeFromSuperview()
+                let enableAnimations = renderContext.context.sharedContext.energyUsageSettings.fullTranslucency
+                let overlay = MediaSpoilerDustOverlay(enableAnimations: enableAnimations, mediaId: mediaId, blurredImageNode: self.wrappedNode.makeSpoilerBlurredNode())
+                self.spoilerOverlay = overlay
+                self.addSubview(overlay.containerNode.view)
+                self.setNeedsLayout()
+            }
+        } else if let overlay = self.spoilerOverlay {
+            overlay.containerNode.view.removeFromSuperview()
+            self.spoilerOverlay = nil
+        }
     }
 
     func instantPageTransitionNode(for media: InstantPageMedia) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))? {
@@ -179,6 +284,22 @@ final class InstantPageV2MediaVideoView: UIView, InstantPageItemView {
     private(set) var item: InstantPageV2MediaVideoItem
     var itemFrame: CGRect { return self.item.frame }
     let wrappedNode: InstantPageImageNode
+    // Revealable spoiler dust cover (nil unless `item.spoiler`); see `MediaSpoilerDustOverlay`.
+    private var spoilerOverlay: MediaSpoilerDustOverlay?
+    // Inline autoplay player, present only when `shouldAutoplayVideo` is true for the current file
+    // and (if spoilered) the cover has been revealed. Layered ABOVE the poster `wrappedNode`.
+    private var videoNode: UniversalVideoNode?
+    // The media id the current `videoNode` was built for; drives teardown/rebuild on positional reuse.
+    private var videoNodeMediaId: EngineMedia.Id?
+    // Whether the view currently intersects the visibility rect; gates `canAttachContent`.
+    private var localIsVisible = false
+    // One-shot auto-download fetch (download even when not autoplaying), keyed by media id.
+    private let videoFetchDisposable = MetaDisposable()
+    private var videoFetchMediaId: EngineMedia.Id?
+
+    deinit {
+        self.videoFetchDisposable.dispose()
+    }
 
     init(item: InstantPageV2MediaVideoItem, renderContext: InstantPageV2RenderContext, theme: InstantPageTheme) {
         self.item = item
@@ -186,7 +307,14 @@ final class InstantPageV2MediaVideoView: UIView, InstantPageItemView {
         let wrapperRef = WrapperRef()
         let renderContextRef = renderContext
         let openMedia: (InstantPageMedia) -> Void = { tapped in
-            guard let wrapper = wrapperRef.view else { return }
+            guard let wrapper = wrapperRef.view as? InstantPageV2MediaVideoView else { return }
+            // While a spoiler cover is concealed, the first tap reveals it instead of opening
+            // the gallery; once revealed, taps fall through to the normal open path.
+            if let overlay = wrapper.spoilerOverlay, overlay.concealed {
+                overlay.reveal()
+                wrapper.updateInlineVideo(renderContext: renderContextRef)
+                return
+            }
             handleOpenMediaTap(tapped: tapped, wrapper: wrapper, renderContext: renderContextRef)
         }
         self.wrappedNode = makeMediaWrapper(
@@ -219,6 +347,15 @@ final class InstantPageV2MediaVideoView: UIView, InstantPageItemView {
     override func layoutSubviews() {
         super.layoutSubviews()
         self.wrappedNode.frame = self.bounds
+        self.videoNode?.frame = self.bounds
+        self.videoNode?.updateLayout(size: self.bounds.size, transition: .immediate)
+        if let overlay = self.spoilerOverlay {
+            overlay.updateLayout(size: self.bounds.size)
+            if let blurNode = overlay.blurredImageNode {
+                // Draw the blur (the overlay only sets its frame); reuses the wrapped node's dimension math.
+                self.wrappedNode.layoutSpoilerBlurredNode(blurNode, size: self.bounds.size)
+            }
+        }
     }
 
     func update(item: InstantPageV2MediaVideoItem, theme: InstantPageTheme, renderContext: InstantPageV2RenderContext) {
@@ -227,6 +364,107 @@ final class InstantPageV2MediaVideoView: UIView, InstantPageItemView {
         self.clipsToBounds = item.cornerRadius > 0.0
         let strings = renderContext.context.sharedContext.currentPresentationData.with { $0 }.strings
         self.wrappedNode.update(strings: strings, theme: theme)
+        self.updateSpoiler(renderContext: renderContext)
+        self.updateInlineVideo(renderContext: renderContext)
+    }
+
+    // Reconciles the spoiler dust cover with the current item. A reused view drops a stale cover
+    // when `spoiler` turns off or the underlying media changes, and keeps its (possibly revealed)
+    // cover when the same spoiler media is re-laid-out.
+    private func updateSpoiler(renderContext: InstantPageV2RenderContext) {
+        if self.item.spoiler {
+            let mediaId = self.item.media.media.id
+            if let overlay = self.spoilerOverlay, overlay.mediaId == mediaId {
+                // Same spoiler medium — preserve the current reveal state.
+            } else {
+                self.spoilerOverlay?.containerNode.view.removeFromSuperview()
+                let enableAnimations = renderContext.context.sharedContext.energyUsageSettings.fullTranslucency
+                let overlay = MediaSpoilerDustOverlay(enableAnimations: enableAnimations, mediaId: mediaId, blurredImageNode: self.wrappedNode.makeSpoilerBlurredNode())
+                self.spoilerOverlay = overlay
+                self.addSubview(overlay.containerNode.view)
+                self.setNeedsLayout()
+            }
+        } else if let overlay = self.spoilerOverlay {
+            overlay.containerNode.view.removeFromSuperview()
+            self.spoilerOverlay = nil
+        }
+    }
+
+    // Reconciles the inline autoplay player + one-shot auto-download with the current item/policy.
+    private func updateInlineVideo(renderContext: InstantPageV2RenderContext) {
+        guard case let .file(file) = self.item.media.media, let messageId = renderContext.message?.id else {
+            self.tearDownVideoNode()
+            return
+        }
+        let mediaId = self.item.media.media.id
+
+        // Auto-download the video bytes per settings, once per media id, regardless of autoplay.
+        if renderContext.shouldAutoDownloadFile(file), self.videoFetchMediaId != mediaId {
+            self.videoFetchMediaId = mediaId
+            let fileReference = renderContext.fileReference(file)
+            self.videoFetchDisposable.set(freeMediaFileInteractiveFetched(account: renderContext.context.account, userLocation: renderContext.sourceLocation.userLocation, fileReference: fileReference).start())
+        }
+
+        // Autoplay only when enabled AND no concealed spoiler cover is hiding the media.
+        let spoilerBlocks = (self.spoilerOverlay?.concealed ?? false)
+        let wantAutoplay = renderContext.shouldAutoplayVideo(file) && !spoilerBlocks
+
+        if wantAutoplay {
+            if self.videoNode != nil, self.videoNodeMediaId == mediaId {
+                return
+            }
+            self.tearDownVideoNode()
+
+            var streamVideo = false
+            if isMediaStreamable(media: file) {
+                streamVideo = true
+            }
+            var imageReference: ImageMediaReference?
+            if let presentation = smallestImageRepresentation(file.previewRepresentations) {
+                let image = TelegramMediaImage(imageId: EngineMedia.Id(namespace: 0, id: 0), representations: [presentation], immediateThumbnailData: file.immediateThumbnailData, reference: nil, partialReference: nil, flags: [])
+                imageReference = renderContext.imageReference(image)
+            }
+            let content = NativeVideoContent(
+                id: .message(UInt32(bitPattern: messageId.id), file.fileId),
+                userLocation: renderContext.sourceLocation.userLocation,
+                fileReference: renderContext.fileReference(file),
+                imageReference: imageReference,
+                streamVideo: streamVideo ? .conservative : .none,
+                loopVideo: file.isAnimated,
+                enableSound: false,
+                fetchAutomatically: true,
+                placeholderColor: .clear,
+                storeAfterDownload: nil
+            )
+            let videoNode = UniversalVideoNode(
+                context: renderContext.context,
+                postbox: renderContext.context.account.postbox,
+                audioSession: renderContext.context.sharedContext.mediaManager.audioSession,
+                manager: renderContext.context.sharedContext.mediaManager.universalVideoManager,
+                decoration: GalleryVideoDecoration(),
+                content: content,
+                priority: .embedded,
+                autoplay: true
+            )
+            videoNode.isUserInteractionEnabled = false
+            videoNode.frame = self.bounds
+            self.addSubview(videoNode.view)
+            self.videoNode = videoNode
+            self.videoNodeMediaId = mediaId
+            videoNode.canAttachContent = self.localIsVisible
+            self.setNeedsLayout()
+        } else {
+            self.tearDownVideoNode()
+        }
+    }
+
+    private func tearDownVideoNode() {
+        if let videoNode = self.videoNode {
+            videoNode.canAttachContent = false
+            videoNode.view.removeFromSuperview()
+            self.videoNode = nil
+            self.videoNodeMediaId = nil
+        }
     }
 
     func instantPageTransitionNode(for media: InstantPageMedia) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))? {
@@ -235,6 +473,14 @@ final class InstantPageV2MediaVideoView: UIView, InstantPageItemView {
 
     func instantPageUpdateHiddenMedia(_ media: InstantPageMedia?) {
         self.wrappedNode.updateHiddenMedia(media: media)
+        self.videoNode?.isHidden = (media == self.item.media)
+    }
+
+    func instantPageUpdateIsVisible(_ isVisible: Bool) {
+        if self.localIsVisible != isVisible {
+            self.localIsVisible = isVisible
+            self.videoNode?.canAttachContent = isVisible
+        }
     }
 }
 

@@ -6,7 +6,7 @@ import MtProtoKit
 
 
 public enum SearchMessagesLocation: Equatable {
-    case general(scope: TelegramSearchPeersScope, groupId: PeerGroupId?, tags: MessageTags?, minDate: Int32?, maxDate: Int32?, folderId: Int32?)
+    case general(scope: TelegramSearchPeersScope, groupId: PeerGroupId?, tags: MessageTags?, minDate: Int32?, maxDate: Int32?, folderId: Int32?, communityId: PeerId?)
     case peer(peerId: PeerId, fromId: PeerId?, tags: MessageTags?, reactions: [MessageReaction.Reaction]?, threadId: Int64?, minDate: Int32?, maxDate: Int32?)
     case sentMedia(tags: MessageTags?)
 }
@@ -470,7 +470,7 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                 }
                 return combineLatest(peerMessages, additionalPeerMessages)
             }
-        case let .general(_, groupId, tags, minDate, maxDate, _):
+        case let .general(scope, groupId, tags, minDate, maxDate, _, communityId):
             var flags: Int32 = 0
             let folderId: Int32?
             if let groupId {
@@ -480,7 +480,7 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                 folderId = nil
             }
         
-            if case let .general(scope, _, _, _, _, _) = location, case let .globalPosts(allowPaidStars) = scope {
+            if case let .globalPosts(allowPaidStars) = scope {
                 remoteSearchResult = account.postbox.transaction { transaction -> (Int32, MessageIndex?, Api.InputPeer) in
                     var lowerBound: MessageIndex?
                     if let state = state, let message = state.main.messages.last {
@@ -507,34 +507,43 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                     }
                 }
             } else {
-                if case let .general(scope, _, _, _, _, _) = location {
-                    switch scope {
-                    case .everywhere:
-                        break
-                    case .channels:
-                        flags |= (1 << 1)
-                    case .groups:
-                        flags |= (1 << 2)
-                    case .privateChats:
-                        flags |= (1 << 3)
-                    case .globalPosts:
-                        break
-                    }
+                switch scope {
+                case .everywhere:
+                    break
+                case .channels:
+                    flags |= (1 << 1)
+                case .groups:
+                    flags |= (1 << 2)
+                case .privateChats, .bots:
+                    flags |= (1 << 3)
+                case .globalPosts:
+                    break
                 }
                 let filter: Api.MessagesFilter = tags.flatMap { messageFilterForTagMask($0) } ?? .inputMessagesFilterEmpty
-                remoteSearchResult = account.postbox.transaction { transaction -> (Int32, MessageIndex?, Api.InputPeer) in
+                remoteSearchResult = account.postbox.transaction { transaction -> (Int32, MessageIndex?, Api.InputPeer, Api.InputChannel?) in
+                    var inputCommunity: Api.InputChannel?
+                    if let communityId, let community = transaction.getPeer(communityId) {
+                        inputCommunity = apiInputChannel(community)
+                    }
                     var lowerBound: MessageIndex?
                     if let state = state, let message = state.main.messages.last {
                         lowerBound = message.index
                     }
                     if let lowerBound = lowerBound, let peer = transaction.getPeer(lowerBound.id.peerId), let inputPeer = apiInputPeer(peer) {
-                        return (state?.main.nextRate ?? 0, lowerBound, inputPeer)
+                        return (state?.main.nextRate ?? 0, lowerBound, inputPeer, inputCommunity)
                     } else {
-                        return (0, lowerBound, .inputPeerEmpty)
+                        return (0, lowerBound, .inputPeerEmpty, inputCommunity)
                     }
                 }
-                |> mapToSignal { (nextRate, lowerBound, inputPeer) in
-                    return account.network.request(Api.functions.messages.searchGlobal(flags: flags, folderId: folderId, q: query, filter: filter, minDate: minDate ?? 0, maxDate: maxDate ?? (Int32.max - 1), offsetRate: nextRate, offsetPeer: inputPeer, offsetId: lowerBound?.id.id ?? 0, limit: limit), automaticFloodWait: false)
+                |> mapToSignal { (nextRate, lowerBound, inputPeer, inputCommunity) in
+                    var flags = flags
+                    var folderId = folderId
+                    if inputCommunity != nil {
+                        flags = 0
+                        folderId = nil
+                        flags |= (1 << 4)
+                    }
+                    return account.network.request(Api.functions.messages.searchGlobal(flags: flags, folderId: folderId, community: inputCommunity, q: query, filter: filter, minDate: minDate ?? 0, maxDate: maxDate ?? (Int32.max - 1), offsetRate: nextRate, offsetPeer: inputPeer, offsetId: lowerBound?.id.id ?? 0, limit: limit), automaticFloodWait: false)
                     |> map { result -> (Api.messages.Messages?, Api.messages.Messages?) in
                         return (result, nil)
                     }
@@ -566,9 +575,11 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
             
             if state?.additional == nil {
                 switch location {
-                    case let .general(_, _, tags, minDate, maxDate, _):
+                    case let .general(_, _, tags, minDate, maxDate, _, communityId):
                         let secretMessages: [Message]
-                        if case let .general(scope, _, _, _, _, _) = location, case .channels = scope {
+                        if let _ = communityId {
+                            secretMessages = []
+                        } else if case let .general(scope, _, _, _, _, _, _) = location, case .channels = scope {
                             secretMessages = []
                         } else {
                             secretMessages = transaction.searchMessages(peerId: nil, query: query, tags: tags)

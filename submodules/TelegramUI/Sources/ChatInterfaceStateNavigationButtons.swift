@@ -94,7 +94,7 @@ func rightNavigationButtonForChatInterfaceState(context: AccountContext, present
         if let currentButton = currentButton, currentButton.action == .cancelMessageSelection {
             return currentButton
         } else {
-            let buttonItem = UIBarButtonItem(title: "___done", style: .plain, target: target, action: selector)
+            let buttonItem = UIBarButtonItem(title: strings.Common_Cancel, style: .plain, target: target, action: selector)
             buttonItem.accessibilityLabel = strings.Common_Cancel
             return ChatNavigationButton(action: .cancelMessageSelection, buttonItem: buttonItem)
         }

@@ -27,8 +27,8 @@ final class TextProcessingTextAreaComponent: Component {
     let isExpanded: (value: Bool, toggle: () -> Void)?
     let copyAction: (() -> Void)?
     let emojify: (value: Bool, toggle: () -> Void)?
-    let text: TextWithEntities?
-    let loadingStateMeasuringText: String?
+    let text: ComposedRichMessage?
+    let loadingStateMeasuringText: ComposedRichMessage?
     let textCorrectionRanges: [Range<Int>]
     let present: (ViewController, Any?) -> Void
     let rootViewForTextSelection: () -> UIView?
@@ -43,8 +43,8 @@ final class TextProcessingTextAreaComponent: Component {
         isExpanded: (value: Bool, toggle: () -> Void)?,
         copyAction: (() -> Void)?,
         emojify: (value: Bool, toggle: () -> Void)?,
-        text: TextWithEntities?,
-        loadingStateMeasuringText: String?,
+        text: ComposedRichMessage?,
+        loadingStateMeasuringText: ComposedRichMessage?,
         textCorrectionRanges: [Range<Int>],
         present: @escaping (ViewController, Any?) -> Void,
         rootViewForTextSelection: @escaping () -> UIView?
@@ -115,7 +115,6 @@ final class TextProcessingTextAreaComponent: Component {
         private var emojify: ComponentView<Empty>?
         private let titleButton: HighlightTrackingButton
         
-        private let textState = InteractiveTextComponent.External()
         private let textContainer: UIView
         private let text = ComponentView<Empty>()
         private var expandShadow: UIImageView?
@@ -123,7 +122,7 @@ final class TextProcessingTextAreaComponent: Component {
         
         private let copyButton = ComponentView<Empty>()
         
-        private var previousText: TextWithEntities?
+        private var previousText: ComposedRichMessage?
         private var previousTextLineCount: Int?
         private let measureLoadingTextState = InteractiveTextComponent.External()
         private let measureLoadingText = ComponentView<Empty>()
@@ -133,10 +132,6 @@ final class TextProcessingTextAreaComponent: Component {
         private let textSelectionContainer: UIView
         private let textSelectionKnobContainer: UIView
         private let textSelectionKnobSurface: UIView
-        
-        private var expandedBlockIds: Set<Int> = Set()
-        private var appliedExpandedBlockIds: Set<Int>?
-        private var displayContentsUnderSpoilers: (value: Bool, location: CGPoint?) = (false, nil)
         
         private var currentSpeechHolder: SpeechSynthesizerHolder?
         
@@ -190,21 +185,9 @@ final class TextProcessingTextAreaComponent: Component {
                 return nil
             }
             if result == self.textSelectionNode?.view {
-                if let textView = self.text.view as? InteractiveTextComponent.View {
-                    let textPoint = self.convert(point, to: textView.textNode.view)
-                    if let attributes = textView.textNode.attributesAtPoint(textPoint, orNearest: false)?.1 {
-                        if attributes[NSAttributedString.Key(rawValue: "TelegramSpoiler")] != nil || attributes[NSAttributedString.Key(rawValue: "Attribute__Spoiler")] != nil {
-                            if !self.displayContentsUnderSpoilers.value {
-                                if let value = textView.textNode.view.hitTest(textPoint, with: event) {
-                                    return value
-                                }
-                            }
-                        }
-                        if attributes[NSAttributedString.Key(rawValue: "TelegramBlockQuote")] != nil || attributes[NSAttributedString.Key(rawValue: "Attribute__Blockquote")] != nil {
-                            if let value = textView.textNode.view.hitTest(textPoint, with: event) {
-                                return value
-                            }
-                        }
+                if let textComponentView = self.text.view as? TextProcessingTextComponent.View {
+                    if let value = textComponentView.hitTestTextInteraction(self.convert(point, to: textComponentView), with: event) {
+                        return value
                     }
                 }
             }
@@ -359,107 +342,26 @@ final class TextProcessingTextAreaComponent: Component {
             }
             
             contentHeight += 25.0
-            
-            let fontSize: CGFloat = 17.0
-            let textValue = NSMutableAttributedString(attributedString: stringWithAppliedEntities(
-                component.text?.text ?? self.previousText?.text ?? "",
-                entities: component.text?.entities ?? self.previousText?.entities ?? [],
-                baseColor: component.theme.list.itemPrimaryTextColor,
-                linkColor: component.theme.list.itemAccentColor,
-                baseQuoteTintColor: component.theme.list.itemAccentColor,
-                baseFont: Font.regular(fontSize),
-                linkFont: Font.regular(fontSize),
-                boldFont: Font.semibold(fontSize),
-                italicFont: Font.italic(fontSize),
-                boldItalicFont: Font.semiboldItalic(fontSize),
-                fixedFont: Font.monospace(fontSize),
-                blockQuoteFont: Font.monospace(fontSize),
-                message: nil
-            ))
-            for range in component.textCorrectionRanges {
-                if range.lowerBound >= 0 && range.upperBound < textValue.length {
-                    textValue.addAttributes([
-                        .underlineColor: component.theme.list.itemAccentColor,
-                        .underlineStyle: NSUnderlineStyle.patternDot.rawValue
-                    ], range: NSRange(location: range.lowerBound, length: range.upperBound - range.lowerBound))
-                }
-            }
-            
+
             let textOrigin = CGPoint(x: sideInset, y: contentHeight)
-            
-            var spoilerExpandPoint: CGPoint?
-            if let location = self.displayContentsUnderSpoilers.location {
-                self.displayContentsUnderSpoilers.location = nil
-                
-                spoilerExpandPoint = CGPoint(x: location.x - textOrigin.x, y: location.y - textOrigin.y)
-            }
-            
+
             let textSize = self.text.update(
                 transition: transition,
-                component: AnyComponent(InteractiveTextComponent(
-                    external: self.textState,
-                    attributedString: textValue,
-                    backgroundColor: nil,
-                    minimumNumberOfLines: 1,
-                    maximumNumberOfLines: 0,
-                    truncationType: .end,
-                    alignment: .left,
-                    verticalAlignment: .top,
-                    lineSpacing: 0.12,
-                    cutout: nil,
-                    insets: UIEdgeInsets(),
-                    lineColor: nil,
-                    textShadowColor: nil,
-                    textShadowBlur: nil,
-                    textStroke: nil,
-                    displayContentsUnderSpoilers: self.displayContentsUnderSpoilers.value,
-                    customTruncationToken: nil,
-                    expandedBlocks: self.expandedBlockIds,
+                component: AnyComponent(TextProcessingTextComponent(
                     context: component.context,
-                    cache: component.context.animationCache,
-                    renderer: component.context.animationRenderer,
-                    placeholderColor: component.theme.list.mediaPlaceholderColor,
-                    attemptSynchronous: true,
-                    textColor: component.theme.list.itemPrimaryTextColor,
-                    spoilerEffectColor: component.theme.list.itemPrimaryTextColor,
-                    spoilerTextColor: component.theme.list.itemPrimaryTextColor,
-                    areContentAnimationsEnabled: true,
-                    spoilerExpandPoint: spoilerExpandPoint,
-                    canHandleTapAtPoint: { _ in
-                        return true
-                    },
-                    requestToggleBlockCollapsed: { [weak self] blockId in
-                        guard let self else {
-                            return
-                        }
-                        if self.expandedBlockIds.contains(blockId) {
-                            self.expandedBlockIds.remove(blockId)
-                        } else {
-                            self.expandedBlockIds.insert(blockId)
-                        }
-                        self.state?.updated(transition: .spring(duration: 0.4))
-                    },
-                    requestDisplayContentsUnderSpoilers: { [weak self] location in
-                        guard let self, let textView = self.text.view as? InteractiveTextComponent.View else {
-                            return
-                        }
-                        
-                        cancelParentGestures(view: self)
-                        
-                        var mappedLocation: CGPoint?
-                        if let location {
-                            mappedLocation = textView.textNode.layer.convert(location, to: self.layer)
-                        }
-                        self.displayContentsUnderSpoilers = (true, mappedLocation)
-                        self.state?.updated(transition: .spring(duration: 0.4))
-                    }
+                    theme: component.theme,
+                    strings: component.strings,
+                    text: component.text ?? self.previousText,
+                    textCorrectionRanges: component.textCorrectionRanges
                 )),
                 environment: {},
                 containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: availableSize.height)
             )
+            let textComponentView = self.text.view as? TextProcessingTextComponent.View
             let textFrame = CGRect(origin: textOrigin, size: textSize)
             if let textView = self.text.view {
                 if textView.superview == nil {
+                    self.text.parentState = state
                     textView.layer.anchorPoint = CGPoint()
                     self.textContainer.addSubview(textView)
                     textView.alpha = 0.0
@@ -467,13 +369,13 @@ final class TextProcessingTextAreaComponent: Component {
                 textView.bounds = CGRect(origin: CGPoint(), size: textFrame.size)
                 alphaTransition.setAlpha(view: textView, alpha: component.text != nil ? 1.0 : 0.0)
             }
-            if component.text != nil, let layout = self.textState.layout {
+            if component.text != nil, let textLayoutInfo = textComponentView?.textLayoutInfo {
                 self.previousText = component.text
-                self.previousTextLineCount = layout.numberOfLines
+                self.previousTextLineCount = textLayoutInfo.numberOfLines
             }
-            
+
             var textContainerFrame = textFrame
-            if let isExpanded = component.isExpanded, let textLayout = self.textState.layout, textLayout.numberOfLines > 1 {
+            if let isExpanded = component.isExpanded, let textLayout = textComponentView?.textLayoutInfo, textLayout.numberOfLines > 1 {
                 if !isExpanded.value, let firstLineRect = textLayout.linesRects().first {
                     textContainerFrame.size.height = ceil(firstLineRect.maxY)
                 }
@@ -556,19 +458,19 @@ final class TextProcessingTextAreaComponent: Component {
                     expandShadow.removeFromSuperview()
                 }
                 
-                if component.copyAction != nil, let textLayout = self.textState.layout {
+                if component.copyAction != nil, let textLayout = textComponentView?.textLayoutInfo {
                     if textLayout.trailingLineWidth >= availableSize.width - sideInset - 32.0 || textLayout.trailingLineIsRTL || textLayout.trailingLineIsBlock {
                         textContainerFrame.size.height += 28.0
                     }
                 }
             }
             
-            if component.text != nil, component.isExpanded?.value ?? true, let textView = self.text.view as? InteractiveTextComponent.View {
+            if component.text != nil, component.isExpanded?.value ?? true, let textComponentView, let selectionTextNode = textComponentView.textNodeForSelection {
                 let textSelectionNode: TextSelectionNode
                 if let current = self.textSelectionNode {
                     textSelectionNode = current
                 } else {
-                    textSelectionNode = TextSelectionNode(theme: TextSelectionTheme(selection: component.theme.list.itemAccentColor.withMultipliedAlpha(0.5), knob: component.theme.list.itemAccentColor, isDark: component.theme.overallDarkAppearance), strings: component.strings, textNodeOrView: .node(textView.textNode), updateIsActive: { [weak self] value in
+                    textSelectionNode = TextSelectionNode(theme: TextSelectionTheme(selection: component.theme.list.itemAccentColor.withMultipliedAlpha(0.5), knob: component.theme.list.itemAccentColor, isDark: component.theme.overallDarkAppearance), strings: component.strings, textNodeOrView: .node(selectionTextNode), updateIsActive: { [weak self] value in
                         guard let self else {
                             return
                         }
@@ -629,13 +531,13 @@ final class TextProcessingTextAreaComponent: Component {
                     self.textSelectionNode = textSelectionNode
                     
                     self.textSelectionContainer.insertSubview(self.textSelectionKnobContainer, at: 0)
-                    self.textContainer.insertSubview(textSelectionNode.highlightAreaNode.view, belowSubview: textView)
-                    self.textContainer.insertSubview(textSelectionNode.view, aboveSubview: textView)
+                    self.textContainer.insertSubview(textSelectionNode.highlightAreaNode.view, belowSubview: textComponentView)
+                    self.textContainer.insertSubview(textSelectionNode.view, aboveSubview: textComponentView)
                 }
-                
-                textSelectionNode.frame = textView.frame
-                textSelectionNode.highlightAreaNode.frame = textView.frame
-                self.textSelectionKnobSurface.frame = textView.frame
+
+                textSelectionNode.frame = textComponentView.frame
+                textSelectionNode.highlightAreaNode.frame = textComponentView.frame
+                self.textSelectionKnobSurface.frame = textComponentView.frame
             } else {
                 for subview in Array(self.textSelectionContainer.subviews) {
                     subview.removeFromSuperview()
@@ -646,13 +548,13 @@ final class TextProcessingTextAreaComponent: Component {
                 if let textSelectionNode = self.textSelectionNode {
                     self.textSelectionNode = nil
                     textSelectionNode.view.removeFromSuperview()
-                    
+
                     if textSelectionNode.highlightAreaNode.view.superview != nil {
                         textSelectionNode.highlightAreaNode.view.removeFromSuperview()
                     }
                 }
             }
-            
+
             if component.text == nil {
                 let shimmerEffectNode: ShimmerEffectNode
                 if let current = self.shimmerEffectNode {
@@ -674,8 +576,17 @@ final class TextProcessingTextAreaComponent: Component {
                         fakeLines.append("a")
                     }
                 } else if let loadingStateMeasuringText = component.loadingStateMeasuringText {
-                    fakeLines = loadingStateMeasuringText
-                } else {
+                    switch loadingStateMeasuringText {
+                    case let .rich(instantPage):
+                        //TODO:InstantPage — approximate line count via the plain-text projection until rich content is measured natively
+                        fakeLines = instantPage.plainText
+                    case let .plain(text, _):
+                        fakeLines = text
+                    case .empty:
+                        break
+                    }
+                }
+                if fakeLines.isEmpty {
                     for _ in 0 ..< 4 {
                         if !fakeLines.isEmpty {
                             fakeLines.append("\n")
@@ -688,7 +599,7 @@ final class TextProcessingTextAreaComponent: Component {
                     transition: .immediate,
                     component: AnyComponent(InteractiveTextComponent(
                         external: self.measureLoadingTextState,
-                        attributedString: NSAttributedString(string: fakeLines, font: Font.regular(fontSize), textColor: .black),
+                        attributedString: NSAttributedString(string: fakeLines, font: Font.regular(TextProcessingTextComponent.fontSize), textColor: .black),
                         backgroundColor: nil,
                         minimumNumberOfLines: 1,
                         maximumNumberOfLines: 0,
@@ -704,7 +615,7 @@ final class TextProcessingTextAreaComponent: Component {
                         textStroke: nil,
                         displayContentsUnderSpoilers: true,
                         customTruncationToken: nil,
-                        expandedBlocks: self.expandedBlockIds,
+                        expandedBlocks: Set(),
                         context: component.context,
                         cache: component.context.animationCache,
                         renderer: component.context.animationRenderer,

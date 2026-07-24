@@ -27,6 +27,7 @@ import AVFoundation
 
 private struct CreateChannelArguments {
     let context: AccountContext
+    let displayDescription: Bool
     
     let updateEditingName: (ItemListAvatarAndNameInfoItemName) -> Void
     let updateEditingDescriptionText: (String) -> Void
@@ -195,7 +196,11 @@ private enum CreateChannelEntry: ItemListNodeEntry {
                 return ItemListAvatarAndNameInfoItem(itemContext: .accountContext(arguments.context), presentationData: presentationData, systemStyle: .glass, dateTimeFormat: dateTimeFormat, mode: .editSettings, peer: peer, presence: nil, memberCount: nil, state: state, sectionId: ItemListSectionId(self.section), style: .blocks(withTopInset: false, withExtendedBottomInset: false), editingNameUpdated: { editingName in
                     arguments.updateEditingName(editingName)
                 }, editingNameCompleted: {
-                    arguments.focusOnDescription()
+                    if arguments.displayDescription {
+                        arguments.focusOnDescription()
+                    } else {
+                        arguments.done()
+                    }
                 }, avatarTapped: {
                     arguments.changeProfilePhoto()
                 }, updatingImage: avatar, tag: CreateChannelEntryTag.info)
@@ -275,7 +280,7 @@ private struct CreateChannelState: Equatable {
     }
 }
 
-private func CreateChannelEntries(presentationData: PresentationData, state: CreateChannelState, requestPeer: ReplyMarkupButtonRequestPeerType.Channel?) -> [CreateChannelEntry] {
+private func CreateChannelEntries(presentationData: PresentationData, state: CreateChannelState, requestPeer: ReplyMarkupButtonRequestPeerType.Channel?, displayDescription: Bool) -> [CreateChannelEntry] {
     var entries: [CreateChannelEntry] = []
     
     let groupInfoState = ItemListAvatarAndNameInfoItemState(editingName: state.editingName, updatingName: nil)
@@ -284,8 +289,10 @@ private func CreateChannelEntries(presentationData: PresentationData, state: Cre
 
     entries.append(.channelInfo(presentationData.theme, presentationData.strings, presentationData.dateTimeFormat, EnginePeer(peer), groupInfoState, state.avatar))
     
-    entries.append(.descriptionSetup(presentationData.theme, presentationData.strings.Channel_Edit_AboutItem, state.editingDescriptionText))
-    entries.append(.descriptionInfo(presentationData.theme, presentationData.strings.Channel_About_Help))
+    if displayDescription {
+        entries.append(.descriptionSetup(presentationData.theme, presentationData.strings.Channel_Edit_AboutItem, state.editingDescriptionText))
+        entries.append(.descriptionInfo(presentationData.theme, presentationData.strings.Channel_About_Help))
+    }
     
     if let requestPeer {
         if let hasUsername = requestPeer.hasUsername, hasUsername {
@@ -341,6 +348,7 @@ private func CreateChannelEntries(presentationData: PresentationData, state: Cre
 
 public enum CreateChannelMode {
     case generic
+    case community
     case requestPeer(ReplyMarkupButtonRequestPeerType.Channel)
 }
 
@@ -392,8 +400,15 @@ public func createChannelController(context: AccountContext, mode: CreateChannel
     if case let .requestPeer(peerType) = mode {
         requestPeer = peerType
     }
+
+    let displayDescription: Bool
+    if case .community = mode {
+        displayDescription = false
+    } else {
+        displayDescription = true
+    }
     
-    let arguments = CreateChannelArguments(context: context, updateEditingName: { editingName in
+    let arguments = CreateChannelArguments(context: context, displayDescription: displayDescription, updateEditingName: { editingName in
         updateState { current in
             var current = current
             switch editingName {
@@ -457,11 +472,16 @@ public func createChannelController(context: AccountContext, mode: CreateChannel
                         }).start()
                     }
                     
-                    if case .requestPeer = mode {
+                    switch mode {
+                    case .requestPeer:
                         completion?(peerId, {
                             dismissImpl?()
                         })
-                    } else {
+                    case .community:
+                        completion?(peerId, {
+                            dismissImpl?()
+                        })
+                    case .generic:
                         let controller = channelVisibilityController(context: context, peerId: peerId, mode: .initialSetup, upgradedToSupergroup: { _, f in f() })
                         replaceControllerImpl?(controller)
                     }
@@ -545,7 +565,7 @@ public func createChannelController(context: AccountContext, mode: CreateChannel
             
             let editorController = MediaEditorScreenImpl(
                 context: context,
-                mode: .avatarEditor,
+                mode: .avatarEditor(clipStyle: .round),
                 subject: subject,
                 transitionIn: fromCamera ? .camera : transitionView.flatMap({ .gallery(
                     MediaEditorScreenImpl.TransitionIn.GalleryTransitionIn(
@@ -661,7 +681,7 @@ public func createChannelController(context: AccountContext, mode: CreateChannel
         }
         
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(presentationData.strings.ChannelIntro_CreateChannel), leftNavigationButton: nil, rightNavigationButton: rightNavigationButton, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: CreateChannelEntries(presentationData: presentationData, state: state, requestPeer: requestPeer), style: .blocks, focusItemTag: CreateChannelEntryTag.info)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: CreateChannelEntries(presentationData: presentationData, state: state, requestPeer: requestPeer, displayDescription: displayDescription), style: .blocks, focusItemTag: CreateChannelEntryTag.info)
         
         return (controllerState, (listState, arguments))
     } |> afterDisposed {

@@ -457,6 +457,16 @@ extension ChatListFilter {
         }
     }
 
+    private func apiInputPeerForIncludedFilterPeer(peerId: PeerId, transaction: Transaction) -> Api.InputPeer? {
+        guard let peer = transaction.getPeer(peerId) else {
+            return nil
+        }
+        if let community = peer as? TelegramCommunity, community.collapsedInDialogs != true {
+            return nil
+        }
+        return apiInputPeer(peer)
+    }
+
     func apiFilter(transaction: Transaction) -> Api.DialogFilter? {
         switch self {
         case .allChats:
@@ -474,12 +484,12 @@ extension ChatListFilter {
                     flags |= 1 << 28
                 }
                 return .dialogFilterChatlist(.init(flags: flags, id: id, title: .textWithEntities(.init(text: title.text, entities: apiEntitiesFromMessageTextEntities(title.entities, associatedPeers: SimpleDictionary()))), emoticon: emoticon, color: data.color?.rawValue, pinnedPeers: data.includePeers.pinnedPeers.compactMap { peerId -> Api.InputPeer? in
-                    return transaction.getPeer(peerId).flatMap(apiInputPeer)
+                    return self.apiInputPeerForIncludedFilterPeer(peerId: peerId, transaction: transaction)
                 }, includePeers: data.includePeers.peers.compactMap { peerId -> Api.InputPeer? in
                     if data.includePeers.pinnedPeers.contains(peerId) {
                         return nil
                     }
-                    return transaction.getPeer(peerId).flatMap(apiInputPeer)
+                    return self.apiInputPeerForIncludedFilterPeer(peerId: peerId, transaction: transaction)
                 }))
             } else {
                 var flags: Int32 = 0
@@ -503,12 +513,12 @@ extension ChatListFilter {
                     flags |= 1 << 28
                 }
                 return .dialogFilter(.init(flags: flags, id: id, title: .textWithEntities(.init(text: title.text, entities: apiEntitiesFromMessageTextEntities(title.entities, associatedPeers: SimpleDictionary()))), emoticon: emoticon, color: data.color?.rawValue, pinnedPeers: data.includePeers.pinnedPeers.compactMap { peerId -> Api.InputPeer? in
-                    return transaction.getPeer(peerId).flatMap(apiInputPeer)
+                    return self.apiInputPeerForIncludedFilterPeer(peerId: peerId, transaction: transaction)
                 }, includePeers: data.includePeers.peers.compactMap { peerId -> Api.InputPeer? in
                     if data.includePeers.pinnedPeers.contains(peerId) {
                         return nil
                     }
-                    return transaction.getPeer(peerId).flatMap(apiInputPeer)
+                    return self.apiInputPeerForIncludedFilterPeer(peerId: peerId, transaction: transaction)
                 }, excludePeers: data.excludePeers.compactMap { peerId -> Api.InputPeer? in
                     return transaction.getPeer(peerId).flatMap(apiInputPeer)
                 }))
@@ -812,12 +822,23 @@ private func requestChatListFilters(accountPeerId: PeerId, postbox: Postbox, net
 }
 
 private func loadAndStorePeerChatInfos(accountPeerId: PeerId, postbox: Postbox, network: Network, peers: [Api.InputPeer]) -> Signal<Never, NoError> {
-    let signal = network.request(Api.functions.messages.getPeerDialogs(peers: peers.map { .inputDialogPeer(.init(peer: $0)) }))
-    |> map(Optional.init)
-        
-    return signal
-    |> `catch` { _ -> Signal<Api.messages.PeerDialogs?, NoError> in
-        return .single(nil)
+    return postbox.transaction { transaction -> [Api.InputDialogPeer] in
+        return peers.map { peer -> Api.InputDialogPeer in
+            if case let .inputPeerChannel(inputPeerChannelData) = peer {
+                let peerId = peerIdFromApiCommunityId(inputPeerChannelData.channelId)
+                if let peer = transaction.getPeer(peerId) as? TelegramCommunity, let inputChannel = apiInputChannel(peer) {
+                    return .inputDialogPeerCommunity(.init(community: inputChannel))
+                }
+            }
+            return .inputDialogPeer(.init(peer: peer))
+        }
+    }
+    |> mapToSignal { inputDialogPeers -> Signal<Api.messages.PeerDialogs?, NoError> in
+        return network.request(Api.functions.messages.getPeerDialogs(peers: inputDialogPeers))
+        |> map(Optional.init)
+        |> `catch` { _ -> Signal<Api.messages.PeerDialogs?, NoError> in
+            return .single(nil)
+        }
     }
     |> mapToSignal { result -> Signal<Never, NoError> in
         guard let result = result else {
@@ -909,6 +930,9 @@ private func loadAndStorePeerChatInfos(accountPeerId: PeerId, postbox: Postbox, 
                             }
                             channelStates[peer.peerId] = pts
                         }
+                    case let .dialogCommunity(dialogCommunityData):
+                        let peerId = peerIdFromApiCommunityId(dialogCommunityData.communityId)
+                        notificationSettings[peerId] = TelegramPeerNotificationSettings(apiSettings: dialogCommunityData.notifySettings)
                     case .dialogFolder:
                         assertionFailure()
                         break

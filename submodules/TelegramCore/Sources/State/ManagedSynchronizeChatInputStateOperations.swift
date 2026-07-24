@@ -7,7 +7,8 @@ import MtProtoKit
 
 private final class ManagedSynchronizeChatInputStateOperationsHelper {
     var operationDisposables: [Int32: Disposable] = [:]
-    
+    var peerMediaNeeds: [PeerId: DisposableSet] = [:]
+
     private let hasRunningOperations: ValuePromise<Bool>
     
     init(hasRunningOperations: ValuePromise<Bool>) {
@@ -50,7 +51,33 @@ private final class ManagedSynchronizeChatInputStateOperationsHelper {
         return (disposeOperations, beginOperations)
     }
     
+    func updatePeerMediaNeeds(peerId: PeerId, fileResources: [(Int64, TelegramMediaFile)], network: Network, postbox: Postbox, messageMediaPreuploadManager: MessageMediaPreuploadManager) {
+        // Add the current run's needs first, then release the previous run's, so a
+        // surviving resource never drops to zero holders (no needless cancel/restart);
+        // the manager's 1s grace covers ordering/handoff. A resource present last run
+        // but absent now is released here and, not re-added, is grace-cancelled.
+        let newSet = DisposableSet()
+        for (id, file) in fileResources {
+            let source: Signal<EngineMediaResource.ResourceData, NoError> = postbox.mediaBox.resourceData(file.resource)
+            |> map { data in
+                return EngineMediaResource.ResourceData(data)
+            }
+            newSet.add(messageMediaPreuploadManager.add(network: network, postbox: postbox, id: id, encrypt: false, tag: nil, source: source))
+        }
+        let previous = self.peerMediaNeeds[peerId]
+        if fileResources.isEmpty {
+            self.peerMediaNeeds.removeValue(forKey: peerId)
+        } else {
+            self.peerMediaNeeds[peerId] = newSet
+        }
+        previous?.dispose()
+    }
+
     func reset() -> [Disposable] {
+        for (_, set) in self.peerMediaNeeds {
+            set.dispose()
+        }
+        self.peerMediaNeeds.removeAll()
         let disposables = Array(self.operationDisposables.values)
         self.operationDisposables.removeAll()
         return disposables
@@ -73,7 +100,7 @@ private func withTakenOperation(postbox: Postbox, peerId: PeerId, tag: PeerOpera
     } |> switchToLatest
 }
 
-func managedSynchronizeChatInputStateOperations(postbox: Postbox, network: Network) -> Signal<Bool, NoError> {
+func managedSynchronizeChatInputStateOperations(postbox: Postbox, network: Network, messageMediaPreuploadManager: MessageMediaPreuploadManager, auxiliaryMethods: AccountAuxiliaryMethods) -> Signal<Bool, NoError> {
     return Signal { subscriber in
         let hasRunningOperations = ValuePromise<Bool>(false, ignoreRepeated: true)
         let tag: PeerOperationLogTag = OperationLogTags.SynchronizeChatInputStates
@@ -93,7 +120,7 @@ func managedSynchronizeChatInputStateOperations(postbox: Postbox, network: Netwo
                 let signal = withTakenOperation(postbox: postbox, peerId: entry.peerId, tag: tag, tagLocalIndex: entry.tagLocalIndex, { transaction, entry -> Signal<Void, NoError> in
                     if let entry = entry {
                         if let operation = entry.contents as? SynchronizeChatInputStateOperation {
-                            return synchronizeChatInputState(transaction: transaction, postbox: postbox, network: network, peerId: entry.peerId, threadId: operation.threadId, operation: operation)
+                            return synchronizeChatInputState(transaction: transaction, postbox: postbox, network: network, messageMediaPreuploadManager: messageMediaPreuploadManager, auxiliaryMethods: auxiliaryMethods, helper: helper, peerId: entry.peerId, threadId: operation.threadId, operation: operation)
                         } else {
                             assertionFailure()
                         }
@@ -125,7 +152,7 @@ func managedSynchronizeChatInputStateOperations(postbox: Postbox, network: Netwo
     }
 }
 
-private func synchronizeChatInputState(transaction: Transaction, postbox: Postbox, network: Network, peerId: PeerId, threadId: Int64?, operation: SynchronizeChatInputStateOperation) -> Signal<Void, NoError> {
+private func synchronizeChatInputState(transaction: Transaction, postbox: Postbox, network: Network, messageMediaPreuploadManager: MessageMediaPreuploadManager, auxiliaryMethods: AccountAuxiliaryMethods, helper: Atomic<ManagedSynchronizeChatInputStateOperationsHelper>, peerId: PeerId, threadId: Int64?, operation: SynchronizeChatInputStateOperation) -> Signal<Void, NoError> {
     var inputState: SynchronizeableChatInputState?
     let peerChatInterfaceState: StoredPeerChatInterfaceState?
     if let threadId {
@@ -136,6 +163,18 @@ private func synchronizeChatInputState(transaction: Transaction, postbox: Postbo
     
     if let peerChatInterfaceState = peerChatInterfaceState, let data = peerChatInterfaceState.data {
         inputState = (try? AdaptedPostboxDecoder().decode(InternalChatInterfaceState.self, from: data))?.synchronizeableInputState
+    }
+
+    var localFileResources: [(Int64, TelegramMediaFile)] = []
+    if case let .instantPage(page) = inputState?.content {
+        for (_, media) in page.media {
+            if let file = media as? TelegramMediaFile, let resourceId = localIdForResource(file.resource) {
+                localFileResources.append((resourceId, file))
+            }
+        }
+    }
+    helper.with { helperValue in
+        helperValue.updatePeerMediaNeeds(peerId: peerId, fileResources: localFileResources, network: network, postbox: postbox, messageMediaPreuploadManager: messageMediaPreuploadManager)
     }
 
     if let peer = transaction.getPeer(peerId), let inputPeer = apiInputPeer(peer) {
@@ -250,14 +289,42 @@ private func synchronizeChatInputState(transaction: Transaction, postbox: Postbo
         if suggestedPost != nil {
             flags |= 1 << 8
         }
-        
-        return network.request(Api.functions.messages.saveDraft(flags: flags, replyTo: replyTo, peer: inputPeer, message: inputState?.text ?? "", entities: apiEntitiesFromMessageTextEntities(inputState?.entities ?? [], associatedPeers: SimpleDictionary()), media: nil, effect: nil, suggestedPost: suggestedPost, richMessage: nil))
-        |> delay(2.0, queue: Queue.concurrentDefaultQueue())
-        |> `catch` { _ -> Signal<Api.Bool, NoError> in
-            return .single(.boolFalse)
+
+        var richText: RichTextMessageAttribute?
+        if case let .instantPage(page) = inputState?.content {
+            richText = RichTextMessageAttribute(instantPage: page, fullInstantPage: nil)
         }
-        |> mapToSignal { _ -> Signal<Void, NoError> in
-            return .complete()
+
+        let savedMessage = inputState?.text ?? ""
+        let savedEntities = apiEntitiesFromMessageTextEntities(inputState?.entities ?? [], associatedPeers: SimpleDictionary())
+
+        return uploadedRichMessage(network: network, postbox: postbox, auxiliaryMethods: auxiliaryMethods, messageMediaPreuploadManager: messageMediaPreuploadManager, forceReupload: false, peerId: peerId, richText: richText)
+        |> mapToSignal { apiRichMessage -> Signal<Void, NoError> in
+            var flags = flags
+            let requestMessage: String
+            let requestEntities: [Api.MessageEntity]
+            if apiRichMessage != nil {
+                flags |= 1 << 9
+                // The rich content (text + structure) is fully carried by `richMessage`; the flat
+                // `message`/`entities` would duplicate the text the InstantPage already holds, and the
+                // receiver ignores them when `richMessage` is present (AccountStateManagementUtils draft
+                // parse builds `.instantPage` purely from `richMessage`). Send them empty + clear the
+                // entities flag, mirroring the send path's `.message(text: "", ...)` for rich content.
+                flags &= ~(Int32(1) << 3)
+                requestMessage = ""
+                requestEntities = []
+            } else {
+                requestMessage = savedMessage
+                requestEntities = savedEntities
+            }
+            return network.request(Api.functions.messages.saveDraft(flags: flags, replyTo: replyTo, peer: inputPeer, message: requestMessage, entities: requestEntities, media: nil, effect: nil, suggestedPost: suggestedPost, richMessage: apiRichMessage))
+            |> delay(2.0, queue: Queue.concurrentDefaultQueue())
+            |> `catch` { _ -> Signal<Api.Bool, NoError> in
+                return .single(.boolFalse)
+            }
+            |> mapToSignal { _ -> Signal<Void, NoError> in
+                return .complete()
+            }
         }
     } else {
         return .complete()

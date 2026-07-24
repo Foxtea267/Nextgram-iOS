@@ -307,6 +307,7 @@ public enum TelegramMediaActionType: PostboxCoding, Equatable {
     case managedBotCreated(botId: PeerId)
     case pollOptionAppended(TelegramMediaPollOption)
     case pollOptionDeleted(TelegramMediaPollOption)
+    case communityChanged(communityId: PeerId?)
     
     public init(decoder: PostboxDecoder) {
         let rawValue: Int32 = decoder.decodeInt32ForKey("_rawValue", orElse: 0)
@@ -490,6 +491,8 @@ public enum TelegramMediaActionType: PostboxCoding, Equatable {
             self = .pollOptionAppended(decoder.decodeObjectForKey("option", decoder: { TelegramMediaPollOption(decoder: $0) }) as! TelegramMediaPollOption)
         case 64:
             self = .pollOptionDeleted(decoder.decodeObjectForKey("option", decoder: { TelegramMediaPollOption(decoder: $0) }) as! TelegramMediaPollOption)
+        case 65:
+            self = .communityChanged(communityId: decoder.decodeOptionalInt64ForKey("communityId").flatMap(PeerId.init))
         default:
             self = .unknown
         }
@@ -1002,6 +1005,13 @@ public enum TelegramMediaActionType: PostboxCoding, Equatable {
         case let .pollOptionDeleted(option):
             encoder.encodeInt32(64, forKey: "_rawValue")
             encoder.encodeObject(option, forKey: "option")
+        case let .communityChanged(communityId):
+            encoder.encodeInt32(65, forKey: "_rawValue")
+            if let communityId {
+                encoder.encodeInt64(communityId.toInt64(), forKey: "communityId")
+            } else {
+                encoder.encodeNil(forKey: "communityId")
+            }
         }
     }
     
@@ -1062,6 +1072,8 @@ public enum TelegramMediaActionType: PostboxCoding, Equatable {
             return [groupCreatorChange.targetPeerId]
         case let .managedBotCreated(botId):
             return [botId]
+        case let .communityChanged(communityId):
+            return communityId.flatMap { [$0] } ?? []
         default:
             return []
         }

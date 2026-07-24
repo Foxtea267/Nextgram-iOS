@@ -57,8 +57,8 @@ extension BotInfo {
                     commands = apiCommands.map { command in
                         switch command {
                             case let .botCommand(botCommandData):
-                                let (command, description) = (botCommandData.command, botCommandData.description)
-                                return BotCommand(text: command, description: description)
+                                let (flags, command, description) = (botCommandData.flags, botCommandData.command, botCommandData.description)
+                                return BotCommand(text: command, description: description, isEphemeral: (flags & (1 << 0)) != 0)
                         }
                     }
                 }

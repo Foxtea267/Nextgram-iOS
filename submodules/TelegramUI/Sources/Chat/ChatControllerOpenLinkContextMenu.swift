@@ -17,6 +17,7 @@ import UrlEscaping
 import UrlWhitelist
 import OpenInExternalAppUI
 import SafariServices
+import TelegramPresentationData
 
 private struct ChatLinkOpenMode {
     let shouldOpenInApp: Bool
@@ -26,12 +27,12 @@ private enum ChatLinkReverseOpenTarget {
     case inApp
     case externalBrowser
     
-    var checkboxTitle: String {
+    func title(strings: PresentationStrings) -> String {
         switch self {
         case .inApp:
-            return "Always open this site in-app"
+            return strings.WebBrowser_Exception_OpenInApp
         case .externalBrowser:
-            return "Always open this site in browser"
+            return strings.WebBrowser_Exception_OpenInBrowser
         }
     }
     
@@ -139,7 +140,7 @@ extension ChatControllerImpl {
                             Queue.mainQueue().after(0.5) {
                                 let tooltipScreen = UndoOverlayController(
                                     presentationData: self.presentationData,
-                                    content: .actionSucceeded(title: "Exception Added", text: "This site will always open in-app.", cancel: "", destructive: false),
+                                    content: .actionSucceeded(title: self.presentationData.strings.WebBrowser_ExceptionAdded_Title, text: self.presentationData.strings.WebBrowser_ExceptionAdded_Text, cancel: "", destructive: false),
                                     elevatedLayout: false,
                                     animateInAsReplacement: false,
                                     action: { _ in
@@ -187,7 +188,7 @@ extension ChatControllerImpl {
             },
             progress: nil,
             alertDisplayUpdated: nil,
-            concealedAlertOption: OpenUserGeneratedUrlConcealedAlertOption(title: target.checkboxTitle, action: { [weak self] in
+            concealedAlertOption: OpenUserGeneratedUrlConcealedAlertOption(title: target.title(strings: self.presentationData.strings), action: { [weak self] in
                 guard let self else {
                     return
                 }
@@ -364,7 +365,7 @@ extension ChatControllerImpl {
             )
 
             if let openMode {
-                let reverseText = openMode.shouldOpenInApp ? "Open in Browser" : "Open In-App"
+                let reverseText = openMode.shouldOpenInApp ? self.presentationData.strings.Chat_ContextMenu_OpenInBrowser : self.presentationData.strings.Chat_ContextMenu_OpenInApp
                 items.append(
                     .action(ContextMenuActionItem(text: reverseText, icon: { theme in return generateTintedImage(image: openMode.shouldOpenInApp ? UIImage(bundleImageName: "Chat/Context Menu/Globe") : UIImage(bundleImageName: "Chat/Context Menu/Browser"), color: theme.contextMenu.primaryColor) }, action: { [weak self] _, f in
                         f(.default)

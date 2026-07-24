@@ -1336,6 +1336,15 @@ public extension Api {
 }
 public extension Api {
     indirect enum InputNotifyPeer: TypeConstructorDescription {
+        public class Cons_inputNotifyCommunity: TypeConstructorDescription {
+            public var community: Api.InputChannel
+            public init(community: Api.InputChannel) {
+                self.community = community
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("inputNotifyCommunity", [("community", ConstructorParameterDescription(self.community))])
+            }
+        }
         public class Cons_inputNotifyForumTopic: TypeConstructorDescription {
             public var peer: Api.InputPeer
             public var topMsgId: Int32
@@ -1358,6 +1367,7 @@ public extension Api {
         }
         case inputNotifyBroadcasts
         case inputNotifyChats
+        case inputNotifyCommunity(Cons_inputNotifyCommunity)
         case inputNotifyForumTopic(Cons_inputNotifyForumTopic)
         case inputNotifyPeer(Cons_inputNotifyPeer)
         case inputNotifyUsers
@@ -1373,6 +1383,12 @@ public extension Api {
                 if boxed {
                     buffer.appendInt32(1251338318)
                 }
+                break
+            case .inputNotifyCommunity(let _data):
+                if boxed {
+                    buffer.appendInt32(666573532)
+                }
+                _data.community.serialize(buffer, true)
                 break
             case .inputNotifyForumTopic(let _data):
                 if boxed {
@@ -1401,6 +1417,8 @@ public extension Api {
                 return ("inputNotifyBroadcasts", [])
             case .inputNotifyChats:
                 return ("inputNotifyChats", [])
+            case .inputNotifyCommunity(let _data):
+                return ("inputNotifyCommunity", [("community", ConstructorParameterDescription(_data.community))])
             case .inputNotifyForumTopic(let _data):
                 return ("inputNotifyForumTopic", [("peer", ConstructorParameterDescription(_data.peer)), ("topMsgId", ConstructorParameterDescription(_data.topMsgId))])
             case .inputNotifyPeer(let _data):
@@ -1415,6 +1433,19 @@ public extension Api {
         }
         public static func parse_inputNotifyChats(_ reader: BufferReader) -> InputNotifyPeer? {
             return Api.InputNotifyPeer.inputNotifyChats
+        }
+        public static func parse_inputNotifyCommunity(_ reader: BufferReader) -> InputNotifyPeer? {
+            var _1: Api.InputChannel?
+            if let signature = reader.readInt32() {
+                _1 = Api.parse(reader, signature: signature) as? Api.InputChannel
+            }
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.InputNotifyPeer.inputNotifyCommunity(Cons_inputNotifyCommunity(community: _1!))
+            }
+            else {
+                return nil
+            }
         }
         public static func parse_inputNotifyForumTopic(_ reader: BufferReader) -> InputNotifyPeer? {
             var _1: Api.InputPeer?

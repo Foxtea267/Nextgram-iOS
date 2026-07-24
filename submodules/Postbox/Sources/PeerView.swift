@@ -66,6 +66,9 @@ final class MutablePeerView: MutablePostboxView {
             if let additionalAssociatedPeerId = peer.additionalAssociatedPeerId {
                 peerIds.insert(additionalAssociatedPeerId)
             }
+            if let containerPeerId = peer.containerPeerId {
+                peerIds.insert(containerPeerId)
+            }
         } else {
             self.contactPeerId = peerId
         }
@@ -112,6 +115,11 @@ final class MutablePeerView: MutablePostboxView {
         if let peer = self.peers[peerId], let additionalAssociatedPeerId = peer.additionalAssociatedPeerId {
             if let peer = getPeer(additionalAssociatedPeerId) {
                 self.peers[additionalAssociatedPeerId] = peer
+            }
+        }
+        if let peer = self.peers[peerId], let containerPeerId = peer.containerPeerId {
+            if let peer = getPeer(containerPeerId) {
+                self.peers[containerPeerId] = peer
             }
         }
         for id in messageIds {
@@ -166,6 +174,9 @@ final class MutablePeerView: MutablePostboxView {
                 if let additionalAssociatedPeerId = peer.additionalAssociatedPeerId {
                     peerIds.insert(additionalAssociatedPeerId)
                 }
+                if let containerPeerId = peer.containerPeerId {
+                    peerIds.insert(containerPeerId)
+                }
             }
             peerIds.formUnion(cachedData.peerIds)
             
@@ -215,6 +226,9 @@ final class MutablePeerView: MutablePostboxView {
                 }
                 if let additionalAssociatedPeerId = peer.additionalAssociatedPeerId {
                     peerIds.insert(additionalAssociatedPeerId)
+                }
+                if let containerPeerId = peer.containerPeerId {
+                    peerIds.insert(containerPeerId)
                 }
             }
             if let cachedData = self.cachedData {

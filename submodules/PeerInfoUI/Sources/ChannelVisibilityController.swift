@@ -1739,10 +1739,13 @@ public func channelVisibilityController(context: AccountContext, updatedPresenta
         if inviteLinksCount > 0 {
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let isGroup = currentPeerIsGroup.with { $0 }
-            let approvalTitle = isGroup ? presentationData.strings.Group_Setup_ApproveNewMembers : presentationData.strings.Channel_Setup_ApproveNewSubscribers
-            let action = value ? presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksEnable : presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksDisable
-            let peerType = isGroup ? presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksPeerGroup : presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksPeerChannel
-            let text = presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksText(action, approvalTitle, "\(inviteLinksCount)", peerType).string
+            let linksText = presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksText_Links(inviteLinksCount)
+            let text: String
+            if isGroup {
+                text = value ? presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksText_EnableGroup(linksText).string : presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksText_DisableGroup(linksText).string
+            } else {
+                text = value ? presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksText_EnableChannel(linksText).string : presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksText_DisableChannel(linksText).string
+            }
             presentControllerImpl?(textAlertController(context: context, updatedPresentationData: updatedPresentationData, title: presentationData.strings.Group_Setup_ApproveNewMembersApplyToExistingInviteLinksTitle, text: text, actions: [
                 TextAlertAction(type: .genericAction, title: presentationData.strings.Common_No, action: {
                     updateApproveMembers(false)

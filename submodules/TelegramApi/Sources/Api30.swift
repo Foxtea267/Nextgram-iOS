@@ -765,7 +765,8 @@ public extension Api {
             public var botActiveUsers: Int32?
             public var botVerificationIcon: Int64?
             public var sendPaidMessagesStars: Int64?
-            public init(flags: Int32, flags2: Int32, id: Int64, accessHash: Int64?, firstName: String?, lastName: String?, username: String?, phone: String?, photo: Api.UserProfilePhoto?, status: Api.UserStatus?, botInfoVersion: Int32?, restrictionReason: [Api.RestrictionReason]?, botInlinePlaceholder: String?, langCode: String?, emojiStatus: Api.EmojiStatus?, usernames: [Api.Username]?, storiesMaxId: Api.RecentStory?, color: Api.PeerColor?, profileColor: Api.PeerColor?, botActiveUsers: Int32?, botVerificationIcon: Int64?, sendPaidMessagesStars: Int64?) {
+            public var linkedCommunityId: Int64?
+            public init(flags: Int32, flags2: Int32, id: Int64, accessHash: Int64?, firstName: String?, lastName: String?, username: String?, phone: String?, photo: Api.UserProfilePhoto?, status: Api.UserStatus?, botInfoVersion: Int32?, restrictionReason: [Api.RestrictionReason]?, botInlinePlaceholder: String?, langCode: String?, emojiStatus: Api.EmojiStatus?, usernames: [Api.Username]?, storiesMaxId: Api.RecentStory?, color: Api.PeerColor?, profileColor: Api.PeerColor?, botActiveUsers: Int32?, botVerificationIcon: Int64?, sendPaidMessagesStars: Int64?, linkedCommunityId: Int64?) {
                 self.flags = flags
                 self.flags2 = flags2
                 self.id = id
@@ -788,9 +789,10 @@ public extension Api {
                 self.botActiveUsers = botActiveUsers
                 self.botVerificationIcon = botVerificationIcon
                 self.sendPaidMessagesStars = sendPaidMessagesStars
+                self.linkedCommunityId = linkedCommunityId
             }
             public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("user", [("flags", ConstructorParameterDescription(self.flags)), ("flags2", ConstructorParameterDescription(self.flags2)), ("id", ConstructorParameterDescription(self.id)), ("accessHash", ConstructorParameterDescription(self.accessHash)), ("firstName", ConstructorParameterDescription(self.firstName)), ("lastName", ConstructorParameterDescription(self.lastName)), ("username", ConstructorParameterDescription(self.username)), ("phone", ConstructorParameterDescription(self.phone)), ("photo", ConstructorParameterDescription(self.photo)), ("status", ConstructorParameterDescription(self.status)), ("botInfoVersion", ConstructorParameterDescription(self.botInfoVersion)), ("restrictionReason", ConstructorParameterDescription(self.restrictionReason)), ("botInlinePlaceholder", ConstructorParameterDescription(self.botInlinePlaceholder)), ("langCode", ConstructorParameterDescription(self.langCode)), ("emojiStatus", ConstructorParameterDescription(self.emojiStatus)), ("usernames", ConstructorParameterDescription(self.usernames)), ("storiesMaxId", ConstructorParameterDescription(self.storiesMaxId)), ("color", ConstructorParameterDescription(self.color)), ("profileColor", ConstructorParameterDescription(self.profileColor)), ("botActiveUsers", ConstructorParameterDescription(self.botActiveUsers)), ("botVerificationIcon", ConstructorParameterDescription(self.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(self.sendPaidMessagesStars))])
+                return ("user", [("flags", ConstructorParameterDescription(self.flags)), ("flags2", ConstructorParameterDescription(self.flags2)), ("id", ConstructorParameterDescription(self.id)), ("accessHash", ConstructorParameterDescription(self.accessHash)), ("firstName", ConstructorParameterDescription(self.firstName)), ("lastName", ConstructorParameterDescription(self.lastName)), ("username", ConstructorParameterDescription(self.username)), ("phone", ConstructorParameterDescription(self.phone)), ("photo", ConstructorParameterDescription(self.photo)), ("status", ConstructorParameterDescription(self.status)), ("botInfoVersion", ConstructorParameterDescription(self.botInfoVersion)), ("restrictionReason", ConstructorParameterDescription(self.restrictionReason)), ("botInlinePlaceholder", ConstructorParameterDescription(self.botInlinePlaceholder)), ("langCode", ConstructorParameterDescription(self.langCode)), ("emojiStatus", ConstructorParameterDescription(self.emojiStatus)), ("usernames", ConstructorParameterDescription(self.usernames)), ("storiesMaxId", ConstructorParameterDescription(self.storiesMaxId)), ("color", ConstructorParameterDescription(self.color)), ("profileColor", ConstructorParameterDescription(self.profileColor)), ("botActiveUsers", ConstructorParameterDescription(self.botActiveUsers)), ("botVerificationIcon", ConstructorParameterDescription(self.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(self.sendPaidMessagesStars)), ("linkedCommunityId", ConstructorParameterDescription(self.linkedCommunityId))])
             }
         }
         public class Cons_userEmpty: TypeConstructorDescription {
@@ -809,7 +811,7 @@ public extension Api {
             switch self {
             case .user(let _data):
                 if boxed {
-                    buffer.appendInt32(829899656)
+                    buffer.appendInt32(-1313289085)
                 }
                 serializeInt32(_data.flags, buffer: buffer, boxed: false)
                 serializeInt32(_data.flags2, buffer: buffer, boxed: false)
@@ -879,6 +881,9 @@ public extension Api {
                 if Int(_data.flags2) & Int(1 << 15) != 0 {
                     serializeInt64(_data.sendPaidMessagesStars!, buffer: buffer, boxed: false)
                 }
+                if Int(_data.flags2) & Int(1 << 21) != 0 {
+                    serializeInt64(_data.linkedCommunityId!, buffer: buffer, boxed: false)
+                }
                 break
             case .userEmpty(let _data):
                 if boxed {
@@ -892,7 +897,7 @@ public extension Api {
         public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
             switch self {
             case .user(let _data):
-                return ("user", [("flags", ConstructorParameterDescription(_data.flags)), ("flags2", ConstructorParameterDescription(_data.flags2)), ("id", ConstructorParameterDescription(_data.id)), ("accessHash", ConstructorParameterDescription(_data.accessHash)), ("firstName", ConstructorParameterDescription(_data.firstName)), ("lastName", ConstructorParameterDescription(_data.lastName)), ("username", ConstructorParameterDescription(_data.username)), ("phone", ConstructorParameterDescription(_data.phone)), ("photo", ConstructorParameterDescription(_data.photo)), ("status", ConstructorParameterDescription(_data.status)), ("botInfoVersion", ConstructorParameterDescription(_data.botInfoVersion)), ("restrictionReason", ConstructorParameterDescription(_data.restrictionReason)), ("botInlinePlaceholder", ConstructorParameterDescription(_data.botInlinePlaceholder)), ("langCode", ConstructorParameterDescription(_data.langCode)), ("emojiStatus", ConstructorParameterDescription(_data.emojiStatus)), ("usernames", ConstructorParameterDescription(_data.usernames)), ("storiesMaxId", ConstructorParameterDescription(_data.storiesMaxId)), ("color", ConstructorParameterDescription(_data.color)), ("profileColor", ConstructorParameterDescription(_data.profileColor)), ("botActiveUsers", ConstructorParameterDescription(_data.botActiveUsers)), ("botVerificationIcon", ConstructorParameterDescription(_data.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(_data.sendPaidMessagesStars))])
+                return ("user", [("flags", ConstructorParameterDescription(_data.flags)), ("flags2", ConstructorParameterDescription(_data.flags2)), ("id", ConstructorParameterDescription(_data.id)), ("accessHash", ConstructorParameterDescription(_data.accessHash)), ("firstName", ConstructorParameterDescription(_data.firstName)), ("lastName", ConstructorParameterDescription(_data.lastName)), ("username", ConstructorParameterDescription(_data.username)), ("phone", ConstructorParameterDescription(_data.phone)), ("photo", ConstructorParameterDescription(_data.photo)), ("status", ConstructorParameterDescription(_data.status)), ("botInfoVersion", ConstructorParameterDescription(_data.botInfoVersion)), ("restrictionReason", ConstructorParameterDescription(_data.restrictionReason)), ("botInlinePlaceholder", ConstructorParameterDescription(_data.botInlinePlaceholder)), ("langCode", ConstructorParameterDescription(_data.langCode)), ("emojiStatus", ConstructorParameterDescription(_data.emojiStatus)), ("usernames", ConstructorParameterDescription(_data.usernames)), ("storiesMaxId", ConstructorParameterDescription(_data.storiesMaxId)), ("color", ConstructorParameterDescription(_data.color)), ("profileColor", ConstructorParameterDescription(_data.profileColor)), ("botActiveUsers", ConstructorParameterDescription(_data.botActiveUsers)), ("botVerificationIcon", ConstructorParameterDescription(_data.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(_data.sendPaidMessagesStars)), ("linkedCommunityId", ConstructorParameterDescription(_data.linkedCommunityId))])
             case .userEmpty(let _data):
                 return ("userEmpty", [("id", ConstructorParameterDescription(_data.id))])
             }
@@ -997,6 +1002,10 @@ public extension Api {
             if Int(_2 ?? 0) & Int(1 << 15) != 0 {
                 _22 = reader.readInt64()
             }
+            var _23: Int64?
+            if Int(_2 ?? 0) & Int(1 << 21) != 0 {
+                _23 = reader.readInt64()
+            }
             let _c1 = _1 != nil
             let _c2 = _2 != nil
             let _c3 = _3 != nil
@@ -1019,8 +1028,9 @@ public extension Api {
             let _c20 = (Int(_2 ?? 0) & Int(1 << 12) == 0) || _20 != nil
             let _c21 = (Int(_2 ?? 0) & Int(1 << 14) == 0) || _21 != nil
             let _c22 = (Int(_2 ?? 0) & Int(1 << 15) == 0) || _22 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 && _c10 && _c11 && _c12 && _c13 && _c14 && _c15 && _c16 && _c17 && _c18 && _c19 && _c20 && _c21 && _c22 {
-                return Api.User.user(Cons_user(flags: _1!, flags2: _2!, id: _3!, accessHash: _4, firstName: _5, lastName: _6, username: _7, phone: _8, photo: _9, status: _10, botInfoVersion: _11, restrictionReason: _12, botInlinePlaceholder: _13, langCode: _14, emojiStatus: _15, usernames: _16, storiesMaxId: _17, color: _18, profileColor: _19, botActiveUsers: _20, botVerificationIcon: _21, sendPaidMessagesStars: _22))
+            let _c23 = (Int(_2 ?? 0) & Int(1 << 21) == 0) || _23 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 && _c10 && _c11 && _c12 && _c13 && _c14 && _c15 && _c16 && _c17 && _c18 && _c19 && _c20 && _c21 && _c22 && _c23 {
+                return Api.User.user(Cons_user(flags: _1!, flags2: _2!, id: _3!, accessHash: _4, firstName: _5, lastName: _6, username: _7, phone: _8, photo: _9, status: _10, botInfoVersion: _11, restrictionReason: _12, botInlinePlaceholder: _13, langCode: _14, emojiStatus: _15, usernames: _16, storiesMaxId: _17, color: _18, profileColor: _19, botActiveUsers: _20, botVerificationIcon: _21, sendPaidMessagesStars: _22, linkedCommunityId: _23))
             }
             else {
                 return nil

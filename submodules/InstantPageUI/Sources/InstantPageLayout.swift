@@ -513,7 +513,7 @@ public func layoutInstantPageBlock(webpage: TelegramMediaWebpage, userLocation: 
                 }
             }
             return InstantPageLayout(origin: CGPoint(), contentSize: contentSize, items: listItems)
-        case let .blockQuote(blocks, caption):
+        case let .blockQuote(blocks, caption, _):
             let lineInset: CGFloat = 20.0
             let verticalInset: CGFloat = 4.0
             var contentSize = CGSize(width: boundingWidth, height: verticalInset)
@@ -608,7 +608,7 @@ public func layoutInstantPageBlock(webpage: TelegramMediaWebpage, userLocation: 
             }
             contentSize.height += verticalInset
             return InstantPageLayout(origin: CGPoint(), contentSize: contentSize, items: items)
-        case let .image(id, caption, url, webpageId):
+        case let .image(id, caption, url, webpageId, _):
             if case let .image(image) = media[id], let largest = largestImageRepresentation(image.representations) {
                 let imageSize = largest.dimensions
                 var filledSize = imageSize.cgSize.aspectFitted(CGSize(width: boundingWidth - safeInset * 2.0, height: 1200.0))
@@ -648,7 +648,7 @@ public func layoutInstantPageBlock(webpage: TelegramMediaWebpage, userLocation: 
             } else {
                 return InstantPageLayout(origin: CGPoint(), contentSize: CGSize(), items: [])
             }
-        case let .video(id, caption, autoplay, _):
+        case let .video(id, caption, autoplay, _, _):
             if case let .file(file) = media[id], let dimensions = file.dimensions {
                 let imageSize = dimensions
                 var filledSize = imageSize.cgSize.aspectFitted(CGSize(width: boundingWidth - safeInset * 2.0, height: 1200.0))
@@ -695,11 +695,11 @@ public func layoutInstantPageBlock(webpage: TelegramMediaWebpage, userLocation: 
             for subItem in innerItems {
                 var size = CGSize()
                 switch subItem {
-                    case let .image(id, _, _, _):
+                    case let .image(id, _, _, _, _):
                         if case let .image(image) = media[id], let largest = largestImageRepresentation(image.representations) {
                             size = largest.dimensions.cgSize
                         }
-                    case let .video(id, _, _, _):
+                    case let .video(id, _, _, _, _):
                     if case let .file(file) = media[id], let dimensions = file.dimensions {
                             size = dimensions.cgSize
                         }
@@ -814,7 +814,7 @@ public func layoutInstantPageBlock(webpage: TelegramMediaWebpage, userLocation: 
             
             for subBlock in subItems {
                 switch subBlock {
-                    case let .image(id, caption, url, webpageId):
+                    case let .image(id, caption, url, webpageId, _):
                         if case let .image(image) = media[id], let imageSize = largestImageRepresentation(image.representations)?.dimensions {
                             let mediaIndex = mediaIndexCounter
                             mediaIndexCounter += 1

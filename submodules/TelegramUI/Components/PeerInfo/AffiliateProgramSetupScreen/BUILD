@@ -27,7 +27,7 @@ swift_library(
         "//submodules/TelegramUI/Components/ListSectionComponent",
         "//submodules/TelegramUI/Components/ListItemSliderSelectorComponent",
         "//submodules/TelegramUI/Components/ListActionItemComponent",
-        "//submodules/Components/BlurredBackgroundComponent",
+        "//submodules/TelegramUI/Components/EdgeEffect",
         "//submodules/Markdown",
         "//submodules/PresentationDataUtils",
         "//submodules/TelegramUI/Components/Stories/PeerListItemComponent",

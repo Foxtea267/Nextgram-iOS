@@ -80,6 +80,8 @@ extension RichText {
             self = .textMentionName(text: RichText(apiText: textMentionNameData.text), peerId: textMentionNameData.userId)
         case let .textSpoiler(textSpoilerData):
             self = .textSpoiler(text: RichText(apiText: textSpoilerData.text))
+        case .textDiff:
+            self = .empty
         }
     }
     

@@ -123,7 +123,8 @@ final class ChatSendMessageRichTextPreview: ChatSendMessageContextScreenRichText
             imageTintColor: nil,
             overlayPanelColor: messageTheme.accentControlColor.withMultipliedAlpha(0.25),
             separatorColor: messageTheme.accentControlColor.withMultipliedAlpha(0.25),
-            secondaryControlColor: messageTheme.secondaryTextColor
+            secondaryControlColor: messageTheme.secondaryTextColor,
+            quoteAccentColor: mainColor
         )
 
         let layout = layoutInstantPageV2(

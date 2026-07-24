@@ -157,6 +157,15 @@ public extension Api {
 }
 public extension Api {
     enum NotifyPeer: TypeConstructorDescription {
+        public class Cons_notifyCommunity: TypeConstructorDescription {
+            public var communityId: Int64
+            public init(communityId: Int64) {
+                self.communityId = communityId
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("notifyCommunity", [("communityId", ConstructorParameterDescription(self.communityId))])
+            }
+        }
         public class Cons_notifyForumTopic: TypeConstructorDescription {
             public var peer: Api.Peer
             public var topMsgId: Int32
@@ -179,6 +188,7 @@ public extension Api {
         }
         case notifyBroadcasts
         case notifyChats
+        case notifyCommunity(Cons_notifyCommunity)
         case notifyForumTopic(Cons_notifyForumTopic)
         case notifyPeer(Cons_notifyPeer)
         case notifyUsers
@@ -194,6 +204,12 @@ public extension Api {
                 if boxed {
                     buffer.appendInt32(-1073230141)
                 }
+                break
+            case .notifyCommunity(let _data):
+                if boxed {
+                    buffer.appendInt32(-1103664743)
+                }
+                serializeInt64(_data.communityId, buffer: buffer, boxed: false)
                 break
             case .notifyForumTopic(let _data):
                 if boxed {
@@ -222,6 +238,8 @@ public extension Api {
                 return ("notifyBroadcasts", [])
             case .notifyChats:
                 return ("notifyChats", [])
+            case .notifyCommunity(let _data):
+                return ("notifyCommunity", [("communityId", ConstructorParameterDescription(_data.communityId))])
             case .notifyForumTopic(let _data):
                 return ("notifyForumTopic", [("peer", ConstructorParameterDescription(_data.peer)), ("topMsgId", ConstructorParameterDescription(_data.topMsgId))])
             case .notifyPeer(let _data):
@@ -236,6 +254,17 @@ public extension Api {
         }
         public static func parse_notifyChats(_ reader: BufferReader) -> NotifyPeer? {
             return Api.NotifyPeer.notifyChats
+        }
+        public static func parse_notifyCommunity(_ reader: BufferReader) -> NotifyPeer? {
+            var _1: Int64?
+            _1 = reader.readInt64()
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.NotifyPeer.notifyCommunity(Cons_notifyCommunity(communityId: _1!))
+            }
+            else {
+                return nil
+            }
         }
         public static func parse_notifyForumTopic(_ reader: BufferReader) -> NotifyPeer? {
             var _1: Api.Peer?

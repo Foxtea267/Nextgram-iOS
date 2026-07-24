@@ -268,6 +268,56 @@ public extension TelegramEngine {
             return _internal_createGroup(account: self.account, title: title, peerIds: peerIds, ttlPeriod: ttlPeriod)
         }
 
+        public func createCommunity(title: String, about: String?, peerId: PeerId, visible: Bool) -> Signal<PeerId, CreateCommunityError> {
+            return _internal_createCommunity(account: self.account, title: title, about: about, peerId: peerId, visible: visible)
+        }
+
+        public func joinedCommunities() -> Signal<[EnginePeer], NoError> {
+            return _internal_joinedCommunities(account: self.account)
+        }
+
+        public func updatedCommunitiesState() -> Signal<CommunitiesState, NoError> {
+            return _internal_updatedCommunitiesState(postbox: self.account.postbox)
+        }
+
+        public func isHiddenByCollapsedCommunity(peerId: PeerId) -> Signal<Bool, NoError> {
+            return self.account.postbox.transaction { transaction -> Bool in
+                return isPeerHiddenByCollapsedCommunity(transaction: transaction, peerId: peerId)
+            }
+        }
+
+        public func toggleCommunityPeerLink(communityId: PeerId, peerId: PeerId, action: CommunityPeerLinkAction) -> Signal<Never, CommunityPeerLinkError> {
+            return _internal_toggleCommunityPeerLink(account: self.account, communityId: communityId, peerId: peerId, action: action)
+        }
+
+        public func communityPeerLinkRequests(communityId: PeerId, offset: String?, limit: Int32) -> Signal<CommunityPeerLinkRequests, NoError> {
+            return _internal_communityPeerLinkRequests(account: self.account, communityId: communityId, offset: offset, limit: limit)
+        }
+
+        public func communityPeerLinkRequestsContext(communityId: PeerId, initialLimit: Int32 = 100) -> CommunityPeerLinkRequestsContext {
+            return CommunityPeerLinkRequestsContext(account: self.account, communityId: communityId, initialLimit: initialLimit)
+        }
+
+        public func toggleCommunityPeerLinkRequestApproval(communityId: PeerId, peerId: PeerId, approve: Bool) -> Signal<Never, CommunityPeerRequestApprovalError> {
+            return _internal_toggleCommunityPeerLinkRequestApproval(account: self.account, communityId: communityId, peerId: peerId, approve: approve)
+        }
+
+        public func toggleAllCommunityPeerLinkRequestApproval(communityId: PeerId, approve: Bool) -> Signal<Never, CommunityPeerRequestApprovalError> {
+            return _internal_toggleAllCommunityPeerLinkRequestApproval(account: self.account, communityId: communityId, approve: approve)
+        }
+
+        public func toggleCommunityParticipantBanned(communityId: PeerId, participantId: PeerId, banned: Bool) -> Signal<Void, CommunityParticipantBannedError> {
+            return _internal_toggleCommunityParticipantBanned(account: self.account, communityId: communityId, participantId: participantId, banned: banned)
+        }
+
+        public func toggleCommunityCollapsedInDialogs(communityId: PeerId, collapsed: Bool) -> Signal<Never, CommunityCollapsedInDialogsError> {
+            return _internal_toggleCommunityCollapsedInDialogs(account: self.account, communityId: communityId, collapsed: collapsed)
+        }
+
+        public func communityParticipantJoinedChats(communityId: PeerId, participantId: PeerId) -> Signal<CommunityParticipantJoinedChats, NoError> {
+            return _internal_communityParticipantJoinedChats(account: self.account, communityId: communityId, participantId: participantId)
+        }
+
         public func createSecretChat(peerId: PeerId) -> Signal<PeerId, CreateSecretChatError> {
             return _internal_createSecretChat(account: self.account, peerId: peerId)
         }

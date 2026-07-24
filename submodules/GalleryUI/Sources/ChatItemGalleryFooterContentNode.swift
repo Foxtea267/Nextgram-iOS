@@ -24,9 +24,9 @@ import TextNodeWithEntities
 import AnimationCache
 import MultiAnimationRenderer
 import Pasteboard
+import ChatRichTextEditorComposer
 import Speak
 import TranslateUI
-import TextProcessingScreen
 import TelegramNotices
 import SolidRoundedButtonNode
 import UrlHandling
@@ -552,16 +552,16 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
                         guard let self else {
                             return
                         }
-                        let translateController = await TextProcessingScreen(
+                        let translateController = await self.context.sharedContext.makeTextProcessingScreen(
                             context: self.context,
                             theme: defaultDarkPresentationTheme,
                             mode: .translate(fromLanguage: language, applyResult: nil),
-                            inputText: TextWithEntities(text: text.string, entities: []),
+                            inputText: .plain(text: text.string, entities: []),
                             copyResult: { [weak self] text in
                                 guard let self else {
                                     return
                                 }
-                                storeMessageTextInPasteboard(text.text, entities: text.entities)
+                                storeComposedRichMessageInPasteboard(text)
                                 let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
                                 let undoController = UndoOverlayController(presentationData: presentationData, content: .copy(text: presentationData.strings.Conversation_TextCopied), elevatedLayout: true, animateInAsReplacement: false, appearance: UndoOverlayController.Appearance(isBlurred: true), action: { _ in true })
                                 self.controllerInteraction?.presentController(undoController, nil)

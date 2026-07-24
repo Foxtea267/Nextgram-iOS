@@ -1329,6 +1329,17 @@ public extension Api {
                 return ("updateDeleteChannelMessages", [("channelId", ConstructorParameterDescription(self.channelId)), ("messages", ConstructorParameterDescription(self.messages)), ("pts", ConstructorParameterDescription(self.pts)), ("ptsCount", ConstructorParameterDescription(self.ptsCount))])
             }
         }
+        public class Cons_updateDeleteEphemeralMessages: TypeConstructorDescription {
+            public var peer: Api.Peer
+            public var ids: [Int32]
+            public init(peer: Api.Peer, ids: [Int32]) {
+                self.peer = peer
+                self.ids = ids
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("updateDeleteEphemeralMessages", [("peer", ConstructorParameterDescription(self.peer)), ("ids", ConstructorParameterDescription(self.ids))])
+            }
+        }
         public class Cons_updateDeleteGroupCallMessages: TypeConstructorDescription {
             public var call: Api.InputGroupCall
             public var messages: [Int32]
@@ -1464,6 +1475,15 @@ public extension Api {
             }
             public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
                 return ("updateEditChannelMessage", [("message", ConstructorParameterDescription(self.message)), ("pts", ConstructorParameterDescription(self.pts)), ("ptsCount", ConstructorParameterDescription(self.ptsCount))])
+            }
+        }
+        public class Cons_updateEditEphemeralMessage: TypeConstructorDescription {
+            public var message: Api.EphemeralMessage
+            public init(message: Api.EphemeralMessage) {
+                self.message = message
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("updateEditEphemeralMessage", [("message", ConstructorParameterDescription(self.message))])
             }
         }
         public class Cons_updateEditMessage: TypeConstructorDescription {
@@ -1847,6 +1867,15 @@ public extension Api {
             }
             public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
                 return ("updateNewEncryptedMessage", [("message", ConstructorParameterDescription(self.message)), ("qts", ConstructorParameterDescription(self.qts))])
+            }
+        }
+        public class Cons_updateNewEphemeralMessage: TypeConstructorDescription {
+            public var message: Api.EphemeralMessage
+            public init(message: Api.EphemeralMessage) {
+                self.message = message
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("updateNewEphemeralMessage", [("message", ConstructorParameterDescription(self.message))])
             }
         }
         public class Cons_updateNewMessage: TypeConstructorDescription {
@@ -2622,6 +2651,7 @@ public extension Api {
         case updateContactsReset
         case updateDcOptions(Cons_updateDcOptions)
         case updateDeleteChannelMessages(Cons_updateDeleteChannelMessages)
+        case updateDeleteEphemeralMessages(Cons_updateDeleteEphemeralMessages)
         case updateDeleteGroupCallMessages(Cons_updateDeleteGroupCallMessages)
         case updateDeleteMessages(Cons_updateDeleteMessages)
         case updateDeleteQuickReply(Cons_updateDeleteQuickReply)
@@ -2634,6 +2664,7 @@ public extension Api {
         case updateDialogUnreadMark(Cons_updateDialogUnreadMark)
         case updateDraftMessage(Cons_updateDraftMessage)
         case updateEditChannelMessage(Cons_updateEditChannelMessage)
+        case updateEditEphemeralMessage(Cons_updateEditEphemeralMessage)
         case updateEditMessage(Cons_updateEditMessage)
         case updateEmojiGameInfo(Cons_updateEmojiGameInfo)
         case updateEncryptedChatTyping(Cons_updateEncryptedChatTyping)
@@ -2665,6 +2696,7 @@ public extension Api {
         case updateNewBotConnection(Cons_updateNewBotConnection)
         case updateNewChannelMessage(Cons_updateNewChannelMessage)
         case updateNewEncryptedMessage(Cons_updateNewEncryptedMessage)
+        case updateNewEphemeralMessage(Cons_updateNewEphemeralMessage)
         case updateNewMessage(Cons_updateNewMessage)
         case updateNewQuickReply(Cons_updateNewQuickReply)
         case updateNewScheduledMessage(Cons_updateNewScheduledMessage)
@@ -3233,6 +3265,17 @@ public extension Api {
                 serializeInt32(_data.pts, buffer: buffer, boxed: false)
                 serializeInt32(_data.ptsCount, buffer: buffer, boxed: false)
                 break
+            case .updateDeleteEphemeralMessages(let _data):
+                if boxed {
+                    buffer.appendInt32(1457257720)
+                }
+                _data.peer.serialize(buffer, true)
+                buffer.appendInt32(481674261)
+                buffer.appendInt32(Int32(_data.ids.count))
+                for item in _data.ids {
+                    serializeInt32(item, buffer: buffer, boxed: false)
+                }
+                break
             case .updateDeleteGroupCallMessages(let _data):
                 if boxed {
                     buffer.appendInt32(1048963372)
@@ -3358,6 +3401,12 @@ public extension Api {
                 _data.message.serialize(buffer, true)
                 serializeInt32(_data.pts, buffer: buffer, boxed: false)
                 serializeInt32(_data.ptsCount, buffer: buffer, boxed: false)
+                break
+            case .updateEditEphemeralMessage(let _data):
+                if boxed {
+                    buffer.appendInt32(1270583041)
+                }
+                _data.message.serialize(buffer, true)
                 break
             case .updateEditMessage(let _data):
                 if boxed {
@@ -3657,6 +3706,12 @@ public extension Api {
                 }
                 _data.message.serialize(buffer, true)
                 serializeInt32(_data.qts, buffer: buffer, boxed: false)
+                break
+            case .updateNewEphemeralMessage(let _data):
+                if boxed {
+                    buffer.appendInt32(549239713)
+                }
+                _data.message.serialize(buffer, true)
                 break
             case .updateNewMessage(let _data):
                 if boxed {
@@ -4342,6 +4397,8 @@ public extension Api {
                 return ("updateDcOptions", [("dcOptions", ConstructorParameterDescription(_data.dcOptions))])
             case .updateDeleteChannelMessages(let _data):
                 return ("updateDeleteChannelMessages", [("channelId", ConstructorParameterDescription(_data.channelId)), ("messages", ConstructorParameterDescription(_data.messages)), ("pts", ConstructorParameterDescription(_data.pts)), ("ptsCount", ConstructorParameterDescription(_data.ptsCount))])
+            case .updateDeleteEphemeralMessages(let _data):
+                return ("updateDeleteEphemeralMessages", [("peer", ConstructorParameterDescription(_data.peer)), ("ids", ConstructorParameterDescription(_data.ids))])
             case .updateDeleteGroupCallMessages(let _data):
                 return ("updateDeleteGroupCallMessages", [("call", ConstructorParameterDescription(_data.call)), ("messages", ConstructorParameterDescription(_data.messages))])
             case .updateDeleteMessages(let _data):
@@ -4366,6 +4423,8 @@ public extension Api {
                 return ("updateDraftMessage", [("flags", ConstructorParameterDescription(_data.flags)), ("peer", ConstructorParameterDescription(_data.peer)), ("topMsgId", ConstructorParameterDescription(_data.topMsgId)), ("savedPeerId", ConstructorParameterDescription(_data.savedPeerId)), ("draft", ConstructorParameterDescription(_data.draft))])
             case .updateEditChannelMessage(let _data):
                 return ("updateEditChannelMessage", [("message", ConstructorParameterDescription(_data.message)), ("pts", ConstructorParameterDescription(_data.pts)), ("ptsCount", ConstructorParameterDescription(_data.ptsCount))])
+            case .updateEditEphemeralMessage(let _data):
+                return ("updateEditEphemeralMessage", [("message", ConstructorParameterDescription(_data.message))])
             case .updateEditMessage(let _data):
                 return ("updateEditMessage", [("message", ConstructorParameterDescription(_data.message)), ("pts", ConstructorParameterDescription(_data.pts)), ("ptsCount", ConstructorParameterDescription(_data.ptsCount))])
             case .updateEmojiGameInfo(let _data):
@@ -4428,6 +4487,8 @@ public extension Api {
                 return ("updateNewChannelMessage", [("message", ConstructorParameterDescription(_data.message)), ("pts", ConstructorParameterDescription(_data.pts)), ("ptsCount", ConstructorParameterDescription(_data.ptsCount))])
             case .updateNewEncryptedMessage(let _data):
                 return ("updateNewEncryptedMessage", [("message", ConstructorParameterDescription(_data.message)), ("qts", ConstructorParameterDescription(_data.qts))])
+            case .updateNewEphemeralMessage(let _data):
+                return ("updateNewEphemeralMessage", [("message", ConstructorParameterDescription(_data.message))])
             case .updateNewMessage(let _data):
                 return ("updateNewMessage", [("message", ConstructorParameterDescription(_data.message)), ("pts", ConstructorParameterDescription(_data.pts)), ("ptsCount", ConstructorParameterDescription(_data.ptsCount))])
             case .updateNewQuickReply(let _data):
@@ -5606,6 +5667,24 @@ public extension Api {
                 return nil
             }
         }
+        public static func parse_updateDeleteEphemeralMessages(_ reader: BufferReader) -> Update? {
+            var _1: Api.Peer?
+            if let signature = reader.readInt32() {
+                _1 = Api.parse(reader, signature: signature) as? Api.Peer
+            }
+            var _2: [Int32]?
+            if let _ = reader.readInt32() {
+                _2 = Api.parseVector(reader, elementSignature: -1471112230, elementType: Int32.self)
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            if _c1 && _c2 {
+                return Api.Update.updateDeleteEphemeralMessages(Cons_updateDeleteEphemeralMessages(peer: _1!, ids: _2!))
+            }
+            else {
+                return nil
+            }
+        }
         public static func parse_updateDeleteGroupCallMessages(_ reader: BufferReader) -> Update? {
             var _1: Api.InputGroupCall?
             if let signature = reader.readInt32() {
@@ -5826,6 +5905,19 @@ public extension Api {
             let _c3 = _3 != nil
             if _c1 && _c2 && _c3 {
                 return Api.Update.updateEditChannelMessage(Cons_updateEditChannelMessage(message: _1!, pts: _2!, ptsCount: _3!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_updateEditEphemeralMessage(_ reader: BufferReader) -> Update? {
+            var _1: Api.EphemeralMessage?
+            if let signature = reader.readInt32() {
+                _1 = Api.parse(reader, signature: signature) as? Api.EphemeralMessage
+            }
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.Update.updateEditEphemeralMessage(Cons_updateEditEphemeralMessage(message: _1!))
             }
             else {
                 return nil
@@ -6432,6 +6524,19 @@ public extension Api {
             let _c2 = _2 != nil
             if _c1 && _c2 {
                 return Api.Update.updateNewEncryptedMessage(Cons_updateNewEncryptedMessage(message: _1!, qts: _2!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_updateNewEphemeralMessage(_ reader: BufferReader) -> Update? {
+            var _1: Api.EphemeralMessage?
+            if let signature = reader.readInt32() {
+                _1 = Api.parse(reader, signature: signature) as? Api.EphemeralMessage
+            }
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.Update.updateNewEphemeralMessage(Cons_updateNewEphemeralMessage(message: _1!))
             }
             else {
                 return nil

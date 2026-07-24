@@ -203,10 +203,15 @@ final class MessageItemView: UIView {
     
     private let textClippingContainer: UIView
     private var textNode: ChatInputTextNode?
+    // Whether `textNode.attributedText` is currently colored for the settled outgoing bubble
+    // (outgoing primary text color) rather than the source/morph state (input-field color).
+    // nil until the text node is first built. See the recolor in the no-media text path.
+    private var textNodeUsesOutgoingColor: Bool?
     private var customEmojiContainerView: CustomEmojiContainerView?
     private var emojiViewProvider: ((ChatTextInputTextCustomEmojiAttribute) -> UIView)?
     
     private var richTextPreviewView: UIView?
+    private var richMorphSnapshotView: UIView?
     private var mediaPreviewClippingView: UIView?
     private var mediaPreview: ChatSendMessageContextScreenMediaPreview?
     
@@ -245,7 +250,7 @@ final class MessageItemView: UIView {
     }
     
     func animateIn(
-        sourceTextInputView: ChatInputTextView?,
+        textInputSource: ChatSendMessageContextScreenTextInputSource?,
         isEditMessage: Bool,
         transition: ComponentTransition
     ) {
@@ -260,7 +265,7 @@ final class MessageItemView: UIView {
     }
     
     func animateOut(
-        sourceTextInputView: ChatInputTextView?,
+        textInputSource: ChatSendMessageContextScreenTextInputSource?,
         toEmpty: Bool,
         isEditMessage: Bool,
         transition: ComponentTransition
@@ -286,7 +291,7 @@ final class MessageItemView: UIView {
         textString: NSAttributedString,
         richTextPreview: ChatSendMessageContextScreenRichTextPreview?,
         maxRichBubbleWidth: CGFloat,
-        sourceTextInputView: ChatInputTextView?,
+        textInputSource: ChatSendMessageContextScreenTextInputSource?,
         emojiViewProvider: ((ChatTextInputTextCustomEmojiAttribute) -> UIView)?,
         sourceMediaPreview: ChatSendMessageContextScreenMediaPreview?,
         mediaCaptionIsAbove: Bool,
@@ -419,8 +424,8 @@ final class MessageItemView: UIView {
                     self.textNode = textNode
                     self.textClippingContainer.addSubview(textNode.view)
                     
-                    if let sourceTextInputView {
-                        var textContainerInset = sourceTextInputView.defaultTextContainerInset
+                    if let textInputSource {
+                        var textContainerInset = textInputSource.defaultTextContainerInset
                         textContainerInset.right = 0.0
                         textNode.textView.defaultTextContainerInset = textContainerInset
                     }
@@ -436,8 +441,8 @@ final class MessageItemView: UIView {
                 
                 let mainColor = presentationData.theme.chat.message.outgoing.accentControlColor
                 let mappedLineStyle: ChatInputTextView.Theme.Quote.LineStyle
-                if let sourceTextInputView, let textTheme = sourceTextInputView.theme {
-                    switch textTheme.quote.lineStyle {
+                if let textInputSource, let lineStyle = textInputSource.quoteLineStyle {
+                    switch lineStyle {
                     case .solid:
                         mappedLineStyle = .solid(color: mainColor)
                     case .doubleDashed:
@@ -508,8 +513,8 @@ final class MessageItemView: UIView {
                 let textClippingContainerFrame = CGRect(origin: CGPoint(x: backgroundFrame.minX + 1.0, y: backgroundFrame.minY + 1.0), size: CGSize(width: backgroundFrame.width - 1.0 - 7.0, height: backgroundFrame.height - 1.0 - 1.0))
                 
                 var textClippingContainerBounds = CGRect(origin: CGPoint(), size: textClippingContainerFrame.size)
-                if explicitBackgroundSize != nil, let sourceTextInputView {
-                    textClippingContainerBounds.origin.y = sourceTextInputView.contentOffset.y
+                if explicitBackgroundSize != nil, let textInputSource {
+                    textClippingContainerBounds.origin.y = textInputSource.contentOffset.y
                 } else {
                     textClippingContainerBounds.origin.y = unclippedPositionedTextHeight - backgroundSize.height + 4.0
                     textClippingContainerBounds.origin.y = max(0.0, textClippingContainerBounds.origin.y)
@@ -613,7 +618,12 @@ final class MessageItemView: UIView {
             
             return backgroundFrame.size
         } else {
+            // `explicitBackgroundSize != nil` is the source/morph state (bubble overlays the live
+            // input field); nil is the settled state (the real outgoing bubble).
+            let isSettled = explicitBackgroundSize == nil
+
             let textNode: ChatInputTextNode
+            var textNodeIsNew = false
             if let current = self.textNode {
                 textNode = current
             } else {
@@ -622,24 +632,41 @@ final class MessageItemView: UIView {
                 textNode.isUserInteractionEnabled = false
                 self.textNode = textNode
                 self.textClippingContainer.addSubview(textNode.view)
-                
-                if let sourceTextInputView {
-                    textNode.textView.defaultTextContainerInset = sourceTextInputView.defaultTextContainerInset
+
+                if let textInputSource {
+                    textNode.textView.defaultTextContainerInset = textInputSource.defaultTextContainerInset
                 }
-                
+                textNodeIsNew = true
+            }
+
+            // The extracted `textString` does not carry a base foreground color that renders correctly
+            // in this preview node — without an explicit color it defaults to black. So set one explicitly,
+            // matching whichever surface the text currently sits on: the settled outgoing bubble uses the
+            // outgoing message's primary text color; the source/morph state (the bubble overlaying the live
+            // input field, including the animate-out back to the field) uses the input field's text color so
+            // the copy matches the still-visible field — e.g. white in a dark theme, where the input-field
+            // default of black would otherwise show through.
+            if textNodeIsNew || self.textNodeUsesOutgoingColor != isSettled {
+                self.textNodeUsesOutgoingColor = isSettled
+
                 let messageAttributedText = NSMutableAttributedString(attributedString: textString)
-                
+
+                let baseTextColor = isSettled
+                    ? presentationData.theme.chat.message.outgoing.primaryTextColor
+                    : presentationData.theme.chat.inputPanel.inputTextColor
+                messageAttributedText.addAttribute(.foregroundColor, value: baseTextColor, range: NSRange(location: 0, length: messageAttributedText.length))
+
                 for entity in generateTextEntities(textString.string, enabledTypes: .all) {
                     messageAttributedText.addAttribute(.foregroundColor, value: presentationData.theme.chat.message.outgoing.linkTextColor, range: NSRange(location: entity.range.lowerBound, length: entity.range.upperBound - entity.range.lowerBound))
                 }
-                
+
                 textNode.attributedText = messageAttributedText
             }
-            
+
             let mainColor = presentationData.theme.chat.message.outgoing.accentControlColor
             let mappedLineStyle: ChatInputTextView.Theme.Quote.LineStyle
-            if let sourceTextInputView, let textTheme = sourceTextInputView.theme {
-                switch textTheme.quote.lineStyle {
+            if let textInputSource, let lineStyle = textInputSource.quoteLineStyle {
+                switch lineStyle {
                 case .solid:
                     mappedLineStyle = .solid(color: mainColor)
                 case .doubleDashed:
@@ -664,8 +691,8 @@ final class MessageItemView: UIView {
             let textPositioningInsets = UIEdgeInsets(top: -5.0, left: 0.0, bottom: -4.0, right: -4.0)
             
             var currentRightInset: CGFloat = 0.0
-            if let sourceTextInputView {
-                currentRightInset = sourceTextInputView.currentRightInset
+            if let textInputSource {
+                currentRightInset = textInputSource.currentRightInset
             }
             let textHeight = textNode.textHeightForWidth(maxTextWidth, rightInset: currentRightInset)
             textNode.updateLayout(size: CGSize(width: maxTextWidth, height: textHeight))
@@ -694,12 +721,18 @@ final class MessageItemView: UIView {
             
             let textFrame = CGRect(origin: CGPoint(x: textInsets.left, y: textInsets.top), size: positionedTextSize)
 
-            // The outgoing bubble reserves space on the right for its tail (mirrors the
-            // plain-text path's `backgroundSize.width - 1 - 7`); the left keeps a 1pt border.
-            // The injected page lays out within this content width, so it never runs into the
-            // tail and the bubble can't exceed the available container width.
+            // Rich content (which can include full-bleed images/tables) fills the bubble's internal
+            // area — a 1pt border on the left and a 7pt reservation on the right that clears the
+            // outgoing tail — matching the text path's `backgroundSize.width - 1 - 7` content rect.
+            // The content is then clipped to the bubble's inner corner radius (richContentCornerRadius)
+            // so images/tables round to the bubble instead of overflowing its square corners. The tail
+            // is part of the background shape, drawn outside this clipped content area.
             let richBubbleLeftInset: CGFloat = 1.0
             let richBubbleRightInset: CGFloat = 7.0
+            // Matches ChatMessageItemLayoutConstants.compact.image.defaultCornerRadius (the radius
+            // the real rich bubble clips this same InstantPageV2View content to). Hard-coded to
+            // avoid a ChatMessageItemCommon build dependency for one constant.
+            let richContentCornerRadius: CGFloat = 15.0
 
             var richContentSize: CGSize?
             if let richTextPreview {
@@ -709,11 +742,28 @@ final class MessageItemView: UIView {
                     self.addSubview(richView)
                     self.richTextPreviewView = richView
                 }
+                // Clip the extracted page content to the bubble's inner radius so images/tables
+                // are rounded to match the bubble instead of overflowing its square corners.
+                richView.clipsToBounds = true
+                richView.layer.cornerRadius = richContentCornerRadius
                 let richBoundingWidth = max(1.0, maxRichBubbleWidth - richBubbleLeftInset - richBubbleRightInset)
                 richContentSize = richTextPreview.update(boundingWidth: richBoundingWidth, presentationData: presentationData, transition: transition)
+
+                // Morph stand-in: a pixel snapshot of the live input field, captured on the first
+                // (source-state) layout — before the screen hard-hides the field. The flat text node
+                // can't represent rich structure (headings/lists/tables), so we crossfade this faithful
+                // snapshot — not the flat text — into the rich preview. snapshotView can return nil if
+                // the field isn't rendered; the crossfade falls back to the flat text in that case.
+                if self.richMorphSnapshotView == nil, let textInputSource, let snapshot = textInputSource.sourceView.snapshotView(afterScreenUpdates: false) {
+                    snapshot.isUserInteractionEnabled = false
+                    self.addSubview(snapshot)
+                    self.richMorphSnapshotView = snapshot
+                }
             } else if let richTextPreviewView = self.richTextPreviewView {
                 self.richTextPreviewView = nil
                 richTextPreviewView.removeFromSuperview()
+                self.richMorphSnapshotView?.removeFromSuperview()
+                self.richMorphSnapshotView = nil
             }
 
             let settledContentSize: CGSize
@@ -731,8 +781,8 @@ final class MessageItemView: UIView {
             let textClippingContainerFrame = CGRect(origin: CGPoint(x: 1.0, y: 1.0), size: CGSize(width: backgroundSize.width - 1.0 - 7.0, height: backgroundSize.height - 1.0 - 1.0))
             
             var textClippingContainerBounds = CGRect(origin: CGPoint(), size: textClippingContainerFrame.size)
-            if explicitBackgroundSize != nil, let sourceTextInputView {
-                textClippingContainerBounds.origin.y = sourceTextInputView.contentOffset.y
+            if explicitBackgroundSize != nil, let textInputSource {
+                textClippingContainerBounds.origin.y = textInputSource.contentOffset.y
             } else {
                 textClippingContainerBounds.origin.y = unclippedPositionedTextHeight - backgroundSize.height + 4.0
                 textClippingContainerBounds.origin.y = max(0.0, textClippingContainerBounds.origin.y)
@@ -745,14 +795,30 @@ final class MessageItemView: UIView {
             self.updateTextContents()
 
             // Blend between the raw plain text (source/morph) and the injected rich layout
-            // (settled). `explicitBackgroundSize != nil` means source-morph; nil means settled.
-            let isSettled = explicitBackgroundSize == nil
+            // (settled). `explicitBackgroundSize != nil` means source-morph; nil means settled
+            // (`isSettled`, computed above).
             if let richTextPreviewView = self.richTextPreviewView, let richContentSize {
                 let richAlpha: CGFloat = isSettled ? 1.0 : 0.0
-                let plainAlpha: CGFloat = isSettled ? 0.0 : 1.0
                 transition.setAlpha(view: richTextPreviewView, alpha: richAlpha)
-                transition.setAlpha(view: self.textClippingContainer, alpha: plainAlpha)
                 transition.setFrame(view: richTextPreviewView, frame: CGRect(origin: CGPoint(x: richBubbleLeftInset, y: 1.0), size: richContentSize))
+
+                if let richMorphSnapshotView = self.richMorphSnapshotView {
+                    // The flat text node is meaningless for rich content — keep it hidden and crossfade
+                    // the live-field snapshot instead. In the source state the snapshot is positioned to
+                    // overlay the live input field exactly: the field's top-left sits at
+                    // (textInsets.left, 2.0) within this view, because the screen builds
+                    // sourceMessageItemFrame at (field.minX - sourceMessageTextInsets.left, field.minY - 2.0)
+                    // and passes sourceMessageTextInsets as textInsets. The snapshot's own bounds carry the
+                    // field's size. So when the screen hard-hides the live field, this snapshot already covers
+                    // its pixels and the handoff is invisible; it then fades out as the preview fades in.
+                    self.textClippingContainer.alpha = 0.0
+                    let snapshotAlpha: CGFloat = isSettled ? 0.0 : 1.0
+                    transition.setAlpha(view: richMorphSnapshotView, alpha: snapshotAlpha)
+                    transition.setFrame(view: richMorphSnapshotView, frame: CGRect(origin: CGPoint(x: textInsets.left, y: 2.0), size: richMorphSnapshotView.bounds.size))
+                } else {
+                    let plainAlpha: CGFloat = isSettled ? 0.0 : 1.0
+                    transition.setAlpha(view: self.textClippingContainer, alpha: plainAlpha)
+                }
             } else {
                 transition.setAlpha(view: self.textClippingContainer, alpha: 1.0)
             }

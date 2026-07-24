@@ -2713,7 +2713,7 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
                 } else {
                     dateFormat = .regular
                 }
-                let dateText = stringForMessageTimestampStatus(accountPeerId: item.context.account.peerId, message: EngineMessage(item.message), dateTimeFormat: item.presentationData.dateTimeFormat, nameDisplayOrder: item.presentationData.nameDisplayOrder, strings: item.presentationData.strings, format: dateFormat, associatedData: item.associatedData)
+                let dateText = stringForMessageTimestampStatus(context: item.context, message: EngineMessage(item.message), dateTimeFormat: item.presentationData.dateTimeFormat, nameDisplayOrder: item.presentationData.nameDisplayOrder, strings: item.presentationData.strings, format: dateFormat, associatedData: item.associatedData)
                 
                 let statusType: ChatMessageDateAndStatusType?
                 if case .customChatContents = item.associatedData.subject {
@@ -3707,38 +3707,49 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
             }
 
             for optionNode in self.optionNodes {
-                if optionNode.frame.contains(point), case .tap = gesture {
+                if optionNode.frame.contains(point) {
                     if self.newOptionIsFocused {
                         return ChatMessageBubbleContentTapAction(content: .none)
                     }
-                    if let mediaFrame = optionNode.mediaFrame, mediaFrame.offsetBy(dx: optionNode.frame.minX, dy: optionNode.frame.minY).contains(point), let option = optionNode.option, let _ = option.media {
-                        return ChatMessageBubbleContentTapAction(content: .custom({ [weak self] in
-                            if let item = self?.item {
-                                item.controllerInteraction.openPollMedia(item.message, .option(option))
+
+                    if let mediaFrame = optionNode.mediaFrame {
+                        let absoluteMediaFrame = mediaFrame.offsetBy(dx: optionNode.frame.minX, dy: optionNode.frame.minY)
+                        if absoluteMediaFrame.contains(point), let option = optionNode.option, let media = option.media {
+                            if case .longTap = gesture, let webpage = media as? TelegramMediaWebpage, let url = webpage.content.url {
+                                return ChatMessageBubbleContentTapAction(content: .url(ChatMessageBubbleContentTapAction.Url(url: url, concealed: true)), rects: [absoluteMediaFrame])
+                            } else if case .tap = gesture {
+                                return ChatMessageBubbleContentTapAction(content: .custom({ [weak self] in
+                                    if let item = self?.item {
+                                        item.controllerInteraction.openPollMedia(item.message, .option(option))
+                                    }
+                                }))
                             }
-                        }))
+                        }
                     }
-                    if optionNode.isUserInteractionEnabled {
-                        return ChatMessageBubbleContentTapAction(content: .ignore)
-                    } else if let item = self.item, !Namespaces.Message.allNonRegular.contains(item.message.id.namespace), let poll = self.poll, let option = optionNode.option, !isBotChat {
-                        switch poll.publicity {
-                        case .anonymous:
-                            return ChatMessageBubbleContentTapAction(content: .none)
-                        case .public:
-                            var hasNonZeroVoters = false
-                            if let voters = poll.results.voters {
-                                for voter in voters {
-                                    if voter.count != 0 {
-                                        hasNonZeroVoters = true
-                                        break
+
+                    if case .tap = gesture {
+                        if optionNode.isUserInteractionEnabled {
+                            return ChatMessageBubbleContentTapAction(content: .ignore)
+                        } else if let item = self.item, !Namespaces.Message.allNonRegular.contains(item.message.id.namespace), !Namespaces.Message.allEphemeral.contains(item.message.id.namespace), let poll = self.poll, let option = optionNode.option, !isBotChat {
+                            switch poll.publicity {
+                            case .anonymous:
+                                return ChatMessageBubbleContentTapAction(content: .none)
+                            case .public:
+                                var hasNonZeroVoters = false
+                                if let voters = poll.results.voters {
+                                    for voter in voters {
+                                        if voter.count != 0 {
+                                            hasNonZeroVoters = true
+                                            break
+                                        }
                                     }
                                 }
-                            }
-                            if hasNonZeroVoters {
-                                if !isEstimating {
-                                    return ChatMessageBubbleContentTapAction(content: .openPollResults(option.opaqueIdentifier))
+                                if hasNonZeroVoters {
+                                    if !isEstimating {
+                                        return ChatMessageBubbleContentTapAction(content: .openPollResults(option.opaqueIdentifier))
+                                    }
+                                    return ChatMessageBubbleContentTapAction(content: .openMessage)
                                 }
-                                return ChatMessageBubbleContentTapAction(content: .openMessage)
                             }
                         }
                     }

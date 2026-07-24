@@ -122,6 +122,11 @@ final class EmojisChatInputContextPanelNode: ChatInputContextPanelNode {
     private var enqueuedTransitions: [(EmojisChatInputContextPanelTransition, Bool)] = []
     private var validLayout: (CGSize, CGFloat, CGFloat, CGFloat)?
     private var presentationInterfaceState: ChatPresentationInterfaceState?
+
+    /// Horizontal position of the caret (in this node's coordinate space) that the bubble's
+    /// arrow should point at. Set by the controller before `updateLayout`. When nil, the
+    /// bubble falls back to its legacy left-anchored position.
+    var cursorAnchorX: CGFloat?
     
     private let animationCache: AnimationCache
     private let animationRenderer: MultiAnimationRenderer
@@ -550,10 +555,28 @@ final class EmojisChatInputContextPanelNode: ChatInputContextPanelNode {
         let sideInsets: CGFloat = 10.0 + leftInset
         let contentWidth = min(size.width - sideInsets - sideInsets, max(24.0, CGFloat(self.currentEntries?.count ?? 0) * 45.0))
         
+        // The bubble's arrow sits at `contentLeftInset + arrowTipOffset` from the bubble's
+        // left edge; `leftOffset` shifts the whole bubble right of `sideInsets`.
+        let arrowTipOffset: CGFloat = 15.0
         var contentLeftInset: CGFloat = 40.0
         var leftOffset: CGFloat = 0.0
-        if sideInsets + floor(contentWidth / 2.0) < sideInsets + contentLeftInset + 15.0 {
-            let updatedLeftInset = sideInsets + floor(contentWidth / 2.0) - 15.0 - sideInsets
+        if let cursorAnchorX = self.cursorAnchorX {
+            // Anchor the bubble so its arrow points at the caret, clamped to the screen
+            // (mirrors the typed-emoji suggestion popup's positioning).
+            let minBubbleX = sideInsets
+            let maxBubbleX = max(sideInsets, size.width - sideInsets - contentWidth)
+            let bubbleX = max(minBubbleX, min(maxBubbleX, cursorAnchorX - (contentLeftInset + arrowTipOffset)))
+            leftOffset = bubbleX - sideInsets
+
+            // Re-point the arrow within the (possibly clamped) bubble so it still lands on the
+            // caret, keeping it inside the rounded caps.
+            let arrowSegmentWidth: CGFloat = 30.0
+            let capMin: CGFloat = 8.0
+            let maxInset = max(capMin, contentWidth - arrowSegmentWidth - capMin)
+            let minInset = min(capMin, maxInset)
+            contentLeftInset = max(minInset, min(maxInset, cursorAnchorX - bubbleX - arrowTipOffset))
+        } else if sideInsets + floor(contentWidth / 2.0) < sideInsets + contentLeftInset + arrowTipOffset {
+            let updatedLeftInset = sideInsets + floor(contentWidth / 2.0) - arrowTipOffset - sideInsets
             leftOffset = contentLeftInset - updatedLeftInset
             contentLeftInset = updatedLeftInset
         }

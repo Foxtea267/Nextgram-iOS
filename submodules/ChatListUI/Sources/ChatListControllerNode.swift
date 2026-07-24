@@ -233,6 +233,8 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             previousItemNode.listNode.shouldStopScrolling = nil
             previousItemNode.listNode.activateChatPreview = nil
             previousItemNode.listNode.openStories = nil
+            previousItemNode.listNode.openCommunity = nil
+            previousItemNode.listNode.ungroupCommunity = nil
             previousItemNode.listNode.addedVisibleChatsWithPeerIds = nil
             previousItemNode.listNode.didBeginSelectingChats = nil
             previousItemNode.listNode.canExpandHiddenItems = nil
@@ -283,6 +285,12 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         }
         itemNode.listNode.groupSelected = { [weak self] groupId in
             self?.groupSelected?(groupId)
+        }
+        itemNode.listNode.openCommunity = { [weak self] communityId in
+            self?.openCommunity?(communityId)
+        }
+        itemNode.listNode.ungroupCommunity = { [weak self] communityId in
+            self?.ungroupCommunity?(communityId)
         }
         itemNode.listNode.updatePeerGrouping = { [weak self] peerId, group in
             self?.updatePeerGrouping?(peerId, group)
@@ -487,6 +495,8 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     public var peerSelected: ((EnginePeer, Int64?, Bool, Bool, ChatListNodeEntryPromoInfo?) -> Void)?
     public var disabledPeerSelected: ((EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void)?
     var groupSelected: ((EngineChatList.Group) -> Void)?
+    var openCommunity: ((EnginePeer.Id) -> Void)?
+    var ungroupCommunity: ((EnginePeer.Id) -> Void)?
     var updatePeerGrouping: ((EnginePeer.Id, Bool) -> Void)?
     var contentOffset: ListViewVisibleContentOffset?
     public var contentOffsetChanged: ((ListViewVisibleContentOffset, ListView) -> Void)?
@@ -2472,6 +2482,8 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 inlineStackContainerNode.setPeerThreadHidden = self.mainContainerNode.setPeerThreadHidden
                 inlineStackContainerNode.peerSelected = self.mainContainerNode.peerSelected
                 inlineStackContainerNode.groupSelected = self.mainContainerNode.groupSelected
+                inlineStackContainerNode.openCommunity = self.mainContainerNode.openCommunity
+                inlineStackContainerNode.ungroupCommunity = self.mainContainerNode.ungroupCommunity
                 inlineStackContainerNode.updatePeerGrouping = self.mainContainerNode.updatePeerGrouping
                 
                 inlineStackContainerNode.contentOffsetChanged = { [weak self] offset, listView in

@@ -4,20 +4,24 @@ import Postbox
 public struct BotCommand: PostboxCoding, Hashable {
     public let text: String
     public let description: String
+    public let isEphemeral: Bool
     
-    public init(text: String, description: String) {
+    public init(text: String, description: String, isEphemeral: Bool = false) {
         self.text = text
         self.description = description
+        self.isEphemeral = isEphemeral
     }
     
     public init(decoder: PostboxDecoder) {
         self.text = decoder.decodeStringForKey("t", orElse: "")
         self.description = decoder.decodeStringForKey("d", orElse: "")
+        self.isEphemeral = decoder.decodeInt32ForKey("e", orElse: 0) != 0
     }
     
     public func encode(_ encoder: PostboxEncoder) {
         encoder.encodeString(self.text, forKey: "t")
         encoder.encodeString(self.description, forKey: "d")
+        encoder.encodeInt32(self.isEphemeral ? 1 : 0, forKey: "e")
     }
 }
 

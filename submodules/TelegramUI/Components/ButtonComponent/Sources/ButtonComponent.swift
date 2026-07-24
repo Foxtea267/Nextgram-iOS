@@ -403,6 +403,7 @@ public final class ButtonComponent: Component {
 
     public let background: Background
     public let content: AnyComponentWithIdentity<Empty>
+    public let restrictContentAnimations: Bool
     public let contentInsets: UIEdgeInsets?
     public let fitToContentWidth: Bool
     public let isEnabled: Bool
@@ -415,6 +416,7 @@ public final class ButtonComponent: Component {
     public init(
         background: Background,
         content: AnyComponentWithIdentity<Empty>,
+        restrictContentAnimations: Bool = false,
         contentInsets: UIEdgeInsets? = nil,
         fitToContentWidth: Bool = false,
         isEnabled: Bool = true,
@@ -426,6 +428,7 @@ public final class ButtonComponent: Component {
     ) {
         self.background = background
         self.content = content
+        self.restrictContentAnimations = restrictContentAnimations
         self.contentInsets = contentInsets
         self.fitToContentWidth = fitToContentWidth
         self.isEnabled = isEnabled
@@ -441,6 +444,9 @@ public final class ButtonComponent: Component {
             return false
         }
         if lhs.content != rhs.content {
+            return false
+        }
+        if lhs.restrictContentAnimations != rhs.restrictContentAnimations {
             return false
         }
         if lhs.contentInsets != rhs.contentInsets {
@@ -684,7 +690,7 @@ public final class ButtonComponent: Component {
  
             var previousContentItem: ContentItem?
             let contentItem: ContentItem
-            var contentItemTransition = transition
+            var contentItemTransition = component.restrictContentAnimations ? transition.withAnimation(.none) : transition
             if let current = self.contentItem, current.id == component.content.id {
                 contentItem = current
             } else {

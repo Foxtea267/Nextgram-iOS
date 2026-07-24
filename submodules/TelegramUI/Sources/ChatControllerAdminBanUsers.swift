@@ -101,6 +101,10 @@ extension ChatControllerImpl {
             for (authorId, rights) in result.updateBannedRights {
                 let _ = self.context.engine.peers.updateChannelMemberBannedRights(peerId: banLocationPeerId, memberId: authorId, rights: rights).startStandalone()
             }
+
+            if let banFromCommunity = result.banFromCommunity {
+                let _ = self.context.engine.peers.toggleCommunityParticipantBanned(communityId: banFromCommunity.communityId, participantId: banFromCommunity.participantId, banned: true).startStandalone()
+            }
         }
         
         if text.isEmpty {

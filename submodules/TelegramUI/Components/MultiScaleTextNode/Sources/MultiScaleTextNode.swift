@@ -79,21 +79,27 @@ public final class MultiScaleTextNode: ASDisplayNode {
     }
     
     public func updateLayout(text: String, states: [AnyHashable: MultiScaleTextState], mainState: AnyHashable) -> [AnyHashable: MultiScaleTextLayout] {
+        return self.updateLayout(attributedText: NSAttributedString(string: text), accessibilityText: text, states: states, mainState: mainState)
+    }
+
+    public func updateLayout(attributedText: NSAttributedString, accessibilityText: String? = nil, states: [AnyHashable: MultiScaleTextState], mainState: AnyHashable) -> [AnyHashable: MultiScaleTextLayout] {
         assert(Set(states.keys) == Set(self.stateNodes.keys))
         assert(states[mainState] != nil)
         
+        let accessibilityText = accessibilityText ?? attributedText.string
         var result: [AnyHashable: MultiScaleTextLayout] = [:]
         var mainLayout: MultiScaleTextLayout?
         for (key, state) in states {
             if let node = self.stateNodes[key] {
-                node.tintTextNode.attributedText = NSAttributedString(string: text, attributes: [
-                    .font: state.attributes.font,
-                    .foregroundColor: state.attributes.color
-                ])
-                node.noTintTextNode.attributedText = NSAttributedString(string: text, attributes: [
-                    .font: state.attributes.font,
-                    .foregroundColor: state.attributes.color
-                ])
+                let stateAttributedText = NSMutableAttributedString(attributedString: attributedText)
+                if stateAttributedText.length != 0 {
+                    stateAttributedText.addAttributes([
+                        .font: state.attributes.font,
+                        .foregroundColor: state.attributes.color
+                    ], range: NSRange(location: 0, length: stateAttributedText.length))
+                }
+                node.tintTextNode.attributedText = stateAttributedText
+                node.noTintTextNode.attributedText = NSAttributedString(attributedString: stateAttributedText)
                 if let shadowColor = state.attributes.shadowColor {
                     node.tintTextNode.textShadowColor = shadowColor
                     node.tintTextNode.textShadowBlur = 3.0
@@ -104,7 +110,7 @@ public final class MultiScaleTextNode: ASDisplayNode {
                     node.noTintTextNode.shadowColor = nil
                 }
                 node.tintTextNode.isAccessibilityElement = true
-                node.tintTextNode.accessibilityLabel = text
+                node.tintTextNode.accessibilityLabel = accessibilityText
                 node.noTintTextNode.isAccessibilityElement = false
                 let nodeSize = node.tintTextNode.updateLayout(state.constrainedSize)
                 let _ = node.noTintTextNode.updateLayout(state.constrainedSize)

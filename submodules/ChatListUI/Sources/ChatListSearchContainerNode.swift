@@ -115,7 +115,9 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     private let context: AccountContext
     private let peersFilter: ChatListNodePeersFilter
     private let requestPeerType: [ReplyMarkupButtonRequestPeerType]?
+    private let excludedPeerIds: Set<EnginePeer.Id>
     private var location: ChatListControllerLocation
+    private let communityId: EnginePeer.Id?
     private var folder: (Int32, String)?
     private let displaySearchFilters: Bool
     private let hasDownloads: Bool
@@ -123,8 +125,8 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     private let openMessage: (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void
     private let navigationController: NavigationController?
     
-    var dismissSearch: (() -> Void)?
-    var dismissSearchImmediately: (() -> Void)?
+    public var dismissSearch: (() -> Void)?
+    public var dismissSearchImmediately: (() -> Void)?
     var openAdInfo: ((ASDisplayNode, AdPeer) -> Void)?
     
     private let edgeEffectView: EdgeEffectView
@@ -181,7 +183,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     private var recentAppsDisposable: Disposable?
     private var refreshedGlobalPostSearchStateDisposable: Disposable?
     
-    public init(context: AccountContext, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, filter: ChatListNodePeersFilter, requestPeerType: [ReplyMarkupButtonRequestPeerType]?, location: ChatListControllerLocation, folder: (Int32, String)?, displaySearchFilters: Bool, hasDownloads: Bool, initialFilter: ChatListSearchFilter = .chats, openPeer originalOpenPeer: @escaping (EnginePeer, EnginePeer?, Int64?, Bool) -> Void, openDisabledPeer: @escaping (EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void, openRecentPeerOptions: @escaping (EnginePeer) -> Void, openMessage originalOpenMessage: @escaping (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void, addContact: ((String) -> Void)?, peerContextAction: ((EnginePeer, ChatListSearchContextActionSource, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?, present: @escaping (ViewController, Any?) -> Void, presentInGlobalOverlay: @escaping (ViewController, Any?) -> Void, navigationController: NavigationController?, parentController: @escaping () -> ViewController?) {
+    public init(context: AccountContext, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, filter: ChatListNodePeersFilter, requestPeerType: [ReplyMarkupButtonRequestPeerType]?, excludedPeerIds: Set<EnginePeer.Id> = [], location: ChatListControllerLocation, communityId: EnginePeer.Id? = nil, folder: (Int32, String)?, displaySearchFilters: Bool, hasDownloads: Bool, initialFilter: ChatListSearchFilter = .chats, openPeer originalOpenPeer: @escaping (EnginePeer, EnginePeer?, Int64?, Bool) -> Void, openDisabledPeer: @escaping (EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void, openRecentPeerOptions: @escaping (EnginePeer) -> Void, openMessage originalOpenMessage: @escaping (EnginePeer, Int64?, EngineMessage.Id, Bool) -> Void, addContact: ((String) -> Void)?, peerContextAction: ((EnginePeer, ChatListSearchContextActionSource, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?, present: @escaping (ViewController, Any?) -> Void, presentInGlobalOverlay: @escaping (ViewController, Any?) -> Void, navigationController: NavigationController?, parentController: @escaping () -> ViewController?) {
         var initialFilter = initialFilter
         if case .chats = initialFilter, case .forum = location {
             initialFilter = .topics
@@ -193,7 +195,9 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         self.context = context
         self.peersFilter = filter
         self.requestPeerType = requestPeerType
+        self.excludedPeerIds = excludedPeerIds
         self.location = location
+        self.communityId = communityId
         
         self.folder = folder
         
@@ -212,7 +216,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         self.edgeEffectView = EdgeEffectView()
         
         self.filterContainerNode = ChatListSearchFiltersContainerNode()
-        self.paneContainerNode = ChatListSearchPaneContainerNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, peersFilter: self.peersFilter, requestPeerType: self.requestPeerType, location: location, searchQuery: self.searchQuery.get(), searchOptions: self.searchOptions.get(), navigationController: navigationController, parentController: parentController())
+        self.paneContainerNode = ChatListSearchPaneContainerNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, peersFilter: self.peersFilter, requestPeerType: self.requestPeerType, excludedPeerIds: self.excludedPeerIds, location: location, communityId: communityId, searchQuery: self.searchQuery.get(), searchOptions: self.searchOptions.get(), navigationController: navigationController, parentController: parentController())
         self.paneContainerNode.clipsToBounds = true
         
         super.init()

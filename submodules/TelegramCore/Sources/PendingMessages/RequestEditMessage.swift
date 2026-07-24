@@ -97,9 +97,12 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
             uploadedMedia = .single(nil)
         }
     }
-    return uploadedMedia
+    return uploadedRichMessage(network: network, postbox: postbox, auxiliaryMethods: stateManager.auxiliaryMethods, messageMediaPreuploadManager: messageMediaPreuploadManager, forceReupload: forceReupload, peerId: messageId.peerId, richText: richText)
     |> mapError { _ -> RequestEditMessageInternalError in }
-    |> mapToSignal { uploadedMediaResult -> Signal<RequestEditMessageResult, RequestEditMessageInternalError> in
+    |> mapToSignal { resolvedRichMessage -> Signal<RequestEditMessageResult, RequestEditMessageInternalError> in
+        return uploadedMedia
+        |> mapError { _ -> RequestEditMessageInternalError in }
+        |> mapToSignal { uploadedMediaResult -> Signal<RequestEditMessageResult, RequestEditMessageInternalError> in
         var pendingMediaContent: PendingMessageUploadedContent?
         if let uploadedMediaResult = uploadedMediaResult {
             switch uploadedMediaResult {
@@ -155,9 +158,8 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
                     flags |= Int32(1 << 3)
                 }
                 
-                var apiRichMessage: Api.InputRichMessage?
-                if let richText {
-                    apiRichMessage = richText.apiInputRichMessage()
+                let apiRichMessage = resolvedRichMessage
+                if apiRichMessage != nil {
                     flags |= Int32(1 << 23)
                 }
                 
@@ -234,12 +236,17 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
                     if let result = result {
                         return postbox.transaction { transaction -> RequestEditMessageResult in
                             var toMedia: Media?
+                            var toRichText: RichTextMessageAttribute?
                             if let message = result.messages.first.flatMap({ StoreMessage(apiMessage: $0, accountPeerId: accountPeerId, peerIsForum: peer.isForumOrMonoForum) }) {
                                 toMedia = message.media.first
+                                toRichText = message.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute
                             }
-                            
+
                             if case let .update(fromMedia) = media, let toMedia = toMedia {
                                 applyMediaResourceChanges(from: fromMedia.media, to: toMedia, postbox: postbox, force: true)
+                            }
+                            if let richText, let toRichText {
+                                applyMediaResourceChanges(from: richText, to: toRichText, postbox: postbox, force: true)
                             }
                             
                             switch result {
@@ -373,6 +380,7 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
                 return .single(.done(false))
             }
         }
+    }
     }
 }
 

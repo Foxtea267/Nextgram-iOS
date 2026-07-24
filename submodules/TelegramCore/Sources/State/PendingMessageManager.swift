@@ -4,7 +4,6 @@ import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
 
-
 public struct PendingMessageStatus: Equatable {
     public struct Progress: Equatable {
         public let progress: Float
@@ -1832,6 +1831,10 @@ public final class PendingMessageManager {
                 
                 let sendMessageRequest: Signal<NetworkRequestResult<Api.Updates>, MTRpcError>
                 switch content.content {
+                    case let .richMessage(assembledRichMessage):
+                        apiRichMessage = assembledRichMessage
+                        flags |= Int32(1 << 23)
+                        fallthrough
                     case .text:
                         if bubbleUpEmojiOrStickersets {
                             flags |= Int32(1 << 15)

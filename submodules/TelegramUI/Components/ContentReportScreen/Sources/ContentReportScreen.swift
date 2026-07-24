@@ -202,6 +202,7 @@ private final class SheetPageContent: CombinedComponent {
                 items.append(
                     AnyComponentWithIdentity(id: items.count, component: AnyComponent(ListMultilineTextFieldItemComponent(
                         externalState: state.textInputState,
+                        style: .glass,
                         context: component.context,
                         theme: theme,
                         strings: strings,
@@ -218,12 +219,6 @@ private final class SheetPageContent: CombinedComponent {
                             state?.updated()
                         },
                         returnKeyAction: {
-//                            guard let self else {
-//                                return
-//                            }
-//                            if let titleView = self.introSection.findTaggedView(tag: self.textInputTag) as? ListMultilineTextFieldItemComponent.View {
-//                                titleView.endEditing(true)
-//                            }
                         },
                         textUpdateTransition: .spring(duration: 0.4),
                         tag: textInputTag

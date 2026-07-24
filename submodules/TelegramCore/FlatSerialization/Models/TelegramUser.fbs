@@ -37,6 +37,7 @@ table TelegramUser {
     subscriberCount:int32 (id: 17);
     verificationIconFileId:int64 (id: 18);
     collectibleColor:PeerCollectibleColor (id: 19);
+    linkedCommunityId:PeerId (id: 20);
 }
 
 root_type TelegramUser;

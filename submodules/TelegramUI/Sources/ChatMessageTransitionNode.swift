@@ -358,7 +358,12 @@ public final class ChatMessageTransitionNodeImpl: ASDisplayNode, ChatMessageTran
         func updateLayout(size: CGSize) {
             self.clippingNode.frame = CGRect(origin: CGPoint(), size: size)
             
-            let absoluteRect = self.itemNode.view.convert(self.itemNode.view.bounds, to: self.itemNode.supernode?.supernode?.view)
+            // The chat history node composes (rather than is) its ListViewImpl, so item nodes sit one
+            // level deeper: itemNode -> listView (identity) -> ChatHistoryListNodeImpl wrapper (holds the
+            // 180° rotation) -> un-rotated container. Convert up to that container (3 hops) so the wrapper's
+            // rotation is applied as an intermediate transform, yielding the item's on-screen rect (matching
+            // the pre-composition 2-hop behavior). Stopping at the wrapper's own space would skip its rotation.
+            let absoluteRect = self.itemNode.view.convert(self.itemNode.view.bounds, to: self.itemNode.supernode?.supernode?.supernode?.view)
             self.containerNode.frame = absoluteRect
             if let globalPortalSourceView = self.globalPortalSourceView {
                 globalPortalSourceView.frame = CGRect(origin: CGPoint(), size: size)

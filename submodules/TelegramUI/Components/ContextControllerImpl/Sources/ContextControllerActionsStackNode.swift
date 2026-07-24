@@ -1401,6 +1401,10 @@ private final class ItemSelectionRecognizer: UIGestureRecognizer {
         self.initialLocation = nil
     }
     
+    func cancel() {
+        self.state = .failed
+    }
+    
     public override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
         super.touchesBegan(touches, with: event)
         
@@ -1640,6 +1644,7 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
         var requestUpdate: ((ContainedViewLayoutTransition) -> Void)?
         var requestPop: (() -> Void)?
         var transitionFraction: CGFloat = 0.0
+        var cancelItemSelectionGesture: (() -> Void)?
         
         private var panRecognizer: InteractiveTransitionGestureRecognizer?
         
@@ -1673,6 +1678,9 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
         }
         
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+            if otherGestureRecognizer is ItemSelectionRecognizer {
+                return true
+            }
             return false
         }
         
@@ -1689,6 +1697,7 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
         @objc private func panGesture(_ recognizer: UIPanGestureRecognizer) {
             switch recognizer.state {
             case .began:
+                self.cancelItemSelectionGesture?()
                 self.transitionFraction = 0.0
             case .changed:
                 let distanceFactor: CGFloat = recognizer.translation(in: self.view).x / self.bounds.width
@@ -2014,6 +2023,10 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
                 return
             }
             strongSelf.pop()
+        }
+        
+        self.navigationContainer.cancelItemSelectionGesture = { [weak self] in
+            self?.selectionPanGesture?.cancel()
         }
         
         let selectionPanGesture = ItemSelectionRecognizer(target: self, action: #selector(self.panGesture(_:)))

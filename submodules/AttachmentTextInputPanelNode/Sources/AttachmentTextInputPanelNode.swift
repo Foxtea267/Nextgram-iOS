@@ -362,7 +362,7 @@ public class AttachmentTextInputPanelNode: ASDisplayNode, TGCaptionPanelView, AS
     }
 
     public func updateInputTextState(_ state: ChatTextInputState, animated: Bool) {
-        if state.inputText.length != 0 && self.textInputNode == nil {
+        if !state.isEmpty && self.textInputNode == nil {
             self.loadTextInputNode()
         }
 

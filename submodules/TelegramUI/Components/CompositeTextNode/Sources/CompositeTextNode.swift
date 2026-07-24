@@ -6,7 +6,7 @@ import AsyncDisplayKit
 public class CompositeTextNode: ASDisplayNode {
     public enum Component: Equatable {
         case text(NSAttributedString)
-        case icon(UIImage)
+        case icon(UIImage, CGPoint)
     }
     
     public var components: [Component] = []
@@ -45,6 +45,7 @@ public class CompositeTextNode: ASDisplayNode {
                     textNode = current
                 } else {
                     textNode = ImmediateTextNode()
+                    textNode.displaysAsynchronously = false
                     textNode.maximumNumberOfLines = 1
                     textNode.insets = UIEdgeInsets(top: 3.0, left: 0.0, bottom: 3.0, right: 0.0)
                     textNode.layer.layerTintColor = self.imageTintColor?.cgColor
@@ -58,7 +59,7 @@ public class CompositeTextNode: ASDisplayNode {
                 textNode.frame = CGRect(origin: CGPoint(x: size.width - textNode.insets.left, y: -textNode.insets.top), size: textSize)
                 size.width += textSize.width - textNode.insets.left - textNode.insets.right
                 size.height = max(size.height, textSize.height - textNode.insets.top - textNode.insets.bottom)
-            case let .icon(icon):
+            case let .icon(icon, offset):
                 let id = nextIconId
                 nextIconId += 1
                 validIconIds.append(id)
@@ -78,7 +79,7 @@ public class CompositeTextNode: ASDisplayNode {
                 if size.width != 0.0 {
                     size.width += 3.0
                 }
-                iconView.frame = CGRect(origin: CGPoint(x: size.width, y: 3.0 + UIScreenPixel), size: iconSize)
+                iconView.frame = CGRect(origin: CGPoint(x: size.width, y: 3.0 + UIScreenPixel + offset.y), size: iconSize)
                 size.width += iconSize.width
                 size.width += 3.0
                 size.height = max(size.height, iconSize.height)

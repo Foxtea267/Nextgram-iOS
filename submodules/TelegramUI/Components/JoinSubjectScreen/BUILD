@@ -14,6 +14,7 @@ swift_library(
         "//submodules/TelegramPresentationData",
         "//submodules/ComponentFlow",
         "//submodules/Components/ViewControllerComponent",
+        "//submodules/Components/SheetComponent",
         "//submodules/Components/ComponentDisplayAdapters",
         "//submodules/AppBundle",
         "//submodules/AccountContext",
@@ -30,7 +31,9 @@ swift_library(
         "//submodules/SSignalKit/SwiftSignalKit",
         "//submodules/PresentationDataUtils",
         "//submodules/TelegramUI/Components/CheckComponent",
+        "//submodules/TelegramUI/Components/GlassBarButtonComponent",
         "//submodules/TelegramUI/Components/PlainButtonComponent",
+        "//submodules/TelegramUI/Components/EmojiStatusComponent",
     ],
     visibility = [
         "//visibility:public",

@@ -1,4 +1,372 @@
 public extension Api {
+    enum DialogFilter: TypeConstructorDescription {
+        public class Cons_dialogFilter: TypeConstructorDescription {
+            public var flags: Int32
+            public var id: Int32
+            public var title: Api.TextWithEntities
+            public var emoticon: String?
+            public var color: Int32?
+            public var pinnedPeers: [Api.InputPeer]
+            public var includePeers: [Api.InputPeer]
+            public var excludePeers: [Api.InputPeer]
+            public init(flags: Int32, id: Int32, title: Api.TextWithEntities, emoticon: String?, color: Int32?, pinnedPeers: [Api.InputPeer], includePeers: [Api.InputPeer], excludePeers: [Api.InputPeer]) {
+                self.flags = flags
+                self.id = id
+                self.title = title
+                self.emoticon = emoticon
+                self.color = color
+                self.pinnedPeers = pinnedPeers
+                self.includePeers = includePeers
+                self.excludePeers = excludePeers
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("dialogFilter", [("flags", ConstructorParameterDescription(self.flags)), ("id", ConstructorParameterDescription(self.id)), ("title", ConstructorParameterDescription(self.title)), ("emoticon", ConstructorParameterDescription(self.emoticon)), ("color", ConstructorParameterDescription(self.color)), ("pinnedPeers", ConstructorParameterDescription(self.pinnedPeers)), ("includePeers", ConstructorParameterDescription(self.includePeers)), ("excludePeers", ConstructorParameterDescription(self.excludePeers))])
+            }
+        }
+        public class Cons_dialogFilterChatlist: TypeConstructorDescription {
+            public var flags: Int32
+            public var id: Int32
+            public var title: Api.TextWithEntities
+            public var emoticon: String?
+            public var color: Int32?
+            public var pinnedPeers: [Api.InputPeer]
+            public var includePeers: [Api.InputPeer]
+            public init(flags: Int32, id: Int32, title: Api.TextWithEntities, emoticon: String?, color: Int32?, pinnedPeers: [Api.InputPeer], includePeers: [Api.InputPeer]) {
+                self.flags = flags
+                self.id = id
+                self.title = title
+                self.emoticon = emoticon
+                self.color = color
+                self.pinnedPeers = pinnedPeers
+                self.includePeers = includePeers
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("dialogFilterChatlist", [("flags", ConstructorParameterDescription(self.flags)), ("id", ConstructorParameterDescription(self.id)), ("title", ConstructorParameterDescription(self.title)), ("emoticon", ConstructorParameterDescription(self.emoticon)), ("color", ConstructorParameterDescription(self.color)), ("pinnedPeers", ConstructorParameterDescription(self.pinnedPeers)), ("includePeers", ConstructorParameterDescription(self.includePeers))])
+            }
+        }
+        case dialogFilter(Cons_dialogFilter)
+        case dialogFilterChatlist(Cons_dialogFilterChatlist)
+        case dialogFilterDefault
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .dialogFilter(let _data):
+                if boxed {
+                    buffer.appendInt32(-1438177711)
+                }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
+                serializeInt32(_data.id, buffer: buffer, boxed: false)
+                _data.title.serialize(buffer, true)
+                if Int(_data.flags) & Int(1 << 25) != 0 {
+                    serializeString(_data.emoticon!, buffer: buffer, boxed: false)
+                }
+                if Int(_data.flags) & Int(1 << 27) != 0 {
+                    serializeInt32(_data.color!, buffer: buffer, boxed: false)
+                }
+                buffer.appendInt32(481674261)
+                buffer.appendInt32(Int32(_data.pinnedPeers.count))
+                for item in _data.pinnedPeers {
+                    item.serialize(buffer, true)
+                }
+                buffer.appendInt32(481674261)
+                buffer.appendInt32(Int32(_data.includePeers.count))
+                for item in _data.includePeers {
+                    item.serialize(buffer, true)
+                }
+                buffer.appendInt32(481674261)
+                buffer.appendInt32(Int32(_data.excludePeers.count))
+                for item in _data.excludePeers {
+                    item.serialize(buffer, true)
+                }
+                break
+            case .dialogFilterChatlist(let _data):
+                if boxed {
+                    buffer.appendInt32(-1772913705)
+                }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
+                serializeInt32(_data.id, buffer: buffer, boxed: false)
+                _data.title.serialize(buffer, true)
+                if Int(_data.flags) & Int(1 << 25) != 0 {
+                    serializeString(_data.emoticon!, buffer: buffer, boxed: false)
+                }
+                if Int(_data.flags) & Int(1 << 27) != 0 {
+                    serializeInt32(_data.color!, buffer: buffer, boxed: false)
+                }
+                buffer.appendInt32(481674261)
+                buffer.appendInt32(Int32(_data.pinnedPeers.count))
+                for item in _data.pinnedPeers {
+                    item.serialize(buffer, true)
+                }
+                buffer.appendInt32(481674261)
+                buffer.appendInt32(Int32(_data.includePeers.count))
+                for item in _data.includePeers {
+                    item.serialize(buffer, true)
+                }
+                break
+            case .dialogFilterDefault:
+                if boxed {
+                    buffer.appendInt32(909284270)
+                }
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .dialogFilter(let _data):
+                return ("dialogFilter", [("flags", ConstructorParameterDescription(_data.flags)), ("id", ConstructorParameterDescription(_data.id)), ("title", ConstructorParameterDescription(_data.title)), ("emoticon", ConstructorParameterDescription(_data.emoticon)), ("color", ConstructorParameterDescription(_data.color)), ("pinnedPeers", ConstructorParameterDescription(_data.pinnedPeers)), ("includePeers", ConstructorParameterDescription(_data.includePeers)), ("excludePeers", ConstructorParameterDescription(_data.excludePeers))])
+            case .dialogFilterChatlist(let _data):
+                return ("dialogFilterChatlist", [("flags", ConstructorParameterDescription(_data.flags)), ("id", ConstructorParameterDescription(_data.id)), ("title", ConstructorParameterDescription(_data.title)), ("emoticon", ConstructorParameterDescription(_data.emoticon)), ("color", ConstructorParameterDescription(_data.color)), ("pinnedPeers", ConstructorParameterDescription(_data.pinnedPeers)), ("includePeers", ConstructorParameterDescription(_data.includePeers))])
+            case .dialogFilterDefault:
+                return ("dialogFilterDefault", [])
+            }
+        }
+
+        public static func parse_dialogFilter(_ reader: BufferReader) -> DialogFilter? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: Int32?
+            _2 = reader.readInt32()
+            var _3: Api.TextWithEntities?
+            if let signature = reader.readInt32() {
+                _3 = Api.parse(reader, signature: signature) as? Api.TextWithEntities
+            }
+            var _4: String?
+            if Int(_1 ?? 0) & Int(1 << 25) != 0 {
+                _4 = parseString(reader)
+            }
+            var _5: Int32?
+            if Int(_1 ?? 0) & Int(1 << 27) != 0 {
+                _5 = reader.readInt32()
+            }
+            var _6: [Api.InputPeer]?
+            if let _ = reader.readInt32() {
+                _6 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputPeer.self)
+            }
+            var _7: [Api.InputPeer]?
+            if let _ = reader.readInt32() {
+                _7 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputPeer.self)
+            }
+            var _8: [Api.InputPeer]?
+            if let _ = reader.readInt32() {
+                _8 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputPeer.self)
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            let _c3 = _3 != nil
+            let _c4 = (Int(_1 ?? 0) & Int(1 << 25) == 0) || _4 != nil
+            let _c5 = (Int(_1 ?? 0) & Int(1 << 27) == 0) || _5 != nil
+            let _c6 = _6 != nil
+            let _c7 = _7 != nil
+            let _c8 = _8 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 {
+                return Api.DialogFilter.dialogFilter(Cons_dialogFilter(flags: _1!, id: _2!, title: _3!, emoticon: _4, color: _5, pinnedPeers: _6!, includePeers: _7!, excludePeers: _8!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_dialogFilterChatlist(_ reader: BufferReader) -> DialogFilter? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: Int32?
+            _2 = reader.readInt32()
+            var _3: Api.TextWithEntities?
+            if let signature = reader.readInt32() {
+                _3 = Api.parse(reader, signature: signature) as? Api.TextWithEntities
+            }
+            var _4: String?
+            if Int(_1 ?? 0) & Int(1 << 25) != 0 {
+                _4 = parseString(reader)
+            }
+            var _5: Int32?
+            if Int(_1 ?? 0) & Int(1 << 27) != 0 {
+                _5 = reader.readInt32()
+            }
+            var _6: [Api.InputPeer]?
+            if let _ = reader.readInt32() {
+                _6 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputPeer.self)
+            }
+            var _7: [Api.InputPeer]?
+            if let _ = reader.readInt32() {
+                _7 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputPeer.self)
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            let _c3 = _3 != nil
+            let _c4 = (Int(_1 ?? 0) & Int(1 << 25) == 0) || _4 != nil
+            let _c5 = (Int(_1 ?? 0) & Int(1 << 27) == 0) || _5 != nil
+            let _c6 = _6 != nil
+            let _c7 = _7 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 {
+                return Api.DialogFilter.dialogFilterChatlist(Cons_dialogFilterChatlist(flags: _1!, id: _2!, title: _3!, emoticon: _4, color: _5, pinnedPeers: _6!, includePeers: _7!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_dialogFilterDefault(_ reader: BufferReader) -> DialogFilter? {
+            return Api.DialogFilter.dialogFilterDefault
+        }
+    }
+}
+public extension Api {
+    enum DialogFilterSuggested: TypeConstructorDescription {
+        public class Cons_dialogFilterSuggested: TypeConstructorDescription {
+            public var filter: Api.DialogFilter
+            public var description: String
+            public init(filter: Api.DialogFilter, description: String) {
+                self.filter = filter
+                self.description = description
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("dialogFilterSuggested", [("filter", ConstructorParameterDescription(self.filter)), ("description", ConstructorParameterDescription(self.description))])
+            }
+        }
+        case dialogFilterSuggested(Cons_dialogFilterSuggested)
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .dialogFilterSuggested(let _data):
+                if boxed {
+                    buffer.appendInt32(2004110666)
+                }
+                _data.filter.serialize(buffer, true)
+                serializeString(_data.description, buffer: buffer, boxed: false)
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .dialogFilterSuggested(let _data):
+                return ("dialogFilterSuggested", [("filter", ConstructorParameterDescription(_data.filter)), ("description", ConstructorParameterDescription(_data.description))])
+            }
+        }
+
+        public static func parse_dialogFilterSuggested(_ reader: BufferReader) -> DialogFilterSuggested? {
+            var _1: Api.DialogFilter?
+            if let signature = reader.readInt32() {
+                _1 = Api.parse(reader, signature: signature) as? Api.DialogFilter
+            }
+            var _2: String?
+            _2 = parseString(reader)
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            if _c1 && _c2 {
+                return Api.DialogFilterSuggested.dialogFilterSuggested(Cons_dialogFilterSuggested(filter: _1!, description: _2!))
+            }
+            else {
+                return nil
+            }
+        }
+    }
+}
+public extension Api {
+    enum DialogPeer: TypeConstructorDescription {
+        public class Cons_dialogPeer: TypeConstructorDescription {
+            public var peer: Api.Peer
+            public init(peer: Api.Peer) {
+                self.peer = peer
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("dialogPeer", [("peer", ConstructorParameterDescription(self.peer))])
+            }
+        }
+        public class Cons_dialogPeerCommunity: TypeConstructorDescription {
+            public var communityId: Int64
+            public init(communityId: Int64) {
+                self.communityId = communityId
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("dialogPeerCommunity", [("communityId", ConstructorParameterDescription(self.communityId))])
+            }
+        }
+        public class Cons_dialogPeerFolder: TypeConstructorDescription {
+            public var folderId: Int32
+            public init(folderId: Int32) {
+                self.folderId = folderId
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("dialogPeerFolder", [("folderId", ConstructorParameterDescription(self.folderId))])
+            }
+        }
+        case dialogPeer(Cons_dialogPeer)
+        case dialogPeerCommunity(Cons_dialogPeerCommunity)
+        case dialogPeerFolder(Cons_dialogPeerFolder)
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .dialogPeer(let _data):
+                if boxed {
+                    buffer.appendInt32(-445792507)
+                }
+                _data.peer.serialize(buffer, true)
+                break
+            case .dialogPeerCommunity(let _data):
+                if boxed {
+                    buffer.appendInt32(795199716)
+                }
+                serializeInt64(_data.communityId, buffer: buffer, boxed: false)
+                break
+            case .dialogPeerFolder(let _data):
+                if boxed {
+                    buffer.appendInt32(1363483106)
+                }
+                serializeInt32(_data.folderId, buffer: buffer, boxed: false)
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .dialogPeer(let _data):
+                return ("dialogPeer", [("peer", ConstructorParameterDescription(_data.peer))])
+            case .dialogPeerCommunity(let _data):
+                return ("dialogPeerCommunity", [("communityId", ConstructorParameterDescription(_data.communityId))])
+            case .dialogPeerFolder(let _data):
+                return ("dialogPeerFolder", [("folderId", ConstructorParameterDescription(_data.folderId))])
+            }
+        }
+
+        public static func parse_dialogPeer(_ reader: BufferReader) -> DialogPeer? {
+            var _1: Api.Peer?
+            if let signature = reader.readInt32() {
+                _1 = Api.parse(reader, signature: signature) as? Api.Peer
+            }
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.DialogPeer.dialogPeer(Cons_dialogPeer(peer: _1!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_dialogPeerCommunity(_ reader: BufferReader) -> DialogPeer? {
+            var _1: Int64?
+            _1 = reader.readInt64()
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.DialogPeer.dialogPeerCommunity(Cons_dialogPeerCommunity(communityId: _1!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_dialogPeerFolder(_ reader: BufferReader) -> DialogPeer? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.DialogPeer.dialogPeerFolder(Cons_dialogPeerFolder(folderId: _1!))
+            }
+            else {
+                return nil
+            }
+        }
+    }
+}
+public extension Api {
     enum DisallowedGiftsSettings: TypeConstructorDescription {
         public class Cons_disallowedGiftsSettings: TypeConstructorDescription {
             public var flags: Int32
@@ -1187,326 +1555,6 @@ public extension Api {
             let _c4 = _4 != nil
             if _c1 && _c2 && _c3 && _c4 {
                 return Api.EmojiKeywordsDifference.emojiKeywordsDifference(Cons_emojiKeywordsDifference(langCode: _1!, fromVersion: _2!, version: _3!, keywords: _4!))
-            }
-            else {
-                return nil
-            }
-        }
-    }
-}
-public extension Api {
-    enum EmojiLanguage: TypeConstructorDescription {
-        public class Cons_emojiLanguage: TypeConstructorDescription {
-            public var langCode: String
-            public init(langCode: String) {
-                self.langCode = langCode
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("emojiLanguage", [("langCode", ConstructorParameterDescription(self.langCode))])
-            }
-        }
-        case emojiLanguage(Cons_emojiLanguage)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .emojiLanguage(let _data):
-                if boxed {
-                    buffer.appendInt32(-1275374751)
-                }
-                serializeString(_data.langCode, buffer: buffer, boxed: false)
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .emojiLanguage(let _data):
-                return ("emojiLanguage", [("langCode", ConstructorParameterDescription(_data.langCode))])
-            }
-        }
-
-        public static func parse_emojiLanguage(_ reader: BufferReader) -> EmojiLanguage? {
-            var _1: String?
-            _1 = parseString(reader)
-            let _c1 = _1 != nil
-            if _c1 {
-                return Api.EmojiLanguage.emojiLanguage(Cons_emojiLanguage(langCode: _1!))
-            }
-            else {
-                return nil
-            }
-        }
-    }
-}
-public extension Api {
-    enum EmojiList: TypeConstructorDescription {
-        public class Cons_emojiList: TypeConstructorDescription {
-            public var hash: Int64
-            public var documentId: [Int64]
-            public init(hash: Int64, documentId: [Int64]) {
-                self.hash = hash
-                self.documentId = documentId
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("emojiList", [("hash", ConstructorParameterDescription(self.hash)), ("documentId", ConstructorParameterDescription(self.documentId))])
-            }
-        }
-        case emojiList(Cons_emojiList)
-        case emojiListNotModified
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .emojiList(let _data):
-                if boxed {
-                    buffer.appendInt32(2048790993)
-                }
-                serializeInt64(_data.hash, buffer: buffer, boxed: false)
-                buffer.appendInt32(481674261)
-                buffer.appendInt32(Int32(_data.documentId.count))
-                for item in _data.documentId {
-                    serializeInt64(item, buffer: buffer, boxed: false)
-                }
-                break
-            case .emojiListNotModified:
-                if boxed {
-                    buffer.appendInt32(1209970170)
-                }
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .emojiList(let _data):
-                return ("emojiList", [("hash", ConstructorParameterDescription(_data.hash)), ("documentId", ConstructorParameterDescription(_data.documentId))])
-            case .emojiListNotModified:
-                return ("emojiListNotModified", [])
-            }
-        }
-
-        public static func parse_emojiList(_ reader: BufferReader) -> EmojiList? {
-            var _1: Int64?
-            _1 = reader.readInt64()
-            var _2: [Int64]?
-            if let _ = reader.readInt32() {
-                _2 = Api.parseVector(reader, elementSignature: 570911930, elementType: Int64.self)
-            }
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            if _c1 && _c2 {
-                return Api.EmojiList.emojiList(Cons_emojiList(hash: _1!, documentId: _2!))
-            }
-            else {
-                return nil
-            }
-        }
-        public static func parse_emojiListNotModified(_ reader: BufferReader) -> EmojiList? {
-            return Api.EmojiList.emojiListNotModified
-        }
-    }
-}
-public extension Api {
-    enum EmojiStatus: TypeConstructorDescription {
-        public class Cons_emojiStatus: TypeConstructorDescription {
-            public var flags: Int32
-            public var documentId: Int64
-            public var until: Int32?
-            public init(flags: Int32, documentId: Int64, until: Int32?) {
-                self.flags = flags
-                self.documentId = documentId
-                self.until = until
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("emojiStatus", [("flags", ConstructorParameterDescription(self.flags)), ("documentId", ConstructorParameterDescription(self.documentId)), ("until", ConstructorParameterDescription(self.until))])
-            }
-        }
-        public class Cons_emojiStatusCollectible: TypeConstructorDescription {
-            public var flags: Int32
-            public var collectibleId: Int64
-            public var documentId: Int64
-            public var title: String
-            public var slug: String
-            public var patternDocumentId: Int64
-            public var centerColor: Int32
-            public var edgeColor: Int32
-            public var patternColor: Int32
-            public var textColor: Int32
-            public var until: Int32?
-            public init(flags: Int32, collectibleId: Int64, documentId: Int64, title: String, slug: String, patternDocumentId: Int64, centerColor: Int32, edgeColor: Int32, patternColor: Int32, textColor: Int32, until: Int32?) {
-                self.flags = flags
-                self.collectibleId = collectibleId
-                self.documentId = documentId
-                self.title = title
-                self.slug = slug
-                self.patternDocumentId = patternDocumentId
-                self.centerColor = centerColor
-                self.edgeColor = edgeColor
-                self.patternColor = patternColor
-                self.textColor = textColor
-                self.until = until
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("emojiStatusCollectible", [("flags", ConstructorParameterDescription(self.flags)), ("collectibleId", ConstructorParameterDescription(self.collectibleId)), ("documentId", ConstructorParameterDescription(self.documentId)), ("title", ConstructorParameterDescription(self.title)), ("slug", ConstructorParameterDescription(self.slug)), ("patternDocumentId", ConstructorParameterDescription(self.patternDocumentId)), ("centerColor", ConstructorParameterDescription(self.centerColor)), ("edgeColor", ConstructorParameterDescription(self.edgeColor)), ("patternColor", ConstructorParameterDescription(self.patternColor)), ("textColor", ConstructorParameterDescription(self.textColor)), ("until", ConstructorParameterDescription(self.until))])
-            }
-        }
-        public class Cons_inputEmojiStatusCollectible: TypeConstructorDescription {
-            public var flags: Int32
-            public var collectibleId: Int64
-            public var until: Int32?
-            public init(flags: Int32, collectibleId: Int64, until: Int32?) {
-                self.flags = flags
-                self.collectibleId = collectibleId
-                self.until = until
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("inputEmojiStatusCollectible", [("flags", ConstructorParameterDescription(self.flags)), ("collectibleId", ConstructorParameterDescription(self.collectibleId)), ("until", ConstructorParameterDescription(self.until))])
-            }
-        }
-        case emojiStatus(Cons_emojiStatus)
-        case emojiStatusCollectible(Cons_emojiStatusCollectible)
-        case emojiStatusEmpty
-        case inputEmojiStatusCollectible(Cons_inputEmojiStatusCollectible)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .emojiStatus(let _data):
-                if boxed {
-                    buffer.appendInt32(-402717046)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                serializeInt64(_data.documentId, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 0) != 0 {
-                    serializeInt32(_data.until!, buffer: buffer, boxed: false)
-                }
-                break
-            case .emojiStatusCollectible(let _data):
-                if boxed {
-                    buffer.appendInt32(1904500795)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                serializeInt64(_data.collectibleId, buffer: buffer, boxed: false)
-                serializeInt64(_data.documentId, buffer: buffer, boxed: false)
-                serializeString(_data.title, buffer: buffer, boxed: false)
-                serializeString(_data.slug, buffer: buffer, boxed: false)
-                serializeInt64(_data.patternDocumentId, buffer: buffer, boxed: false)
-                serializeInt32(_data.centerColor, buffer: buffer, boxed: false)
-                serializeInt32(_data.edgeColor, buffer: buffer, boxed: false)
-                serializeInt32(_data.patternColor, buffer: buffer, boxed: false)
-                serializeInt32(_data.textColor, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 0) != 0 {
-                    serializeInt32(_data.until!, buffer: buffer, boxed: false)
-                }
-                break
-            case .emojiStatusEmpty:
-                if boxed {
-                    buffer.appendInt32(769727150)
-                }
-                break
-            case .inputEmojiStatusCollectible(let _data):
-                if boxed {
-                    buffer.appendInt32(118758847)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                serializeInt64(_data.collectibleId, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 0) != 0 {
-                    serializeInt32(_data.until!, buffer: buffer, boxed: false)
-                }
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .emojiStatus(let _data):
-                return ("emojiStatus", [("flags", ConstructorParameterDescription(_data.flags)), ("documentId", ConstructorParameterDescription(_data.documentId)), ("until", ConstructorParameterDescription(_data.until))])
-            case .emojiStatusCollectible(let _data):
-                return ("emojiStatusCollectible", [("flags", ConstructorParameterDescription(_data.flags)), ("collectibleId", ConstructorParameterDescription(_data.collectibleId)), ("documentId", ConstructorParameterDescription(_data.documentId)), ("title", ConstructorParameterDescription(_data.title)), ("slug", ConstructorParameterDescription(_data.slug)), ("patternDocumentId", ConstructorParameterDescription(_data.patternDocumentId)), ("centerColor", ConstructorParameterDescription(_data.centerColor)), ("edgeColor", ConstructorParameterDescription(_data.edgeColor)), ("patternColor", ConstructorParameterDescription(_data.patternColor)), ("textColor", ConstructorParameterDescription(_data.textColor)), ("until", ConstructorParameterDescription(_data.until))])
-            case .emojiStatusEmpty:
-                return ("emojiStatusEmpty", [])
-            case .inputEmojiStatusCollectible(let _data):
-                return ("inputEmojiStatusCollectible", [("flags", ConstructorParameterDescription(_data.flags)), ("collectibleId", ConstructorParameterDescription(_data.collectibleId)), ("until", ConstructorParameterDescription(_data.until))])
-            }
-        }
-
-        public static func parse_emojiStatus(_ reader: BufferReader) -> EmojiStatus? {
-            var _1: Int32?
-            _1 = reader.readInt32()
-            var _2: Int64?
-            _2 = reader.readInt64()
-            var _3: Int32?
-            if Int(_1 ?? 0) & Int(1 << 0) != 0 {
-                _3 = reader.readInt32()
-            }
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            let _c3 = (Int(_1 ?? 0) & Int(1 << 0) == 0) || _3 != nil
-            if _c1 && _c2 && _c3 {
-                return Api.EmojiStatus.emojiStatus(Cons_emojiStatus(flags: _1!, documentId: _2!, until: _3))
-            }
-            else {
-                return nil
-            }
-        }
-        public static func parse_emojiStatusCollectible(_ reader: BufferReader) -> EmojiStatus? {
-            var _1: Int32?
-            _1 = reader.readInt32()
-            var _2: Int64?
-            _2 = reader.readInt64()
-            var _3: Int64?
-            _3 = reader.readInt64()
-            var _4: String?
-            _4 = parseString(reader)
-            var _5: String?
-            _5 = parseString(reader)
-            var _6: Int64?
-            _6 = reader.readInt64()
-            var _7: Int32?
-            _7 = reader.readInt32()
-            var _8: Int32?
-            _8 = reader.readInt32()
-            var _9: Int32?
-            _9 = reader.readInt32()
-            var _10: Int32?
-            _10 = reader.readInt32()
-            var _11: Int32?
-            if Int(_1 ?? 0) & Int(1 << 0) != 0 {
-                _11 = reader.readInt32()
-            }
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            let _c3 = _3 != nil
-            let _c4 = _4 != nil
-            let _c5 = _5 != nil
-            let _c6 = _6 != nil
-            let _c7 = _7 != nil
-            let _c8 = _8 != nil
-            let _c9 = _9 != nil
-            let _c10 = _10 != nil
-            let _c11 = (Int(_1 ?? 0) & Int(1 << 0) == 0) || _11 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 && _c10 && _c11 {
-                return Api.EmojiStatus.emojiStatusCollectible(Cons_emojiStatusCollectible(flags: _1!, collectibleId: _2!, documentId: _3!, title: _4!, slug: _5!, patternDocumentId: _6!, centerColor: _7!, edgeColor: _8!, patternColor: _9!, textColor: _10!, until: _11))
-            }
-            else {
-                return nil
-            }
-        }
-        public static func parse_emojiStatusEmpty(_ reader: BufferReader) -> EmojiStatus? {
-            return Api.EmojiStatus.emojiStatusEmpty
-        }
-        public static func parse_inputEmojiStatusCollectible(_ reader: BufferReader) -> EmojiStatus? {
-            var _1: Int32?
-            _1 = reader.readInt32()
-            var _2: Int64?
-            _2 = reader.readInt64()
-            var _3: Int32?
-            if Int(_1 ?? 0) & Int(1 << 0) != 0 {
-                _3 = reader.readInt32()
-            }
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            let _c3 = (Int(_1 ?? 0) & Int(1 << 0) == 0) || _3 != nil
-            if _c1 && _c2 && _c3 {
-                return Api.EmojiStatus.inputEmojiStatusCollectible(Cons_inputEmojiStatusCollectible(flags: _1!, collectibleId: _2!, until: _3))
             }
             else {
                 return nil

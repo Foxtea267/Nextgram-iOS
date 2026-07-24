@@ -548,7 +548,7 @@ extension VideoChatScreenComponent.View {
                     text = isScheduled ? environment.strings.VoiceChat_CancelConfirmationText : environment.strings.VoiceChat_EndConfirmationText
                 }
 
-                let alertController = textAlertController(context: currentCall.accountContext, forceTheme: environment.theme, title: title, text: text, actions: [TextAlertAction(type: .defaultAction, title: environment.strings.Common_Cancel, action: {}), TextAlertAction(type: .genericAction, title: isScheduled ? environment.strings.VoiceChat_CancelConfirmationEnd : environment.strings.VoiceChat_EndConfirmationEnd, action: {
+                let alertController = textAlertController(context: currentCall.accountContext, forceTheme: environment.theme, title: title, text: text, actions: [TextAlertAction(type: .genericAction, title: environment.strings.Common_Cancel, action: {}), TextAlertAction(type: .defaultDestructiveAction, title: isScheduled ? environment.strings.VoiceChat_CancelConfirmationEnd : environment.strings.VoiceChat_EndConfirmationEnd, action: {
                     action()
                 })])
                 environment.controller()?.present(alertController, in: .window(.root))

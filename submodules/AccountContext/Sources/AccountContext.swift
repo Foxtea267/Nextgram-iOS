@@ -179,6 +179,17 @@ public struct ChatAvailableMessageActions {
     }
 }
 
+public enum CommunityViewScreenMode: Equatable {
+    case sheet
+    case fullscreen
+    case preview
+}
+
+public enum CommunityEditScreenMode: Equatable {
+    case edit(communityId: EnginePeer.Id)
+    case create(peerId: EnginePeer.Id)
+}
+
 public enum WallpaperUrlParameter {
     case slug(String, WallpaperPresentationOptions, [UInt32], Int32?, Int32?)
     case color(UIColor)
@@ -189,9 +200,12 @@ public enum PeerType: Equatable {
     case user(isBot: Bool)
     case group
     case channel
+    case community
     
     public static func getType(for peer: EnginePeer) -> PeerType {
-        if case let .user(user) = peer {
+        if case .community = peer {
+            return .community
+        } else if case let .user(user) = peer {
             return .user(isBot: user.botInfo != nil)
         } else if case let .channel(channel) = peer, case .broadcast = channel.info {
             return .channel
@@ -1112,15 +1126,18 @@ public struct ChatControllerParams {
     public let forcedTheme: PresentationTheme?
     public let forcedNavigationBarTheme: PresentationTheme?
     public let forcedWallpaper: TelegramWallpaper?
+    public let hideTopPanels: Bool
     
     public init(
         forcedTheme: PresentationTheme? = nil,
         forcedNavigationBarTheme: PresentationTheme? = nil,
-        forcedWallpaper: TelegramWallpaper? = nil
+        forcedWallpaper: TelegramWallpaper? = nil,
+        hideTopPanels: Bool = false
     ) {
         self.forcedTheme = forcedTheme
         self.forcedNavigationBarTheme = forcedNavigationBarTheme
         self.forcedWallpaper = forcedWallpaper
+        self.hideTopPanels = hideTopPanels
     }
 }
 
@@ -1172,7 +1189,6 @@ public enum JoinAffiliateProgramScreenMode {
         }
     }
 
-    
     case join(Join)
     case active(Active)
 }
@@ -1190,18 +1206,20 @@ public enum JoinSubjectScreenMode {
         public let isPublic: Bool
         public let isRequest: Bool
         public let verificationStatus: VerificationStatus?
+        public let nameColor: PeerNameColor?
         public let image: TelegramMediaImageRepresentation?
         public let title: String
         public let about: String?
         public let memberCount: Int32
         public let members: [EnginePeer]
         
-        public init(link: String, isGroup: Bool, isPublic: Bool, isRequest: Bool, verificationStatus: VerificationStatus?, image: TelegramMediaImageRepresentation?, title: String, about: String?, memberCount: Int32, members: [EnginePeer]) {
+        public init(link: String, isGroup: Bool, isPublic: Bool, isRequest: Bool, verificationStatus: VerificationStatus?, nameColor: PeerNameColor?, image: TelegramMediaImageRepresentation?, title: String, about: String?, memberCount: Int32, members: [EnginePeer]) {
             self.link = link
             self.isGroup = isGroup
             self.isPublic = isPublic
             self.isRequest = isRequest
             self.verificationStatus = verificationStatus
+            self.nameColor = nameColor
             self.image = image
             self.title = title
             self.about = about
@@ -1319,10 +1337,10 @@ public protocol ChannelMembersSearchController: ViewController {
 
 public final class TextProcessingScreenSendContextActions {
     public let peerId: EnginePeer.Id
-    public let send: (TextWithEntities, ChatSendMessageActionSheetController.SendMode, ChatSendMessageActionSheetController.SendParameters?) -> Void
-    public let schedule: (TextWithEntities, ChatSendMessageActionSheetController.SendParameters?) -> Void
+    public let send: (ComposedRichMessage, ChatSendMessageActionSheetController.SendMode, ChatSendMessageActionSheetController.SendParameters?) -> Void
+    public let schedule: (ComposedRichMessage, ChatSendMessageActionSheetController.SendParameters?) -> Void
     
-    public init(peerId: EnginePeer.Id, send: @escaping (TextWithEntities, ChatSendMessageActionSheetController.SendMode, ChatSendMessageActionSheetController.SendParameters?) -> Void, schedule: @escaping (TextWithEntities, ChatSendMessageActionSheetController.SendParameters?) -> Void) {
+    public init(peerId: EnginePeer.Id, send: @escaping (ComposedRichMessage, ChatSendMessageActionSheetController.SendMode, ChatSendMessageActionSheetController.SendParameters?) -> Void, schedule: @escaping (ComposedRichMessage, ChatSendMessageActionSheetController.SendParameters?) -> Void) {
         self.peerId = peerId
         self.send = send
         self.schedule = schedule
@@ -1330,9 +1348,10 @@ public final class TextProcessingScreenSendContextActions {
 }
 
 public enum TextProcessingScreenMode {
-    case edit(saveRestoreStateId: EnginePeer.Id?, completion: (TextWithEntities) -> Void, send: ((TextWithEntities) -> Void)?, sendContextActions: TextProcessingScreenSendContextActions?)
-    case translate(fromLanguage: String?, applyResult: ((TextWithEntities) -> Void)?)
+    case edit(saveRestoreStateId: EnginePeer.Id?, completion: (ComposedRichMessage) -> Void, send: ((ComposedRichMessage) -> Void)?, sendContextActions: TextProcessingScreenSendContextActions?)
+    case translate(fromLanguage: String?, applyResult: ((ComposedRichMessage) -> Void)?)
     case preview(style: TelegramComposeAIMessageMode.CloudStyle.Custom, authorPeer: EnginePeer?, initialPreview: AIMessageStylePreview?, isAlreadyAdded: Bool, added: () -> Void)
+    case generate(completion: (ComposedRichMessage) -> Void)
 }
 
 public enum EmojiStatusSelectionControllerMode {
@@ -1421,6 +1440,7 @@ public protocol SharedAccountContext: AnyObject {
     func makeProxySettingsController(context: AccountContext) -> ViewController
     func makeLocalizationListController(context: AccountContext) -> ViewController
     func makeCreateGroupController(context: AccountContext, peerIds: [EnginePeer.Id], initialTitle: String?, mode: CreateGroupMode, completion: ((EnginePeer.Id, @escaping () -> Void) -> Void)?) -> ViewController
+    func makeCreateChannelController(context: AccountContext, completion: @escaping (EnginePeer.Id, @escaping () -> Void) -> Void) -> ViewController
     func makeChatRecentActionsController(context: AccountContext, peer: EnginePeer, adminPeerId: EnginePeer.Id?, starsState: StarsRevenueStats?) -> ViewController
     func makePrivacyAndSecurityController(context: AccountContext) -> ViewController
     func makeBioPrivacyController(context: AccountContext, settings: Promise<AccountPrivacySettings?>, present: @escaping (ViewController) -> Void)
@@ -1474,6 +1494,15 @@ public protocol SharedAccountContext: AnyObject {
         parentController: ViewController,
         context: AccountContext,
         peer: EnginePeer,
+        completion: @escaping (UIImage?) -> Void,
+        completedWithUploadingImage: @escaping (UIImage, Signal<PeerInfoAvatarUploadStatus, NoError>) -> UIView?
+    )
+    func displaySetPhoto(
+        parentController: ViewController,
+        context: AccountContext,
+        peer: EnginePeer,
+        canDelete: Bool,
+        performDelete: @escaping () -> Void,
         completion: @escaping (UIImage?) -> Void,
         completedWithUploadingImage: @escaping (UIImage, Signal<PeerInfoAvatarUploadStatus, NoError>) -> UIView?
     )
@@ -1546,7 +1575,7 @@ public protocol SharedAccountContext: AnyObject {
     func makeMiniAppListScreen(context: AccountContext, initialData: MiniAppListScreenInitialData) -> ViewController
     func makeIncomingMessagePrivacyScreen(context: AccountContext, value: GlobalPrivacySettings.NonContactChatsPrivacy, exceptions: SelectivePrivacySettings, update: @escaping (GlobalPrivacySettings.NonContactChatsPrivacy) -> Void) -> ViewController
     func openWebApp(context: AccountContext, parentController: ViewController, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, botPeer: EnginePeer, chatPeer: EnginePeer?, threadId: Int64?, buttonText: String, url: String, simple: Bool, source: ChatOpenWebViewSource, skipTermsOfService: Bool, payload: String?, verifyAgeCompletion: ((Int) -> Void)?)
-    func openJoinChatWebView(context: AccountContext, parentController: ViewController, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, webView: JoinChatWebView)
+    func openJoinChatWebView(context: AccountContext, parentController: ViewController, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, webView: JoinChatWebView, chatTitle: String)
     func makeAffiliateProgramSetupScreenInitialData(context: AccountContext, peerId: EnginePeer.Id, mode: AffiliateProgramSetupScreenMode) -> Signal<AffiliateProgramSetupScreenInitialData, NoError>
     func makeAffiliateProgramSetupScreen(context: AccountContext, initialData: AffiliateProgramSetupScreenInitialData) -> ViewController
     func makeAffiliateProgramJoinScreen(context: AccountContext, sourcePeer: EnginePeer, commissionPermille: Int32, programDuration: Int32?, revenuePerUser: Double, mode: JoinAffiliateProgramScreenMode) -> ViewController
@@ -1555,6 +1584,15 @@ public protocol SharedAccountContext: AnyObject {
     func makeGalleryController(context: AccountContext, source: GalleryControllerItemSource, streamSingleVideo: Bool, isPreview: Bool) -> ViewController
     func makeAccountFreezeInfoScreen(context: AccountContext) -> ViewController
     func makeSendInviteLinkScreen(context: AccountContext, subject: SendInviteLinkScreenSubject, peers: [TelegramForbiddenInvitePeer], theme: PresentationTheme?) -> ViewController
+    func makeCommunitiesScreen(context: AccountContext, peerId: EnginePeer.Id?) -> ViewController
+    func makeCommunityAddScreen(context: AccountContext, communityId: EnginePeer.Id, peerId: EnginePeer.Id, completed: @escaping (Bool) -> Void) -> ViewController
+    func makeCommunityAddScreen(context: AccountContext, communityId: EnginePeer.Id, peerId: EnginePeer.Id, requiresConfirmation: Bool, completed: @escaping (Bool) -> Void) -> ViewController
+    func makeCommunityAddScreen(context: AccountContext, peerId: EnginePeer.Id, initialVisibility: Bool, completed: @escaping (Bool) -> Void) -> ViewController
+    func makeCommunityEditScreen(context: AccountContext, communityId: EnginePeer.Id) -> ViewController
+    func makeCommunityEditScreen(context: AccountContext, mode: CommunityEditScreenMode, completed: @escaping () -> Void) -> ViewController
+    func makeCommunityRequestsScreen(context: AccountContext, communityId: EnginePeer.Id, existingContext: CommunityPeerLinkRequestsContext?) -> ViewController
+    func makeCommunityViewScreen(context: AccountContext, communityId: EnginePeer.Id, mode: CommunityViewScreenMode) -> ViewController
+    func makeCommunityPeerSelectionScreen(context: AccountContext, communityId: EnginePeer.Id, selectionOptions: CommunityPeerSelectionOptions) -> ViewController
     func makeCocoonInfoScreen(context: AccountContext) -> ViewController
     func makeLinkEditController(context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?, text: String, link: String?, apply: @escaping (String?, TelegramMediaWebpage?) -> Void) -> ViewController
 
@@ -1585,8 +1623,8 @@ public protocol SharedAccountContext: AnyObject {
         context: AccountContext,
         theme: PresentationTheme?,
         mode: TextProcessingScreenMode,
-        inputText: TextWithEntities,
-        copyResult: ((TextWithEntities) -> Void)?,
+        inputText: ComposedRichMessage,
+        copyResult: ((ComposedRichMessage) -> Void)?,
         translateChat: ((String) -> Void)?
     ) async -> ViewController
     func makeCreateBotScreen(
@@ -1731,6 +1769,8 @@ public protocol AccountContext: AnyObject {
     func joinGroupCall(peerId: EnginePeer.Id, invite: String?, requestJoinAsPeerId: ((@escaping (EnginePeer.Id?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription)
     func joinConferenceCall(call: JoinCallLinkInformation, isVideo: Bool, unmuteByDefault: Bool)
     func requestCall(peerId: EnginePeer.Id, isVideo: Bool, completion: @escaping () -> Void)
+    
+    func getAppConfigValue(_ key: String) -> Any?
 }
 
 public struct AntiSpamBotConfiguration {
@@ -1834,6 +1874,26 @@ public struct StickersSearchConfiguration {
     public static func with(appConfiguration: AppConfiguration) -> StickersSearchConfiguration {
         if let data = appConfiguration.data, let suggestOnlyApi = data["stickers_emoji_suggest_only_api"] as? Bool {
             return StickersSearchConfiguration(disableLocalSuggestions: suggestOnlyApi)
+        } else {
+            return .defaultValue
+        }
+    }
+}
+
+public struct CommunitiesConfiguration {
+    static var defaultValue: CommunitiesConfiguration {
+        return CommunitiesConfiguration(peersLimit: 100)
+    }
+    
+    public let peersLimit: Int32
+    
+    fileprivate init(peersLimit: Int32) {
+        self.peersLimit = peersLimit
+    }
+    
+    public static func with(appConfiguration: AppConfiguration) -> CommunitiesConfiguration {
+        if let data = appConfiguration.data, let peersLimit = data["community_peers_limit"] as? Double {
+            return CommunitiesConfiguration(peersLimit: Int32(peersLimit))
         } else {
             return .defaultValue
         }

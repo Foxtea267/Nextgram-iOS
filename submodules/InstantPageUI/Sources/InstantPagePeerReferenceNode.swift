@@ -318,7 +318,7 @@ public final class InstantPagePeerReferenceNode: ASDisplayNode, InstantPageNode 
                     break
                 case let .webView(webView):
                     if let navigationController = strongSelf.context.sharedContext.mainWindow?.viewController as? NavigationController, let controller = navigationController.viewControllers.last as? ViewController {
-                        strongSelf.context.sharedContext.openJoinChatWebView(context: strongSelf.context, parentController: controller, updatedPresentationData: nil, webView: webView)
+                        strongSelf.context.sharedContext.openJoinChatWebView(context: strongSelf.context, parentController: controller, updatedPresentationData: nil, webView: webView, chatTitle: peer.compactDisplayTitle)
                     } else if case .inProgress = strongSelf.joinState {
                         strongSelf.updateJoinState(.notJoined)
                     }

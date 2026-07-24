@@ -22,6 +22,14 @@ func _internal_toggleItemPinned(postbox: Postbox, accountPeerId: PeerId, locatio
         switch location {
         case let .group(groupId):
             var itemIds = transaction.getPinnedItemIds(groupId: groupId)
+            if itemIds.firstIndex(of: itemId) == nil {
+                switch itemId {
+                case let .peer(peerId):
+                    if let community = transaction.getPeer(peerId) as? TelegramCommunity, community.collapsedInDialogs != true {
+                        return .done
+                    }
+                }
+            }
             let sameKind = itemIds.filter { item in
                 switch itemId {
                     case let .peer(lhsPeerId):

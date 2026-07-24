@@ -890,6 +890,26 @@ public class PremiumLimitsListScreen: ViewController {
                     )
                 )
                 
+                availableItems[.richText] = DemoPagerComponent.Item(
+                    AnyComponentWithIdentity(
+                        id: PremiumDemoScreen.Subject.richText,
+                        component: AnyComponent(
+                            PageComponent(
+                                content: AnyComponent(PhoneDemoComponent(
+                                    context: context,
+                                    position: .top,
+                                    model: .island,
+                                    videoFile: videos["rich_formatting"],
+                                    decoration: .badgeStars
+                                )),
+                                title: strings.Premium_RichText,
+                                text: strings.Premium_RichTextInfo,
+                                textColor: textColor
+                            )
+                        )
+                    )
+                )
+                
                 availableItems[.business] = DemoPagerComponent.Item(
                     AnyComponentWithIdentity(
                         id: PremiumDemoScreen.Subject.business,

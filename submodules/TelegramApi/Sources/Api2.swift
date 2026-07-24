@@ -286,14 +286,16 @@ public extension Api {
 public extension Api {
     enum BotCommand: TypeConstructorDescription {
         public class Cons_botCommand: TypeConstructorDescription {
+            public var flags: Int32
             public var command: String
             public var description: String
-            public init(command: String, description: String) {
+            public init(flags: Int32, command: String, description: String) {
+                self.flags = flags
                 self.command = command
                 self.description = description
             }
             public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("botCommand", [("command", ConstructorParameterDescription(self.command)), ("description", ConstructorParameterDescription(self.description))])
+                return ("botCommand", [("flags", ConstructorParameterDescription(self.flags)), ("command", ConstructorParameterDescription(self.command)), ("description", ConstructorParameterDescription(self.description))])
             }
         }
         case botCommand(Cons_botCommand)
@@ -302,8 +304,9 @@ public extension Api {
             switch self {
             case .botCommand(let _data):
                 if boxed {
-                    buffer.appendInt32(-1032140601)
+                    buffer.appendInt32(-1739401518)
                 }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
                 serializeString(_data.command, buffer: buffer, boxed: false)
                 serializeString(_data.description, buffer: buffer, boxed: false)
                 break
@@ -313,19 +316,22 @@ public extension Api {
         public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
             switch self {
             case .botCommand(let _data):
-                return ("botCommand", [("command", ConstructorParameterDescription(_data.command)), ("description", ConstructorParameterDescription(_data.description))])
+                return ("botCommand", [("flags", ConstructorParameterDescription(_data.flags)), ("command", ConstructorParameterDescription(_data.command)), ("description", ConstructorParameterDescription(_data.description))])
             }
         }
 
         public static func parse_botCommand(_ reader: BufferReader) -> BotCommand? {
-            var _1: String?
-            _1 = parseString(reader)
+            var _1: Int32?
+            _1 = reader.readInt32()
             var _2: String?
             _2 = parseString(reader)
+            var _3: String?
+            _3 = parseString(reader)
             let _c1 = _1 != nil
             let _c2 = _2 != nil
-            if _c1 && _c2 {
-                return Api.BotCommand.botCommand(Cons_botCommand(command: _1!, description: _2!))
+            let _c3 = _3 != nil
+            if _c1 && _c2 && _c3 {
+                return Api.BotCommand.botCommand(Cons_botCommand(flags: _1!, command: _2!, description: _3!))
             }
             else {
                 return nil

@@ -713,7 +713,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                 } else {
                     dateFormat = .regular
                 }
-                let dateText = stringForMessageTimestampStatus(accountPeerId: context.account.peerId, message: EngineMessage(message), dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, strings: presentationData.strings, format: dateFormat, associatedData: associatedData)
+                let dateText = stringForMessageTimestampStatus(context: context, message: EngineMessage(message), dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, strings: presentationData.strings, format: dateFormat, associatedData: associatedData)
                 
                 let statusType: ChatMessageDateAndStatusType
                 if incoming {

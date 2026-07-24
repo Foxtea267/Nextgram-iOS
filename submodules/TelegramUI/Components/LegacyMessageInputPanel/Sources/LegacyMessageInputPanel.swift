@@ -16,6 +16,7 @@ import TelegramNotices
 import TextFormat
 import TelegramUIPreferences
 import Pasteboard
+import ChatRichTextEditorComposer
 import ChatEntityKeyboardInputNode
 import ChatPresentationInterfaceState
 
@@ -697,14 +698,18 @@ public class LegacyMessageInputPanelNode: ASDisplayNode, TGCaptionPanelView {
                         guard let self else {
                             return
                         }
-                        self.setCaption(chatInputStateStringWithAppliedEntities(text.text, entities: text.entities))
+                        // Captions are plain text with entities; the API only returns a rich result for rich input.
+                        guard case let .plain(text, entities) = text else {
+                            return
+                        }
+                        self.setCaption(chatInputStateStringWithAppliedEntities(text, entities: entities))
                     },
                     send: nil,
                     sendContextActions: nil
                 ),
-                inputText: TextWithEntities(text: inputText.string, entities: entities),
+                inputText: .plain(text: inputText.string, entities: entities),
                 copyResult: { text in
-                    storeMessageTextInPasteboard(text.text, entities: text.entities)
+                    storeComposedRichMessageInPasteboard(text)
                 },
                 translateChat: nil
             ))

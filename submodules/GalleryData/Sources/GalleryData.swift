@@ -33,13 +33,13 @@ public enum ChatMessageGalleryControllerData {
 
 private func instantPageBlockMedia(pageId: EngineMedia.Id, block: InstantPageBlock, media: [EngineMedia.Id: EngineRawMedia], counter: inout Int) -> [InstantPageGalleryEntry] {
     switch block {
-        case let .image(id, caption, _, _):
+        case let .image(id, caption, _, _, _):
             if let m = media[id] {
                 let result = [InstantPageGalleryEntry(index: Int32(counter), pageId: pageId, media: InstantPageMedia(index: counter, media: EngineMedia(m), url: nil, caption: caption.text, credit: caption.credit), caption: caption.text, credit: caption.credit, location: InstantPageGalleryEntryLocation(position: Int32(counter), totalCount: 0))]
                 counter += 1
                 return result
             }
-        case let .video(id, caption, _, _):
+        case let .video(id, caption, _, _, _):
             if let m = media[id] {
                 let result = [InstantPageGalleryEntry(index: Int32(counter), pageId: pageId, media: InstantPageMedia(index: counter, media: EngineMedia(m), url: nil, caption: caption.text, credit: caption.credit), caption: caption.text, credit: caption.credit, location: InstantPageGalleryEntryLocation(position: Int32(counter), totalCount: 0))]
                 counter += 1

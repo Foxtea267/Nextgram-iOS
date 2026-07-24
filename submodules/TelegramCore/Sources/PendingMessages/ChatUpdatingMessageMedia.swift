@@ -7,14 +7,16 @@ public final class ChatUpdatingMessageMedia: Equatable {
     public let disableUrlPreview: Bool
     public let media: RequestEditMessageMedia
     public let invertMediaAttribute: InvertMediaMessageAttribute?
+    public let richText: RichTextMessageAttribute?
     public let progress: Float
-    
-    init(text: String, entities: TextEntitiesMessageAttribute?, disableUrlPreview: Bool, media: RequestEditMessageMedia, invertMediaAttribute: InvertMediaMessageAttribute?, progress: Float) {
+
+    init(text: String, entities: TextEntitiesMessageAttribute?, disableUrlPreview: Bool, media: RequestEditMessageMedia, invertMediaAttribute: InvertMediaMessageAttribute?, richText: RichTextMessageAttribute?, progress: Float) {
         self.text = text
         self.entities = entities
         self.disableUrlPreview = disableUrlPreview
         self.media = media
         self.invertMediaAttribute = invertMediaAttribute
+        self.richText = richText
         self.progress = progress
     }
     
@@ -34,6 +36,9 @@ public final class ChatUpdatingMessageMedia: Equatable {
         if (lhs.invertMediaAttribute == nil) != (rhs.invertMediaAttribute == nil) {
             return false
         }
+        if lhs.richText != rhs.richText {
+            return false
+        }
         if lhs.progress != rhs.progress {
             return false
         }
@@ -41,6 +46,6 @@ public final class ChatUpdatingMessageMedia: Equatable {
     }
     
     func withProgress(_ progress: Float) -> ChatUpdatingMessageMedia {
-        return ChatUpdatingMessageMedia(text: self.text, entities: self.entities, disableUrlPreview: self.disableUrlPreview, media: self.media, invertMediaAttribute: self.invertMediaAttribute, progress: progress)
+        return ChatUpdatingMessageMedia(text: self.text, entities: self.entities, disableUrlPreview: self.disableUrlPreview, media: self.media, invertMediaAttribute: self.invertMediaAttribute, richText: self.richText, progress: progress)
     }
 }

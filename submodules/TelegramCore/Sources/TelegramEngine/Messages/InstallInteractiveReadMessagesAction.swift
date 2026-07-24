@@ -12,6 +12,9 @@ func _internal_installInteractiveReadMessagesAction(postbox: Postbox, stateManag
         
         for message in messages {
             if case let .Id(id) = message.id {
+                if Namespaces.Message.allEphemeral.contains(id.namespace) {
+                    continue
+                }
                 if threadId == nil || message.threadId == threadId {
                 } else {
                     continue
@@ -191,6 +194,9 @@ private final class StoreOrUpdateMessageActionImpl: StoreOrUpdateMessageAction {
         
         for message in messages {
             guard let index = message.index else {
+                continue
+            }
+            if Namespaces.Message.allEphemeral.contains(index.id.namespace) {
                 continue
             }
             if !visibleRange.contains(index: index) {

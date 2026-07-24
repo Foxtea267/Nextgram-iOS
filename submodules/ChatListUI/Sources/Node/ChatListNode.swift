@@ -28,7 +28,15 @@ import NagramSettingsSignal // MARK: NAGRAM
 public enum ChatListNodeMode {
     case chatList(appendContacts: Bool)
     case peers(filter: ChatListNodePeersFilter, isSelecting: Bool, additionalCategories: [ChatListNodeAdditionalCategory], topPeers: [EnginePeer], chatListFilters: [ChatListFilter]?, displayAutoremoveTimeout: Bool, displayPresence: Bool)
-    case peerType(type: [ReplyMarkupButtonRequestPeerType], hasCreate: Bool)
+    case peerType(type: [ReplyMarkupButtonRequestPeerType], hasCreate: Bool, excludedPeerIds: Set<EnginePeer.Id>, includeCommunities: Bool)
+}
+
+private func isIncludedCommunityContainer(_ peer: EnginePeer?, filter: ChatListNodePeersFilter) -> Bool {
+    if filter.contains(.includeCommunities), case .community = peer {
+        return true
+    } else {
+        return false
+    }
 }
 
 struct ChatListNodeListViewTransition {
@@ -111,6 +119,8 @@ public final class ChatListNodeInteraction {
     let openChatFolderUpdates: () -> Void
     let hideChatFolderUpdates: () -> Void
     let openStories: (ChatListNode.OpenStoriesSubject, ASDisplayNode?) -> Void
+    let openCommunity: (EnginePeer.Id) -> Void
+    let ungroupCommunity: (EnginePeer.Id) -> Void
     let openStarsTopup: (Int64?) -> Void
     let editPeer: (ChatListItem) -> Void
     let openWebApp: (TelegramUser) -> Void
@@ -172,6 +182,8 @@ public final class ChatListNodeInteraction {
         openChatFolderUpdates: @escaping () -> Void,
         hideChatFolderUpdates: @escaping () -> Void,
         openStories: @escaping (ChatListNode.OpenStoriesSubject, ASDisplayNode?) -> Void,
+        openCommunity: @escaping (EnginePeer.Id) -> Void = { _ in },
+        ungroupCommunity: @escaping (EnginePeer.Id) -> Void = { _ in },
         openStarsTopup: @escaping (Int64?) -> Void,
         editPeer: @escaping (ChatListItem) -> Void,
         openWebApp: @escaping (TelegramUser) -> Void,
@@ -220,6 +232,8 @@ public final class ChatListNodeInteraction {
         self.openChatFolderUpdates = openChatFolderUpdates
         self.hideChatFolderUpdates = hideChatFolderUpdates
         self.openStories = openStories
+        self.openCommunity = openCommunity
+        self.ungroupCommunity = ungroupCommunity
         self.openStarsTopup = openStarsTopup
         self.editPeer = editPeer
         self.openWebApp = openWebApp
@@ -458,6 +472,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                         content: .peer(ChatListItemContent.PeerData(
                             messages: peerEntry.messages,
                             peer: peer,
+                            avatarPeer: peerEntry.avatarPeer,
                             threadInfo: threadInfo,
                             combinedReadState: combinedReadState,
                             isRemovedFromTotalUnreadCount: isRemovedFromTotalUnreadCount,
@@ -507,7 +522,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                     } else {
                         if filter.contains(.onlyWriteable) {
                             if let peer = peer.peers[peer.peerId] {
-                                if !canSendMessagesToPeer(peer) {
+                                if !isIncludedCommunityContainer(peer, filter: filter) && !canSendMessagesToPeer(peer) {
                                     enabled = false
                                 }
                                 if peerEntry.requiresPremiumForMessaging {
@@ -540,6 +555,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                             if let peer = peer.peers[peer.peerId] {
                                 if case .legacyGroup = peer {
                                 } else if case let .channel(peer) = peer, case .group = peer.info {
+                                } else if isIncludedCommunityContainer(peer, filter: filter) {
                                 } else {
                                     enabled = false
                                 }
@@ -624,18 +640,22 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                     }
                 
                     var isForum = false
+                    var isCommunity = false
                     if let peer = chatPeer, case let .channel(channel) = peer, channel.isForumOrMonoForum {
                         isForum = true
-                        if editing, case .chatList = mode {
+                        if editing {
+                            enabled = false
+                        }
+                    } else if isIncludedCommunityContainer(chatPeer, filter: filter) {
+                        isCommunity = true
+                        if editing {
                             enabled = false
                         }
                     }
                 
                     var selectable = editing
-                    if case .chatList = mode {
-                        if isForum {
-                            selectable = false
-                        }
+                    if isForum || isCommunity {
+                        selectable = false
                     }
 
                     return ListViewInsertItem(index: entry.index, previousIndex: entry.previousIndex, item: ContactsPeerItem(
@@ -660,7 +680,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                                     nodeInteraction.peerSelected(chatPeer, nil, threadId, nil, false)
                                 }
                             }
-                        }, disabledAction: (isForum && editing) && !peerEntry.requiresPremiumForMessaging ? nil : { _ in
+                        }, disabledAction: ((isForum || isCommunity) && editing) && !peerEntry.requiresPremiumForMessaging ? nil : { _ in
                             if let chatPeer = chatPeer {
                                 nodeInteraction.disabledPeerSelected(chatPeer, threadId, peerEntry.requiresPremiumForMessaging ? .premiumRequired : .generic)
                             }
@@ -820,6 +840,7 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                             content: .peer(ChatListItemContent.PeerData(
                                 messages: peerEntry.messages,
                                 peer: peer,
+                                avatarPeer: peerEntry.avatarPeer,
                                 threadInfo: threadInfo,
                                 combinedReadState: combinedReadState,
                                 isRemovedFromTotalUnreadCount: isRemovedFromTotalUnreadCount,
@@ -869,7 +890,7 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                         } else {
                             if filter.contains(.onlyWriteable) {
                                 if let peer = peer.peers[peer.peerId] {
-                                    if !canSendMessagesToPeer(peer) {
+                                    if !isIncludedCommunityContainer(peer, filter: filter) && !canSendMessagesToPeer(peer) {
                                         enabled = false
                                     }
                                     if peerEntry.requiresPremiumForMessaging {
@@ -939,16 +960,19 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                         var isForum = false
                         if let peer = chatPeer, case let .channel(channel) = peer, channel.isForumOrMonoForum {
                             isForum = true
-                            if editing, case .chatList = mode {
+                            if editing {
+                                enabled = false
+                            }
+                        } else if isIncludedCommunityContainer(chatPeer, filter: filter) {
+                            isForum = true
+                            if editing {
                                 enabled = false
                             }
                         }
                     
                         var selectable = editing
-                        if case .chatList = mode {
-                            if isForum {
-                                selectable = false
-                            }
+                        if isForum {
+                            selectable = false
                         }
                     
                         return ListViewUpdateItem(index: entry.index, previousIndex: entry.previousIndex, item: ContactsPeerItem(
@@ -1140,7 +1164,18 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
     }
 }
 
-private func mappedChatListNodeViewListTransition(context: AccountContext, nodeInteraction: ChatListNodeInteraction, location: ChatListControllerLocation, isPremium: Bool, filterData: ChatListItemFilterData?, chatListFilters: [ChatListFilter]?, mode: ChatListNodeMode, isPeerEnabled: ((EnginePeer) -> Bool)?, presentationData: ChatListPresentationData, transition: ChatListNodeViewTransition) -> ChatListNodeListViewTransition {
+private func mappedChatListNodeViewListTransition(
+    context: AccountContext,
+    nodeInteraction: ChatListNodeInteraction,
+    location: ChatListControllerLocation,
+    isPremium: Bool,
+    filterData: ChatListItemFilterData?,
+    chatListFilters: [ChatListFilter]?,
+    mode: ChatListNodeMode,
+    isPeerEnabled: ((EnginePeer) -> Bool)?,
+    presentationData: ChatListPresentationData,
+    transition: ChatListNodeViewTransition
+) -> ChatListNodeListViewTransition {
     return ChatListNodeListViewTransition(chatListView: transition.chatListView, deleteItems: transition.deleteItems, insertItems: mappedInsertEntries(context: context, nodeInteraction: nodeInteraction, location: location, isPremium: isPremium, filterData: filterData, chatListFilters: chatListFilters, mode: mode, isPeerEnabled: isPeerEnabled, entries: transition.insertEntries, presentationData: presentationData), updateItems: mappedUpdateEntries(context: context, nodeInteraction: nodeInteraction, location: location, isPremium: isPremium, filterData: filterData, chatListFilters: chatListFilters, mode: mode, isPeerEnabled: isPeerEnabled, entries: transition.updateEntries, presentationData: presentationData), options: transition.options, scrollToItem: transition.scrollToItem, stationaryItemRange: transition.stationaryItemRange, adjustScrollToFirstItem: transition.adjustScrollToFirstItem, animateCrossfade: transition.animateCrossfade)
 }
 
@@ -1218,6 +1253,8 @@ public final class ChatListNode: ListViewImpl {
     public var hidePsa: ((EnginePeer.Id) -> Void)?
     public var activateChatPreview: ((ChatListItem, Int64?, ASDisplayNode, ContextGesture?, CGPoint?) -> Void)?
     public var openStories: ((ChatListNode.OpenStoriesSubject, ASDisplayNode?) -> Void)?
+    public var openCommunity: ((EnginePeer.Id) -> Void)?
+    public var ungroupCommunity: ((EnginePeer.Id) -> Void)?
     public var openBirthdaySetup: (() -> Void)?
     public var openPremiumManagement: (() -> Void)?
     public var openStarsTopup: ((Int64?) -> Void)?
@@ -1899,6 +1936,16 @@ public final class ChatListNode: ListViewImpl {
                 return
             }
             self.openStories?(subject, itemNode)
+        }, openCommunity: { [weak self] communityId in
+            guard let self else {
+                return
+            }
+            self.openCommunity?(communityId)
+        }, ungroupCommunity: { [weak self] communityId in
+            guard let self else {
+                return
+            }
+            self.ungroupCommunity?(communityId)
         }, openStarsTopup: { [weak self] amount in
             guard let self else {
                 return
@@ -2262,6 +2309,10 @@ public final class ChatListNode: ListViewImpl {
                                 if filter.contains(.excludeGroups) {
                                     return false
                                 }
+                            case .community:
+                                if filter.contains(.excludeGroups) {
+                                    return false
+                                }
                             case let .channel(channel):
                                 switch channel.info {
                                 case .broadcast:
@@ -2281,6 +2332,7 @@ public final class ChatListNode: ListViewImpl {
                         if filter.contains(.onlyGroupsAndChannels) {
                             if case .channel = peer.chatMainPeer {
                             } else if case .legacyGroup = peer.chatMainPeer {
+                            } else if isIncludedCommunityContainer(peer.chatMainPeer, filter: filter) {
                             } else {
                                 return false
                             }
@@ -2290,6 +2342,8 @@ public final class ChatListNode: ListViewImpl {
                                 if case let .channel(peer) = peer.chatMainPeer, case .group = peer.info {
                                     isGroup = true
                                 } else if peer.peerId.namespace == Namespaces.Peer.CloudGroup {
+                                    isGroup = true
+                                } else if isIncludedCommunityContainer(peer.chatMainPeer, filter: filter) {
                                     isGroup = true
                                 }
                                 if !isGroup {
@@ -2312,7 +2366,7 @@ public final class ChatListNode: ListViewImpl {
                         
                         if filter.contains(.onlyWriteable) && filter.contains(.excludeDisabled) {
                             if let peer = peer.peers[peer.peerId] {
-                                if !canSendMessagesToPeer(peer) {
+                                if !isIncludedCommunityContainer(peer, filter: filter) && !canSendMessagesToPeer(peer) {
                                     return false
                                 }
                             } else {
@@ -2347,8 +2401,18 @@ public final class ChatListNode: ListViewImpl {
                         
                         isEmpty = false
                         return true
-                    case let .peerType(peerTypes, _):
-                        if let peer = peer.peer, !peer.isDeleted && peer.id != context.account.peerId {
+                    case let .peerType(peerTypes, _, excludedPeerIds, includeCommunities):
+                        if let peer = peer.peer, !peer.isDeleted && peer.id != context.account.peerId && !excludedPeerIds.contains(peer.id) {
+                            if includeCommunities, case .community = peer {
+                                return peerTypes.contains(where: { peerType in
+                                    switch peerType {
+                                    case .group, .channel:
+                                        return true
+                                    case .user, .createBot:
+                                        return false
+                                    }
+                                })
+                            }
                             var match = false
                             for peerType in peerTypes {
                                 if match {

@@ -61,7 +61,16 @@ private func monthAtIndex(_ index: Int, strings: PresentationStrings) -> String 
     }
 }
 
-public func stringForMessageTimestampStatus(accountPeerId: EnginePeer.Id, message: EngineMessage, dateTimeFormat: PresentationDateTimeFormat, nameDisplayOrder: PresentationPersonNameOrder, strings: PresentationStrings, format: MessageTimestampStatusFormat = .regular, associatedData: ChatMessageItemAssociatedData, ignoreAuthor: Bool = false) -> String {
+public func stringForMessageTimestampStatus(
+    context: AccountContext,
+    message: EngineMessage,
+    dateTimeFormat: PresentationDateTimeFormat,
+    nameDisplayOrder: PresentationPersonNameOrder,
+    strings: PresentationStrings,
+    format: MessageTimestampStatusFormat = .regular,
+    associatedData: ChatMessageItemAssociatedData,
+    ignoreAuthor: Bool = false
+) -> String {
     if let adAttribute = message.adAttribute {
         switch adAttribute.messageType {
         case .sponsored:
@@ -71,17 +80,25 @@ public func stringForMessageTimestampStatus(accountPeerId: EnginePeer.Id, messag
         }
     }
     
+    var format = format
     var timestamp: Int32
+    var isFullEditedDate = false
     if let scheduleTime = message.scheduleTime {
         timestamp = scheduleTime
     } else {
-        timestamp = message.timestamp
+        if let useEditedTimestamp = context.getAppConfigValue("message_primary_edited_date") as? Bool, useEditedTimestamp, let editedTimestamp = message.editedTime {
+            timestamp = editedTimestamp
+            format = .full
+            isFullEditedDate = true
+        } else {
+            timestamp = message.timestamp
+        }
     }
     
     var displayFullDate = false
     if case .full = format, timestamp > 100000 {
         displayFullDate = true
-    } else if let forwardInfo = message.forwardInfo, message.id.peerId == accountPeerId {
+    } else if let forwardInfo = message.forwardInfo, message.id.peerId == context.account.peerId {
         displayFullDate = true
         timestamp = forwardInfo.date
     }
@@ -140,15 +157,27 @@ public func stringForMessageTimestampStatus(accountPeerId: EnginePeer.Id, messag
         localtime_r(&now, &timeinfoNow)
         
         if timeinfo.tm_year == timeinfoNow.tm_year {
-            if format != .full, timeinfo.tm_yday == timeinfoNow.tm_yday {
-                dayText = strings.Weekday_Today
+            if format != .full || isFullEditedDate, timeinfo.tm_yday == timeinfoNow.tm_yday {
+                if isFullEditedDate {
+                    dayText = ""
+                } else {
+                    dayText = strings.Weekday_Today
+                }
             } else {
                 dayText = strings.Date_ChatDateHeader(monthAtIndex(Int(timeinfo.tm_mon), strings: strings), "\(timeinfo.tm_mday)").string
             }
         } else {
             dayText = strings.Date_ChatDateHeaderYear(monthAtIndex(Int(timeinfo.tm_mon), strings: strings), "\(timeinfo.tm_mday)", "\(1900 + timeinfo.tm_year)").string
         }
-        dateText = strings.Message_FullDateFormat(dayText, stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)).string
+        if isFullEditedDate {
+            if dayText.isEmpty {
+                dateText = strings.Message_EditTodayFullDateFormat(stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)).string
+            } else {
+                dateText = strings.Message_EditFullDateFormat(dayText, stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)).string
+            }
+        } else {
+            dateText = strings.Message_FullDateFormat(dayText, stringForMessageTimestamp(timestamp: timestamp, dateTimeFormat: dateTimeFormat)).string
+        }
     } else if let forwardInfo = message.forwardInfo, forwardInfo.flags.contains(.isImported) {
         dateText = strings.Message_ImportedDateFormat(dateStringForDay(strings: strings, dateTimeFormat: dateTimeFormat, timestamp: forwardInfo.date), stringForMessageTimestamp(timestamp: forwardInfo.date, dateTimeFormat: dateTimeFormat), dateText).string
     }
@@ -176,7 +205,7 @@ public func stringForMessageTimestampStatus(accountPeerId: EnginePeer.Id, messag
             }
         }
         
-        if message.id.peerId != accountPeerId {
+        if message.id.peerId != context.account.peerId {
             for attribute in message.attributes {
                 if let attribute = attribute as? SourceReferenceMessageAttribute {
                     if let forwardInfo = message.forwardInfo {

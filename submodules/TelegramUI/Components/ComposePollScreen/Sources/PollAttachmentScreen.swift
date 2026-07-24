@@ -21,6 +21,7 @@ public enum PollAttachmentSubject {
     case description
     case quizAnswer
     case option
+    case richText
 }
 
 func makePollAttachmentLinkWebpage(link: String) -> TelegramMediaWebpage {
@@ -91,26 +92,41 @@ public func presentPollAttachmentScreen(
     }
 
     attachmentController.requestController = { [weak attachmentController] type, controllerCompletion in
-        let mediaPickerPollSubject: MediaPickerScreenImpl.Subject.AssetsMode.PollMode
-        let filePickerPollSubject: AttachmentFileControllerSource.PollMode
+        let mediaPickerAssetsMode: MediaPickerScreenImpl.Subject.AssetsMode
+        let filePickerSource: AttachmentFileControllerSource
+        let filePickerAssetsMode: MediaPickerScreenImpl.Subject.AssetsMode
+        
         let locationPickerPollSubject: LocationPickerController.Source.PollMode
         let stickerPickerPollSubject: StickerAttachmentScreen.Source.PollMode
         switch subject {
         case .description:
-            mediaPickerPollSubject = .description
-            filePickerPollSubject = .description
+            mediaPickerAssetsMode = .poll(mode: .description, asFile: false)
+            filePickerAssetsMode = .poll(mode: .description, asFile: true)
+            filePickerSource = .poll(.description)
+            
             locationPickerPollSubject = .description
             stickerPickerPollSubject = .description
         case .quizAnswer:
-            mediaPickerPollSubject = .quizAnswer
-            filePickerPollSubject = .quizAnswer
+            mediaPickerAssetsMode = .poll(mode: .quizAnswer, asFile: false)
+            filePickerAssetsMode = .poll(mode: .quizAnswer, asFile: true)
+            filePickerSource = .poll(.quizAnswer)
+            
             locationPickerPollSubject = .quizAnswer
             stickerPickerPollSubject = .quizAnswer
-        default:
-            mediaPickerPollSubject = .option
-            filePickerPollSubject = .description
+        case .option:
+            mediaPickerAssetsMode = .poll(mode: .option, asFile: false)
+            filePickerAssetsMode = .poll(mode: .option, asFile: true)
+            filePickerSource = .poll(.quizAnswer)
+            
             locationPickerPollSubject = .option
             stickerPickerPollSubject = .option
+        case .richText:
+            mediaPickerAssetsMode = .richText(asFile: false)
+            filePickerAssetsMode = .richText(asFile: true)
+            filePickerSource = .richText
+            
+            locationPickerPollSubject = .richText
+            stickerPickerPollSubject = .richText
         }
 
         switch type {
@@ -123,7 +139,7 @@ public func presentPollAttachmentScreen(
                 threadTitle: nil,
                 chatLocation: nil,
                 enableMultiselection: false,
-                subject: .assets(nil, .poll(mode: mediaPickerPollSubject, asFile: false))
+                subject: .assets(nil, mediaPickerAssetsMode)
             )
             controller.getCaptionPanelView = {
                 return nil
@@ -139,11 +155,12 @@ public func presentPollAttachmentScreen(
             }
             controllerCompletion(controller, controller.mediaPickerContext)
             return true
-        case .file:
+        case .file, .audio:
             let controller = makeAttachmentFileControllerImpl(
                 context: context,
                 updatedPresentationData: updatedPresentationData,
-                source: .poll(filePickerPollSubject),
+                mode: type == .audio ? .audio(.story) : .recent,
+                source: filePickerSource,
                 bannedSendMedia: nil,
                 presentGallery: { [weak attachmentController] in
                     attachmentController?.dismiss(animated: true)
@@ -156,7 +173,7 @@ public func presentPollAttachmentScreen(
                         threadTitle: nil,
                         chatLocation: nil,
                         enableMultiselection: false,
-                        subject: .assets(nil, .poll(mode: mediaPickerPollSubject, asFile: true))
+                        subject: .assets(nil, filePickerAssetsMode)
                     )
                     controller.getCaptionPanelView = {
                         return nil

@@ -437,6 +437,7 @@ private final class PremiumGiftScreenContentComponent: CombinedComponent {
                 UIColor(rgb: 0xa34cd7),
                 UIColor(rgb: 0x9b4fed),
                 UIColor(rgb: 0x8958ff),
+                UIColor(rgb: 0x8958ff),
                 UIColor(rgb: 0x676bff),
                 UIColor(rgb: 0x676bff),
                 UIColor(rgb: 0x6172ff),

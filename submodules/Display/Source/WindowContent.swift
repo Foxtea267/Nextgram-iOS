@@ -840,7 +840,12 @@ public class Window1 {
         
         for view in self.hostView.eventView.subviews.reversed() {
             let classString = NSStringFromClass(type(of: view))
-            if classString == "UITransitionView" || classString.contains("ContextMenuContainerView") {
+            // The system edit menu is inserted as a top-level subview of the window (== eventView) and must
+            // be hit-tested here, otherwise its touches fall through to the content below. Pre-iOS-16 this is
+            // a `UICalloutBar`/`...ContextMenuContainerView`; on iOS 16+ `UIEditMenuInteraction` hosts it in a
+            // `_UIEditMenuContainerView` (matched via "EditMenu"). Without the iOS-16 case, tapping any item
+            // in a UIEditMenuInteraction menu does nothing and the tap passes through to the content.
+            if classString == "UITransitionView" || classString.contains("ContextMenuContainerView") || classString.contains("EditMenu") {
                 if let result = view.hitTest(point, with: event) {
                     return result
                 }

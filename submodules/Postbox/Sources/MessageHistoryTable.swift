@@ -185,14 +185,17 @@ final class MessageHistoryTable: Table {
     
     private func processIndexOperationsCommitAccumulatedRemoveIndices(peerId: PeerId, accumulatedRemoveIndices: inout [MessageIndex], updatedCombinedState: inout CombinedPeerReadState?, invalidateReadState: inout Bool, unsentMessageOperations: inout [IntermediateMessageHistoryUnsentOperation], outputOperations: inout [MessageHistoryOperation], globalTagsOperations: inout [GlobalMessageHistoryTagsOperation], pendingActionsOperations: inout [PendingMessageActionsOperation], updatedMessageActionsSummaries: inout [PendingMessageActionsSummaryKey: Int32], updatedMessageTagSummaries: inout [MessageHistoryTagsSummaryKey: MessageHistoryTagNamespaceSummary], invalidateMessageTagSummaries: inout [InvalidatedMessageHistoryTagsSummaryEntryOperation], localTagsOperations: inout [IntermediateMessageHistoryLocalTagsOperation], timestampBasedMessageAttributesOperations: inout [TimestampBasedMessageAttributesOperation]) {
         if !accumulatedRemoveIndices.isEmpty {
-            let (combinedState, invalidate) = self.readStateTable.deleteMessages(peerId, indices: accumulatedRemoveIndices, incomingStatsInIndices: { peerId, namespace, indices in
-                return self.incomingMessageStatsInIndices(peerId, namespace: namespace, indices: indices)
-            })
-            if let combinedState = combinedState {
-                updatedCombinedState = combinedState
-            }
-            if invalidate {
-                invalidateReadState = true
+            let readStateRemoveIndices = accumulatedRemoveIndices.filter { self.seedConfiguration.chatMessagesNamespaces.contains($0.id.namespace) }
+            if !readStateRemoveIndices.isEmpty {
+                let (combinedState, invalidate) = self.readStateTable.deleteMessages(peerId, indices: readStateRemoveIndices, incomingStatsInIndices: { peerId, namespace, indices in
+                    return self.incomingMessageStatsInIndices(peerId, namespace: namespace, indices: indices)
+                })
+                if let combinedState = combinedState {
+                    updatedCombinedState = combinedState
+                }
+                if invalidate {
+                    invalidateReadState = true
+                }
             }
             
             let buckets = self.continuousIndexIntervalsForRemoving(accumulatedRemoveIndices)
@@ -344,7 +347,7 @@ final class MessageHistoryTable: Table {
                             self.timeBasedAttributesTable.set(tag: tag, id: message.id, timestamp: timestamp, operations: &timestampBasedMessageAttributesOperations)
                         }
                     }
-                    if !message.flags.intersection(.IsIncomingMask).isEmpty {
+                    if self.seedConfiguration.chatMessagesNamespaces.contains(message.id.namespace) && !message.flags.intersection(.IsIncomingMask).isEmpty {
                         accumulatedAddedIncomingMessageIndices.insert(message.index)
                     }
                 case let .InsertExistingMessage(storeMessage):
@@ -374,7 +377,7 @@ final class MessageHistoryTable: Table {
                             outputOperations.append(.UpdateGroupInfos(updatedGroupInfos))
                         }
                         
-                        if !message.flags.intersection(.IsIncomingMask).isEmpty {
+                        if self.seedConfiguration.chatMessagesNamespaces.contains(message.id.namespace) && !message.flags.intersection(.IsIncomingMask).isEmpty {
                             if index != message.index {
                                 accumulatedRemoveIndices.append(index)
                                 accumulatedAddedIncomingMessageIndices.insert(message.index)

@@ -22,7 +22,7 @@ import PhotoResources
 import ListSectionComponent
 import ListItemSwipeOptionContainer
 
-private let avatarFont = avatarPlaceholderFont(size: 15.0)
+private let avatarFont = avatarPlaceholderFont(size: 17.0)
 private let readIconImage: UIImage? = generateTintedImage(image: UIImage(bundleImageName: "Chat/Message/MenuReadIcon"), color: .white)?.withRenderingMode(.alwaysTemplate)
 private let repostIconImage: UIImage? = generateTintedImage(image: UIImage(bundleImageName: "Stories/HeaderRepost"), color: .white)?.withRenderingMode(.alwaysTemplate)
 private let forwardIconImage: UIImage? = generateTintedImage(image: UIImage(bundleImageName: "Stories/HeaderForward"), color: .white)?.withRenderingMode(.alwaysTemplate)
@@ -58,6 +58,7 @@ public final class PeerListItemComponent: Component {
     public enum Style {
         case generic
         case compact
+        case list
     }
     
     public enum SelectionState: Equatable {
@@ -196,6 +197,11 @@ public final class PeerListItemComponent: Component {
         }
     }
     
+    public enum TitleAccessory: Equatable {
+        case none
+        case hidden
+    }
+    
     public final class ExtractedTheme: Equatable {
         public let inset: CGFloat
         public let background: UIColor
@@ -225,6 +231,7 @@ public final class PeerListItemComponent: Component {
     let style: Style
     let sideInset: CGFloat
     let title: String
+    let titleAccessory: TitleAccessory
     let avatar: Avatar?
     let avatarComponent: AnyComponent<Empty>?
     let peer: EnginePeer?
@@ -256,6 +263,7 @@ public final class PeerListItemComponent: Component {
         style: Style,
         sideInset: CGFloat,
         title: String,
+        titleAccessory: TitleAccessory = .none,
         avatar: Avatar? = nil,
         avatarComponent: AnyComponent<Empty>? = nil,
         peer: EnginePeer?,
@@ -286,6 +294,7 @@ public final class PeerListItemComponent: Component {
         self.style = style
         self.sideInset = sideInset
         self.title = title
+        self.titleAccessory = titleAccessory
         self.avatar = avatar
         self.avatarComponent = avatarComponent
         self.peer = peer
@@ -328,6 +337,9 @@ public final class PeerListItemComponent: Component {
             return false
         }
         if lhs.title != rhs.title {
+            return false
+        }
+        if lhs.titleAccessory != rhs.titleAccessory {
             return false
         }
         if lhs.avatar != rhs.avatar {
@@ -406,6 +418,7 @@ public final class PeerListItemComponent: Component {
         private let swipeOptionContainer: ListItemSwipeOptionContainer
         
         private let title = ComponentView<Empty>()
+        private var titleAccessoryView: UIImageView?
         private var label = ComponentView<Empty>()
         private var subtitleView: ComponentView<Empty>?
         private let separatorLayer: SimpleLayer
@@ -508,7 +521,7 @@ public final class PeerListItemComponent: Component {
                 
                 self.containerButton.clipsToBounds = value
                 self.containerButton.backgroundColor = value ? extractedBackgroundColor : nil
-                self.containerButton.layer.cornerRadius = value ? 10.0 : 0.0
+                self.containerButton.layer.cornerRadius = value ? 26.0 : 0.0
             }
             self.extractedContainerView.willUpdateIsExtractedToContextPreview = { [weak self] value, transition in
                 guard let self else {
@@ -678,6 +691,8 @@ public final class PeerListItemComponent: Component {
             self.component = component
             self.state = state
             
+            let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
+            
             self.containerButton.alpha = component.isEnabled ? 1.0 : 0.3
             self.containerButton.isEnabled = component.action != nil
             
@@ -686,8 +701,7 @@ public final class PeerListItemComponent: Component {
             let labelData: (String, Subtitle.Color)
             if let presence = component.presence {
                 let timestamp = CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970
-                let dateTimeFormat = component.context.sharedContext.currentPresentationData.with { $0 }.dateTimeFormat
-                let labelDataValue = stringAndActivityForUserPresence(strings: component.strings, dateTimeFormat: dateTimeFormat, presence: presence, relativeTo: Int32(timestamp))
+                let labelDataValue = stringAndActivityForUserPresence(strings: component.strings, dateTimeFormat: presentationData.dateTimeFormat, presence: presence, relativeTo: Int32(timestamp))
                 labelData = (labelDataValue.0, labelDataValue.1 ? .accent : .neutral)
             } else if let subtitle = component.subtitle {
                 labelData = (subtitle.text, subtitle.color)
@@ -709,7 +723,7 @@ public final class PeerListItemComponent: Component {
             let verticalInset: CGFloat = component.insets?.top ?? 1.0
             
             var leftInset: CGFloat = 53.0 + component.sideInset
-            if case .generic = component.style {
+            if [.generic, .list].contains(component.style) {
                 leftInset += 9.0
             }
             var rightInset: CGFloat = contextInset * 2.0 + 8.0 + component.sideInset
@@ -719,7 +733,7 @@ public final class PeerListItemComponent: Component {
             if component.story != nil {
                 rightInset += 40.0
             }
-            
+                        
             var subtitleComponentSize: CGSize?
             if let subtitleComponent = component.subtitleComponent {
                 let subtitleView: ComponentView<Empty>
@@ -762,6 +776,10 @@ public final class PeerListItemComponent: Component {
                 } else {
                     height = 40.0 + verticalInset * 2.0
                 }
+            case .list:
+                titleFont = Font.semibold(floor(presentationData.listsFontSize.itemListBaseFontSize * 16.0 / 17.0))
+                subtitleFont = Font.regular(14.0)
+                height = 48.0 + verticalInset * 2.0
             }
 
             if let rightAccessoryComponentView = self.rightAccessoryComponentView, component.rightAccessoryComponent?.id != previousComponent?.rightAccessoryComponent?.id {
@@ -913,13 +931,13 @@ public final class PeerListItemComponent: Component {
                 
                 if let peer = component.peer {
                     let clipStyle: AvatarNodeClipStyle
-                    if case let .channel(channel) = peer, channel.isForumOrMonoForum {
+                    if case .community = peer {
+                        clipStyle = .roundedRect
+                    } else if case let .channel(channel) = peer, channel.isForumOrMonoForum {
                         clipStyle = .roundedRect
                     } else {
                         clipStyle = .round
                     }
-                    let _ = clipStyle
-                    let _ = synchronousLoad
                     
                     if peer.smallProfileImage != nil {
                         avatarNode.setPeerV2(
@@ -929,7 +947,7 @@ public final class PeerListItemComponent: Component {
                             authorOfMessage: nil,
                             overrideImage: nil,
                             emptyColor: nil,
-                            clipStyle: .round,
+                            clipStyle: clipStyle,
                             synchronousLoad: synchronousLoad,
                             displayDimensions: CGSize(width: avatarSize, height: avatarSize)
                         )
@@ -989,6 +1007,24 @@ public final class PeerListItemComponent: Component {
             
             let availableTextWidth = availableSize.width - leftInset - rightInset
             var titleAvailableWidth = component.style == .compact ? availableTextWidth * 0.7 : availableSize.width - leftInset - rightInset
+            let titleAccessorySpacing: CGFloat = 4.0
+            var titleAccessorySize = CGSize()
+            if case .hidden = component.titleAccessory, let image = generateTintedImage(image: UIImage(bundleImageName: "Chat List/HiddenIcon"), color: component.theme.list.itemSecondaryTextColor) {
+                let titleAccessoryView: UIImageView
+                if let current = self.titleAccessoryView {
+                    titleAccessoryView = current
+                } else {
+                    titleAccessoryView = UIImageView()
+                    titleAccessoryView.isUserInteractionEnabled = false
+                    self.titleAccessoryView = titleAccessoryView
+                }
+                titleAccessoryView.image = image
+                titleAccessorySize = image.size
+                titleAvailableWidth -= titleAccessorySize.width + titleAccessorySpacing
+            } else if let titleAccessoryView = self.titleAccessoryView {
+                self.titleAccessoryView = nil
+                titleAccessoryView.removeFromSuperview()
+            }
             switch component.rightAccessory {
             case .disclosure:
                 titleAvailableWidth -= 32.0
@@ -1055,7 +1091,7 @@ public final class PeerListItemComponent: Component {
             let centralContentHeight: CGFloat
             if let subtitleComponentSize {
                 centralContentHeight = titleSize.height + subtitleComponentSize.height + titleSpacing
-            } else if labelSize.height > 0.0, case .generic = component.style {
+            } else if labelSize.height > 0.0, [.generic, .list].contains(component.style) {
                 centralContentHeight = titleSize.height + labelSize.height + titleSpacing
             } else {
                 centralContentHeight = titleSize.height
@@ -1082,6 +1118,24 @@ public final class PeerListItemComponent: Component {
                     })
                     transition.animateAlpha(view: titleView, from: 0.0, to: 1.0)
                 }
+            }
+            
+            var nextTitleIconOriginX = titleFrame.maxX
+            if let titleAccessoryView = self.titleAccessoryView, !titleAccessorySize.width.isZero {
+                var transition = transition
+                if titleAccessoryView.superview == nil {
+                    transition = .immediate
+                    self.containerButton.addSubview(titleAccessoryView)
+                }
+                let titleAccessoryFrame = CGRect(
+                    origin: CGPoint(
+                        x: nextTitleIconOriginX + titleAccessorySpacing,
+                        y: floorToScreenPixels(titleFrame.midY - titleAccessorySize.height / 2.0) + 1.0
+                    ),
+                    size: titleAccessorySize
+                )
+                transition.setFrame(view: titleAccessoryView, frame: titleAccessoryFrame)
+                nextTitleIconOriginX = titleAccessoryFrame.maxX
             }
             
             if let statusIcon, case .generic = component.style {
@@ -1120,7 +1174,7 @@ public final class PeerListItemComponent: Component {
                         avatarIconView.isUserInteractionEnabled = false
                         self.containerButton.addSubview(avatarIconView)
                     }
-                    avatarIconTransition.setFrame(view: avatarIconView, frame: CGRect(origin: CGPoint(x: titleFrame.maxX + 4.0, y: floorToScreenPixels(titleFrame.midY - iconSize.height / 2.0)), size: iconSize))
+                    avatarIconTransition.setFrame(view: avatarIconView, frame: CGRect(origin: CGPoint(x: nextTitleIconOriginX + 4.0, y: floorToScreenPixels(titleFrame.midY - iconSize.height / 2.0)), size: iconSize))
                 }
             } else if let avatarIcon = self.avatarIcon {
                 self.avatarIcon = nil
@@ -1165,10 +1219,10 @@ public final class PeerListItemComponent: Component {
                 
                 let labelFrame: CGRect
                 switch component.style {
-                case .generic:
+                case .generic, .list:
                     labelFrame = CGRect(origin: CGPoint(x: titleFrame.minX + iconLabelOffset, y: titleFrame.maxY + titleSpacing), size: labelSize)
                 case .compact:
-                    labelFrame = CGRect(origin: CGPoint(x: titleFrame.maxX + 4.0, y: floor((height - verticalInset * 2.0 - centralContentHeight) / 2.0)), size: labelSize)
+                    labelFrame = CGRect(origin: CGPoint(x: nextTitleIconOriginX + 4.0, y: floor((height - verticalInset * 2.0 - centralContentHeight) / 2.0)), size: labelSize)
                 }
                 
                 if labelView.superview == nil {
@@ -1394,7 +1448,7 @@ public final class PeerListItemComponent: Component {
             if themeUpdated {
                 self.separatorLayer.backgroundColor = component.theme.list.itemPlainSeparatorColor.cgColor
             }
-            transition.setFrame(layer: self.separatorLayer, frame: CGRect(origin: CGPoint(x: leftInset, y: height), size: CGSize(width: availableSize.width - leftInset, height: UIScreenPixel)))
+            transition.setFrame(layer: self.separatorLayer, frame: CGRect(origin: CGPoint(x: leftInset, y: height), size: CGSize(width: availableSize.width - leftInset - 16.0, height: UIScreenPixel)))
             self.separatorLayer.isHidden = !component.hasNext
             
             let resultBounds = CGRect(origin: CGPoint(), size: CGSize(width: availableSize.width, height: height))

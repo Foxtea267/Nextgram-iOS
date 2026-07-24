@@ -530,6 +530,7 @@ public enum AdminedPublicChannelsScope {
     case forLocation
     case forVoiceChat
     case forPersonalProfile
+    case forCommunity
 }
 
 public final class TelegramAdminedPublicChannel: Equatable {
@@ -566,6 +567,8 @@ func _internal_adminedPublicChannels(account: Account, scope: AdminedPublicChann
         flags |= (1 << 2)
     case .forPersonalProfile:
         flags |= (1 << 2)
+    case .forCommunity:
+        flags |= (1 << 3)
     }
     
     let accountPeerId = account.peerId
@@ -588,6 +591,8 @@ func _internal_adminedPublicChannels(account: Account, scope: AdminedPublicChann
                     if case let .channel(channelData) = chat {
                         let participantsCount = channelData.participantsCount
                         subscriberCounts[chat.peerId] = participantsCount.flatMap(Int.init)
+                    } else if case let .chat(chatData) = chat {
+                        subscriberCounts[chat.peerId] = Int(chatData.participantsCount)
                     }
                 }
             case let .chatsSlice(chatsSliceData):

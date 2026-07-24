@@ -56,6 +56,7 @@ public final class LocationPickerController: ViewController, AttachmentContainab
             case description
             case quizAnswer
             case option
+            case richText
         }
         
         case generic

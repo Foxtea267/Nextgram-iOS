@@ -930,7 +930,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                     } else {
                         dateFormat = .regular
                     }
-                    let dateText = stringForMessageTimestampStatus(accountPeerId: arguments.context.account.peerId, message: EngineMessage(arguments.message), dateTimeFormat: arguments.presentationData.dateTimeFormat, nameDisplayOrder: arguments.presentationData.nameDisplayOrder, strings: arguments.presentationData.strings, format: dateFormat, associatedData: arguments.associatedData)
+                    let dateText = stringForMessageTimestampStatus(context: arguments.context, message: EngineMessage(arguments.message), dateTimeFormat: arguments.presentationData.dateTimeFormat, nameDisplayOrder: arguments.presentationData.nameDisplayOrder, strings: arguments.presentationData.strings, format: dateFormat, associatedData: arguments.associatedData)
                     
                     let displayReactionsInline = shouldDisplayInlineDateReactions(message: EngineMessage(arguments.message), isPremium: arguments.associatedData.isPremium, forceInline: arguments.associatedData.forceInlineReactions)
                     var reactionSettings: ChatMessageDateAndStatusNode.TrailingReactionSettings?

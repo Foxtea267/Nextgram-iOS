@@ -302,7 +302,7 @@ final class MonetizationBalanceItemNode: ListViewItemNode, ItemListItemNode {
                         if isStars {
                             strongSelf.iconNode.image = UIImage(bundleImageName: "Premium/Stars/BalanceStar")
                         } else {
-                            strongSelf.iconNode.image = generateTintedImage(image: UIImage(bundleImageName: "Ads/TonBig"), color: item.presentationData.theme.list.itemAccentColor)
+                            strongSelf.iconNode.image = generateTintedImage(image: UIImage(bundleImageName: "Ads/TonBig"), color: UIColor(rgb: 0x30A1F5))
                         }
                     }
 

@@ -64,7 +64,7 @@ private func loadCurrencyFormatterEntries() -> [String: CurrencyFormatterEntry] 
     }
     
     let tonEntry = CurrencyFormatterEntry(
-        symbol: "TON",
+        symbol: "GRAM",
         thousandsSeparator: ".",
         decimalSeparator: ",",
         symbolOnLeft: true,

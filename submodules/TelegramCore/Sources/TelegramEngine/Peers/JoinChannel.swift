@@ -50,19 +50,16 @@ func _internal_joinChannel(account: Account, peerId: PeerId, hash: String?) -> S
             case let .chatInviteJoinResultOk(data):
                 updates = data.updates
             case let .chatInviteJoinResultWebView(data):
-                switch data.webview {
-                case let .webViewResultUrl(urlData):
-                    let botPeerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(data.botId))
-                    return account.postbox.transaction { transaction -> Signal<JoinChannelResult, JoinChannelError> in
-                        updatePeers(transaction: transaction, accountPeerId: account.peerId, peers: AccumulatedPeers(users: data.users))
-                        guard let botPeer = transaction.getPeer(botPeerId) else {
-                            return .fail(.generic)
-                        }
-                        return .single(.webView(JoinChatWebView(botPeer: EnginePeer(botPeer), url: urlData.url, queryId: urlData.queryId ?? 0, peerId: peerId)))
+                let botPeerId = PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(data.botId))
+                return account.postbox.transaction { transaction -> Signal<JoinChannelResult, JoinChannelError> in
+                    updatePeers(transaction: transaction, accountPeerId: account.peerId, peers: AccumulatedPeers(users: data.users))
+                    guard let botPeer = transaction.getPeer(botPeerId) else {
+                        return .fail(.generic)
                     }
-                    |> castError(JoinChannelError.self)
-                    |> switchToLatest
+                    return .single(.webView(JoinChatWebView(botPeer: EnginePeer(botPeer), url: nil, queryId: data.queryId, peerId: peerId)))
                 }
+                |> castError(JoinChannelError.self)
+                |> switchToLatest
             }
 
             account.stateManager.addUpdates(updates)

@@ -288,6 +288,7 @@ public final class ResizableSheetComponent<ChildEnvironmentType: Sendable & Equa
             self.topEdgeEffectView.clipsToBounds = true
             self.topEdgeEffectView.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
             self.topEdgeEffectView.layer.cornerRadius = 40.0
+            self.topEdgeEffectView.isUserInteractionEnabled = false
 
             self.bottomEdgeEffectView = EdgeEffectView()
             self.bottomEdgeEffectView.clipsToBounds = true
@@ -589,11 +590,11 @@ public final class ResizableSheetComponent<ChildEnvironmentType: Sendable & Equa
                 topOffsetFraction = 1.0
             }
             
-//            #if DEBUG// && false
-//            if "".isEmpty {
-//                topOffsetFraction = 1.0
-//            }
-//            #endif
+            #if DEBUG && true
+            if "".isEmpty {
+                topOffsetFraction = 1.0
+            }
+            #endif
 
             let minScale: CGFloat = itemLayout.isTablet ? 1.0 : (itemLayout.containerSize.width - 6.0 * 2.0) / itemLayout.containerSize.width
             let minScaledTranslation: CGFloat = itemLayout.isTablet ? 0.0 : (itemLayout.containerSize.height - itemLayout.containerSize.height * minScale) * 0.5 - 6.0
@@ -937,7 +938,7 @@ public final class ResizableSheetComponent<ChildEnvironmentType: Sendable & Equa
             
             let scrollContentHeight = max(topInset + contentHeight + containerInset + sheetEnvironment.inputHeight, availableSize.height - containerInset)
 
-            self.scrollContentClippingView.layer.cornerRadius = 38.0
+            self.scrollContentClippingView.layer.cornerRadius = 40.0
 
             let containerCornerRadius = max(22.0, sheetEnvironment.deviceMetrics.screenCornerRadius)
             self.itemLayout = ItemLayout(containerSize: availableSize, containerInset: containerInset, containerCornerRadius: containerCornerRadius, bottomInset: sheetEnvironment.safeInsets.bottom, topInset: topInset, fillingSize: fillingSize, isTablet: sheetEnvironment.metrics.isTablet)

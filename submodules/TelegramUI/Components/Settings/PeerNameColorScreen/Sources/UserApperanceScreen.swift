@@ -559,7 +559,7 @@ final class UserAppearanceScreenComponent: Component {
                             case .stars:
                                 originalPriceString = presentationData.strings.Gift_Buy_ErrorPriceChanged_Text_Stars(Int32(clamping: resellAmount.amount.value))
                             case .ton:
-                                originalPriceString = formatTonAmountText(resellAmount.amount.value, dateTimeFormat: presentationData.dateTimeFormat, maxDecimalPositions: nil) + " TON"
+                                originalPriceString = formatTonAmountText(resellAmount.amount.value, dateTimeFormat: presentationData.dateTimeFormat, maxDecimalPositions: nil, formatString: presentationData.strings.Currency_Grams)
                             }
                             
                             let newPriceString: String
@@ -570,7 +570,7 @@ final class UserAppearanceScreenComponent: Component {
                                 buttonText = presentationData.strings.Gift_Buy_Confirm_BuyFor(Int32(newPrice.amount.value))
                             case .ton:
                                 let tonValueString = formatTonAmountText(newPrice.amount.value, dateTimeFormat: presentationData.dateTimeFormat, maxDecimalPositions: nil)
-                                newPriceString = tonValueString + " TON"
+                                newPriceString = formatTonAmountText(newPrice.amount.value, dateTimeFormat: presentationData.dateTimeFormat, maxDecimalPositions: nil, formatString: presentationData.strings.Currency_Grams)
                                 buttonText = presentationData.strings.Gift_Buy_Confirm_BuyForTon(tonValueString).string
                             }
                             let errorText = presentationData.strings.Gift_Buy_ErrorPriceChanged_Text(originalPriceString, newPriceString).string

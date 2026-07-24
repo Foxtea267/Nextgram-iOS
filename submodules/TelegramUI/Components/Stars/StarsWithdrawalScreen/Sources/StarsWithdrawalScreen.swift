@@ -441,7 +441,7 @@ private final class SheetContent: CombinedComponent {
                 case .ton:
                     if let value = state.amount?.value, value > 0 {
                         let tonValue = Int64(Float(value) * Float(resaleConfiguration.starGiftCommissionTonPermille) / 1000.0)
-                        let tonString = formatTonAmountText(tonValue, dateTimeFormat: environment.dateTimeFormat, maxDecimalPositions: 3) + " TON"
+                        let tonString = formatTonAmountText(tonValue, dateTimeFormat: environment.dateTimeFormat, maxDecimalPositions: 3, formatString: presentationData.strings.Currency_Grams)
                         amountInfoString = NSAttributedString(attributedString: parseMarkdownIntoAttributedString(environment.strings.Stars_SellGift_AmountInfo(tonString).string, attributes: amountMarkdownAttributes, textAlignment: .natural))
                         
                         if let tonUsdRate = withdrawConfiguration.tonUsdRate {
@@ -1426,7 +1426,7 @@ public final class StarsWithdrawScreen: ViewControllerComponentContainer {
             case .stars:
                 text = presentationData.strings.Stars_SellGiftMinAmountToast_Text("\(presentationData.strings.Stars_Withdraw_Withdraw_ErrorMinimum_Stars(Int32(clamping: minAmount)))").string
             case .ton:
-                let amountString = formatTonAmountText(minAmount, dateTimeFormat: presentationData.dateTimeFormat) + " TON"
+                let amountString = formatTonAmountText(minAmount, dateTimeFormat: presentationData.dateTimeFormat, formatString: presentationData.strings.Currency_Grams)
                 text = presentationData.strings.Stars_SellGiftMinAmountToast_Text(amountString).string
             }
         } else if case let .suggestedPost(mode, _, _, _) = self.mode {
@@ -1451,7 +1451,7 @@ public final class StarsWithdrawScreen: ViewControllerComponentContainer {
             case .stars:
                 text = presentationData.strings.Gift_Offer_GiftMinAmountToast_Text("\(presentationData.strings.Stars_Withdraw_Withdraw_ErrorMinimum_Stars(Int32(clamping: minAmount)))").string
             case .ton:
-                let amountString = formatTonAmountText(minAmount, dateTimeFormat: presentationData.dateTimeFormat) + " TON"
+                let amountString = formatTonAmountText(minAmount, dateTimeFormat: presentationData.dateTimeFormat, formatString: presentationData.strings.Currency_Grams)
                 text = presentationData.strings.Gift_Offer_GiftMinAmountToast_Text(amountString).string
             }
         }

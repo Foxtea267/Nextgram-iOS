@@ -11,6 +11,23 @@ import SemanticStatusNode
 import MusicAlbumArtResources
 import PhotoResources
 
+/// Optional per-element color override for an audio row. When non-nil, the node uses these instead of the
+/// chat-message-bubble theme colors — used by the RichTextEditor's in-editor preview so an audio block tracks
+/// the editor's accent/text scheme (the same `RichTextEditorTheme` accent the table reads) rather than the
+/// outgoing-bubble palette. nil (real message rendering) leaves the bubble palette untouched.
+public struct InstantPageAudioColorOverride: Equatable {
+    public let control: UIColor          // play-button fill + streaming/progress ring
+    public let controlForeground: UIColor // the play/pause glyph drawn on the accent fill
+    public let title: UIColor            // line 1 (track title)
+    public let description: UIColor      // line 2 (duration · performer)
+    public init(control: UIColor, controlForeground: UIColor, title: UIColor, description: UIColor) {
+        self.control = control
+        self.controlForeground = controlForeground
+        self.title = title
+        self.description = description
+    }
+}
+
 // Renders an InstantPage audio block to match the standard music message bubble
 // (ChatMessageInteractiveFileNode, non-thumbnail/non-voice music branch). Visual only differs
 // from the file node in that playback is driven by InstantPageMediaPlaylist (our `play` closure)
@@ -20,6 +37,8 @@ final class InstantPageV2AudioContentNode: ASDisplayNode {
     private let message: MessageReference?
     private let file: TelegramMediaFile
     private let incoming: Bool
+    // nil → chat-bubble palette (real messages); non-nil → editor accent/text override (see the struct).
+    private let colorOverride: InstantPageAudioColorOverride?
 
     private let statusNode: SemanticStatusNode
     private let streamingStatusNode: SemanticStatusNode
@@ -56,18 +75,19 @@ final class InstantPageV2AudioContentNode: ASDisplayNode {
     private static let controlAreaWidth: CGFloat = 12.0 + 40.0 + 8.0
     private static let normHeight: CGFloat = 44.0
 
-    init(context: AccountContext, message: MessageReference?, file: TelegramMediaFile, incoming: Bool, presentationData: PresentationData) {
+    init(context: AccountContext, message: MessageReference?, file: TelegramMediaFile, incoming: Bool, presentationData: PresentationData, colorOverride: InstantPageAudioColorOverride? = nil) {
         self.context = context
         self.message = message
         self.file = file
         self.incoming = incoming
         self.presentationData = presentationData
         self.incomingValue = incoming
+        self.colorOverride = colorOverride
 
         let messageTheme = incoming ? presentationData.theme.chat.message.incoming : presentationData.theme.chat.message.outgoing
 
-        let backgroundNodeColor = messageTheme.mediaActiveControlColor
-        let foregroundNodeColor: UIColor = (incoming && messageTheme.mediaActiveControlColor.rgb != 0xffffff) ? .white : .clear
+        let backgroundNodeColor = colorOverride?.control ?? messageTheme.mediaActiveControlColor
+        let foregroundNodeColor: UIColor = colorOverride?.controlForeground ?? ((incoming && messageTheme.mediaActiveControlColor.rgb != 0xffffff) ? .white : .clear)
 
         var title: String?
         var performer: String?
@@ -97,9 +117,9 @@ final class InstantPageV2AudioContentNode: ASDisplayNode {
             backgroundNodeColor: backgroundNodeColor,
             foregroundNodeColor: foregroundNodeColor,
             image: albumArtImage,
-            overlayForegroundNodeColor: presentationData.theme.chat.message.mediaOverlayControlColors.foregroundColor
+            overlayForegroundNodeColor: colorOverride?.controlForeground ?? presentationData.theme.chat.message.mediaOverlayControlColors.foregroundColor
         )
-        self.streamingStatusNode = SemanticStatusNode(backgroundNodeColor: .clear, foregroundNodeColor: messageTheme.mediaActiveControlColor)
+        self.streamingStatusNode = SemanticStatusNode(backgroundNodeColor: .clear, foregroundNodeColor: colorOverride?.control ?? messageTheme.mediaActiveControlColor)
 
         self.titleNode = TextNode()
         self.titleNode.displaysAsynchronously = false
@@ -112,8 +132,8 @@ final class InstantPageV2AudioContentNode: ASDisplayNode {
 
         super.init()
 
-        self.titleAttributedString = InstantPageV2AudioContentNode.titleString(file: file, incoming: incoming, presentationData: presentationData)
-        self.descriptionAttributedString = InstantPageV2AudioContentNode.descriptionString(file: file, incoming: incoming, presentationData: presentationData)
+        self.titleAttributedString = InstantPageV2AudioContentNode.titleString(file: file, incoming: incoming, presentationData: presentationData, overrideColor: colorOverride?.title)
+        self.descriptionAttributedString = InstantPageV2AudioContentNode.descriptionString(file: file, incoming: incoming, presentationData: presentationData, overrideColor: colorOverride?.description)
 
         self.addSubnode(self.statusNode)
         self.addSubnode(self.streamingStatusNode)
@@ -191,14 +211,14 @@ final class InstantPageV2AudioContentNode: ASDisplayNode {
         if self.presentationData.theme === presentationData.theme && self.incomingValue == incoming { return }
         self.presentationData = presentationData
         self.incomingValue = incoming
-        self.titleAttributedString = InstantPageV2AudioContentNode.titleString(file: self.file, incoming: incoming, presentationData: presentationData)
-        self.descriptionAttributedString = InstantPageV2AudioContentNode.descriptionString(file: self.file, incoming: incoming, presentationData: presentationData)
+        self.titleAttributedString = InstantPageV2AudioContentNode.titleString(file: self.file, incoming: incoming, presentationData: presentationData, overrideColor: self.colorOverride?.title)
+        self.descriptionAttributedString = InstantPageV2AudioContentNode.descriptionString(file: self.file, incoming: incoming, presentationData: presentationData, overrideColor: self.colorOverride?.description)
         let messageTheme = incoming ? presentationData.theme.chat.message.incoming : presentationData.theme.chat.message.outgoing
-        self.statusNode.backgroundNodeColor = messageTheme.mediaActiveControlColor
+        self.statusNode.backgroundNodeColor = self.colorOverride?.control ?? messageTheme.mediaActiveControlColor
         // foreground/overlay also depend on incoming + theme (set at construction) — refresh them
         // too so the play glyph isn't miscolored after an in-place theme/direction change.
-        self.statusNode.foregroundNodeColor = (incoming && messageTheme.mediaActiveControlColor.rgb != 0xffffff) ? .white : .clear
-        self.statusNode.overlayForegroundNodeColor = presentationData.theme.chat.message.mediaOverlayControlColors.foregroundColor
+        self.statusNode.foregroundNodeColor = self.colorOverride?.controlForeground ?? ((incoming && messageTheme.mediaActiveControlColor.rgb != 0xffffff) ? .white : .clear)
+        self.statusNode.overlayForegroundNodeColor = self.colorOverride?.controlForeground ?? presentationData.theme.chat.message.mediaOverlayControlColors.foregroundColor
 
         // No setNeedsLayout(): this node doesn't override layout(); the host calls updateLayout(width:)
         // right after updatePresentationData, which re-runs the text layout with the rebuilt strings.
@@ -218,19 +238,19 @@ final class InstantPageV2AudioContentNode: ASDisplayNode {
     }
 
     // Line 1: track title at 17pt (= baseDisplaySize at the default font setting; scales with it).
-    private static func titleString(file: TelegramMediaFile, incoming: Bool, presentationData: PresentationData) -> NSAttributedString {
+    private static func titleString(file: TelegramMediaFile, incoming: Bool, presentationData: PresentationData, overrideColor: UIColor? = nil) -> NSAttributedString {
         let messageTheme = incoming ? presentationData.theme.chat.message.incoming : presentationData.theme.chat.message.outgoing
         let titleFont = Font.regular(floor(presentationData.chatFontSize.baseDisplaySize * 17.0 / 17.0))
         var title = file.fileName ?? "Unknown Track"
         for attribute in file.attributes {
             if case let .Audio(false, _, t, _, _) = attribute { title = t ?? title; break }
         }
-        return NSAttributedString(string: title, font: titleFont, textColor: messageTheme.fileTitleColor)
+        return NSAttributedString(string: title, font: titleFont, textColor: overrideColor ?? messageTheme.fileTitleColor)
     }
 
     // Line 2: "<duration> · <performer>" at 15pt (omits the "· performer" tail when there's no
     // performer; omits the duration when it's absent).
-    private static func descriptionString(file: TelegramMediaFile, incoming: Bool, presentationData: PresentationData) -> NSAttributedString {
+    private static func descriptionString(file: TelegramMediaFile, incoming: Bool, presentationData: PresentationData, overrideColor: UIColor? = nil) -> NSAttributedString {
         let messageTheme = incoming ? presentationData.theme.chat.message.incoming : presentationData.theme.chat.message.outgoing
         let descriptionFont = Font.with(size: floor(presentationData.chatFontSize.baseDisplaySize * 15.0 / 17.0), design: .regular, weight: .regular, traits: [.monospacedNumbers])
         var performer = ""
@@ -249,7 +269,7 @@ final class InstantPageV2AudioContentNode: ASDisplayNode {
         if !performer.isEmpty {
             text += text.isEmpty ? performer : " · \(performer)"
         }
-        return NSAttributedString(string: text, font: descriptionFont, textColor: messageTheme.fileDescriptionColor)
+        return NSAttributedString(string: text, font: descriptionFont, textColor: overrideColor ?? messageTheme.fileDescriptionColor)
     }
 
     func updateLayout(width: CGFloat) {

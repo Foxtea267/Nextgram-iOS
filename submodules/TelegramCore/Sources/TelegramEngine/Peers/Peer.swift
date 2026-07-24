@@ -174,6 +174,7 @@ public enum EnginePeer: Equatable {
     case user(TelegramUser)
     case legacyGroup(TelegramGroup)
     case channel(TelegramChannel)
+    case community(TelegramCommunity)
     case secretChat(TelegramSecretChat)
 
     public static func ==(lhs: EnginePeer, rhs: EnginePeer) -> Bool {
@@ -192,6 +193,12 @@ public enum EnginePeer: Equatable {
             }
         case let .channel(channel):
             if case .channel(channel) = rhs {
+                return true
+            } else {
+                return false
+            }
+        case let .community(community):
+            if case .community(community) = rhs {
                 return true
             } else {
                 return false
@@ -566,6 +573,10 @@ public extension EnginePeer {
     var associatedPeerId: Id? {
         return self._asPeer().associatedPeerId
     }
+    
+    var containerPeerId: Id? {
+        return self._asPeer().containerPeerId
+    }
 
     var hasCustomNameColor: Bool {
         return self._asPeer().hasCustomNameColor
@@ -585,6 +596,8 @@ public extension EnginePeer {
             self = .legacyGroup(group)
         case let channel as TelegramChannel:
             self = .channel(channel)
+        case let community as TelegramCommunity:
+            self = .community(community)
         case let secretChat as TelegramSecretChat:
             self = .secretChat(secretChat)
         default:
@@ -600,6 +613,8 @@ public extension EnginePeer {
             return legacyGroup
         case let .channel(channel):
             return channel
+        case let .community(community):
+            return community
         case let .secretChat(secretChat):
             return secretChat
         }

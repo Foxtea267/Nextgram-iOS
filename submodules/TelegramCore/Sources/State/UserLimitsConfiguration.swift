@@ -31,6 +31,7 @@ public struct UserLimitsConfiguration: Equatable {
     public var maxConferenceParticipantCount: Int32
     public var maxBotsCreated: Int32
     public var maxOwnedAITextStyles: Int32
+    public var maxMessageLength: Int32
     
     public static var defaultValue: UserLimitsConfiguration {
         return UserLimitsConfiguration(
@@ -62,7 +63,8 @@ public struct UserLimitsConfiguration: Equatable {
             maxChannelRecommendationsCount: 10,
             maxConferenceParticipantCount: 100,
             maxBotsCreated: 20,
-            maxOwnedAITextStyles: 5
+            maxOwnedAITextStyles: 5,
+            maxMessageLength: 4096
         )
     }
 
@@ -95,7 +97,8 @@ public struct UserLimitsConfiguration: Equatable {
         maxChannelRecommendationsCount: Int32,
         maxConferenceParticipantCount: Int32,
         maxBotsCreated: Int32,
-        maxOwnedAITextStyles: Int32
+        maxOwnedAITextStyles: Int32,
+        maxMessageLength: Int32
     ) {
         self.maxPinnedChatCount = maxPinnedChatCount
         self.maxPinnedSavedChatCount = maxPinnedSavedChatCount
@@ -126,6 +129,7 @@ public struct UserLimitsConfiguration: Equatable {
         self.maxConferenceParticipantCount = maxConferenceParticipantCount
         self.maxBotsCreated = maxBotsCreated
         self.maxOwnedAITextStyles = maxOwnedAITextStyles
+        self.maxMessageLength = maxMessageLength
     }
 }
 
@@ -182,5 +186,6 @@ extension UserLimitsConfiguration {
         self.maxConferenceParticipantCount = getGeneralValue("conference_call_size_limit", orElse: defaultValue.maxConferenceParticipantCount)
         self.maxBotsCreated = getValue("bots_create_limit", orElse: defaultValue.maxBotsCreated)
         self.maxOwnedAITextStyles = getValue("aicompose_tone_saved_limit", orElse: defaultValue.maxBotsCreated)
+        self.maxMessageLength = getValue("message_length_limit", orElse: defaultValue.maxMessageLength)
     }
 }

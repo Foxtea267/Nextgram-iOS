@@ -37,8 +37,50 @@ public enum ReportContentSubject: Equatable {
     }
 }
 
+private let ephemeralReportOptions: [(title: String, value: String)] = [
+    ("Spam", "spam"),
+    ("Violence", "violence"),
+    ("Pornography", "pornography"),
+    ("Child Abuse", "child_abuse"),
+    ("Illegal Drugs", "illegal_drugs"),
+    ("Personal Details", "personal_details"),
+    ("Other", "other")
+]
+
 func _internal_reportContent(account: Account, subject: ReportContentSubject, option: Data?, message: String?) -> Signal<ReportContentResult, ReportContentError> {
     return account.postbox.transaction { transaction -> Signal<ReportContentResult, ReportContentError> in
+        if case let .messages(messageIds) = subject, !messageIds.isEmpty, messageIds.allSatisfy({ $0.namespace == Namespaces.Message.EphemeralLocal }) {
+            guard let option else {
+                return .single(.options(title: "Report", options: ephemeralReportOptions.map { option in
+                    ReportContentResult.Option(text: option.title, option: Data())
+                }))
+            }
+
+            if String(data: option, encoding: .utf8) == "other", message == nil {
+                return .single(.addComment(optional: false, option: option))
+            }
+
+            var requests: [Signal<Api.ReportResult, MTRpcError>] = []
+            for messageId in messageIds {
+                guard let peer = transaction.getPeer(messageId.peerId), let inputPeer = apiInputPeer(peer), let _ = transaction.getMessage(messageId)?.attributes.first(where: { $0 is EphemeralMessageAttribute }) as? EphemeralMessageAttribute else {
+                    continue
+                }
+                requests.append(account.network.request(Api.functions.ephemeral.reportMessage(peer: inputPeer, id: messageId.id, option: Buffer(data: option), message: message ?? "")))
+            }
+
+            if requests.isEmpty {
+                return .fail(.generic)
+            }
+
+            return combineLatest(requests)
+            |> mapError { _ -> ReportContentError in
+                return .generic
+            }
+            |> map { _ -> ReportContentResult in
+                return .reported
+            }
+        }
+
         let sourceMessageId: MessageId?
         if case let .peer(_, messageId) = subject {
             sourceMessageId = messageId

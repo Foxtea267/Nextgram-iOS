@@ -17,6 +17,8 @@ public func canSendMessagesToPeer(_ peer: EnginePeer, ignoreDefault: Bool = fals
         return secretChat.embeddedState == .active
     case let .channel(channel):
         return channel.hasPermission(.sendSomething, ignoreDefault: ignoreDefault)
+    case .community:
+        return false
     }
 }
 
@@ -38,5 +40,7 @@ public func canSendReactionsToPeer(_ peer: EnginePeer, ignoreDefault: Bool = fal
         return secretChat.embeddedState == .active
     case let .channel(channel):
         return channel.hasBannedPermission(.banSendReactions, ignoreDefault: ignoreDefault) == nil
+    case .community:
+        return false
     }
 }

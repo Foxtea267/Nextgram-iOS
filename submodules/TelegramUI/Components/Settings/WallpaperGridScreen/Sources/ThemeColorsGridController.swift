@@ -184,7 +184,7 @@ public final class ThemeColorsGridController: ViewController, AttachmentContaina
 
         if case .peer = mode {
             self.title = self.presentationData.strings.Conversation_Theme_ChooseColorTitle
-            self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Cancel, style: .plain, target: self, action: #selector(self.cancelPressed))
+            self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: "___close", style: .plain, target: self, action: #selector(self.cancelPressed))
             self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Conversation_Theme_SetCustomColor, style: .plain, target: self, action: #selector(self.customPressed))
         } else {
             self.title = self.presentationData.strings.WallpaperColors_Title

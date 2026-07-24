@@ -173,6 +173,11 @@ public func translateMessageIds(context: AccountContext, messageIds: [EngineMess
                         messageIdsToTranslate.append(messageId)
                         messageIdsSet.insert(messageId)
                     }
+                } else if let _ = message.richText {
+                    if !messageIdsSet.contains(messageId) {
+                        messageIdsToTranslate.append(messageId)
+                        messageIdsSet.insert(messageId)
+                    }
                 } else if let _ = message.media.first(where: { $0 is TelegramMediaPoll }) {
                     if !messageIdsSet.contains(messageId) {
                         messageIdsToTranslate.append(messageId)

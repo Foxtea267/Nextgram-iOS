@@ -92,6 +92,14 @@ public extension TelegramEngine {
                             return false
                         }
                     }.map(EngineRenderedPeer.init)
+                case .bots:
+                    return peers.filter { item in
+                        if let user = item.peer as? TelegramUser, user.botInfo != nil {
+                            return true
+                        } else {
+                            return false
+                        }
+                    }.map(EngineRenderedPeer.init)
                 case .globalPosts:
                     return []
                 }

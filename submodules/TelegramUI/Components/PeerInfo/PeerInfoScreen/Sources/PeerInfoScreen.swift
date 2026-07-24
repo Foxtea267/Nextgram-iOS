@@ -495,6 +495,12 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             editingOpenDiscussionGroupSetup: { [weak self] in
                 self?.editingOpenDiscussionGroupSetup()
             },
+            editingOpenAddToCommunity: { [weak self] in
+                self?.editingOpenAddToCommunity()
+            },
+            editingRemoveFromCommunity: { [weak self] communityId in
+                self?.editingRemoveFromCommunity(communityId: communityId)
+            },
             editingOpenPostSuggestionsSetup: { [weak self] in
                 self?.editingOpenPostSuggestionsSetup()
             },
@@ -3061,7 +3067,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         }
         
         if bot.flags.contains(.notActivated) || bot.flags.contains(.showInSettingsDisclaimer) {
-            let alertController = webAppTermsAlertController(context: self.context, updatedPresentationData: controller.updatedPresentationData, bot: bot, completion: { [weak self] allowWrite in
+            let alertController = webAppTermsAlertController(context: self.context, updatedPresentationData: controller.updatedPresentationData, completion: { [weak self] allowWrite in
                 guard let self else {
                     return
                 }
@@ -4123,6 +4129,70 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.controller?.push(channelDiscussionGroupSetupController(context: self.context, updatedPresentationData: self.controller?.updatedPresentationData, peerId: peer.id))
     }
     
+    private func editingOpenAddToCommunity() {
+        guard let data = self.data, let peer = data.peer else {
+            return
+        }
+        self.controller?.push(self.context.sharedContext.makeCommunitiesScreen(context: self.context, peerId: peer.id))
+    }
+
+    private func editingRemoveFromCommunity(communityId: EnginePeer.Id) {
+        guard let data = self.data, let peer = data.peer else {
+            return
+        }
+        
+        let action = { [weak self] in
+            guard let self else {
+                return
+            }
+            self.activeActionDisposable.set((self.context.engine.peers.toggleCommunityPeerLink(
+                communityId: communityId,
+                peerId: peer.id,
+                action: .unlink
+            )
+            |> deliverOnMainQueue).startStrict(error: { [weak self] _ in
+                guard let self else {
+                    return
+                }
+                self.controller?.present(textAlertController(context: self.context, updatedPresentationData: self.controller?.updatedPresentationData, title: nil, text: self.presentationData.strings.Login_UnknownError, actions: [
+                    TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})
+                ]), in: .window(.root))
+            }, completed: { [weak self] in
+                guard let self else {
+                    return
+                }
+                let _ = self.context.account.postbox.transaction { transaction -> Void in
+                    if case let .channel(channel) = peer {
+                        updatePeersCustom(transaction: transaction, peers: [channel.withUpdatedLinkedCommunityId(nil)], update: { _, updated in
+                            guard let channel = updated as? TelegramChannel else {
+                                return updated
+                            }
+                            return channel.withUpdatedLinkedCommunityId(nil)
+                        })
+                    }
+                    transaction.updatePeerCachedData(peerIds: Set([communityId]), update: { _, current in
+                        guard let current = current as? CachedCommunityData else {
+                            return current
+                        }
+                        return current.withUpdatedLinkedPeers(current.linkedPeers.filter { $0.peerId != peer.id })
+                    })
+                }.startStandalone()
+            }))
+        }
+        
+        self.controller?.present(textAlertController(
+            context: self.context,
+            title: self.presentationData.strings.Community_RemoveChat_Title,
+            text: self.presentationData.strings.Community_RemoveChat_Text,
+            actions: [
+                TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {}),
+                TextAlertAction(type: .defaultDestructiveAction, title: self.presentationData.strings.Community_RemoveChat_Remove, action: {
+                    action()
+                })
+            ]
+        ), in: .window(.root))
+    }
+
     private func editingOpenPostSuggestionsSetup() {
         if #available(iOS 13.0, *) {
             guard let data = self.data, let peer = data.peer else {
@@ -6208,7 +6278,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 self.controller?.present(UndoOverlayController(presentationData: presentationData, content: .succeed(text: presentationData.strings.Chat_SimilarChannels_JoinedChannel(peer.compactDisplayTitle).string, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
             case let .webView(webView):
                 if let controller = self.controller {
-                    self.context.sharedContext.openJoinChatWebView(context: self.context, parentController: controller, updatedPresentationData: self.controller?.updatedPresentationData, webView: webView)
+                    self.context.sharedContext.openJoinChatWebView(context: self.context, parentController: controller, updatedPresentationData: self.controller?.updatedPresentationData, webView: webView, chatTitle: peer.compactDisplayTitle)
                 }
             }
         }, error: { [weak self] error in

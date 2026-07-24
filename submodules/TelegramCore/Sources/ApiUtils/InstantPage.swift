@@ -246,9 +246,9 @@ extension InstantPageBlock {
                 self = .anchor(name)
             case let .pageBlockBlockquote(pageBlockBlockquoteData):
                 let (text, caption) = (pageBlockBlockquoteData.text, pageBlockBlockquoteData.caption)
-                self = .blockQuote(blocks: [.paragraph(RichText(apiText: text))], caption: RichText(apiText: caption))
+                self = .blockQuote(blocks: [.paragraph(RichText(apiText: text))], caption: RichText(apiText: caption), collapsed: nil)
             case let .pageBlockBlockquoteBlocks(pageBlockBlockquoteBlocksData):
-                self = .blockQuote(blocks: pageBlockBlockquoteBlocksData.blocks.map { InstantPageBlock(apiBlock: $0) }, caption: RichText(apiText: pageBlockBlockquoteBlocksData.caption))
+                self = .blockQuote(blocks: pageBlockBlockquoteBlocksData.blocks.map { InstantPageBlock(apiBlock: $0) }, caption: RichText(apiText: pageBlockBlockquoteBlocksData.caption), collapsed: nil)
             case let .pageBlockPullquote(pageBlockPullquoteData):
                 let (text, caption) = (pageBlockPullquoteData.text, pageBlockPullquoteData.caption)
                 self = .pullQuote(text: RichText(apiText: text), caption: RichText(apiText: caption))
@@ -258,10 +258,10 @@ extension InstantPageBlock {
                 if (flags & (1 << 0)) != 0, let webpageId = webpageId, webpageId != 0 {
                     webpageMediaId = MediaId(namespace: Namespaces.Media.CloudWebpage, id: webpageId)
                 }
-                self = .image(id: MediaId(namespace: Namespaces.Media.CloudImage, id: photoId), caption: InstantPageCaption(apiCaption: caption), url: url, webpageId: webpageMediaId)
+                self = .image(id: MediaId(namespace: Namespaces.Media.CloudImage, id: photoId), caption: InstantPageCaption(apiCaption: caption), url: url, webpageId: webpageMediaId, spoiler: (flags & (1 << 1)) != 0)
             case let .pageBlockVideo(pageBlockVideoData):
                 let (flags, videoId, caption) = (pageBlockVideoData.flags, pageBlockVideoData.videoId, pageBlockVideoData.caption)
-                self = .video(id: MediaId(namespace: Namespaces.Media.CloudFile, id: videoId), caption: InstantPageCaption(apiCaption: caption), autoplay: (flags & (1 << 0)) != 0, loop: (flags & (1 << 1)) != 0)
+                self = .video(id: MediaId(namespace: Namespaces.Media.CloudFile, id: videoId), caption: InstantPageCaption(apiCaption: caption), autoplay: (flags & (1 << 0)) != 0, loop: (flags & (1 << 1)) != 0, spoiler: (flags & (1 << 2)) != 0)
             case let .pageBlockCover(pageBlockCoverData):
                 let cover = pageBlockCoverData.cover
                 self = .cover(InstantPageBlock(apiBlock: cover))
@@ -336,6 +336,10 @@ extension InstantPageBlock {
     }
     
     func apiInputBlock() -> Api.PageBlock? {
+        return self.apiInputBlock(mediaIdRemap: [:])
+    }
+
+    func apiInputBlock(mediaIdRemap: [MediaId: Int64]) -> Api.PageBlock? {
         switch self {
         case .unsupported, .title, .subtitle, .kicker, .header, .subheader, .cover, .channelBanner, .authorDate, .relatedArticles, .webEmbed, .postEmbed, .thinking:
             return nil
@@ -374,23 +378,27 @@ extension InstantPageBlock {
             } else {
                 return .pageBlockList(Api.PageBlock.Cons_pageBlockList(items: items.map { $0.apiInputPageListItem() }))
             }
-        case let .blockQuote(blocks, caption):
+        case let .blockQuote(blocks, caption, _):
             if blocks.isEmpty {
                 return .pageBlockBlockquote(Api.PageBlock.Cons_pageBlockBlockquote(text: RichText.empty.apiRichText(), caption: caption.apiRichText()))
             }
             if blocks.count == 1, case let .paragraph(text) = blocks[0] {
                 return .pageBlockBlockquote(Api.PageBlock.Cons_pageBlockBlockquote(text: text.apiRichText(), caption: caption.apiRichText()))
             }
-            return .pageBlockBlockquoteBlocks(Api.PageBlock.Cons_pageBlockBlockquoteBlocks(blocks: blocks.compactMap { $0.apiInputBlock() }, caption: caption.apiRichText()))
+            return .pageBlockBlockquoteBlocks(Api.PageBlock.Cons_pageBlockBlockquoteBlocks(blocks: blocks.compactMap { $0.apiInputBlock(mediaIdRemap: mediaIdRemap) }, caption: caption.apiRichText()))
         case let .pullQuote(text, caption):
             return .pageBlockPullquote(Api.PageBlock.Cons_pageBlockPullquote(text: text.apiRichText(), caption: caption.apiRichText()))
-        case let .image(id, caption, url, webpageId):
+        case let .image(id, caption, url, webpageId, spoiler):
             var flags: Int32 = 0
             if url != nil && webpageId != nil {
                 flags |= 1 << 0
             }
-            return .pageBlockPhoto(Api.PageBlock.Cons_pageBlockPhoto(flags: flags, photoId: id.id, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText())), url: url, webpageId: webpageId?.id))
-        case let .video(id, caption, autoplay, loop):
+            if spoiler {
+                flags |= 1 << 1
+            }
+            let photoId = mediaIdRemap[id] ?? id.id
+            return .pageBlockPhoto(Api.PageBlock.Cons_pageBlockPhoto(flags: flags, photoId: photoId, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText())), url: url, webpageId: webpageId?.id))
+        case let .video(id, caption, autoplay, loop, spoiler):
             var flags: Int32 = 0
             if autoplay {
                 flags |= 1 << 0
@@ -398,13 +406,18 @@ extension InstantPageBlock {
             if loop {
                 flags |= 1 << 1
             }
-            return .pageBlockVideo(Api.PageBlock.Cons_pageBlockVideo(flags: flags, videoId: id.id, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
+            if spoiler {
+                flags |= 1 << 2
+            }
+            let videoId = mediaIdRemap[id] ?? id.id
+            return .pageBlockVideo(Api.PageBlock.Cons_pageBlockVideo(flags: flags, videoId: videoId, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
         case let .audio(id, caption):
-            return .pageBlockAudio(Api.PageBlock.Cons_pageBlockAudio(audioId: id.id, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
+            let audioId = mediaIdRemap[id] ?? id.id
+            return .pageBlockAudio(Api.PageBlock.Cons_pageBlockAudio(audioId: audioId, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
         case let .collage(items, caption):
-            return .pageBlockCollage(Api.PageBlock.Cons_pageBlockCollage(items: items.compactMap { $0.apiInputBlock() }, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
+            return .pageBlockCollage(Api.PageBlock.Cons_pageBlockCollage(items: items.compactMap { $0.apiInputBlock(mediaIdRemap: mediaIdRemap) }, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
         case let .slideshow(items, caption):
-            return .pageBlockSlideshow(Api.PageBlock.Cons_pageBlockSlideshow(items: items.compactMap { $0.apiInputBlock() }, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
+            return .pageBlockSlideshow(Api.PageBlock.Cons_pageBlockSlideshow(items: items.compactMap { $0.apiInputBlock(mediaIdRemap: mediaIdRemap) }, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
         case let .table(title, rows, bordered, striped):
             var flags: Int32 = 0
             if bordered {
@@ -419,7 +432,7 @@ extension InstantPageBlock {
             if expanded {
                 flags |= (1 << 0)
             }
-            return .pageBlockDetails(Api.PageBlock.Cons_pageBlockDetails(flags: flags, blocks: blocks.compactMap { $0.apiInputBlock() }, title: title.apiRichText()))
+            return .pageBlockDetails(Api.PageBlock.Cons_pageBlockDetails(flags: flags, blocks: blocks.compactMap { $0.apiInputBlock(mediaIdRemap: mediaIdRemap) }, title: title.apiRichText()))
         case let .map(latitude, longitude, zoom, dimensions, caption):
             return .inputPageBlockMap(Api.PageBlock.Cons_inputPageBlockMap(geo: .inputGeoPoint(Api.InputGeoPoint.Cons_inputGeoPoint(flags: 0, lat: latitude, long: longitude, accuracyRadius: nil)), zoom: zoom, w: dimensions.width, h: dimensions.height, caption: .pageCaption(Api.PageCaption.Cons_pageCaption(text: caption.text.apiRichText(), credit: caption.credit.apiRichText()))))
         }

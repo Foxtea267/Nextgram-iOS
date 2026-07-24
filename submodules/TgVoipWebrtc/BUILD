@@ -133,6 +133,7 @@ sources = glob([
     "tgcalls/tgcalls/v2/SignalingEncryption.cpp",
     "tgcalls/tgcalls/v2/SignalingSctpConnection.cpp",
     "tgcalls/tgcalls/v2/CustomDcSctpSocket.cpp",
+    "tgcalls/tgcalls/v2/SignalingTranslator.cpp",
 ]
 
 objc_library(

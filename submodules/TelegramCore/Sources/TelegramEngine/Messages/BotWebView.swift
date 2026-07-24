@@ -125,6 +125,40 @@ func _internal_requestMainWebView(postbox: Postbox, network: Network, peerId: Pe
     |> switchToLatest
 }
 
+func _internal_requestChatJoinWebView(network: Network, queryId: Int64, themeParams: [String: Any]?) -> Signal<RequestWebViewResult, RequestWebViewError> {
+    var serializedThemeParams: Api.DataJSON?
+    if let themeParams = themeParams, let data = try? JSONSerialization.data(withJSONObject: themeParams, options: []), let dataString = String(data: data, encoding: .utf8) {
+        serializedThemeParams = .dataJSON(.init(data: dataString))
+    }
+
+    var flags: Int32 = 0
+    if let _ = serializedThemeParams {
+        flags |= (1 << 0)
+    }
+
+    return network.request(Api.functions.messages.requestChatJoinWebView(flags: flags, queryId: queryId, themeParams: serializedThemeParams, platform: botWebViewPlatform))
+    |> mapError { _ -> RequestWebViewError in
+        return .generic
+    }
+    |> mapToSignal { result -> Signal<RequestWebViewResult, RequestWebViewError> in
+        switch result {
+        case let .webViewResultUrl(webViewResultUrlData):
+            let (flags, queryId, url) = (webViewResultUrlData.flags, webViewResultUrlData.queryId, webViewResultUrlData.url)
+            var resultFlags: RequestWebViewResult.Flags = []
+            if (flags & (1 << 1)) != 0 {
+                resultFlags.insert(.fullSize)
+            }
+            if (flags & (1 << 2)) != 0 {
+                resultFlags.insert(.fullScreen)
+            }
+            if (flags & (1 << 3)) != 0 {
+                resultFlags.insert(.sameOrigin)
+            }
+            return .single(RequestWebViewResult(flags: resultFlags, queryId: queryId, url: url, keepAliveSignal: nil))
+        }
+    }
+}
+
 public enum KeepWebViewError {
     case generic
 }

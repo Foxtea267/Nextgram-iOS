@@ -28,6 +28,7 @@ swift_library(
         "//submodules/TextFormat",
         "//submodules/TelegramUIPreferences",
         "//submodules/Pasteboard",
+        "//submodules/TelegramUI/Components/Chat/ChatRichTextEditorComposer",
     ],
     visibility = [
         "//visibility:public",

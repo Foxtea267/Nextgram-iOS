@@ -321,7 +321,7 @@ public final class ChatTextInputActionButtonsNode: ASDisplayNode, ChatSendMessag
             var amount: Int64
             if let forwardedCount = interfaceState.interfaceState.forwardMessageIds?.count, forwardedCount > 0 {
                 amount = sendPaidMessageStars.value * Int64(forwardedCount)
-                if interfaceState.interfaceState.effectiveInputState.inputText.length > 0 {
+                if !interfaceState.interfaceState.effectiveInputState.isEmpty {
                     amount += sendPaidMessageStars.value
                 }
             } else {

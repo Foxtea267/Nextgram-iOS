@@ -89,7 +89,7 @@ private final class DownloadedMediaStoreContext {
                             return false
                         }
                         peerTypeValue = .users
-                    case .secretChat:
+                    case .secretChat, .community:
                         return false
                     case .legacyGroup:
                         peerTypeValue = .groups

@@ -122,6 +122,14 @@ func spacingBetweenBlocks(upper: InstantPageBlock?, lower: InstantPageBlock?, fi
                         return 6.0
                     case .table:
                         return 10.0
+                    case .blockQuote, .pullQuote, .preformatted:
+                        return 10.0
+                    case .image, .video, .collage, .slideshow:
+                        if fitToWidth {
+                            return 0.0
+                        } else {
+                            return 5.0
+                        }
                     default:
                         return 5.0
                     }
@@ -141,6 +149,14 @@ func spacingBetweenBlocks(upper: InstantPageBlock?, lower: InstantPageBlock?, fi
                 return 0.0
             } else if case .thinking = upper {
                 return 2.0
+            } else if case .image = upper, fitToWidth {
+                return 0.0
+            } else if case .video = upper, fitToWidth {
+                return 0.0
+            } else if case .collage = upper, fitToWidth {
+                return 0.0
+            } else if case .slideshow = upper, fitToWidth {
+                return 0.0
             } else {
                 if fitToWidth {
                     return 5.0

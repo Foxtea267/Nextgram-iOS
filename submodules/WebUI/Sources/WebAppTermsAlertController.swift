@@ -15,7 +15,7 @@ import AlertCheckComponent
 public func webAppTermsAlertController(
     context: AccountContext,
     updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?,
-    bot: AttachMenuBot,
+    text: String? = nil,
     completion: @escaping (Bool) -> Void,
     dismissed: @escaping () -> Void = {}
 ) -> ViewController {
@@ -34,7 +34,7 @@ public func webAppTermsAlertController(
     content.append(AnyComponentWithIdentity(
         id: "text",
         component: AnyComponent(
-            AlertTextComponent(content: .plain(strings.WebApp_DisclaimerText))
+            AlertTextComponent(content: .plain(text ?? strings.WebApp_DisclaimerText))
         )
     ))
     content.append(AnyComponentWithIdentity(

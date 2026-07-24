@@ -17,11 +17,11 @@ import ImageContentAnalysis
 import TextSelectionNode
 import Speak
 import TranslateUI
-import TextProcessingScreen
 import UndoUI
 import ContextUI
 import SaveToCameraRoll
 import Pasteboard
+import ChatRichTextEditorComposer
 import AdUI
 import AdsInfoScreen
 import AdsReportScreen
@@ -417,12 +417,13 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                                         return
                                     }
                                     let presentationData = strongSelf.context.sharedContext.currentPresentationData.with({ $0 })
-                                    let controller = await TextProcessingScreen(
+                                    let controller = await strongSelf.context.sharedContext.makeTextProcessingScreen(
                                         context: strongSelf.context,
+                                        theme: nil,
                                         mode: .translate(fromLanguage: nil, applyResult: nil),
-                                        inputText: TextWithEntities(text: string, entities: []),
+                                        inputText: .plain(text: string, entities: []),
                                         copyResult: { [weak parentController] text in
-                                            storeMessageTextInPasteboard(text.text, entities: text.entities)
+                                            storeComposedRichMessageInPasteboard(text)
                                             let tooltipController = UndoOverlayController(presentationData: presentationData, content: .copy(text: presentationData.strings.Conversation_TextCopied), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false })
                                             parentController?.present(tooltipController, in: .window(.root))
                                         },

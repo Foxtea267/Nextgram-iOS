@@ -126,6 +126,7 @@ public final class ReplyAccessoryPanelNode: AccessoryPanelNode {
 
                 var authorName = ""
                 var text = ""
+                var previewText = NSAttributedString()
                 var isText = true
                 if let forwardInfo = message?.forwardInfo, forwardInfo.flags.contains(.isImported) {
                     if let author = forwardInfo.author {
@@ -147,6 +148,7 @@ public final class ReplyAccessoryPanelNode: AccessoryPanelNode {
                     }
                     let (attributedText, _, isTextValue) = descriptionStringForMessage(contentSettings: context.currentContentSettings.with { $0 }, message: EngineMessage(message), strings: strings, nameDisplayOrder: nameDisplayOrder, dateTimeFormat: dateTimeFormat, accountPeerId: context.account.peerId)
                     text = attributedText.string
+                    previewText = attributedText
                     isText = isTextValue
                 } else {
                     isMedia = false
@@ -172,7 +174,13 @@ public final class ReplyAccessoryPanelNode: AccessoryPanelNode {
                         messageText = NSAttributedString(string: text, font: textFont, textColor: isMedia ? strongSelf.theme.chat.inputPanel.secondaryTextColor : strongSelf.theme.chat.inputPanel.primaryTextColor)
                     }
                 } else {
-                    messageText = NSAttributedString(string: text, font: textFont, textColor: isMedia ? strongSelf.theme.chat.inputPanel.secondaryTextColor : strongSelf.theme.chat.inputPanel.primaryTextColor)
+                    let textColor = isMedia ? strongSelf.theme.chat.inputPanel.secondaryTextColor : strongSelf.theme.chat.inputPanel.primaryTextColor
+                    let mutablePreviewText = NSMutableAttributedString(attributedString: previewText)
+                    mutablePreviewText.addAttributes([
+                        .font: textFont,
+                        .foregroundColor: textColor
+                    ], range: NSRange(location: 0, length: mutablePreviewText.length))
+                    messageText = renderInstantPagePreviewIcons(mutablePreviewText, font: textFont, textColor: textColor)
                 }
                 
                 var updatedMediaReference: AnyMediaReference?
@@ -257,7 +265,7 @@ public final class ReplyAccessoryPanelNode: AccessoryPanelNode {
                             if nameRange.range.lowerBound != 0 {
                                 titleText.append(.text(NSAttributedString(string: rawNsString.substring(with: NSRange(location: 0, length: nameRange.range.lowerBound)), font: Font.medium(15.0), textColor: strongSelf.theme.chat.inputPanel.panelControlAccentColor)))
                             }
-                            titleText.append(.icon(icon))
+                            titleText.append(.icon(icon, .zero))
                             titleText.append(.text(NSAttributedString(string: peer.debugDisplayTitle, font: Font.medium(15.0), textColor: strongSelf.theme.chat.inputPanel.panelControlAccentColor)))
                             
                             if nameRange.range.upperBound != rawNsString.length {
@@ -291,7 +299,7 @@ public final class ReplyAccessoryPanelNode: AccessoryPanelNode {
                                 icon = UIImage(bundleImageName: "Chat/Input/Accessory Panels/PanelTextGroupIcon")
                             }
                             if let iconImage = generateTintedImage(image: icon, color: strongSelf.theme.chat.inputPanel.panelControlAccentColor) {
-                                titleText.append(.icon(iconImage))
+                                titleText.append(.icon(iconImage, .zero))
                                 titleText.append(.text(NSAttributedString(string: peer.debugDisplayTitle, font: Font.medium(15.0), textColor: theme.chat.inputPanel.panelControlAccentColor)))
                             }
                         }
@@ -415,11 +423,11 @@ public final class ReplyAccessoryPanelNode: AccessoryPanelNode {
                     let updatedText = NSMutableAttributedString(attributedString: text)
                     updatedText.addAttribute(.foregroundColor, value: theme.chat.inputPanel.panelControlAccentColor, range: NSRange(location: 0, length: updatedText.length))
                     return .text(updatedText)
-                case let .icon(icon):
+                case let .icon(icon, offset):
                     if let iconImage = generateTintedImage(image: icon, color: theme.chat.inputPanel.panelControlAccentColor) {
-                        return .icon(iconImage)
+                        return .icon(iconImage, offset)
                     } else {
-                        return .icon(icon)
+                        return .icon(icon, offset)
                     }
                 }
             }

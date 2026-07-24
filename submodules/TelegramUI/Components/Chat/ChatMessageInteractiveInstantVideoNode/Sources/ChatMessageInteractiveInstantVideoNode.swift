@@ -553,7 +553,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             } else {
                 dateFormat = .regular
             }
-            let dateText = stringForMessageTimestampStatus(accountPeerId: item.context.account.peerId, message: EngineMessage(item.message), dateTimeFormat: item.presentationData.dateTimeFormat, nameDisplayOrder: item.presentationData.nameDisplayOrder, strings: item.presentationData.strings, format: dateFormat, associatedData: item.associatedData, ignoreAuthor: item.presentationData.isPreview)
+            let dateText = stringForMessageTimestampStatus(context: item.context, message: EngineMessage(item.message), dateTimeFormat: item.presentationData.dateTimeFormat, nameDisplayOrder: item.presentationData.nameDisplayOrder, strings: item.presentationData.strings, format: dateFormat, associatedData: item.associatedData, ignoreAuthor: item.presentationData.isPreview)
             
             let maxDateAndStatusWidth: CGFloat
             if case .bubble = statusDisplayType {

@@ -367,25 +367,51 @@ public final class PeerChannelMemberCategoriesContextsManager {
     }
     
     public func updateMemberBannedRights(engine: TelegramEngine, peerId: PeerId, memberId: PeerId, bannedRights: TelegramChatBannedRights?) -> Signal<Void, NoError> {
-        return engine.peers.updateChannelMemberBannedRights(peerId: peerId, memberId: memberId, rights: bannedRights)
-        |> deliverOnMainQueue
-        |> beforeNext { [weak self] (previous, updated, isMember) in
-            if let strongSelf = self {
-                strongSelf.impl.with { impl in
-                    for (contextPeerId, context) in impl.contexts {
-                        if peerId == contextPeerId {
-                            context.replayUpdates([(previous, updated, isMember)])
+        return engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
+        |> mapToSignal { peer -> Signal<Void, NoError> in
+            if bannedRights == nil, case .community = peer {
+                return engine.peers.toggleCommunityParticipantBanned(communityId: peerId, participantId: memberId, banned: false)
+                |> `catch` { _ -> Signal<Void, NoError> in
+                    return .complete()
+                }
+                |> deliverOnMainQueue
+                |> beforeCompleted { [weak self] in
+                    if let strongSelf = self {
+                        strongSelf.impl.with { impl in
+                            for (contextPeerId, context) in impl.contexts {
+                                if peerId == contextPeerId {
+                                    context.remove(memberId: memberId)
+                                }
+                            }
                         }
                     }
                 }
-                if !isMember {
-                    strongSelf.removedChannelMembersPipe.putNext([(peerId, memberId)])
+                |> mapToSignal { _ -> Signal<Void, NoError> in
+                    return .complete()
+                }
+            } else {
+                return engine.peers.updateChannelMemberBannedRights(peerId: peerId, memberId: memberId, rights: bannedRights)
+                |> deliverOnMainQueue
+                |> beforeNext { [weak self] (previous, updated, isMember) in
+                    if let strongSelf = self {
+                        strongSelf.impl.with { impl in
+                            for (contextPeerId, context) in impl.contexts {
+                                if peerId == contextPeerId {
+                                    context.replayUpdates([(previous, updated, isMember)])
+                                }
+                            }
+                        }
+                        if !isMember {
+                            strongSelf.removedChannelMembersPipe.putNext([(peerId, memberId)])
+                        }
+                    }
+                }
+                |> mapToSignal { _ -> Signal<Void, NoError> in
+                    return .complete()
                 }
             }
         }
-        |> mapToSignal { _ -> Signal<Void, NoError> in
-            return .complete()
-        }
+        
     }
     
     public func updateMemberRank(engine: TelegramEngine, peerId: PeerId, memberId: PeerId, rank: String?) -> Signal<Void, UpdateChatRankError> {

@@ -9,6 +9,15 @@ public extension MessageFlags {
 }
 
 public extension Message {
+    var ephemeralOutgoingAttribute: EphemeralOutgoingMessageAttribute? {
+        for attribute in self.attributes {
+            if let attribute = attribute as? EphemeralOutgoingMessageAttribute {
+                return attribute
+            }
+        }
+        return nil
+    }
+
     var visibleButtonKeyboardMarkup: ReplyMarkupMessageAttribute? {
         for attribute in self.attributes {
             if let attribute = attribute as? ReplyMarkupMessageAttribute {
@@ -372,6 +381,8 @@ public extension Message {
     func effectivelyFailed(timestamp: Int32) -> Bool {
         if self.flags.contains(.Failed) {
             return true
+        } else if self.ephemeralOutgoingAttribute?.state == .failed {
+            return true
         } else if self.id.namespace == Namespaces.Message.ScheduledCloud && self.timestamp != scheduleWhenOnlineTimestamp {
             return timestamp > self.timestamp + 60
         } else {
@@ -439,6 +450,8 @@ public extension Message {
 public extension Message {
     var isSentOrAcknowledged: Bool {
         if self.flags.contains(.Failed) {
+            return false
+        } else if self.ephemeralOutgoingAttribute?.state == .failed {
             return false
         } else if self.flags.isSending {
             for attribute in self.attributes {
@@ -508,6 +521,14 @@ public extension Message {
             }
         }
         return nil
+    }
+    var isEphemeral: Bool {
+        for attribute in self.attributes {
+            if attribute is EphemeralMessageAttribute || attribute is EphemeralOutgoingMessageAttribute {
+                return true
+            }
+        }
+        return false
     }
 }
 

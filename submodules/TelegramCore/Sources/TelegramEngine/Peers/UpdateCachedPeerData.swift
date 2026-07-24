@@ -34,7 +34,11 @@ func fetchAndUpdateSupplementalCachedPeerData(peerId rawPeerId: PeerId, accountP
             if let channel = peer as? TelegramChannel, channel.flags.contains(.isMonoforum) {
                 return .single(false)
             }
-                
+            
+            if let _ = peer as? TelegramCommunity {
+                return .single(false)
+            }
+            
             let cachedData = transaction.getPeerCachedData(peerId: peer.id)
             
             if let cachedData = cachedData as? CachedUserData {
@@ -117,13 +121,23 @@ func fetchAndUpdateSupplementalCachedPeerData(peerId rawPeerId: PeerId, accountP
                                     }
                                     return previous.withUpdatedPeerStatusSettings(peerStatusSettings)
                                 case Namespaces.Peer.CloudChannel:
-                                    let previous: CachedChannelData
-                                    if let current = current as? CachedChannelData {
-                                        previous = current
+                                    if peer is TelegramCommunity {
+                                        let previous: CachedCommunityData
+                                        if let current = current as? CachedCommunityData {
+                                            previous = current
+                                        } else {
+                                            previous = CachedCommunityData()
+                                        }
+                                        return previous.withUpdatedPeerStatusSettings(peerStatusSettings)
                                     } else {
-                                        previous = CachedChannelData()
+                                        let previous: CachedChannelData
+                                        if let current = current as? CachedChannelData {
+                                            previous = current
+                                        } else {
+                                            previous = CachedChannelData()
+                                        }
+                                        return previous.withUpdatedPeerStatusSettings(peerStatusSettings)
                                     }
-                                    return previous.withUpdatedPeerStatusSettings(peerStatusSettings)
                                 default:
                                     break
                             }
@@ -523,7 +537,7 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                             case let .chatFull(chatFullData):
                                 let (notifySettings) = (chatFullData.notifySettings)
                                 transaction.updateCurrentPeerNotificationSettings([peerId: TelegramPeerNotificationSettings(apiSettings: notifySettings)])
-                            case .channelFull:
+                            case .channelFull, .communityFull:
                                 break
                             }
                             
@@ -632,7 +646,7 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                         .withUpdatedAutoremoveTimeout(autoremoveTimeout)
                                         .withUpdatedReactionSettings(.known(mappedReactionSettings))
                                 })
-                            case .channelFull:
+                            case .channelFull, .communityFull:
                                 break
                             }
                         }
@@ -653,6 +667,8 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                 let participantSignal: Signal<Api.channels.ChannelParticipant?, NoError>
                 if let channel = maybePeer as? TelegramChannel, channel.flags.contains(.isMonoforum) {
                     participantSignal = .single(nil)
+                } else if maybePeer is TelegramCommunity {
+                    participantSignal = .single(nil)
                 } else {
                     participantSignal = network.request(Api.functions.channels.getParticipant(channel: inputChannel, participant: .inputPeerSelf))
                     |> map(Optional.init)
@@ -672,7 +688,7 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                     case let .channelFull(channelFullData):
                                         let notifySettings = channelFullData.notifySettings
                                         transaction.updateCurrentPeerNotificationSettings([peerId: TelegramPeerNotificationSettings(apiSettings: notifySettings)])
-                                    case .chatFull:
+                                    case .chatFull, .communityFull:
                                         break
                                     }
                                     
@@ -952,15 +968,60 @@ func _internal_fetchAndUpdateCachedPeerData(accountPeerId: PeerId, peerId rawPee
                                                     let _ = postbox.mediaBox.removeCachedResources(Array(Set(resourceIds))).start()
                                                 }
                                             }
+                                        case let .communityFull(communityFullData):
+                                            let (about, chatPhoto, apiLinkedPeers, adminsCount, kickedCount, pendingRequests) = (communityFullData.about, communityFullData.chatPhoto, communityFullData.linkedPeers, communityFullData.adminsCount, communityFullData.kickedCount, communityFullData.peerLinkRequestsPending)
+                                            
+                                            let parsedPeers = AccumulatedPeers(transaction: transaction, chats: chats, users: users)
+                                            updatePeers(transaction: transaction, accountPeerId: accountPeerId, peers: parsedPeers)
+                                            
+                                            let linkedPeers = apiLinkedPeers.map { apiPeer -> CachedCommunityData.CommunityLinkedPeer in
+                                                func boolValue(_ value: Api.Bool?) -> Bool? {
+                                                    guard let value else {
+                                                        return nil
+                                                    }
+                                                    switch value {
+                                                    case .boolTrue:
+                                                        return true
+                                                    case .boolFalse:
+                                                        return false
+                                                    }
+                                                }
+                                                switch apiPeer {
+                                                case let .communityPeer(communityPeerData):
+                                                    return CachedCommunityData.CommunityLinkedPeer(peerId: communityPeerData.peer.peerId, visible: boolValue(communityPeerData.visible), canViewHistory: (communityPeerData.flags & (1 << 2)) != 0)
+                                                }
+                                            }
+                                            
+                                            let photo = telegramMediaImageFromApiPhoto(chatPhoto)
+                                            
+                                            transaction.updatePeerCachedData(peerIds: [peerId], update: { _, current in
+                                                let previous: CachedCommunityData
+                                                if let current = current as? CachedCommunityData {
+                                                    previous = current
+                                                } else {
+                                                    previous = CachedCommunityData()
+                                                }
+                                                return previous
+                                                    .withUpdatedAbout(about)
+                                                    .withUpdatedPhoto(photo)
+                                                    .withUpdatedLinkedPeers(linkedPeers)
+                                                    .withUpdatedAdminsCount(adminsCount)
+                                                    .withUpdatedKickedCount(kickedCount)
+                                                    .withUpdatedPendingRequests(pendingRequests)
+                                            })
                                         case .chatFull:
                                             break
                                     }
                             }
                         } else {
                             transaction.updatePeerCachedData(peerIds: [peerId], update: { _, _ in
-                                var updated = CachedChannelData()
-                                updated = updated.withUpdatedIsNotAccessible(true)
-                                return updated
+                                if maybePeer is TelegramCommunity {
+                                    return CachedCommunityData()
+                                } else {
+                                    var updated = CachedChannelData()
+                                    updated = updated.withUpdatedIsNotAccessible(true)
+                                    return updated
+                                }
                             })
                         }
                         return true

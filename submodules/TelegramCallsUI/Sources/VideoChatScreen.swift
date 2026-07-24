@@ -36,6 +36,7 @@ import EntityKeyboard
 import GlassBackgroundComponent
 import PremiumUI
 import VideoChatMicButtonComponent
+import AlertComponent
 
 extension VideoChatCall {
     var myAudioLevelAndSpeaking: Signal<(Float, Bool), NoError> {
@@ -1092,8 +1093,6 @@ final class VideoChatScreenComponent: Component {
                 
                 if let callState = self.callState, callState.canManageCall {
                     let presentationData = groupCall.accountContext.sharedContext.currentPresentationData.with({ $0 }).withUpdated(theme: environment.theme)
-                    let actionSheet = ActionSheetController(presentationData: presentationData)
-                    var items: [ActionSheetItem] = []
 
                     let leaveTitle: String
                     let leaveAndCancelTitle: String
@@ -1105,33 +1104,6 @@ final class VideoChatScreenComponent: Component {
                         leaveTitle = environment.strings.VoiceChat_LeaveConfirmation
                         leaveAndCancelTitle = isScheduled ? environment.strings.VoiceChat_LeaveAndCancelVoiceChat : environment.strings.VoiceChat_LeaveAndEndVoiceChat
                     }
-                    
-                    items.append(ActionSheetTextItem(title: leaveTitle))
-                    items.append(ActionSheetButtonItem(title: leaveAndCancelTitle, color: .destructive, action: { [weak self, weak actionSheet] in
-                        actionSheet?.dismissAnimated()
-                        
-                        guard let self, let environment = self.environment, case let .group(groupCall) = self.currentCall else {
-                            return
-                        }
-                        let title: String
-                        let text: String
-                        if case let .channel(channel) = self.peer, case .broadcast = channel.info {
-                            title = isScheduled ? environment.strings.LiveStream_CancelConfirmationTitle : environment.strings.LiveStream_EndConfirmationTitle
-                            text = isScheduled ? environment.strings.LiveStream_CancelConfirmationText :  environment.strings.LiveStream_EndConfirmationText
-                        } else {
-                            title = isScheduled ? environment.strings.VoiceChat_CancelConfirmationTitle : environment.strings.VoiceChat_EndConfirmationTitle
-                            text = isScheduled ? environment.strings.VoiceChat_CancelConfirmationText :  environment.strings.VoiceChat_EndConfirmationText
-                        }
-
-                        if let _ = self.members {
-                            let alertController = textAlertController(context: groupCall.accountContext, forceTheme: environment.theme, title: title, text: text, actions: [TextAlertAction(type: .defaultAction, title: environment.strings.Common_Cancel, action: {}), TextAlertAction(type: .genericAction, title: isScheduled ? environment.strings.VoiceChat_CancelConfirmationEnd :  environment.strings.VoiceChat_EndConfirmationEnd, action: {
-                                action(true)
-                            })])
-                            environment.controller()?.present(alertController, in: .window(.root))
-                        } else {
-                            action(true)
-                        }
-                    }))
 
                     let leaveText: String
                     if case let .channel(channel) = self.peer, case .broadcast = channel.info {
@@ -1140,21 +1112,42 @@ final class VideoChatScreenComponent: Component {
                         leaveText = environment.strings.VoiceChat_LeaveVoiceChat
                     }
 
-                    items.append(ActionSheetButtonItem(title: leaveText, color: .accent, action: { [weak actionSheet] in
-                        actionSheet?.dismissAnimated()
-                        
-                        action(false)
-                    }))
-                    
-                    actionSheet.setItemGroups([
-                        ActionSheetItemGroup(items: items),
-                        ActionSheetItemGroup(items: [
-                            ActionSheetButtonItem(title: environment.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                                actionSheet?.dismissAnimated()
-                            })
-                        ])
-                    ])
-                    environment.controller()?.present(actionSheet, in: .window(.root))
+                    let alertController = AlertScreen(
+                        configuration: AlertScreen.Configuration(actionAlignment: .vertical, dismissOnOutsideTap: true, allowInputInset: false),
+                        title: nil,
+                        text: leaveTitle,
+                        actions: [
+                            .init(title: leaveAndCancelTitle, type: .defaultDestructive, action: { [weak self] in
+                                guard let self, let environment = self.environment, case let .group(groupCall) = self.currentCall else {
+                                    return
+                                }
+                                let title: String
+                                let text: String
+                                if case let .channel(channel) = self.peer, case .broadcast = channel.info {
+                                    title = isScheduled ? environment.strings.LiveStream_CancelConfirmationTitle : environment.strings.LiveStream_EndConfirmationTitle
+                                    text = isScheduled ? environment.strings.LiveStream_CancelConfirmationText :  environment.strings.LiveStream_EndConfirmationText
+                                } else {
+                                    title = isScheduled ? environment.strings.VoiceChat_CancelConfirmationTitle : environment.strings.VoiceChat_EndConfirmationTitle
+                                    text = isScheduled ? environment.strings.VoiceChat_CancelConfirmationText :  environment.strings.VoiceChat_EndConfirmationText
+                                }
+
+                                if let _ = self.members {
+                                    let alertController = textAlertController(context: groupCall.accountContext, forceTheme: environment.theme, title: title, text: text, actions: [TextAlertAction(type: .genericAction, title: environment.strings.Common_Cancel, action: {}), TextAlertAction(type: .defaultDestructiveAction, title: isScheduled ? environment.strings.VoiceChat_CancelConfirmationEnd : environment.strings.VoiceChat_EndConfirmationEnd, action: {
+                                        action(true)
+                                    })])
+                                    environment.controller()?.present(alertController, in: .window(.root))
+                                } else {
+                                    action(true)
+                                }
+                            }),
+                            .init(title: leaveText, type: .default, action: {
+                                action(false)
+                            }),
+                            .init(title: environment.strings.Common_Cancel)
+                        ],
+                        updatedPresentationData: (presentationData, .single(presentationData))
+                    )
+                    environment.controller()?.present(alertController, in: .window(.root))
                 } else {
                     action(false)
                 }

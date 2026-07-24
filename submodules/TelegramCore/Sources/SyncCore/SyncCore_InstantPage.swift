@@ -71,10 +71,10 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
     case divider
     case anchor(String)
     case list(items: [InstantPageListItem], ordered: Bool)
-    case blockQuote(blocks: [InstantPageBlock], caption: RichText)
+    case blockQuote(blocks: [InstantPageBlock], caption: RichText, collapsed: Bool?)
     case pullQuote(text: RichText, caption: RichText)
-    case image(id: MediaId, caption: InstantPageCaption, url: String?, webpageId: MediaId?)
-    case video(id: MediaId, caption: InstantPageCaption, autoplay: Bool, loop: Bool)
+    case image(id: MediaId, caption: InstantPageCaption, url: String?, webpageId: MediaId?, spoiler: Bool)
+    case video(id: MediaId, caption: InstantPageCaption, autoplay: Bool, loop: Bool, spoiler: Bool)
     case audio(id: MediaId, caption: InstantPageCaption)
     case cover(InstantPageBlock)
     case webEmbed(url: String?, html: String?, dimensions: PixelDimensions?, caption: InstantPageCaption, stretchToWidth: Bool, allowScrolling: Bool, coverId: MediaId?)
@@ -124,11 +124,12 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
                 self = .list(items: decodeListItems(decoder), ordered: decoder.decodeOptionalInt32ForKey("o") != 0)
             case InstantPageBlockType.blockQuote.rawValue:
                 let caption = decoder.decodeObjectForKey("c", decoder: { RichText(decoder: $0) }) as! RichText
+                let collapsed = decoder.decodeOptionalInt32ForKey("qcol").flatMap { $0 != 0 }
                 if let legacyText = decoder.decodeObjectForKey("t", decoder: { RichText(decoder: $0) }) as? RichText {
-                    self = .blockQuote(blocks: [.paragraph(legacyText)], caption: caption)
+                    self = .blockQuote(blocks: [.paragraph(legacyText)], caption: caption, collapsed: collapsed)
                 } else {
                     let blocks: [InstantPageBlock] = decoder.decodeObjectArrayWithDecoderForKey("b")
-                    self = .blockQuote(blocks: blocks, caption: caption)
+                    self = .blockQuote(blocks: blocks, caption: caption, collapsed: collapsed)
                 }
             case InstantPageBlockType.pullQuote.rawValue:
                 self = .pullQuote(text: decoder.decodeObjectForKey("t", decoder: { RichText(decoder: $0) }) as! RichText, caption: decoder.decodeObjectForKey("c", decoder: { RichText(decoder: $0) }) as! RichText)
@@ -137,9 +138,9 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
                 if let webpageIdNamespace = decoder.decodeOptionalInt32ForKey("wi.n"), let webpageIdId = decoder.decodeOptionalInt64ForKey("wi.i") {
                     webpageId = MediaId(namespace: webpageIdNamespace, id: webpageIdId)
                 }
-                self = .image(id: MediaId(namespace: decoder.decodeInt32ForKey("i.n", orElse: 0), id: decoder.decodeInt64ForKey("i.i", orElse: 0)), caption: decodeCaption(decoder), url: decoder.decodeOptionalStringForKey("u"), webpageId: webpageId)
+                self = .image(id: MediaId(namespace: decoder.decodeInt32ForKey("i.n", orElse: 0), id: decoder.decodeInt64ForKey("i.i", orElse: 0)), caption: decodeCaption(decoder), url: decoder.decodeOptionalStringForKey("u"), webpageId: webpageId, spoiler: decoder.decodeInt32ForKey("sp", orElse: 0) != 0)
             case InstantPageBlockType.video.rawValue:
-                self = .video(id: MediaId(namespace: decoder.decodeInt32ForKey("i.n", orElse: 0), id: decoder.decodeInt64ForKey("i.i", orElse: 0)), caption: decodeCaption(decoder), autoplay: decoder.decodeInt32ForKey("ap", orElse: 0) != 0, loop: decoder.decodeInt32ForKey("lo", orElse: 0) != 0)
+                self = .video(id: MediaId(namespace: decoder.decodeInt32ForKey("i.n", orElse: 0), id: decoder.decodeInt64ForKey("i.i", orElse: 0)), caption: decodeCaption(decoder), autoplay: decoder.decodeInt32ForKey("ap", orElse: 0) != 0, loop: decoder.decodeInt32ForKey("lo", orElse: 0) != 0, spoiler: decoder.decodeInt32ForKey("sp", orElse: 0) != 0)
             case InstantPageBlockType.cover.rawValue:
                 self = .cover(decoder.decodeObjectForKey("c", decoder: { InstantPageBlock(decoder: $0) }) as! InstantPageBlock)
             case InstantPageBlockType.webEmbed.rawValue:
@@ -235,15 +236,18 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
                 encoder.encodeInt32(InstantPageBlockType.list.rawValue, forKey: "r")
                 encoder.encodeObjectArray(items, forKey: "ml")
                 encoder.encodeInt32(ordered ? 1 : 0, forKey: "o")
-            case let .blockQuote(blocks, caption):
+            case let .blockQuote(blocks, caption, collapsed):
                 encoder.encodeInt32(InstantPageBlockType.blockQuote.rawValue, forKey: "r")
                 encoder.encodeObjectArray(blocks, forKey: "b")
                 encoder.encodeObject(caption, forKey: "c")
+                if let collapsed = collapsed {
+                    encoder.encodeInt32(collapsed ? 1 : 0, forKey: "qcol")
+                }
             case let .pullQuote(text, caption):
                 encoder.encodeInt32(InstantPageBlockType.pullQuote.rawValue, forKey: "r")
                 encoder.encodeObject(text, forKey: "t")
                 encoder.encodeObject(caption, forKey: "c")
-            case let .image(id, caption, url, webpageId):
+            case let .image(id, caption, url, webpageId, spoiler):
                 encoder.encodeInt32(InstantPageBlockType.image.rawValue, forKey: "r")
                 encoder.encodeInt32(id.namespace, forKey: "i.n")
                 encoder.encodeInt64(id.id, forKey: "i.i")
@@ -260,13 +264,15 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
                     encoder.encodeNil(forKey: "wi.n")
                     encoder.encodeNil(forKey: "wi.i")
                 }
-            case let .video(id, caption, autoplay, loop):
+                encoder.encodeInt32(spoiler ? 1 : 0, forKey: "sp")
+            case let .video(id, caption, autoplay, loop, spoiler):
                 encoder.encodeInt32(InstantPageBlockType.video.rawValue, forKey: "r")
                 encoder.encodeInt32(id.namespace, forKey: "i.n")
                 encoder.encodeInt64(id.id, forKey: "i.i")
                 encoder.encodeObject(caption, forKey: "mc")
                 encoder.encodeInt32(autoplay ? 1 : 0, forKey: "ap")
                 encoder.encodeInt32(loop ? 1 : 0, forKey: "lo")
+                encoder.encodeInt32(spoiler ? 1 : 0, forKey: "sp")
             case let .cover(block):
                 encoder.encodeInt32(InstantPageBlockType.cover.rawValue, forKey: "r")
                 encoder.encodeObject(block, forKey: "c")
@@ -458,8 +464,10 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
                 } else {
                     return false
                 }
-            case let .blockQuote(lhsBlocks, lhsCaption):
-                if case let .blockQuote(rhsBlocks, rhsCaption) = rhs, lhsBlocks == rhsBlocks, lhsCaption == rhsCaption {
+            case let .blockQuote(lhsBlocks, lhsCaption, _):
+                // `collapsed` is intentionally excluded from equality: no layout/render code reads it, so including
+                // it would only add spurious inequality (redraw/diff churn). Revisit alongside collapse rendering.
+                if case let .blockQuote(rhsBlocks, rhsCaption, _) = rhs, lhsBlocks == rhsBlocks, lhsCaption == rhsCaption {
                     return true
                 } else {
                     return false
@@ -470,14 +478,14 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
                 } else {
                     return false
                 }
-            case let .image(lhsId, lhsCaption, lhsUrl, lhsWebpageId):
-                if case let .image(rhsId, rhsCaption, rhsUrl, rhsWebpageId) = rhs, lhsId == rhsId, lhsCaption == rhsCaption, lhsUrl == rhsUrl, lhsWebpageId == rhsWebpageId {
+            case let .image(lhsId, lhsCaption, lhsUrl, lhsWebpageId, lhsSpoiler):
+                if case let .image(rhsId, rhsCaption, rhsUrl, rhsWebpageId, rhsSpoiler) = rhs, lhsId == rhsId, lhsCaption == rhsCaption, lhsUrl == rhsUrl, lhsWebpageId == rhsWebpageId, lhsSpoiler == rhsSpoiler {
                     return true
                 } else {
                     return false
                 }
-            case let .video(id, caption, autoplay, loop):
-                if case .video(id, caption, autoplay, loop) = rhs {
+            case let .video(id, caption, autoplay, loop, spoiler):
+                if case .video(id, caption, autoplay, loop, spoiler) = rhs {
                     return true
                 } else {
                     return false
@@ -643,11 +651,11 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
             let caption = try RichText(flatBuffersObject: value.caption)
             if value.blocksCount > 0 {
                 let blocks = try (0 ..< value.blocksCount).map { try InstantPageBlock(flatBuffersObject: value.blocks(at: $0)!) }
-                self = .blockQuote(blocks: blocks, caption: caption)
+                self = .blockQuote(blocks: blocks, caption: caption, collapsed: nil)
             } else if let legacyText = value.text {
-                self = .blockQuote(blocks: [.paragraph(try RichText(flatBuffersObject: legacyText))], caption: caption)
+                self = .blockQuote(blocks: [.paragraph(try RichText(flatBuffersObject: legacyText))], caption: caption, collapsed: nil)
             } else {
-                self = .blockQuote(blocks: [], caption: caption)
+                self = .blockQuote(blocks: [], caption: caption, collapsed: nil)
             }
         case .instantpageblockPullquote:
             guard let value = flatBuffersObject.value(type: TelegramCore_InstantPageBlock_PullQuote.self) else {
@@ -658,12 +666,12 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
             guard let value = flatBuffersObject.value(type: TelegramCore_InstantPageBlock_Image.self) else {
                 throw FlatBuffersError.missingRequiredField()
             }
-            self = .image(id: MediaId(value.id), caption: try InstantPageCaption(flatBuffersObject: value.caption), url: value.url, webpageId: value.webpageId.flatMap(MediaId.init))
+            self = .image(id: MediaId(value.id), caption: try InstantPageCaption(flatBuffersObject: value.caption), url: value.url, webpageId: value.webpageId.flatMap(MediaId.init), spoiler: value.spoiler)
         case .instantpageblockVideo:
             guard let value = flatBuffersObject.value(type: TelegramCore_InstantPageBlock_Video.self) else {
                 throw FlatBuffersError.missingRequiredField()
             }
-            self = .video(id: MediaId(value.id), caption: try InstantPageCaption(flatBuffersObject: value.caption), autoplay: value.autoplay, loop: value.loop)
+            self = .video(id: MediaId(value.id), caption: try InstantPageCaption(flatBuffersObject: value.caption), autoplay: value.autoplay, loop: value.loop, spoiler: value.spoiler)
         case .instantpageblockAudio:
             guard let value = flatBuffersObject.value(type: TelegramCore_InstantPageBlock_Audio.self) else {
                 throw FlatBuffersError.missingRequiredField()
@@ -828,7 +836,7 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
             TelegramCore_InstantPageBlock_List.addVectorOf(items: itemsOffset, &builder)
             TelegramCore_InstantPageBlock_List.add(ordered: ordered, &builder)
             offset = TelegramCore_InstantPageBlock_List.endInstantPageBlock_List(&builder, start: start)
-        case let .blockQuote(blocks, caption):
+        case let .blockQuote(blocks, caption, _):
             valueType = .instantpageblockBlockquote
             let blocksOffsets = blocks.map { $0.encodeToFlatBuffers(builder: &builder) }
             let blocksOffset = builder.createVector(ofOffsets: blocksOffsets, len: blocksOffsets.count)
@@ -845,7 +853,7 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
             TelegramCore_InstantPageBlock_PullQuote.add(text: textOffset, &builder)
             TelegramCore_InstantPageBlock_PullQuote.add(caption: captionOffset, &builder)
             offset = TelegramCore_InstantPageBlock_PullQuote.endInstantPageBlock_PullQuote(&builder, start: start)
-        case let .image(id, caption, url, webpageId):
+        case let .image(id, caption, url, webpageId, spoiler):
             valueType = .instantpageblockImage
             let captionOffset = caption.encodeToFlatBuffers(builder: &builder)
             let urlOffset = url.flatMap { builder.create(string: $0) }
@@ -858,8 +866,9 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
             if let webpageId {
                 TelegramCore_InstantPageBlock_Image.add(webpageId: webpageId.asFlatBuffersObject(), &builder)
             }
+            TelegramCore_InstantPageBlock_Image.add(spoiler: spoiler, &builder)
             offset = TelegramCore_InstantPageBlock_Image.endInstantPageBlock_Image(&builder, start: start)
-        case let .video(id, caption, autoplay, loop):
+        case let .video(id, caption, autoplay, loop, spoiler):
             valueType = .instantpageblockVideo
             let captionOffset = caption.encodeToFlatBuffers(builder: &builder)
             let start = TelegramCore_InstantPageBlock_Video.startInstantPageBlock_Video(&builder)
@@ -867,6 +876,7 @@ public indirect enum InstantPageBlock: PostboxCoding, Equatable {
             TelegramCore_InstantPageBlock_Video.add(caption: captionOffset, &builder)
             TelegramCore_InstantPageBlock_Video.add(autoplay: autoplay, &builder)
             TelegramCore_InstantPageBlock_Video.add(loop: loop, &builder)
+            TelegramCore_InstantPageBlock_Video.add(spoiler: spoiler, &builder)
             offset = TelegramCore_InstantPageBlock_Video.endInstantPageBlock_Video(&builder, start: start)
         case let .audio(id, caption):
             valueType = .instantpageblockAudio
@@ -1652,6 +1662,40 @@ public final class InstantPage: PostboxCoding, Equatable {
     }
 }
 
+public extension InstantPage {
+    /// A plain-text projection of the page's text-bearing blocks, used as the
+    /// old-client text fallback when a draft is carried as an `InstantPage`.
+    ///
+    /// Only `.paragraph`, `.preformatted` and `.blockQuote` contribute text;
+    /// every other block (drafts never contain them) is treated as empty.
+    /// Empty pieces are skipped before joining so there are no leading,
+    /// trailing or doubled `"\n"` separators.
+    var plainText: String {
+        return InstantPage.blocksPlainText(self.blocks)
+    }
+
+    private static func blocksPlainText(_ blocks: [InstantPageBlock]) -> String {
+        var pieces: [String] = []
+        for block in blocks {
+            let text: String
+            switch block {
+            case let .paragraph(t):
+                text = t.plainText
+            case let .preformatted(t, _):
+                text = t.plainText
+            case let .blockQuote(blocks, _, _):
+                text = blocksPlainText(blocks)
+            default:
+                text = ""
+            }
+            if !text.isEmpty {
+                pieces.append(text)
+            }
+        }
+        return pieces.joined(separator: "\n")
+    }
+}
+
 private extension InstantPageBlock {
     func allMedia(mediaDict: [MediaId: Media]) -> [Media] {
         switch self {
@@ -1675,7 +1719,7 @@ private extension InstantPageBlock {
                 result.append(contentsOf: item.allMedia(mediaDict: mediaDict))
             }
             return result
-        case let .image(id, _, _, _):
+        case let .image(id, _, _, _, _):
             if let image = mediaDict[id] {
                 return [image]
             } else {
@@ -1701,7 +1745,7 @@ private extension InstantPageBlock {
                 result.append(contentsOf: item.allMedia(mediaDict: mediaDict))
             }
             return result
-        case let .video(id, _, _, _):
+        case let .video(id, _, _, _, _):
             if let video = mediaDict[id] {
                 return [video]
             } else {

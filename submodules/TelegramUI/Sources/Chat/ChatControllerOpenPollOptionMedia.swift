@@ -18,6 +18,8 @@ import PresentationDataUtils
 
 extension ChatControllerImpl {
     func openPollMedia(message: EngineMessage, subject: ChatControllerInteraction.PollMediaSubject) -> Void {
+        self.chatDisplayNode.dismissInput()
+        
         let mediaSubject: GalleryMediaSubject
         let media: EngineMedia?
         switch subject {

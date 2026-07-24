@@ -1385,7 +1385,7 @@ private final class GiftViewSheetContent: CombinedComponent {
                                 case .stars:
                                     priceString = presentationData.strings.Gift_View_Resale_Relist_Success_Stars(Int32(clamping: price.amount.value))
                                 case .ton:
-                                    priceString = formatTonAmountText(price.amount.value, dateTimeFormat: presentationData.dateTimeFormat, maxDecimalPositions: nil) + " TON"
+                                    priceString = formatTonAmountText(price.amount.value, dateTimeFormat: presentationData.dateTimeFormat, maxDecimalPositions: nil, formatString: presentationData.strings.Currency_Grams)
                                 }
                                 text = presentationData.strings.Gift_View_Resale_Relist_Success(giftTitle, priceString).string
                             }

@@ -312,6 +312,8 @@ private func saveIncomingMediaControllerEntries(presentationData: PresentationDa
                 } else {
                     peerTypeValue = .groups
                 }
+            case .community:
+                continue
             }
             
             if peerTypeValue == peerType {

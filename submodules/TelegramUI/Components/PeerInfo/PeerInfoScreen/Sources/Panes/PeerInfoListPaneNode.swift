@@ -82,7 +82,7 @@ final class PeerInfoListPaneNode: ASDisplayNode, PeerInfoPaneNode {
         self.listNode = context.sharedContext.makeChatHistoryListNode(context: context, updatedPresentationData: updatedPresentationData ?? (context.sharedContext.currentPresentationData.with({ $0 }), context.sharedContext.presentationData), chatLocation: chatLocation, chatLocationContextHolder: chatLocationContextHolder, tag: .tag(tagMask), source: .default, subject: nil, controllerInteraction: chatControllerInteraction, selectedMessages: self.selectedMessagesPromise.get(), mode: .list(reversed: false, reverseGroups: false, displayHeaders: .allButLast, hintLinks: tagMask == .webPage, isGlobalSearch: false, isMusicPlaylist: false))
         self.listNode.clipsToBounds = true
         self.listNode.defaultToSynchronousTransactionWhileScrolling = true
-        self.listNode.scroller.bounces = false
+        self.listNode.bounces = false
                 
         self.mediaAccessoryPanelContainer = PassthroughContainerNode()
         self.mediaAccessoryPanelContainer.clipsToBounds = true

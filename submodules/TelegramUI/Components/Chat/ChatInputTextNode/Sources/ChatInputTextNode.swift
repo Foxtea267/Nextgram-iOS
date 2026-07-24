@@ -1101,15 +1101,8 @@ public final class ChatInputTextView: ChatInputTextViewImpl, UITextViewDelegate,
     }
     
     public init(disableTiling: Bool) {
-        let useModernImpl = !"".isEmpty
-        
-        if #available(iOS 15.0, *), useModernImpl {
-            self.displayInternal = ChatInputTextNewInternal()
-            self.measureInternal = ChatInputTextNewInternal()
-        } else {
-            self.displayInternal = ChatInputTextLegacyInternal()
-            self.measureInternal = ChatInputTextLegacyInternal()
-        }
+        self.displayInternal = ChatInputTextLegacyInternal()
+        self.measureInternal = ChatInputTextLegacyInternal()
         
         super.init(frame: CGRect(), textContainer: self.displayInternal.textContainer, disableTiling: disableTiling)
         

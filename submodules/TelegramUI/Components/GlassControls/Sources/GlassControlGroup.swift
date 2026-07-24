@@ -64,7 +64,7 @@ public final class GlassControlGroupComponent: Component {
 
     public enum Background: Equatable {
         case panel
-        case activeTint
+        case activeTint(inset: Bool)
         case color(UIColor)
     }
 
@@ -158,9 +158,13 @@ public final class GlassControlGroupComponent: Component {
             case .panel:
                 foregroundColor = component.theme.chat.inputPanel.panelControlColor
                 tintColor = .init(kind: component.preferClearGlass ? .clear : .panel)
-            case .activeTint:
+            case let .activeTint(inset):
                 foregroundColor = component.theme.list.itemCheckColors.foregroundColor
-                tintColor = .init(kind: component.preferClearGlass ? .clear : .panel, innerColor: component.theme.list.itemCheckColors.fillColor)
+                if inset {
+                    tintColor = .init(kind: component.preferClearGlass ? .clear : .panel, innerColor: component.theme.list.itemCheckColors.fillColor)
+                } else {
+                    tintColor = .init(kind: .custom(style: component.preferClearGlass ? .clear : .default, color: component.theme.list.itemCheckColors.fillColor))
+                }
             case let .color(color):
                 foregroundColor = .white
                 tintColor = .init(kind: .custom(style: component.preferClearGlass ? .clear : .default, color: color))

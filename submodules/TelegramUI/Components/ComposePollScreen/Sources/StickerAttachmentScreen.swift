@@ -1151,6 +1151,7 @@ final class StickerAttachmentScreen: ViewControllerComponentContainer, Attachmen
             case description
             case quizAnswer
             case option
+            case richText
         }
         
         case poll(PollMode)
@@ -1188,6 +1189,8 @@ final class StickerAttachmentScreen: ViewControllerComponentContainer, Attachmen
                     subtitle = ""
                 case .option:
                     subtitle = presentationData.strings.StickerPicker_PollSubtitle_PollOption
+                case .richText:
+                    subtitle = presentationData.strings.RichText_AddMediaTitle
                 }
             case .emoji:
                 title = "Emoji"
@@ -1198,6 +1201,9 @@ final class StickerAttachmentScreen: ViewControllerComponentContainer, Attachmen
                     subtitle = ""
                 case .option:
                     subtitle = "Add emoji to this option"
+                case .richText:
+                    //TODO:localize
+                    subtitle = "Add emoji"
                 }
             }
             let titleView = CounterControllerTitleView(theme: presentationData.theme, verticalOffset: -2.0)
