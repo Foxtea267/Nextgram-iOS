@@ -375,7 +375,8 @@ private func nagramGroups(
     messageMenuAction: @escaping () -> Void,
     regexFiltersAction: @escaping () -> Void,
     inlineBotRulesAction: @escaping () -> Void,
-    llmTranslationSettingsAction: @escaping () -> Void
+    llmTranslationSettingsAction: @escaping () -> Void,
+    groupProfileSettingsAction: @escaping () -> Void
 ) -> [NagramGroup] {
     let sensitiveContentEnabled: () -> Bool = {
         return sensitiveContentConfiguration()?.sensitiveContentEnabled ?? false
@@ -489,6 +490,7 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.ShowProfileId", get: { NagramSettings.shared.showProfileId }, set: { NagramSettings.shared.showProfileId = $0 }),
             .toggle(titleKey: "Nagram.ShowDC", get: { NagramSettings.shared.showDC }, set: { NagramSettings.shared.showDC = $0 }),
             .toggle(titleKey: "Nagram.ShowRegDate", get: { NagramSettings.shared.showRegDate }, set: { NagramSettings.shared.showRegDate = $0 }),
+            .navigation(titleKey: "Nagram.GroupProfileSettings", action: groupProfileSettingsAction),
             .toggle(titleKey: "Nagram.HidePhoneInSettings", get: { NagramSettings.shared.hidePhoneInSettings }, set: { NagramSettings.shared.hidePhoneInSettings = $0 }),
         ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Calls", footerKey: nil, rows: [
@@ -694,6 +696,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nagramInlineBotRulesController(context: context))
     }, llmTranslationSettingsAction: {
         pushControllerImpl?(nagramLLMTranslationSettingsController(context: context))
+    }, groupProfileSettingsAction: {
+        pushControllerImpl?(nagramGroupProfileSettingsController(context: context))
     })
     let flatRows: [NagramRow] = groups.flatMap { $0.rows }
     let flatRowDeepLinks: [String] = groups.flatMap { group in

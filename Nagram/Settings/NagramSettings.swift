@@ -84,6 +84,26 @@ public enum NagramGlassTransparencyMode: String {
     case custom
 }
 
+public enum NagramGroupProfileSettingItem: String, CaseIterable, Hashable {
+    case groupType
+    case inviteLinks
+    case linkedChannel
+    case reactions
+    case appearance
+    case history
+    case topics
+    case location
+    case members
+    case permissions
+    case admins
+    case memberRequests
+    case removedUsers
+    case recentActions
+    case community
+    case deleteGroup
+    case other
+}
+
 public enum NagramTranslationProvider: String, CaseIterable {
     case telegram
     case google
@@ -415,6 +435,9 @@ public final class NagramSettings {
     /// 资料页显示注册日期（默认关 = 保持原生）
     @NagramDefault("nagram.showRegDate", false)
     public var showRegDate: Bool
+    /// 群组资料页直接展示的设置项；默认不展示，用户需逐项启用。
+    @NagramDefault("nagram.groupProfileSettingItems", "")
+    private var groupProfileSettingItems: String
     /// 设置/资料页隐藏手机号（默认关 = 保持原生）
     @NagramDefault("nagram.hidePhoneInSettings", false)
     public var hidePhoneInSettings: Bool
@@ -427,6 +450,29 @@ public final class NagramSettings {
 
     @NagramDefault("nagram.autoInlineBotEnabled", false)
     public var autoInlineBotEnabled: Bool
+
+    public func isGroupProfileSettingItemVisible(_ item: NagramGroupProfileSettingItem) -> Bool {
+        return self.visibleGroupProfileSettingItems.contains(item)
+    }
+
+    public func setGroupProfileSettingItemVisible(_ item: NagramGroupProfileSettingItem, visible: Bool) {
+        var items = self.visibleGroupProfileSettingItems
+        if visible {
+            items.insert(item)
+        } else {
+            items.remove(item)
+        }
+        self.groupProfileSettingItems = NagramGroupProfileSettingItem.allCases
+            .filter { items.contains($0) }
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
+    private var visibleGroupProfileSettingItems: Set<NagramGroupProfileSettingItem> {
+        return Set(self.groupProfileSettingItems.split(separator: ",").compactMap {
+            NagramGroupProfileSettingItem(rawValue: String($0))
+        })
+    }
 
 }
 

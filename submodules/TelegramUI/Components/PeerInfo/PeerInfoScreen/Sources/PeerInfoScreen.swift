@@ -115,6 +115,80 @@ import EdgeEffect
 import Pasteboard
 import AccountPeerContextItem
 
+// MARK: NAGRAM — Map upstream group settings item ids to user-selectable profile items.
+private func nagramGroupProfileSettingItem(peer: EnginePeer, itemId: AnyHashable) -> NagramGroupProfileSettingItem {
+    guard let itemId = itemId.base as? Int else {
+        return .other
+    }
+    switch peer {
+    case let .channel(channel):
+        guard case .group = channel.info else {
+            return .other
+        }
+        switch itemId {
+        case 101:
+            return .groupType
+        case 102:
+            return .inviteLinks
+        case 103:
+            return .linkedChannel
+        case 104:
+            return .history
+        case 106:
+            return .members
+        case 107:
+            return .permissions
+        case 108:
+            return .admins
+        case 109:
+            return .memberRequests
+        case 110:
+            return .removedUsers
+        case 111:
+            return .recentActions
+        case 112, 113:
+            return .location
+        case 115:
+            return .deleteGroup
+        case 116:
+            return .reactions
+        case 117, 118:
+            return .topics
+        case 119:
+            return .appearance
+        case 120, 121, 122, 123:
+            return .community
+        default:
+            return .other
+        }
+    case .legacyGroup:
+        switch itemId {
+        case 101:
+            return .groupType
+        case 102:
+            return .inviteLinks
+        case 103:
+            return .history
+        case 104:
+            return .permissions
+        case 105:
+            return .admins
+        case 106:
+            return .memberRequests
+        case 107:
+            return .reactions
+        case 108, 109:
+            return .topics
+        case 110, 111:
+            return .community
+        default:
+            return .other
+        }
+    default:
+        return .other
+    }
+}
+
 public enum PeerInfoAvatarEditingMode {
     case generic
     case accept
@@ -5535,7 +5609,39 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             insets.left += sectionInset
             insets.right += sectionInset
             
-            let items = self.isSettings ? settingsItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
+            let editItems = (self.isSettings || self.isMyProfile) ? settingsEditingItems(data: self.data, state: self.state, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isMyProfile: self.isMyProfile) : editingItems(data: self.data, boostStatus: self.boostStatus, state: self.state, chatLocation: self.chatLocation, context: self.context, presentationData: self.presentationData, interaction: self.interaction)
+            var items = self.isSettings ? settingsItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
+            
+            // MARK: NAGRAM — Expose user-selected group settings items on the group profile.
+            if let peer = self.data?.peer {
+                let isGroup: Bool
+                switch peer {
+                case let .channel(channel):
+                    if case .group = channel.info {
+                        isGroup = true
+                    } else {
+                        isGroup = false
+                    }
+                case .legacyGroup:
+                    isGroup = true
+                default:
+                    isGroup = false
+                }
+                if isGroup {
+                    let filteredEditItems = editItems.compactMap { sectionId, sectionItems -> (AnyHashable, [PeerInfoScreenItem])? in
+                        let filteredSectionItems = sectionItems.filter { item in
+                            let settingItem = nagramGroupProfileSettingItem(peer: peer, itemId: item.id)
+                            return NagramSettings.shared.isGroupProfileSettingItemVisible(settingItem)
+                        }
+                        guard !filteredSectionItems.isEmpty else {
+                            return nil
+                        }
+                        return (sectionId, filteredSectionItems)
+                    }
+                    let insertionIndex = items.firstIndex(where: { $0.0 == AnyHashable(InfoSection.nagram) }) ?? items.endIndex
+                    items.insert(contentsOf: filteredEditItems, at: insertionIndex)
+                }
+            }
             
             contentHeight += headerHeight
             if !((self.isSettings || self.isMyProfile) && self.state.isEditing) {
@@ -5610,7 +5716,6 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             }
             
             var validEditingSections: [AnyHashable] = []
-            let editItems = (self.isSettings || self.isMyProfile) ? settingsEditingItems(data: self.data, state: self.state, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isMyProfile: self.isMyProfile) : editingItems(data: self.data, boostStatus: self.boostStatus, state: self.state, chatLocation: self.chatLocation, context: self.context, presentationData: self.presentationData, interaction: self.interaction)
 
             for (sectionId, sectionItems) in editItems {
                 var insets = UIEdgeInsets()

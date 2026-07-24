@@ -59,6 +59,7 @@ enum NagramSettingsSyncKeys {
         "nagram.recentStickerLimit",
         "nagram.hideStories",
         "nagram.showRegDate",
+        "nagram.groupProfileSettingItems",
         "nagram.hidePhoneInSettings",
         "nagram.bottomBarLayout.version",
         "nagram.bottomBarLayout.isBottomBarVisible",
