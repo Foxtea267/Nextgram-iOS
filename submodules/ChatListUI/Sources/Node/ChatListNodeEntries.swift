@@ -625,7 +625,7 @@ private func nagramFilteredChatListMessages(_ messages: [EngineMessage], peerId:
             return engineMessage
         }
         var message = engineMessage._asMessage()
-        switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.toInt64()) {
+        switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
         case .hidden:
             return nil
         case .contentHidden:
@@ -680,7 +680,7 @@ private func nagramShouldIgnoreRegexFilteredUnreadBadge(messages: [EngineMessage
         guard !readState.isIncomingMessageIndexRead(message.index) else {
             continue
         }
-        if nagramRegexFilterMatcher.isHidden(text: message.text, authorPeerId: message.author?.id.toInt64()) {
+        if nagramRegexFilterMatcher.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
             hiddenUnreadCount += 1
         }
     }
