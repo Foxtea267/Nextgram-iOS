@@ -206,13 +206,49 @@ public func chatListFilterPredicate(filter: ChatListFilterData, accountPeerId: E
     })
 }
 
+// MARK: NAGRAM — 最近会话文件夹同时匹配已折叠的聚合容器。
 public func nagramChatListFilterRecentPeerIds(accountPeerId: EnginePeer.Id, filterId: Int32) -> Set<EnginePeer.Id> {
     let accountPeerIdValue = accountPeerId.toInt64()
     guard NagramSettings.shared.isRecentChatFolderEnabled(accountPeerId: accountPeerIdValue, filterId: filterId)
     else {
         return Set()
     }
-    return Set(NagramSettings.shared.recentChatIds(accountPeerId: accountPeerIdValue).map(EnginePeer.Id.init))
+    return Set(NagramSettings.shared.recentChatFilterPeerIds(accountPeerId: accountPeerIdValue).map(EnginePeer.Id.init))
+}
+
+private func nagramResolveRecentChatContainerPeerIds(account: Account, filterId: Int32) -> Signal<Set<EnginePeer.Id>, NoError> {
+    let accountPeerId = account.peerId.toInt64()
+    guard NagramSettings.shared.isRecentChatFolderEnabled(accountPeerId: accountPeerId, filterId: filterId) else {
+        return .single(Set())
+    }
+    let recentChatIds = NagramSettings.shared.recentChatIds(accountPeerId: accountPeerId)
+    return account.postbox.transaction { transaction -> ([Int64: Int64], Set<Int64>) in
+        var containerPeerIds: [Int64: Int64] = [:]
+        var resolvedPeerIds = Set<Int64>()
+        for recentChatId in recentChatIds {
+            let peerId = EnginePeer.Id(recentChatId)
+            guard let peer = transaction.getPeer(peerId) else {
+                continue
+            }
+            guard let containerPeerId = peer.containerPeerId else {
+                resolvedPeerIds.insert(recentChatId)
+                continue
+            }
+            guard let community = transaction.getPeer(containerPeerId) as? TelegramCommunity else {
+                continue
+            }
+            resolvedPeerIds.insert(recentChatId)
+            if community.collapsedInDialogs == true {
+                containerPeerIds[recentChatId] = containerPeerId.toInt64()
+            }
+        }
+        return (containerPeerIds, resolvedPeerIds)
+    }
+    |> deliverOnMainQueue
+    |> map { containerPeerIds, resolvedPeerIds -> Set<EnginePeer.Id> in
+        NagramSettings.shared.updateRecentChatContainerPeerIds(containerPeerIds, resolvedPeerIds: resolvedPeerIds, accountPeerId: accountPeerId)
+        return nagramChatListFilterRecentPeerIds(accountPeerId: account.peerId, filterId: filterId)
+    }
 }
 
 private func nagramRecentChatsFilterUpdates(accountPeerId: Int64, filterId: Int32) -> Signal<Void, NoError> {
@@ -247,9 +283,11 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
         if let filter = location.filter, case let .filter(id, _, _, data) = filter {
             let nagramAccountPeerId = account.peerId.toInt64()
             filterPredicate = nagramRecentChatsFilterUpdates(accountPeerId: nagramAccountPeerId, filterId: id)
-            |> map { _ -> ChatListFilterPredicate? in
-                let includeRecentPeerIds = nagramChatListFilterRecentPeerIds(accountPeerId: account.peerId, filterId: id)
-                return chatListFilterPredicate(filter: data, accountPeerId: account.peerId, includeRecentPeerIds: includeRecentPeerIds)
+            |> mapToSignal { _ -> Signal<ChatListFilterPredicate?, NoError> in
+                return nagramResolveRecentChatContainerPeerIds(account: account, filterId: id)
+                |> map { includeRecentPeerIds -> ChatListFilterPredicate? in
+                    return chatListFilterPredicate(filter: data, accountPeerId: account.peerId, includeRecentPeerIds: includeRecentPeerIds)
+                }
             }
         } else {
             filterPredicate = .single(nil)

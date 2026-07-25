@@ -784,9 +784,15 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
             updatedMessages = []
             updatedCombinedReadState = nil
         }
-        let nagramIgnoreUnreadBadge = nagramShouldIgnoreRegexFilteredUnreadBadge(messages: updatedMessages, readState: updatedCombinedReadState, peerId: peerId, accountPeerId: accountPeerId)
+        let nagramMessagePeerId: EnginePeer.Id?
+        if let peer = entry.renderedPeer.peer, case .community = peer {
+            nagramMessagePeerId = updatedMessages.last?.id.peerId ?? peerId
+        } else {
+            nagramMessagePeerId = peerId
+        }
+        let nagramIgnoreUnreadBadge = nagramShouldIgnoreRegexFilteredUnreadBadge(messages: updatedMessages, readState: updatedCombinedReadState, peerId: nagramMessagePeerId, accountPeerId: accountPeerId) // MARK: NAGRAM — 聚合会话按来源会话应用过滤规则
         if !updatedMessages.isEmpty {
-            updatedMessages = nagramFilteredChatListMessages(updatedMessages, peerId: peerId, accountPeerId: accountPeerId, presentationData: state.presentationData)
+            updatedMessages = nagramFilteredChatListMessages(updatedMessages, peerId: nagramMessagePeerId, accountPeerId: accountPeerId, presentationData: state.presentationData)
         }
 
         var draftState: ChatListItemContent.DraftState?

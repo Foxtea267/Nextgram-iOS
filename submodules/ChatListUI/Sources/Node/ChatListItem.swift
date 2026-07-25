@@ -2689,6 +2689,12 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     }
                 }
             }
+            if nagramTwoLineMessagePreview, case let .peer(peerData) = item.content, let message = messages.last, let sourcePeer = communitySourcePeer(peerData: peerData, message: message) { // MARK: NAGRAM — 聚合会话两行布局内联来源会话
+                let sourceTitle = sourcePeer.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
+                if !sourceTitle.isEmpty {
+                    inlineAuthorPrefix = sourceTitle
+                }
+            }
             
             var chatListText: (String, String)?
             var chatListSearchResult: CachedChatListSearchResult?
@@ -3799,7 +3805,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                 effectiveAuthorTitle = nil
             }
             
-            if case let .peer(peerData) = item.content, case .community = peerData.peer.peer, let message = messages.last, let sourcePeer = communitySourcePeer(peerData: peerData, message: message) {
+            if !nagramTwoLineMessagePreview, case let .peer(peerData) = item.content, case .community = peerData.peer.peer, let message = messages.last, let sourcePeer = communitySourcePeer(peerData: peerData, message: message) { // MARK: NAGRAM — 两行布局已内联来源会话
                 let sourceTitle = sourcePeer.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
                 if !sourceTitle.isEmpty {
                     forumThreads.append((id: sourcePeer.id.toInt64(), threadPeer: nil, title: NSAttributedString(string: sourceTitle, font: textFont, textColor: theme.titleColor), iconId: nil, iconColor: nil))

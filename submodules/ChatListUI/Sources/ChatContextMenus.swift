@@ -223,11 +223,11 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                                     let nagramAccountPeerId = context.account.peerId.toInt64() // MARK: NAGRAM
                                     let nagramPeerId = peer.id.toInt64()
                                     if NagramSettings.shared.isRecentChatFolderEnabled(accountPeerId: nagramAccountPeerId, filterId: id),
-                                       NagramSettings.shared.recentChatIds(accountPeerId: nagramAccountPeerId).contains(nagramPeerId) {
+                                       NagramSettings.shared.recentChatFilterPeerIds(accountPeerId: nagramAccountPeerId).contains(nagramPeerId) {
                                         let predicateWithoutRecent = chatListFilterPredicate(filter: data, accountPeerId: context.account.peerId, includeRecentPeerIds: Set())
                                         let includedWithoutRecent = predicateWithoutRecent.includes(peer: peer._asPeer(), groupId: .root, isRemovedFromTotalUnreadCount: isMuted, isUnread: isUnread, isContact: isContact, messageTagSummaryResult: false)
                                         if !includedWithoutRecent {
-                                            NagramSettings.shared.removeRecentChatId(nagramPeerId, accountPeerId: nagramAccountPeerId)
+                                            NagramSettings.shared.removeRecentChatIds(matchingFilterPeerId: nagramPeerId, accountPeerId: nagramAccountPeerId)
                                             c?.dismiss(completion: {
                                                 chatListController?.present(UndoOverlayController(presentationData: presentationData, content: .chatRemovedFromFolder(context: context, chatTitle: peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder), folderTitle: title.rawAttributedString), elevatedLayout: false, animateInAsReplacement: true, action: { _ in
                                                     return false

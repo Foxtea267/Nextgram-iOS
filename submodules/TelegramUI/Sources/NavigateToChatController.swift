@@ -82,7 +82,11 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
             return
         }
         
-        NagramSettings.shared.addRecentChatId(params.chatLocation.peerId.toInt64(), accountPeerId: params.context.account.peerId.toInt64()) // MARK: NAGRAM — 记录导航进入的会话
+        if case let .peer(peer) = params.chatLocation {
+            NagramSettings.shared.addRecentChatId(peer.id.toInt64(), containerPeerId: peer.containerPeerId?.toInt64(), accountPeerId: params.context.account.peerId.toInt64()) // MARK: NAGRAM — 记录导航进入的会话及其聚合容器
+        } else {
+            NagramSettings.shared.addRecentChatId(params.chatLocation.peerId.toInt64(), accountPeerId: params.context.account.peerId.toInt64()) // MARK: NAGRAM — 记录导航进入的会话
+        }
         
         if case let .peer(peer) = params.chatLocation, case let .channel(channel) = peer, channel.flags.contains(.isForum), !viewForumAsMessages {
             for controller in params.navigationController.viewControllers.reversed() {
