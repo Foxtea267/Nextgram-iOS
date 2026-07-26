@@ -342,6 +342,9 @@ public final class NagramSettings {
     /// 隐藏首页的“全部会话”分组（至少存在一个自定义分组时生效）
     @NagramDefault("nagram.hideAllChatsFolder", false)
     public var hideAllChatsFolder: Bool
+    /// 分享面板显示聊天文件夹标签
+    @NagramDefault("nagram.showFoldersInShareSheet", true)
+    public var showFoldersInShareSheet: Bool
     /// 首页分组标签显示方式（"text" / "icon" / "both"）
     @NagramDefault("nagram.chatListFolderTabDisplayMode", NagramChatListFolderTabDisplayMode.text.rawValue)
     public var chatListFolderTabDisplayMode: String
