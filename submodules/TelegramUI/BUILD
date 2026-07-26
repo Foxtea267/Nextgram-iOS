@@ -74,6 +74,7 @@ swift_library(
         "//Nagram/TelegramSettingsCloudSync:NagramTelegramSettingsCloudSync",
         "//Nagram/Strings:NagramStrings",
         "//Nagram/SettingsUI:NagramSettingsUI",
+        "//Nagram/Translate:NagramTranslate",  # MARK: NAGRAM
         "//submodules/MediaPlayer:UniversalMediaPlayer",
         "//submodules/TelegramVoip:TelegramVoip",
         "//submodules/DeviceAccess:DeviceAccess",

@@ -409,6 +409,12 @@ public final class NagramSettings {
     /// OpenAI-compatible LLM temperature in tenths (0...20).
     @NagramDefault("nagram.translationLLMTemperatureTenths", 7)
     public var translationLLMTemperatureTenths: Int32
+    /// 发送前翻译:长按发送按钮菜单显示「翻译」项,译文回填输入框(NAG-75)。
+    @NagramDefault("nagram.translateBeforeSend", false)
+    public var translateBeforeSend: Bool
+    /// 发送前翻译的目标语言代码(popularTranslationLanguages 短列表)。
+    @NagramDefault("nagram.translateBeforeSendTargetLang", "en")
+    public var translateBeforeSendTargetLang: String
 
     // MARK: 波次 3 批 D — 需新逻辑
     /// 回车键发送消息
