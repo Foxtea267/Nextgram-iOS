@@ -28,6 +28,7 @@ enum NagramSettingsSyncKeys {
         "nagram.chatListSwipeAction",
         "nagram.openArchiveOnPull",
         "nagram.showArchiveInFolders",
+        "nagram.hideSavedAndArchivedMessagesInList",
         "nagram.chatListStartupFolderMode",
         "nagram.chatListFolderTabsCompact",
         "nagram.hideAllChatsFolder",

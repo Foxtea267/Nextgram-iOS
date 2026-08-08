@@ -59,6 +59,9 @@
 "Nagram.ChatListMessagePreviewStyle" = "訊息預覽樣式";
 "Nagram.ChatListMessagePreviewStyle.three" = "三行";
 "Nagram.ChatListMessagePreviewStyle.two" = "兩行";
+"Nagram.HideSavedAndArchivedMessagesInList" = "在列表中隱藏收藏夾和歸檔會話資訊";
+"Nagram.MessagePlaceholderInSaved" = "這裡是您的收藏夾會話";
+"Nagram.MessagePlaceholderInArchived" = "這裡是您的歸檔會話";
 "Nagram.ChatListCompact" = "緊湊會話佈局";
 "Nagram.PanguOnReceiving" = "接收訊息 Pangu 化";
 "Nagram.PanguInfo" = "使文字更具可讀性。在 CJK（中文、日文、韓文）、半形英文、數字和符號字元之間自動插入空格。";

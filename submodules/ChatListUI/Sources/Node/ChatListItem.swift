@@ -29,6 +29,7 @@ import MultilineTextComponent
 import MultilineTextWithEntitiesComponent
 import ShimmerEffect
 import NagramSettings
+import NagramStrings // MARK: NAGRAM
 import GlassBackgroundComponent
 
 public enum ChatListItemContent {
@@ -1540,6 +1541,9 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                 case .loading:
                     return nil
                 case let .groupReference(groupReferenceData):
+                    if NagramSettings.shared.hideSavedAndArchivedMessagesInList { // MARK: NAGRAM
+                        return ngI18n("Nagram.MessagePlaceholderInArchived", item.presentationData.strings.baseLanguageCode)
+                    }
                     let peers = groupReferenceData.peers
                     let messageValue = groupReferenceData.message
                     if let message = messageValue, let peer = peers.first?.peer {
@@ -1577,6 +1581,9 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         return item.presentationData.strings.VoiceOver_ChatList_MessageEmpty
                     }
                 case let .peer(peerData):
+                    if NagramSettings.shared.hideSavedAndArchivedMessagesInList, peerData.peer.peerId == item.context.account.peerId, case .chatList = item.chatListLocation { // MARK: NAGRAM
+                        return ngI18n("Nagram.MessagePlaceholderInSaved", item.presentationData.strings.baseLanguageCode)
+                    }
                     if let message = peerData.messages.last {
                         var result = ""
                         if message.flags.contains(.Incoming) {
@@ -2602,12 +2609,17 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             }
             
             let contentData: ContentData
+            let nagramHideSavedMessagePreview: Bool // MARK: NAGRAM
+            if case let .chat(itemPeer) = contentPeer, case .chatList = item.chatListLocation {
+                nagramHideSavedMessagePreview = NagramSettings.shared.hideSavedAndArchivedMessagesInList && itemPeer.peerId == item.context.account.peerId
+            } else {
+                nagramHideSavedMessagePreview = false
+            }
             
             var hideAuthor = false
             switch contentPeer {
                 case let .chat(itemPeer):
                     var (peer, initialHideAuthor, messageText, messageEntities, spoilers, customEmojiRanges, richTextPreview) = chatListItemStrings(strings: item.presentationData.strings, nameDisplayOrder: item.presentationData.nameDisplayOrder, dateTimeFormat: item.presentationData.dateTimeFormat, contentSettings: item.context.currentContentSettings.with { $0 }, messages: messages, chatPeer: itemPeer, accountPeerId: item.context.account.peerId, enableMediaEmoji: !enableChatListPhotos, isPeerGroup: isPeerGroup)
-                    
                     if case let .psa(_, maybePsaText) = promoInfo, let psaText = maybePsaText {
                         initialHideAuthor = true
                         messageText = psaText
@@ -2634,6 +2646,14 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         }
                     default:
                         break
+                    }
+                    if nagramHideSavedMessagePreview { // MARK: NAGRAM — 收藏夹列表仅显示固定占位文案。
+                        initialHideAuthor = true
+                        messageText = ngI18n("Nagram.MessagePlaceholderInSaved", item.presentationData.strings.baseLanguageCode)
+                        messageEntities = []
+                        spoilers = nil
+                        customEmojiRanges = nil
+                        richTextPreview = nil
                     }
                     
                     contentData = .chat(itemPeer: itemPeer, threadInfo: threadInfo, peer: peer, hideAuthor: hideAuthor, messageText: messageText, messageEntities: messageEntities, spoilers: spoilers, customEmojiRanges: customEmojiRanges, richTextPreview: richTextPreview)
@@ -2795,6 +2815,11 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                             peerText = EnginePeer(effectiveAuthor).displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
                             ignoreForwardedIcon = true
                         }
+                    }
+                    if nagramHideSavedMessagePreview { // MARK: NAGRAM — 不泄露收藏夹来源作者或媒体类型。
+                        peerText = nil
+                        authorIsCurrentChat = true
+                        ignoreForwardedIcon = true
                     }
                 
                     if let _ = peerText, case let .channel(channel) = itemPeer.chatMainPeer, channel.isForumOrMonoForum, threadInfo == nil {
@@ -3106,7 +3131,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                             }
                         }
                 
-                        var displayMediaPreviews = true
+                        var displayMediaPreviews = !nagramHideSavedMessagePreview // MARK: NAGRAM
                         if message._asMessage().containsSecretMedia {
                             displayMediaPreviews = false
                         } else if let _ = message.peers[message.id.peerId] as? TelegramSecretChat {
@@ -3230,6 +3255,10 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         }
                     }
                 case let .group(peers):
+                    if NagramSettings.shared.hideSavedAndArchivedMessagesInList { // MARK: NAGRAM — 归档入口仅显示固定占位文案。
+                        attributedText = NSAttributedString(string: ngI18n("Nagram.MessagePlaceholderInArchived", item.presentationData.strings.baseLanguageCode), font: textFont, textColor: theme.messageTextColor)
+                        break
+                    }
                     let textString = NSMutableAttributedString(string: "")
                     var isFirst = true
                     for peer in peers {

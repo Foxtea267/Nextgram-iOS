@@ -333,6 +333,9 @@ public final class NagramSettings {
     /// 在非“全部会话”分组顶部展示归档入口（默认关 = 保持 Telegram 原生行为）
     @NagramDefault("nagram.showArchiveInFolders", false)
     public var showArchiveInFolders: Bool
+    /// 在列表中隐藏收藏夹和归档会话的具体预览（默认关 = 保持 Telegram 原生行为）
+    @NagramDefault("nagram.hideSavedAndArchivedMessagesInList", false)
+    public var hideSavedAndArchivedMessagesInList: Bool
     /// 对话列表启动分组（"telegram" / "last" / "specific"）
     @NagramDefault("nagram.chatListStartupFolderMode", NagramChatListStartupFolderMode.telegramDefault.rawValue)
     public var chatListStartupFolderMode: String

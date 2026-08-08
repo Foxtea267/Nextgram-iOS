@@ -59,6 +59,9 @@
 "Nagram.ChatListMessagePreviewStyle" = "Message Preview Style";
 "Nagram.ChatListMessagePreviewStyle.three" = "Three Lines";
 "Nagram.ChatListMessagePreviewStyle.two" = "Two Lines";
+"Nagram.HideSavedAndArchivedMessagesInList" = "Hide Saved and Archived Messages in List";
+"Nagram.MessagePlaceholderInSaved" = "Here are your Saved Messages chats";
+"Nagram.MessagePlaceholderInArchived" = "Here are your Archived chats";
 "Nagram.ChatListCompact" = "Compact Chat Layout";
 "Nagram.PanguOnReceiving" = "Enable Pangu on Receiving";
 "Nagram.PanguInfo" = "Paranoid text spacing for good readability, automatically inserting spaces between CJK, half-width English, digits, and symbols.";

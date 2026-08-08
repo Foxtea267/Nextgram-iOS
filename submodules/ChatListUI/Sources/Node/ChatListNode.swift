@@ -1992,8 +1992,8 @@ public final class ChatListNode: ListViewImpl {
                 return (update, listLocation.filter)
             }
         }
-        chatListViewUpdate = combineLatest(queue: .mainQueue(), chatListViewUpdate, nagramRegexFiltersSignal()) // MARK: NAGRAM — 规则变化时重算对话列表预览。
-        |> map { update, _ in
+        chatListViewUpdate = combineLatest(queue: .mainQueue(), chatListViewUpdate, nagramRegexFiltersSignal(), nagramBoolSignal("nagram.hideSavedAndArchivedMessagesInList", defaultValue: false)) // MARK: NAGRAM — 预览相关设置变化时重算对话列表。
+        |> map { update, _, _ in
             return update
         }
         
