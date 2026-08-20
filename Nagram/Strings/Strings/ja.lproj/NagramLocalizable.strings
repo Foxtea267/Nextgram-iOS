@@ -106,8 +106,8 @@
 "Nagram.SkipSensitiveContentWarning.Footer" = "有効にすると、18+ メディアをタップした際に確認せず直接表示します。Telegram のセンシティブコンテンツ設定は変更しません。";
 "Nagram.ICloudSync" = "iCloud 同期";
 "Nagram.ICloudSync.Footer" = "有効にすると、Nagram の設定と一部の Telegram 標準ローカル設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
-"Nagram.ForceCopy" = "強制コピー";
-"Nagram.ForceCopy.Footer" = "コンテンツ保護（コピー/転送禁止）が有効なチャットでもメッセージ本文をコピーできるようにします。";
+"Nagram.ForceCopy" = "コンテンツ保護を解除";
+"Nagram.ForceCopy.Footer" = "コンテンツ保護（コピー/転送禁止）が有効なチャットでも、メッセージ本文のコピー、写真や動画の保存、写真からのステッカー作成を許可します。有料コンテンツは引き続き保護されます。";
 "Nagram.MessageMenu" = "メッセージメニュー管理";
 "Nagram.MessageMenu.Header" = "メニュー項目";
 "Nagram.MessageMenu.Footer" = "項目をタップして表示を切り替えたり、上下に移動して順序を調整できます。一部のシステム項目は元の位置に残ります。";

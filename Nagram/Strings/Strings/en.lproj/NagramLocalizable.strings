@@ -106,8 +106,8 @@
 "Nagram.SkipSensitiveContentWarning.Footer" = "When enabled, tapping 18+ media reveals it immediately without confirmation. This does not change Telegram's sensitive content setting.";
 "Nagram.ICloudSync" = "iCloud Sync";
 "Nagram.ICloudSync.Footer" = "When enabled, Nagram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
-"Nagram.ForceCopy" = "Force Copy";
-"Nagram.ForceCopy.Footer" = "Allow copying message text even in chats with content protection (no copy / no forward) enabled.";
+"Nagram.ForceCopy" = "Bypass Content Protection";
+"Nagram.ForceCopy.Footer" = "Allow copying message text, saving photos or videos, and creating stickers from photos in chats with content protection enabled. Paid content remains protected.";
 "Nagram.MessageMenu" = "Message Menu";
 "Nagram.MessageMenu.Header" = "Menu Items";
 "Nagram.MessageMenu.Footer" = "Tap an item to enable or disable it, or move it up and down. Special system-only items stay in their original positions.";

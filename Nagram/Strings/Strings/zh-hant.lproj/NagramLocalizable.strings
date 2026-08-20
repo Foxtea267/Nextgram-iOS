@@ -106,8 +106,8 @@
 "Nagram.SkipSensitiveContentWarning.Footer" = "開啟後，點擊 18+ 媒體時直接顯示，不再彈出確認提示。此項不會修改 Telegram 的敏感內容設定。";
 "Nagram.ICloudSync" = "iCloud 同步";
 "Nagram.ICloudSync.Footer" = "開啟後，Nagram 設定和部分 Telegram 原生本機設定會透過 iCloud 在同一 Apple ID 的裝置間同步。關閉不會刪除雲端既有設定。";
-"Nagram.ForceCopy" = "強制複製";
-"Nagram.ForceCopy.Footer" = "開啟後，在設定了內容保護（禁止複製/轉發）的對話中仍可複製訊息文字。";
+"Nagram.ForceCopy" = "解除內容保護";
+"Nagram.ForceCopy.Footer" = "開啟後，可在設定了內容保護（禁止複製/轉發）的對話中複製訊息文字、儲存圖片或影片，並使用圖片建立貼圖。付費內容仍受保護。";
 "Nagram.MessageMenu" = "訊息選單管理";
 "Nagram.MessageMenu.Header" = "選單項目";
 "Nagram.MessageMenu.Footer" = "點按項目可開關顯示，或上移 / 下移調整順序。少數系統特殊項會保留原位置。";

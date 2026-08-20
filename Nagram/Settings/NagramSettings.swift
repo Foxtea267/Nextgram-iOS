@@ -165,7 +165,7 @@ public final class NagramSettings {
         }
     }
 
-    // MARK: 波次 1 — force-copy（已落地，key 保持不变以平滑迁移）
+    // MARK: 波次 1 — 解除内容保护（沿用 forceCopy key 以平滑迁移）
     @NagramDefault("nagram.forceCopyEnabled", false)
     public var forceCopyEnabled: Bool
 
