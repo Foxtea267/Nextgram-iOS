@@ -101,9 +101,8 @@
 "Nagram.DisableGalleryCamera" = "Disable In-Gallery Camera";
 "Nagram.DisableGalleryCameraPreview" = "Disable Camera Preview";
 "Nagram.DisableFiltering" = "Disable Filtering";
-"Nagram.DisableFiltering.Footer" = "When available, show sensitive content instead of filtering it. This is an account setting synced by Telegram.";
-"Nagram.SkipSensitiveContentWarning" = "Skip 18+ Content Confirmation";
-"Nagram.SkipSensitiveContentWarning.Footer" = "When enabled, tapping 18+ media reveals it immediately without confirmation. This does not change Telegram's sensitive content setting.";
+"Nagram.DisableFiltering.Footer" = "Disable Filtering changes the Telegram account setting. Auto-Show Restricted Media only skips the confirmation prompt; it does not change Telegram settings or bypass age verification.";
+"Nagram.SkipSensitiveContentWarning" = "Auto-Show Restricted Media";
 "Nagram.ICloudSync" = "iCloud Sync";
 "Nagram.ICloudSync.Footer" = "When enabled, Nagram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
 "Nagram.ForceCopy" = "Bypass Content Protection";

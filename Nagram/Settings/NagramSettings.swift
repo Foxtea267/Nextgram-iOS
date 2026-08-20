@@ -170,7 +170,7 @@ public final class NagramSettings {
     public var forceCopyEnabled: Bool
 
     // MARK: 敏感内容
-    /// 跳过 18+ 媒体确认弹窗，直接揭示当前媒体
+    /// 自动显示受限媒体；仅跳过确认弹窗，不绕过年龄验证
     @NagramDefault("nagram.skipSensitiveContentWarning", false)
     public var skipSensitiveContentWarning: Bool
 

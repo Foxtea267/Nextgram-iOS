@@ -101,9 +101,8 @@
 "Nagram.DisableGalleryCamera" = "ギャラリー内カメラを無効化";
 "Nagram.DisableGalleryCameraPreview" = "カメラプレビューを無効化";
 "Nagram.DisableFiltering" = "センシティブ内容のフィルターを無効化";
-"Nagram.DisableFiltering.Footer" = "利用可能な場合、センシティブな内容をフィルターで隠さずに表示します。この項目は Telegram で同期されるアカウント設定です。";
-"Nagram.SkipSensitiveContentWarning" = "18+ コンテンツの確認を省略";
-"Nagram.SkipSensitiveContentWarning.Footer" = "有効にすると、18+ メディアをタップした際に確認せず直接表示します。Telegram のセンシティブコンテンツ設定は変更しません。";
+"Nagram.DisableFiltering.Footer" = "「センシティブ内容のフィルターを無効化」は Telegram で同期されるアカウント設定を変更します。「制限付きメディアを自動表示」は表示前の確認のみを省略し、Telegram の設定を変更したり年齢確認を回避したりしません。";
+"Nagram.SkipSensitiveContentWarning" = "制限付きメディアを自動表示";
 "Nagram.ICloudSync" = "iCloud 同期";
 "Nagram.ICloudSync.Footer" = "有効にすると、Nagram の設定と一部の Telegram 標準ローカル設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
 "Nagram.ForceCopy" = "コンテンツ保護を解除";

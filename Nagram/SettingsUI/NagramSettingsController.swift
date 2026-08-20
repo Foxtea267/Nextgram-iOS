@@ -220,7 +220,7 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
     case "Nagram.DisableFiltering":
         return ["DisableFiltering"]
     case "Nagram.SkipSensitiveContentWarning":
-        return ["Skip18PlusConfirmation", "SkipAgeRestrictionAlert"]
+        return ["AutoShowRestrictedMedia", "Skip18PlusConfirmation", "SkipAgeRestrictionAlert"]
     case "Nagram.ForceCopy":
         return ["ForceCopy", "ForceCopyEnabled"]
     default:
@@ -508,8 +508,6 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Privacy", footerKey: "Nagram.DisableFiltering.Footer", rows: [
             .toggleWithEnabled(titleKey: "Nagram.DisableFiltering", get: sensitiveContentEnabled, set: setSensitiveContentEnabled, enabled: sensitiveContentCanAdjust, enableInteractiveChanges: false),
-        ]),
-        NagramGroup(tab: .other, headerKey: nil, footerKey: "Nagram.SkipSensitiveContentWarning.Footer", rows: [
             .toggle(titleKey: "Nagram.SkipSensitiveContentWarning", get: { NagramSettings.shared.skipSensitiveContentWarning }, set: { NagramSettings.shared.skipSensitiveContentWarning = $0 }),
         ]),
         NagramGroup(tab: .other, headerKey: nil, footerKey: "Nagram.ForceCopy.Footer", rows: [
