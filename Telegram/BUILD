@@ -349,16 +349,21 @@ alternate_icon_folders = [
     "PremiumTurbo",
 ]
 
+# MARK: NAGRAM — the IPA post-processor selects the matching icon set from the
+# active Xcode toolchain. The Xcode 26 Composer sources are supplied separately.
 composer_source_icon_folders = ["Nagram", "NagramBlock", "NagramColorful"]
 composer_build_icon_folders = ["NagramBuild"]
+composer_xcode26_icon_folders = ["Nagram26", "NagramBlock26", "NagramColorful26"]
 
-filegroup(
-    name = "NagramPrecompiledComposerIcons",
-    srcs = glob(
-        ["Telegram-iOS/NagramPrecompiledComposerIcons/*"],
-        allow_empty = True,
-    ),
-)
+[
+    filegroup(
+        name = "{}_icon".format(name),
+        srcs = glob(
+            ["Telegram-iOS/{}.icon/**/*".format(name)],
+            allow_empty = True,
+        ),
+    ) for name in composer_xcode26_icon_folders
+]
 
 filegroup(
     name = "NagramIconPreviews",
@@ -1014,10 +1019,12 @@ sh_binary(
     name = "NagramFixComposerAlternateIcons",
     data = [
         ":Icons",
+        ":Nagram26_icon",
+        ":NagramBlock26_icon",
+        ":NagramColorful26_icon",
         ":Nagram_icon",
         ":NagramBlock_icon",
         ":NagramColorful_icon",
-        ":NagramPrecompiledComposerIcons",
         "//submodules/LegacyComponents:LegacyComponentsAssets",
         "//submodules/PasswordSetupUI:PasswordSetupUIAssets",
         "//submodules/TelegramUI:TelegramUIAssets",
