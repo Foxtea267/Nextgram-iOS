@@ -21,6 +21,8 @@ public extension EnginePeer {
             return group.title
         case let .channel(channel):
             return channel.title
+        case let .community(community):
+            return community.title
         case .secretChat:
             return ""
         }
@@ -54,6 +56,8 @@ public extension EnginePeer {
             return group.title
         case let .channel(channel):
             return channel.title
+        case let .community(community):
+            return community.title
         case .secretChat:
             return ""
         }

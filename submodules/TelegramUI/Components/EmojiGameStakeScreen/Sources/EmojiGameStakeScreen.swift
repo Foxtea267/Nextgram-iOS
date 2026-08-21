@@ -1142,7 +1142,7 @@ public final class AmountFieldComponent: Component {
                 iconMaxSize = CGSize(width: 22.0, height: 22.0)
             case .ton:
                 iconName = "Ads/TonBig"
-                iconTintColor = component.accentColor
+                iconTintColor = UIColor(rgb: 0x30A1F5)
                 iconMaxSize = CGSize(width: 18.0, height: 18.0)
                 iconOffset = CGPoint(x: 3.0, y: 1.0)
             }

@@ -32,68 +32,71 @@ private func generateCloseIcon() -> UIImage {
     })!.withRenderingMode(.alwaysTemplate)
 }
 
-private func textStringForForwardedMessage(_ message: EngineMessage, strings: PresentationStrings) -> (text: String, entities: [MessageTextEntity], isMedia: Bool) {
+private func textStringForForwardedMessage(_ message: EngineMessage, strings: PresentationStrings) -> (text: NSAttributedString, entities: [MessageTextEntity], isMedia: Bool) {
+    if let richText = message.richText {
+        return (richText.instantPage.previewAttributedText(strings: strings), [], false)
+    }
     for media in message.media {
         switch media {
         case _ as TelegramMediaImage:
-            return (strings.Message_Photo, [], true)
+            return (NSAttributedString(string: strings.Message_Photo), [], true)
         case let file as TelegramMediaFile:
             if file.isVideoSticker || file.isAnimatedSticker {
-                return (strings.Message_Sticker, [], true)
+                return (NSAttributedString(string: strings.Message_Sticker), [], true)
             }
             var fileName: String = strings.Message_File
             for attribute in file.attributes {
                 switch attribute {
                 case .Sticker:
-                    return (strings.Message_Sticker, [], true)
+                    return (NSAttributedString(string: strings.Message_Sticker), [], true)
                 case let .FileName(name):
                     fileName = name
                 case let .Audio(isVoice, _, title, performer, _):
                     if isVoice {
-                        return (strings.Message_Audio, [], true)
+                        return (NSAttributedString(string: strings.Message_Audio), [], true)
                     } else {
                         if let title = title, let performer = performer, !title.isEmpty, !performer.isEmpty {
-                            return (title + " — " + performer, [], true)
+                            return (NSAttributedString(string: title + " — " + performer), [], true)
                         } else if let title = title, !title.isEmpty {
-                            return (title, [], true)
+                            return (NSAttributedString(string: title), [], true)
                         } else if let performer = performer, !performer.isEmpty {
-                            return (performer, [], true)
+                            return (NSAttributedString(string: performer), [], true)
                         } else {
-                            return (strings.Message_Audio, [], true)
+                            return (NSAttributedString(string: strings.Message_Audio), [], true)
                         }
                     }
                 case .Video:
                     if file.isAnimated {
-                        return (strings.Message_Animation, [], true)
+                        return (NSAttributedString(string: strings.Message_Animation), [], true)
                     } else {
-                        return (strings.Message_Video, [], true)
+                        return (NSAttributedString(string: strings.Message_Video), [], true)
                     }
                 default:
                     break
                 }
             }
-            return (fileName, [], true)
+            return (NSAttributedString(string: fileName), [], true)
         case _ as TelegramMediaContact:
-            return (strings.Message_Contact, [], true)
+            return (NSAttributedString(string: strings.Message_Contact), [], true)
         case let game as TelegramMediaGame:
-            return (game.title, [], true)
+            return (NSAttributedString(string: game.title), [], true)
         case _ as TelegramMediaMap:
-            return (strings.Message_Location, [], true)
+            return (NSAttributedString(string: strings.Message_Location), [], true)
         case _ as TelegramMediaAction:
-            return ("", [], true)
+            return (NSAttributedString(), [], true)
         case _ as TelegramMediaPoll:
-            return (strings.ForwardedPolls(1), [], true)
+            return (NSAttributedString(string: strings.ForwardedPolls(1)), [], true)
         case let todo as TelegramMediaTodo:
-            return (todo.text, [], true)
+            return (NSAttributedString(string: todo.text), [], true)
         case let dice as TelegramMediaDice:
-            return (dice.emoji, [], true)
+            return (NSAttributedString(string: dice.emoji), [], true)
         case let invoice as TelegramMediaInvoice:
-            return (invoice.title, [], true)
+            return (NSAttributedString(string: invoice.title), [], true)
         default:
             break
         }
     }
-    return (message.text, message._asMessage().textEntitiesAttribute?.entities ?? [], false)
+    return (NSAttributedString(string: message.text), message._asMessage().textEntitiesAttribute?.entities ?? [], false)
 }
 
 public final class ChatInputMessageAccessoryPanel: Component {
@@ -306,6 +309,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
             
             self.lineView = UIImageView()
             self.titleNode = CompositeTextNode()
+            self.titleNode.displaysAsynchronously = false
             
             super.init(frame: frame)
             
@@ -534,7 +538,14 @@ public final class ChatInputMessageAccessoryPanel: Component {
                 
                 let textFont = Font.regular(14.0)
                 let messageText: NSAttributedString
-                if isText {
+                if isText, message.richText != nil {
+                    let mutablePreviewText = NSMutableAttributedString(attributedString: attributedText)
+                    mutablePreviewText.addAttributes([
+                        .font: textFont,
+                        .foregroundColor: environment.theme.chat.inputPanel.primaryTextColor
+                    ], range: NSRange(location: 0, length: mutablePreviewText.length))
+                    messageText = mutablePreviewText
+                } else if isText {
                     let entities = (message._asMessage().textEntitiesAttribute?.entities ?? []).filter { entity in
                         switch entity.type {
                         case .Spoiler, .CustomEmoji:
@@ -578,6 +589,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     titleStringValue = environment.strings.Conversation_EditingMessagePanelTitle
                 }
                 titleText = [.text(NSAttributedString(string: titleStringValue, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor))]
+                textString = renderInstantPagePreviewIcons(textString, font: Font.regular(14.0), textColor: environment.theme.chat.inputPanel.primaryTextColor)
             case let .reply(reply):
                 if let peer = self.messages.first?.peers[reply.id.peerId] as? TelegramChannel, case .broadcast = peer.info {
                     let icon: UIImage?
@@ -597,7 +609,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                             if nameRange.range.lowerBound != 0 {
                                 titleText.append(.text(NSAttributedString(string: rawNsString.substring(with: NSRange(location: 0, length: nameRange.range.lowerBound)), font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor)))
                             }
-                            titleText.append(.icon(icon))
+                            titleText.append(.icon(icon, .zero))
                             titleText.append(.text(NSAttributedString(string: peer.debugDisplayTitle, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor)))
                             
                             if nameRange.range.upperBound != rawNsString.length {
@@ -633,7 +645,12 @@ public final class ChatInputMessageAccessoryPanel: Component {
                         titleText = [.text(NSAttributedString(string: string, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor))]
                     }
                     
-                    if reply.id.peerId != component.chatPeerId {
+                    if reply.id.namespace == Namespaces.Message.EphemeralLocal {
+                        let icon = UIImage(bundleImageName: "Chat/Message/Hidden")
+                        if let iconImage = generateTintedImage(image: icon, color: environment.theme.chat.inputPanel.panelControlAccentColor) {
+                            titleText.insert(.icon(iconImage, CGPoint(x: 0.0, y: -4.0 + UIScreenPixel)), at: 0)
+                        }
+                    } else if reply.id.peerId != component.chatPeerId {
                         if let peer = self.messages.first?.peers[reply.id.peerId], (peer is TelegramChannel || peer is TelegramGroup) {
                             let icon: UIImage?
                             if let channel = peer as? TelegramChannel, case .broadcast = channel.info {
@@ -642,7 +659,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                                 icon = UIImage(bundleImageName: "Chat/Input/Accessory Panels/PanelTextGroupIcon")
                             }
                             if let iconImage = generateTintedImage(image: icon, color: environment.theme.chat.inputPanel.panelControlAccentColor) {
-                                titleText.append(.icon(iconImage))
+                                titleText.append(.icon(iconImage, .zero))
                                 titleText.append(.text(NSAttributedString(string: peer.debugDisplayTitle, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor)))
                             }
                         }
@@ -662,6 +679,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                         }
                     }
                 }
+                textString = renderInstantPagePreviewIcons(textString, font: Font.regular(14.0), textColor: environment.theme.chat.inputPanel.primaryTextColor)
             case let .forward(forward):
                 var title = ""
                 var authors = ""
@@ -688,7 +706,11 @@ public final class ChatInputMessageAccessoryPanel: Component {
                     
                     text = NSMutableAttributedString(attributedString: NSAttributedString(string: "\(authors): ", font: Font.regular(14.0), textColor: secondaryTextColor))
                     
-                    let additionalText = NSMutableAttributedString(attributedString: NSAttributedString(string: string, font: Font.regular(14.0), textColor: secondaryTextColor))
+                    let additionalText = NSMutableAttributedString(attributedString: string)
+                    additionalText.addAttributes([
+                        .font: Font.regular(14.0),
+                        .foregroundColor: secondaryTextColor
+                    ], range: NSRange(location: 0, length: additionalText.length))
                     for entity in entities {
                         switch entity.type {
                         case let .CustomEmoji(_, fileId):
@@ -710,6 +732,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
                 if forward.forwardOptionsState?.hideNames == true {
                     text = NSMutableAttributedString(attributedString: NSAttributedString(string: environment.strings.Conversation_ForwardOptions_SenderNamesRemoved, font: Font.regular(14.0), textColor: secondaryTextColor))
                 }
+                text = NSMutableAttributedString(attributedString: renderInstantPagePreviewIcons(text, font: Font.regular(14.0), textColor: secondaryTextColor))
                 
                 titleText = [.text(NSAttributedString(string: title, font: Font.medium(14.0), textColor: environment.theme.chat.inputPanel.panelControlAccentColor))]
                 textString = text
@@ -902,10 +925,12 @@ public final class ChatInputMessageAccessoryPanel: Component {
             self.titleNode.components = titleText
             let titleSize = self.titleNode.update(constrainedSize: CGSize(width: availableSize.width - lineFrame.maxX - textInsets.left - textInsets.right, height: 100.0))
             
+            let textRenderInsets = UIEdgeInsets(top: 2.0, left: 2.0, bottom: 2.0, right: 2.0)
             let textSize = self.text.update(
                 transition: .immediate,
                 component: AnyComponent(MultilineTextComponent(
                     text: .plain(textString),
+                    insets: textRenderInsets
                 )),
                 environment: {},
                 containerSize: CGSize(width: availableSize.width - lineFrame.maxX - textInsets.left - textInsets.right, height: 100.0)
@@ -924,7 +949,7 @@ public final class ChatInputMessageAccessoryPanel: Component {
             let titleTextSpacing: CGFloat = 1.0
             
             let titleFrame = CGRect(origin: CGPoint(x: lineFrame.maxX + textInsets.left, y: textInsets.top), size: titleSize)
-            let textFrame = CGRect(origin: CGPoint(x: lineFrame.maxX + textInsets.left, y: titleFrame.maxY + titleTextSpacing), size: textSize)
+            let textFrame = CGRect(origin: CGPoint(x: lineFrame.maxX + textInsets.left - textRenderInsets.left, y: titleFrame.maxY + titleTextSpacing - textRenderInsets.top), size: textSize)
             
             transition.setFrame(view: self.titleNode.view, frame: titleFrame)
             

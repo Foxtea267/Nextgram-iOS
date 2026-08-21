@@ -5304,6 +5304,18 @@ Sorry for the inconvenience.";
 "PeerInfo.AddToContacts" = "Add to Contacts";
 
 "PeerInfo.BioExpand" = "more";
+"PeerInfo.HiddenCommunityStatus" = "Hidden • %@";
+"PeerInfo.Community_1" = "Community with %@ chat";
+"PeerInfo.Community_any" = "Community with %@ chats";
+"PeerInfo.Community.RemoveBot" = "Remove Bot from Community";
+"PeerInfo.Community.AddBot" = "Add Bot to a Community";
+"PeerInfo.Community.BotInfo" = "Make your bot part of a community with multiple related chats";
+"PeerInfo.Community.RemoveChannel" = "Remove Channel from Community";
+"PeerInfo.Community.AddChannel" = "Add Channel to a Community";
+"PeerInfo.Community.ChannelInfo" = "Make your channel part of a community with multiple related chats";
+"PeerInfo.Community.RemoveGroup" = "Remove Group from Community";
+"PeerInfo.Community.AddGroup" = "Add Group to a Community";
+"PeerInfo.Community.GroupInfo" = "Make your group part of a community with multiple related chats";
 
 "External.OpenIn" = "Open in %@";
 
@@ -7622,11 +7634,14 @@ Sorry for the inconvenience.";
 "Group.Setup.ApproveNewMembersInfo" = "Turn this on if you want users to be able to send messages only after they are approved by an admin.";
 "Group.Setup.ApproveNewMembersManagedBy" = "Managed by %@";
 "Group.Setup.ApproveNewMembersApplyToExistingInviteLinksTitle" = "Apply to existing invite links?";
-"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksText" = "Also %@ **%@** for **%@ existing invite links** in this %@?";
-"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksEnable" = "enable";
-"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksDisable" = "disable";
-"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksPeerGroup" = "group";
-"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksPeerChannel" = "channel";
+
+"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksText.Links_1" = "%@ existing invite link";
+"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksText.Links_any" = "%@ existing invite links";
+"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksText.EnableGroup" = "Also enable **Approve New Members** for **%@** in this group?";
+"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksText.DisableGroup" = "Also disable **Approve New Members** for **%@** in this group?";
+"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksText.EnableChannel" = "Also enable **Approve New Subscribers** for **%@** in this group?";
+"Group.Setup.ApproveNewMembersApplyToExistingInviteLinksText.DisableChannel" = "Also disable **Approve New Subscribers** for **%@** in this group?";
+
 "Channel.Setup.ApproveNewSubscribers" = "Approve New Subscribers";
 "Channel.Setup.ApproveNewSubscribersInfo" = "Turn this on if you want users to be able to join only after they are approved by an admin.";
 
@@ -11782,10 +11797,10 @@ Sorry for the inconvenience.";
 "Monetization.Intro.Bot.Ads.Text" = "Telegram can display ads in your bot.";
 
 "Monetization.Intro.Split.Title" = "50:50 Revenue Split";
-"Monetization.Intro.Split.Text" = "You receive 50% of the ad revenue in TON.";
+"Monetization.Intro.Split.Text" = "You receive 50% of the ad revenue in GRAM.";
 
 "Monetization.Intro.Withdrawal.Title" = "Flexible Withdrawals";
-"Monetization.Intro.Withdrawal.Text" = "You can withdraw your TON any time.";
+"Monetization.Intro.Withdrawal.Text" = "You can withdraw your GRAM any time.";
 
 "Monetization.Intro.Info.Title" = "What's #TON?";
 "Monetization.Intro.Info.Text" = "TON is a blockchain platform and cryptocurrency that Telegram uses for its high speed and commissions on transactions. [Learn More >]()";
@@ -12497,10 +12512,10 @@ Sorry for the inconvenience.";
 
 "Monetization.StarsRevenueTitle" = "REVENUE";
 
-"Monetization.TonBalanceTitle" = "TON BALANCE";
+"Monetization.TonBalanceTitle" = "GRAM BALANCE";
 "Monetization.StarsBalanceTitle" = "STARS BALANCE";
 
-"Monetization.TonTransactions" = "TON Transactions";
+"Monetization.TonTransactions" = "GRAM Transactions";
 "Monetization.StarsTransactions" = "Stars Transactions";
 
 "Monetization.BalanceStarsWithdraw" = "Withdraw via Fragment";
@@ -12586,9 +12601,9 @@ Sorry for the inconvenience.";
 
 "WebBrowser.Telegram" = "Telegram";
 
-"Monetization.Proceeds.Ton.Info" = "TON from your total balance can be used for ads or withdrawn as rewards 3 days after they are earned.";
+"Monetization.Proceeds.Ton.Info" = "GRAM from your total balance can be used for ads or withdrawn as rewards 3 days after they are earned.";
 "Monetization.Proceeds.Stars.Info" = "Stars from your total balance can be used for ads or withdrawn as rewards 21 days after they are earned.";
-"Monetization.Proceeds.TonAndStars.Info" = "Stars and TON from your total balance can be used for ads or withdrawn as rewards 21 and 3 days respectively after they are earned.";
+"Monetization.Proceeds.TonAndStars.Info" = "Stars and GRAM from your total balance can be used for ads or withdrawn as rewards 21 and 3 days respectively after they are earned.";
 
 "Stars.Transaction.FragmentUnknown_URL" = "https://fragment.com/stars";
 "Conversation.StatusBotSubscribers_1" = "1 user";
@@ -12860,7 +12875,7 @@ Sorry for the inconvenience.";
 "SendStarReactions.TermsOfServiceFooter" = "By sending Stars you agree to the [Terms of Service](https://telegram.org/tos/stars)";
 
 "PeerInfo.AllowedReactions.StarReactions" = "Enable Paid Reactions";
-"PeerInfo.AllowedReactions.StarReactionsFooter" = "Switch this on to let your subscribers set paid reactions with Telegram Stars, which you will be able to withdraw later as TON. [Learn More >](https://telegram.org/privacy)";
+"PeerInfo.AllowedReactions.StarReactionsFooter" = "Switch this on to let your subscribers set paid reactions with Telegram Stars, which you will be able to withdraw later as GRAM. [Learn More >](https://telegram.org/privacy)";
 
 "Chat.ToastStarsSent.Title_1" = "Star sent!";
 "Chat.ToastStarsSent.Title_any" = "Stars sent!";
@@ -12911,7 +12926,7 @@ Sorry for the inconvenience.";
 "Stars.Transaction.Giveaway.Stars_1" = "%@ Star";
 "Stars.Transaction.Giveaway.Stars_any" = "%@ Stars";
 
-"Stats.RevenueInTon" = "Revenue in TON";
+"Stats.RevenueInTon" = "Revenue in GRAM";
 "Stats.RevenueInStars" = "Revenue in Stars";
 "Stats.RevenueInUsd" = "Revenue in USD";
 
@@ -13192,7 +13207,7 @@ Sorry for the inconvenience.";
 
 "Resolve.ChannelErrorNotFound" = "Sorry, this channel doesn't seem to exist.";
 
-"Stats.TonBotRevenue.Title" = "TON Balance";
+"Stats.TonBotRevenue.Title" = "GRAM Balance";
 
 "PeerInfo.BotBalance.Title" = "BALANCE";
 "PeerInfo.BotBalance.Ton" = "Ton";
@@ -14539,8 +14554,8 @@ Sorry for the inconvenience.";
 
 "Chat.PostApproval.DetailStatus.StarsAmount_1" = "# Star";
 "Chat.PostApproval.DetailStatus.StarsAmount_any" = "# Stars";
-"Chat.PostApproval.DetailStatus.TonAmount_1" = "# TON";
-"Chat.PostApproval.DetailStatus.TonAmount_any" = "# TON";
+"Chat.PostApproval.DetailStatus.TonAmount_1" = "# GRAM";
+"Chat.PostApproval.DetailStatus.TonAmount_any" = "# GRAM";
 
 "Chat.PostApproval.DetailStatus.PostedPaid" = "**%1$@** received **%2$@** for publishing this post";
 "Chat.PostApproval.DetailStatus.UserFailedRefunded" = "Suggested post was refunded because you didn't have enough funds";
@@ -14564,9 +14579,9 @@ Sorry for the inconvenience.";
 "Chat.PostApproval.Message.BuyStars" = "Buy Stars";
 
 "Chat.PostApproval.Message.UserAgreementPriceStars" = "💰 You have been charged %1$@.\n\n⌛ **%2$@** will receive the Stars once the post has been live for 24 hours.\n\n🔄 If admins remove the post before it has been live for 24 hours, the your Stars will be refunded.";
-"Chat.PostApproval.Message.UserAgreementPriceTon" = "💰 You have been charged %1$@.\n\n⌛ **%2$@** will receive the TON once the post has been live for 24 hours.\n\n🔄 If admins the post before it has been live for 24 hours, your TON will be refunded.";
+"Chat.PostApproval.Message.UserAgreementPriceTon" = "💰 You have been charged %1$@.\n\n⌛ **%2$@** will receive GRAM once the post has been live for 24 hours.\n\n🔄 If admins the post before it has been live for 24 hours, your GRAM will be refunded.";
 "Chat.PostApproval.Message.AdminAgreementPriceStars" = "💰 The user have been charged %1$@.\n\n⌛ **%2$@** will receive the Stars once the post has been live for 24 hours.\n\n🔄 If you remove the post before it has been live for 24 hours, the user's Stars will be refunded.";
-"Chat.PostApproval.Message.AdminAgreementPriceTon" = "💰 The user have been charged %1$@.\n\n⌛ **%2$@** will receive the TON once the post has been live for 24 hours.\n\n🔄 If you remove the post before it has been live for 24 hours, the user's TON will be refunded.";
+"Chat.PostApproval.Message.AdminAgreementPriceTon" = "💰 The user have been charged %1$@.\n\n⌛ **%2$@** will receive GRAM once the post has been live for 24 hours.\n\n🔄 If you remove the post before it has been live for 24 hours, the user's GRAM will be refunded.";
 "Chat.PostApproval.Message.AdminDeclined" = "";
 "Chat.PostApproval.Message.AdminDeclinedComment" = "%@";
 
@@ -14606,19 +14621,19 @@ Sorry for the inconvenience.";
 "Chat.PostSuggestion.Suggest.InputSubtitleEmpty" = "Tap to offer a price for publishing";
 "Chat.PostSuggestion.Suggest.InputSubtitleAnytime" = "%@ for publishing anytime";
 
-"BalanceNeeded.FragmentTitle" = "%@ TON Needed";
+"BalanceNeeded.FragmentTitle" = "%@ GRAM Needed";
 "BalanceNeeded.FragmentSubtitle" = "You can add funds to your balance via the third-party platform Fragment.";
 "BalanceNeeded.FragmentAction" = "Add Funds via Fragment";
 
-"Settings.Ton.Description" = "Use TON to submit post suggestions to channels on Telegram.";
+"Settings.Ton.Description" = "Use GRAM to submit post suggestions to channels on Telegram.";
 
-"Settings.TransactionsTon.Title" = "TON";
-"Settings.TransactionsTon.Subtitle" = "Use TON to submit post suggestions to channels on Telegram.";
+"Settings.TransactionsTon.Title" = "GRAM";
+"Settings.TransactionsTon.Subtitle" = "Use GRAM to submit post suggestions to channels on Telegram.";
 
 "Chat.DeletePaidMessageStars.Title" = "Stars Will Be Lost";
 "Chat.DeletePaidMessageStars.Text" = "You won't receive **Stars** for this post if you delete it now. The post must remain visible for at least **24 hours** after publication.";
-"Chat.DeletePaidMessageTon.Title" = "TON Will Be Lost";
-"Chat.DeletePaidMessageTon.Text" = "You won't receive **TON** for this post if you delete it now. The post must remain visible for at least **24 hours** after publication.";
+"Chat.DeletePaidMessageTon.Title" = "GRAM Will Be Lost";
+"Chat.DeletePaidMessageTon.Text" = "You won't receive **GRAM** for this post if you delete it now. The post must remain visible for at least **24 hours** after publication.";
 "Chat.DeletePaidMessage.Action" = "Delete Anyway";
 
 "Chat.PostSuggestion.Reject.Title" = "Comment";
@@ -14626,7 +14641,7 @@ Sorry for the inconvenience.";
 
 "Chat.PostSuggestion.Approve.AdminConfirmationText" = "Do you really want to publish this post from **%@**?";
 "Chat.PostSuggestion.Approve.AdminConfirmationPriceStars" = "You will receive %1$@ Stars (%2$@%)\nfor publishing this post. It must remain visible for **24** hours after publication.";
-"Chat.PostSuggestion.Approve.AdminConfirmationPriceTon" = "You will receive %1$@ TON (%2$@%)\nfor publishing this post. It must remain visible for **24** hours after publication.";
+"Chat.PostSuggestion.Approve.AdminConfirmationPriceTon" = "You will receive %1$@ GRAM (%2$@%)\nfor publishing this post. It must remain visible for **24** hours after publication.";
 
 "Chat.PostSuggestion.Approve.UserConfirmationText" = "Do you really want to publish this post?";
 
@@ -14641,7 +14656,7 @@ Sorry for the inconvenience.";
 "Chat.PostSuggestion.SetTime.NoTimeAction" = "Send Anytime";
 
 "Chat.PostSuggestion.ApproveTime.AdminConfirmationPriceStars" = "You will receive %1$@ Stars (%2$@%)\nfor publishing this post.";
-"Chat.PostSuggestion.ApproveTime.AdminConfirmationPriceTon" = "You will receive %1$@ TON (%2$@%)\nfor publishing this post.";
+"Chat.PostSuggestion.ApproveTime.AdminConfirmationPriceTon" = "You will receive %1$@ GRAM (%2$@%)\nfor publishing this post.";
 
 "Chat.PostSuggestion.StarsDisclaimer" = "Transactions in **Stars** may be reversed by the payment provider within **21** days. Only accept Stars from people you trust.";
 
@@ -14655,16 +14670,16 @@ Sorry for the inconvenience.";
 "Chat.PostSuggestion.Suggest.TitleCreate" = "Suggest Terms";
 "Chat.PostSuggestion.Suggest.TitleEdit" = "Suggest Changes";
 "Chat.PostSuggestion.Suggest.PriceSectionStars" = "ENTER A PRICE IN STARS";
-"Chat.PostSuggestion.Suggest.PriceSectionTon" = "ENTER A PRICE IN TON";
+"Chat.PostSuggestion.Suggest.PriceSectionTon" = "ENTER A PRICE IN GRAM";
 "Chat.PostSuggestion.Suggest.PricePlaceholder" = "Price";
 "Chat.PostSuggestion.Suggest.OfferStars" = "Offer Stars";
-"Chat.PostSuggestion.Suggest.OfferTon" = "Offer TON";
+"Chat.PostSuggestion.Suggest.OfferTon" = "Offer GRAM";
 "Chat.PostSuggestion.Suggest.RequestStars" = "Request Stars";
-"Chat.PostSuggestion.Suggest.RequestTon" = "Request TON";
+"Chat.PostSuggestion.Suggest.RequestTon" = "Request GRAM";
 "Chat.PostSuggestion.Suggest.RequestDescriptionStars" = "Choose how many Stars you charge for the message.";
-"Chat.PostSuggestion.Suggest.RequestDescriptionTon" = "Choose how many TON you charge for the message.";
+"Chat.PostSuggestion.Suggest.RequestDescriptionTon" = "Choose how many GRAM you charge for the message.";
 "Chat.PostSuggestion.Suggest.OfferDescriptionStars" = "Choose how many Stars you want to offer %@ to publish this message.";
-"Chat.PostSuggestion.Suggest.OfferDescriptionTon" = "Choose how many TON you want to offer %@ to publish this message.";
+"Chat.PostSuggestion.Suggest.OfferDescriptionTon" = "Choose how many GRAM you want to offer %@ to publish this message.";
 "Chat.PostSuggestion.Suggest.OfferDateDescription" = "Select the date and time you want your message to be published.";
 "Chat.PostSuggestion.Suggest.EditDateDescription" = "Select the date and time you want to publish the message.";
 "Chat.PostSuggestion.Suggest.OfferButtonPrice" = "Offer  %@";
@@ -14679,14 +14694,14 @@ Sorry for the inconvenience.";
 "Premium.Week.SignUp" = "Sign up for %@";
 "Premium.Week.SignUpInfo" = "Get Telegram Premium for 1 week";
 
-"Settings.MyTon" = "My TON";
+"Settings.MyTon" = "My GRAM";
 
-"Stars.Gift.Ton.Text" = "Use TON to submit post suggestions to channels on Telegram.";
-"Stars.Ton.Title" = "TON";
-"Stars.Ton.Description" = "Use TON to submit post suggestions to channels on Telegram.";
+"Stars.Gift.Ton.Text" = "Use GRAM to submit post suggestions to channels on Telegram.";
+"Stars.Ton.Title" = "GRAM";
+"Stars.Ton.Description" = "Use GRAM to submit post suggestions to channels on Telegram.";
 
-"Notification.Ton.Subtitle" = "Use TON to submit post suggestions to channels.";
-"Notification.Ton.SubtitleYou" = "With TON, %@ will be able to submit post suggestions to channels.";
+"Notification.Ton.Subtitle" = "Use GRAM to submit post suggestions to channels.";
+"Notification.Ton.SubtitleYou" = "With GRAM, %@ will be able to submit post suggestions to channels.";
 
 "Chat.Todo.Message.Completed_1" = "%@ of {count} completed";
 "Chat.Todo.Message.Completed_any" = "%@ of {count} completed";
@@ -14774,7 +14789,7 @@ Sorry for the inconvenience.";
 "FaceScan.Instruction.Position" = "Position your face\nwithin the frame";
 "FaceScan.Instruction.Rotate" = "Move your head slowly to\ncomplete the circle";
 
-"Gift.Buy.Confirm.BuyForTon" = "Buy for %@ TON";
+"Gift.Buy.Confirm.BuyForTon" = "Buy for %@ GRAM";
 
 "Gift.View.DisplayedInfoNew" = "This gift is visible. [Hide from Profile >]()";
 "Gift.View.HiddenInfoNew" = "This gift is hidden. [Show on Profile >]()";
@@ -14789,17 +14804,17 @@ Sorry for the inconvenience.";
 
 "Gift.View.EqualsTo" = "Equals to %@";
 
-"Gift.Buy.AcceptsTonOnly" = "The seller only accepts\nTON as payment.";
+"Gift.Buy.AcceptsTonOnly" = "The seller only accepts\nGRAM as payment.";
 "Gift.Buy.PayInStars" = "Pay in Stars";
-"Gift.Buy.PayInTon" = "Pay in TON";
-"Gift.Buy.PayInTon.Tooltip" = "Pay with TON to skip the 21-day wait before transferring the gift again.";
+"Gift.Buy.PayInTon" = "Pay in GRAM";
+"Gift.Buy.PayInTon.Tooltip" = "Pay with GRAM to skip the 21-day wait before transferring the gift again.";
 
 "Premium.PremiumGift.Title" = "Premium Gift";
 "Premium.PremiumGift.Description" = "Subscribe to **Telegram Premium** to send up to **5** of these gifts and unlock access to multiple additional features.";
 
-"Stars.SellGift.TonAmountTitle" = "PRICE IN TON";
-"Stars.SellGift.OnlyTon" = "Only Accept TON";
-"Stars.SellGift.OnlyTonInfo" = "If the buyer pays you in TON, there's no risk of refunds, unlike with Stars payments.";
+"Stars.SellGift.TonAmountTitle" = "PRICE IN GRAM";
+"Stars.SellGift.OnlyTon" = "Only Accept GRAM";
+"Stars.SellGift.OnlyTonInfo" = "If the buyer pays you in GRAM, there's no risk of refunds, unlike with Stars payments.";
 
 "Chat.ViewCollection" = "VIEW COLLECTION";
 
@@ -14897,8 +14912,8 @@ Sorry for the inconvenience.";
 
 "Gift.Options.Gift.Premium" = "premium";
 
-"Stars.Transaction.FragmentTopUpTon.Title" = "TON Top-Up";
-"Stars.Transaction.FragmentWithdrawalTon.Title" = "TON Withdrawal";
+"Stars.Transaction.FragmentTopUpTon.Title" = "GRAM Top-Up";
+"Stars.Transaction.FragmentWithdrawalTon.Title" = "GRAM Withdrawal";
 
 "Stars.Transaction.SearchFee.Title" = "Extra Search Fee";
 "Stars.Intro.Transaction.SearchFee" = "Extra Search Fee";
@@ -14982,7 +14997,7 @@ Sorry for the inconvenience.";
 "Ton.LifetimeProceeds" = "Total Lifetime Proceeds";
 
 "Ton.WithdrawViaFragment" = "Withdraw via Fragment";
-"Ton.WithdrawViaFragment.Info" = "Collect your TON using Fragment. [Learn More >]()";
+"Ton.WithdrawViaFragment.Info" = "Collect your GRAM using Fragment. [Learn More >]()";
 "Ton.WithdrawViaFragment.Info_URL" = "https://telegram.org/tos/bot-developers#6-2-2-tpa-balance";
 
 "MESSAGE_GIFT_THEME" = "%1$@ changed theme to %2$@";
@@ -15606,15 +15621,15 @@ Error: %8$@";
 
 "Gift.Offer.Title" = "Offer to Buy";
 "Gift.Offer.OfferStars" = "Offer Stars";
-"Gift.Offer.OfferTon" = "Offer TON";
+"Gift.Offer.OfferTon" = "Offer GRAM";
 "Gift.Offer.PriceSectionStars" = "STARS TO OFFER";
-"Gift.Offer.PriceSectionTon" = "TON TO OFFER";
+"Gift.Offer.PriceSectionTon" = "GRAM TO OFFER";
 "Gift.Offer.PricePlaceholder" = "Price";
 "Gift.Offer.PriceDescriptionStars" = "Enter the number of Stars you'd like to offer for **%@**.";
-"Gift.Offer.PriceDescriptionTon" = "Enter the number of TON you'd like to offer for **%@**.";
+"Gift.Offer.PriceDescriptionTon" = "Enter the number of GRAM you'd like to offer for **%@**.";
 "Gift.Offer.Duration" = "Offer Duration";
 "Gift.Offer.DurationDescriptionStars" = "Choose how long **%@** can accept your offer. When the time expires, your Stars will be automatically refunded.";
-"Gift.Offer.DurationDescriptionTon" = "Choose how long **%@** can accept your offer. When the time expires, your TON will be automatically refunded.";
+"Gift.Offer.DurationDescriptionTon" = "Choose how long **%@** can accept your offer. When the time expires, your GRAM will be automatically refunded.";
 "Gift.Offer.Duration.Hours_1" = "%@ Hour";
 "Gift.Offer.Duration.Hours_any" = "%@ Hours";
 "Gift.Offer.Offer" = "Offer";
@@ -15751,7 +15766,7 @@ Error: %8$@";
 "Gift.View.OnSale" = "On sale for %@";
 
 "Gift.Store.Balance.MyStars" = "My Stars";
-"Gift.Store.Balance.MyTon" = "My TON";
+"Gift.Store.Balance.MyTon" = "My GRAM";
 
 "Resolve.GiftErrorNotFound" = "Sorry, this gift doesn't seem to exist.";
 "Resolve.GiftErrorBurned" = "Sorry, this gift has already been burned.";
@@ -15835,7 +15850,7 @@ Error: %8$@";
 "Gift.Sell.Confirm.Text" = "Do you want to list **%1$@** for sale at %2$@?";
 "Gift.Sell.Confirm.ListFor_1" = "List for %@ Star";
 "Gift.Sell.Confirm.ListFor_any" = "List for %@ Stars";
-"Gift.Sell.Confirm.ListForTon" = "List for %@ TON";
+"Gift.Sell.Confirm.ListForTon" = "List for %@ GRAM";
 
 "Notification.CopyProtection.Enabled" = "%1$@ disabled sharing in this chat";
 "Notification.CopyProtection.EnabledYou" = "You disabled sharing in this chat";
@@ -16345,6 +16360,7 @@ Error: %8$@";
 
 "MediaPicker.SetNewGroupPhoto" = "Set new group photo";
 "MediaPicker.SetNewChannelPhoto" = "Set new channel photo";
+"MediaPicker.SetNewCommunityPhoto" = "Set new community photo";
 
 "Attachment.Link" = "Link";
 
@@ -16375,3 +16391,212 @@ Error: %8$@";
 "RichTextPreview.Formula" = "[formula]";
 "RichTextPreview.Table" = "[table]";
 "RichTextPreview.Music" = "Music";
+
+"WebBrowser.Exception.OpenInApp" = "Always open this site in-app";
+"WebBrowser.Exception.OpenInBrowser" = "Always open this site in browser";
+"WebBrowser.ExceptionAdded.Title" = "Exception Added";
+"WebBrowser.ExceptionAdded.Text" = "This site will always open in-app.";
+
+"WebApp.GuardDisclaimerText" = "**%1$@** uses **%2$@** to welcome new members. You must agree to the Terms of Use of mini apps to continue.";
+
+"Currency.Grams_1" = "%@ Gram";
+"Currency.Grams_any" = "%@ Grams";
+
+"Gift.Buy.Confirm.BuyForGrams_1" = "Buy for %@ Gram";
+"Gift.Buy.Confirm.BuyForGrams_any" = "Buy for %@ Grams";
+
+"Gift.Sell.Confirm.ListForGrams_1" = "List for %@ Gram";
+"Gift.Sell.Confirm.ListForGrams_any" = "List for %@ Grams";
+
+"Chat.PrivateMessageSentTimestamp.Date" = "sent %@";
+"Chat.PrivateMessageSentTimestamp.TodayAt" = "sent today at %@";
+"Chat.PrivateMessageSentTimestamp.YesterdayAt" = "sent yesterday at %@";
+
+"Message.EditFullDateFormat" = "edited on %1$@, %2$@";
+"Message.EditTodayFullDateFormat" = "edited at %1$@";
+
+"WebBrowser.Exceptions.Create.ExternalText" = "Enter a domain that you don't want to be opened in the external browser.";
+
+"Settings.SetPhoto" = "Set Photo";
+"Settings.ChangePhoto" = "Change Photo";
+
+"ChatList.Context.Ungroup" = "Ungroup";
+"ChatList.UngroupCommunity.Title" = "Ungroup Chats?";
+"ChatList.UngroupCommunity.Text" = "Chats from this community will appear separately in your chat list.";
+"ChatList.UngroupCommunity.Action" = "Ungroup";
+
+"Community.RemoveChat.Title" = "Remove chat from community?";
+"Community.RemoveChat.Text" = "This chat will be removed from the community.";
+"Community.RemoveChat.Remove" = "Remove";
+
+"Community.View.Title" = "Community";
+"Community.View.SectionJoined" = "CHATS YOU ARE IN";
+"Community.View.SectionVisible" = "CHATS YOU CAN VIEW";
+"Community.View.SectionRequestable" = "CHATS YOU CAN REQUEST TO JOIN";
+"Community.View.SectionHidden" = "HIDDEN CHATS";
+"Community.View.HiddenChatToast" = "You can't join or view this chat until an admin invites you.";
+"Community.View.PendingRequests" = "Pending Requests";
+"Community.View.PendingRequestHeader" = "PENDING REQUEST";
+"Community.View.ShowAsOneChat" = "Show as One Chat";
+"Community.View.ShowAsOneChatInfo" = "Group all community chats into one item in the chat list.";
+"Community.View.AddChatButton" = "Add a Chat to Community";
+"Community.View.PendingRequestApprovedToast" = "You've added the group to the community.";
+"Community.View.PendingRequestDeclinedToast" = "You declined adding the group to the community.";
+"Community.View.ChatsLimitReached" = "Sorry, this community has reached the maximum number of chats.";
+"Community.Request.UnknownRequester" = "Someone";
+"Community.Request.RequesterSuggestsGroup" = "%@ suggests this group:";
+"Community.Request.RequesterSuggestsChannel" = "%@ suggests this channel:";
+"Community.Request.RequesterSuggestsBot" = "%@ suggests this bot:";
+"Community.Request.PrivateStatus" = "visible only to its members";
+"Community.Request.Decline" = "Decline";
+"Community.Request.Add" = "Add";
+"Community.Request.Title" = "Pending Requests";
+"Community.Request.EmptyTitle" = "No Pending Requests";
+"Community.Request.EmptyText" = "There are no more chats suggested for this community.";
+"Community.Request.AddAll" = "Add All";
+"Community.Request.AddAllChats" = "Add All Chats";
+"Community.Request.AddAllConfirmation" = "Do you want to add %@ chats to the community?";
+"Community.Request.DeclineAll" = "Decline All";
+"Community.Request.DeclineAllConfirmation" = "Do you want to decline all %@ requests to join the community?";
+"Community.Request.ApprovalInfo" = "Chats require admin approval before they're added to the community. [Change Settings >](settings)";
+"Community.Request.SectionTitle_1" = "%@ CHAT SUGGESTED FOR THIS COMMUNITY";
+"Community.Request.SectionTitle_any" = "%@ CHATS SUGGESTED FOR THIS COMMUNITY";
+"Community.Request.ApprovedToast" = "You've added the group to the community.";
+"Community.Request.DeclinedToast" = "You declined adding the group to the community.";
+
+"Community.Edit.DeleteCommunity" = "Delete Community";
+"Community.Edit.DeleteConfirmationText" = "Are you sure you want to delete this community?";
+"Community.Edit.AddChat" = "Add Chat to Community";
+"Community.Edit.CommunityNamePlaceholder" = "Community Name";
+"Community.Edit.WhoCanAddChats" = "WHO CAN ADD CHATS";
+"Community.Edit.PermissionAllMembers" = "All Members";
+"Community.Edit.PermissionAllMembersInfo" = "Allow members to add their groups and channels to the community.";
+"Community.Edit.PermissionOnlyAdmins" = "Only Admins";
+"Community.Edit.PermissionOnlyAdminsInfo" = "Chats suggested by community members require admin approval.";
+"Community.Edit.Administrators" = "Administrators";
+"Community.Edit.PendingRequests" = "Pending Requests";
+"Community.Edit.RemovedUsers" = "Removed Users";
+"Community.Edit.ChatsLimitReached" = "Sorry, this community has reached the maximum number of chats.";
+"Community.Edit.ChatsHeader_1" = "%@ CHAT";
+"Community.Edit.ChatsHeader_any" = "%@ CHATS";
+
+"Community.EditAdmin.PermissionChangeInfo" = "Edit Community Info";
+"Community.EditAdmin.PermissionManageLinkedPeers" = "Edit Chat List";
+"Community.EditAdmin.PermissionBanUsers" = "Ban Members";
+"Community.EditAdmin.PermissionAddAdmins" = "Add Community Admins";
+
+"Community.Admins.Title" = "Admins";
+"Community.Admins.SectionTitle" = "COMMUNITY ADMINS";
+"Community.Admins.AddAdmin" = "Add Admin";
+"Community.Admins.Info" = "You can add admins to help you manage your community.";
+
+"Community.Blacklist.Title" = "Removed Users";
+"Community.Blacklist.RemoveUser" = "Remove User";
+"Community.Blacklist.Info" = "Users removed from the community by admins cannot rejoin it via invite links.";
+"Community.Blacklist.UsersSectionTitle" = "REMOVED USERS";
+
+"Community.AdminActions.Footer_1" = "The user will be removed from [%@ chat >](community)";
+"Community.AdminActions.Footer_any" = "The user will be removed from [%@ chats >](community)";
+"Community.AdminActions.BanFromCommunity" = "Ban from the Community";
+"Community.AdminActions.WarningTitle" = "Warning";
+"Community.AdminActions.WarningChatCount_1" = "%@ chat";
+"Community.AdminActions.WarningChatCount_any" = "%@ chats";
+"Community.AdminActions.WarningText" = "Banning **%@** will also remove **%@** they created from the community.";
+
+"Community.List.Title" = "Community";
+"Community.List.SubtitleGroup" = "Make your group a part of community with multiple related chats.";
+"Community.List.SubtitleChannel" = "Make your channel a part of community with multiple related chats.";
+"Community.List.SubtitleBot" = "Make your bot a part of community with multiple related chats.";
+"Community.List.CreateCommunity" = "Create Community";
+"Community.List.ChatCount_1" = "%@ chat";
+"Community.List.ChatCount_any" = "%@ chats";
+"Community.List.AddToExistingHeader" = "ADD TO AN EXISTING COMMUNITY";
+
+"Community.Add.Title" = "Add Chat";
+"Community.Add.VisibilityHeader" = "CHAT VISIBILITY";
+"Community.Add.VisibilityInfo" = "You won't be able to change this later.";
+"Community.Add.VisibilityVisible" = "Visible";
+"Community.Add.VisibilityVisibleInfo" = "Anyone in the community will be able to see this chat.";
+"Community.Add.VisibilityHidden" = "Hidden";
+"Community.Add.VisibilityHiddenInfo" = "Only invited members and community admins will see this chat.";
+"Community.Add.ActionAddToCommunity" = "Add to Community";
+
+"Community.Add.Confirm.TextGroup" = "If this group is approved by a community admin, its members will be able to join or request to join other chats in the community.";
+"Community.Add.Confirm.TextChannel" = "If this channel is approved by a community admin, its subscribers will be able to join or request to join other chats in the community.";
+"Community.Add.Confirm.TextBot" = "If this bot is approved by a community admin, community members will be able to see and use it.";
+"Community.Add.Confirm.Add" = "Add";
+
+"Community.AddChat.Title" = "Add a Chat";
+"Community.AddChat.Description" = "Select a chat to add to this community";
+
+"Community.Chat.JoinToView" = "You need to join this group to view its messages.";
+"Community.PrivateChat.Info" = "This group is invite-only.\nOnly its members can view it.";
+"Community.PrivateChat.MessageOwner" = "Message Group Owner";
+"Community.CommunityAdded.View" = "View";
+
+"Privacy.GroupsAndChannels.InviteToCommunityError" = "Sorry, you cannot add %@ to the community because of %@'s privacy settings.";
+
+"Notification.CommunityAddedGroup" = "%1$@ added this group to %2$@ community";
+"Notification.CommunityAddedGroupUnknown" = "This group was added to %1$@ community";
+"Notification.CommunityAddedGroupYou" = "You added this group to %1$@ community";
+"Notification.CommunityRemovedGroup" = "%1$@ removed this group from a community";
+"Notification.CommunityRemovedGroupYou" = "You removed this group from a community";
+
+"Notification.CommunityAddedChannel" = "The channel was added to %1$@ community";
+"Notification.CommunityRemovedChannel" = "The channel was removed from a community";
+
+"Notification.CommunityAddedBot" = "The bot was added to %1$@ community";
+"Notification.CommunityRemovedBot" = "The bot was removed from a community";
+
+"AvatarEditor.SetCommunityPhoto" = "Set as Community Photo";
+
+"Premium.RichText" = "Formatting Tools";
+"Premium.RichTextInfo" = "Add headers, tables, lists, AI and inline media to messages.";
+
+"ChatList.Remove" = "Remove";
+
+"Premium.Limits.Messages" = "Messages";
+"Premium.Limits.MessagesInfo" = "Express yourself with longer messages";
+
+"Attachment.Article" = "Article";
+"RichText.AddMediaTitle" = "Add Media";
+"RichText.RemoveFormattingTitle" = "Remove Formatting?";
+"RichText.RemoveFormattingText" = "This message includes rich formatting, which requires Telegram Premium.";
+"RichText.SubscribeToPremium" = "Subscribe to Premium";
+"RichText.SendWithoutFormatting" = "Send Without Formatting";
+"RichText.LinkTitle" = "Link";
+"RichText.LinkText" = "Set a URL for the selected text";
+"RichText.LinkSet" = "Set";
+"RichText.LinkRemove" = "Remove";
+"RichText.PremiumToastText" = "Sending a message with this formatting will require [Telegram Premium]().";
+"RichText.TableMenu.Alignment" = "Alignment";
+"RichText.FormulaAdd" = "Add Formula";
+"RichText.FormulaEdit" = "Edit Formula";
+"RichText.FormulaSectionSourceTitle" = "LATEX";
+"RichText.FormulaSectionResultTitle" = "RESULT";
+"RichText.TitleArticle" = "Text";
+"RichText.MenuHeading" = "Heading";
+"RichText.MenuHeadingItem" = "Heading %@";
+"RichText.MenuText" = "Text";
+"RichText.MenuQuote" = "Quote";
+"RichText.MenuPullquote" = "Pullquote";
+"RichText.MenuCode" = "Code";
+"RichText.MenuFormula" = "Formula";
+"RichText.Menu.List.None" = "None";
+"RichText.Menu.List.Bullet" = "Bulleted List";
+"RichText.Menu.List.Numbered" = "Numbered List";
+"RichText.Menu.List.Checklist" = "Checklist";
+"RichText.Menu.Table.Copy" = "Copy Table";
+"RichText.Menu.Table.ConvertToText" = "Convert to Text";
+"RichText.Menu.Table.Delete" = "Delete Table";
+"RichText.Menu.Table.HighlightOn" = "Highlight";
+"RichText.Menu.Table.HighlightOff" = "Remove Highlight";
+"RichText.PlaceholderBody" = "Type something...";
+"RichText.PlaceholderQuote" = "Type a quote here";
+"RichText.PlaceholderCode" = "Type code here";
+
+"TextProcessing.TitleAICompose" = "Create with AI";
+"TextProcessing.ActionAddToPage" = "Add to Page";
+"TextProcessing.ActionGenerate" = "Generate";
+"TextProcessing.StyleList.Prompt" = "Prompt";
+"TextProcessing.PromptPlaceholder" = "Generate text, formulas, or tables...";

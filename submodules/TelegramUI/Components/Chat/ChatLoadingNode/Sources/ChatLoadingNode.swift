@@ -239,7 +239,7 @@ public final class ChatLoadingPlaceholderNode: ASDisplayNode {
     }
     
     private var bottomInset: (Int, CGFloat)?
-    public func setup(_ historyNode: ListView, updating: Bool = false) {
+    public func setup(_ historyNode: ChatHistoryListNode, updating: Bool = false) {
         let listNode = historyNode
         
         var listItemNodes: [ASDisplayNode] = []
@@ -305,7 +305,7 @@ public final class ChatLoadingPlaceholderNode: ASDisplayNode {
     }
         
     private var didAnimateOut = false
-    public func animateOut(_ historyNode: ListView, completion: @escaping () -> Void = {}) {
+    public func animateOut(_ historyNode: ChatHistoryListNode, completion: @escaping () -> Void = {}) {
         guard let (size, isSidebarOpen, _, _) = self.validLayout else {
             return
         }

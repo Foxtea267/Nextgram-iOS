@@ -47,7 +47,7 @@ private func instantPageAnchorPathSearch(
                 return [detailsOrdinal] + sub
             }
             detailsOrdinal += 1
-        case let .blockQuote(quoteBlocks, caption):
+        case let .blockQuote(quoteBlocks, caption, _):
             if richTextContainsAnchor(caption, name: name) { return [] }
             if let r = instantPageAnchorPathSearch(quoteBlocks, name: name, detailsOrdinal: &detailsOrdinal) { return r }
         case let .list(items, _):

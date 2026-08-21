@@ -42,7 +42,15 @@ public func formatTonUsdValue(_ value: Int64, divide: Bool = true, rate: Double 
     return "$\(formattedValue)"
 }
 
-public func formatTonAmountText(_ value: Int64, dateTimeFormat: PresentationDateTimeFormat, showPlus: Bool = false, maxDecimalPositions: Int? = 2) -> String {
+public func formatTonAmountText(_ value: Int64, dateTimeFormat: PresentationDateTimeFormat, showPlus: Bool = false, maxDecimalPositions: Int? = 2, formatString: ((Int32) -> String)? = nil) -> String {
+    func applyFormatString(_ amountString: String) -> String {
+        guard let formatString else {
+            return amountString
+        }
+        let pluralizationValue: Int32 = (value == 1_000_000_000 || value == -1_000_000_000) ? 1 : 100
+        return formatString(pluralizationValue).replacingOccurrences(of: "\(pluralizationValue)", with: amountString)
+    }
+
     var balanceText = "\(abs(value))"
     while balanceText.count < 10 {
         balanceText.insert("0", at: balanceText.startIndex)
@@ -81,7 +89,7 @@ public func formatTonAmountText(_ value: Int64, dateTimeFormat: PresentationDate
             } else if showPlus {
                 resultString.insert("+", at: resultString.startIndex)
             }
-            return resultString
+            return applyFormatString(resultString)
         }
     } else if let integerPart = Int32(balanceText) {
         balanceText = presentationStringsFormattedNumber(integerPart, dateTimeFormat.groupingSeparator)
@@ -92,7 +100,7 @@ public func formatTonAmountText(_ value: Int64, dateTimeFormat: PresentationDate
         balanceText.insert("+", at: balanceText.startIndex)
     }
     
-    return balanceText
+    return applyFormatString(balanceText)
 }
 
 public func formatStarsAmountText(_ amount: StarsAmount, dateTimeFormat: PresentationDateTimeFormat, showPlus: Bool = false) -> String {
@@ -141,4 +149,3 @@ public func tonAmountAttributedString(_ string: String, integralFont: UIFont, fr
     }
     return result
 }
-

@@ -917,6 +917,12 @@ public func createGroupControllerImpl(context: AccountContext, peerIds: [PeerId]
         } else {
             peerType = .group
         }
+        let avatarClipStyle: MediaEditorScreenImpl.AvatarClipStyle
+        if case .forum = peerType {
+            avatarClipStyle = .roundedRect
+        } else {
+            avatarClipStyle = .round
+        }
         
         let keyboardInputData = Promise<AvatarKeyboardInputData>()
         keyboardInputData.set(AvatarEditorScreen.inputData(context: context, isGroup: true))
@@ -975,7 +981,7 @@ public func createGroupControllerImpl(context: AccountContext, peerIds: [PeerId]
             
             let editorController = MediaEditorScreenImpl(
                 context: context,
-                mode: .avatarEditor,
+                mode: .avatarEditor(clipStyle: avatarClipStyle),
                 subject: subject,
                 transitionIn: fromCamera ? .camera : transitionView.flatMap({ .gallery(
                     MediaEditorScreenImpl.TransitionIn.GalleryTransitionIn(

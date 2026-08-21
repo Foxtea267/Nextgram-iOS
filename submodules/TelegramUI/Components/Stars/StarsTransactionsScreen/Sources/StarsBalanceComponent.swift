@@ -137,7 +137,7 @@ final class StarsBalanceComponent: Component {
             if self.component == nil {
                 switch component.currency {
                 case .ton:
-                    self.icon.image = generateTintedImage(image: UIImage(bundleImageName: "Ads/TonBig"), color: component.theme.list.itemAccentColor)
+                    self.icon.image = generateTintedImage(image: UIImage(bundleImageName: "Ads/TonBig"), color: UIColor(rgb: 0x30A1F5))
                 case .stars:
                     self.icon.image = UIImage(bundleImageName: "Premium/Stars/BalanceStar")
                 }

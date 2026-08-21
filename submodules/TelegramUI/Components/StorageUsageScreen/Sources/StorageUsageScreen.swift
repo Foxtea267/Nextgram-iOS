@@ -1072,6 +1072,8 @@ final class StorageUsageScreenComponent: Component {
                                 } else {
                                     result[.channels, default: 0] += 1
                                 }
+                            case .community:
+                                break
                             }
                         }
                         
@@ -3153,6 +3155,8 @@ final class StorageUsageScreenComponent: Component {
                             } else {
                                 peerCategory = .channels
                             }
+                        case .community:
+                            continue
                         }
 
                         if peerCategory != mappedCategory {

@@ -902,6 +902,13 @@ public final class AccountContextImpl: AccountContext {
             makeCall()
         }
     }
+    
+    public func getAppConfigValue(_ key: String) -> Any? {
+        if let data = self.currentAppConfiguration.with({ $0 }).data, let value = data[key] {
+            return value
+        }
+        return nil
+    }
 }
 
 private func chatLocationContext(holder: Atomic<ChatLocationContextHolder?>, account: Account, data: ChatReplyThreadMessage) -> ReplyThreadHistoryContext {

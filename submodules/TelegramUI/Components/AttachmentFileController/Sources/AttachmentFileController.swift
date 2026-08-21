@@ -554,6 +554,7 @@ public enum AttachmentFileControllerSource: Equatable {
     
     case generic
     case poll(PollMode)
+    case richText
 }
 
 public func makeAttachmentFileControllerImpl(
@@ -755,7 +756,7 @@ public func makeAttachmentFileControllerImpl(
     case .audio:
         recentDocuments = .single(nil)
         |> then(
-            context.engine.messages.searchMessages(location: .general(scope: .everywhere, groupId: nil, tags: [.music], minDate: nil, maxDate: nil, folderId: nil), query: "", state: nil)
+            context.engine.messages.searchMessages(location: .general(scope: .everywhere, groupId: nil, tags: [.music], minDate: nil, maxDate: nil, folderId: nil, communityId: nil), query: "", state: nil)
             |> map { result -> [EngineRawMessage]? in
                 return result.0.messages
             }

@@ -51,7 +51,7 @@ public class ChartStrings {
     public static var defaultStrings = ChartStrings(
         zoomOut: "Zoom Out",
         total: "Total",
-        revenueInTon: "Revenue in TON",
+        revenueInTon: "Revenue in GRAM",
         revenueInStars: "Revenue in Stars",
         revenueInUsd: "Revenue in USD"
     )

@@ -20,6 +20,7 @@ import ConvertOpusToAAC
 import CoreServices
 import ImageIO
 import UniformTypeIdentifiers
+import NagramSettings // MARK: NAGRAM
 
 // MARK: NAGRAM
 private let canFilterEmptyControlNotifications = (Bundle.main.object(forInfoDictionaryKey: "NagramNotificationFilteringEnabled") as? Bool) == true
@@ -2141,7 +2142,14 @@ private final class NotificationServiceHandler {
                                             var content = content
                                             
                                             var parsedMedia: Media?
-                                            if let messageId, let message = transaction.getMessage(messageId), !message.containsSecretMedia, !message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) {
+                                            if let messageId, let message = transaction.getMessage(messageId) {
+                                                // MARK: NAGRAM — 后台命中 hide/用户 ID 规则时不展示通知，也不让原始未读数覆盖桌面角标。
+                                                if let matcher = NagramSettings.shared.regexFilterMatcher(peerId: message.id.peerId.toInt64(), isOutgoing: false), matcher.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
+                                                    content = NotificationContent(isLockedMessage: nil)
+                                                    content.dismissAfterDelivery = true
+                                                }
+                                            }
+                                            if let messageId, let message = transaction.getMessage(messageId), !content.dismissAfterDelivery, !message.containsSecretMedia, !message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) {
                                                 if let media = message.media.first {
                                                     parsedMedia = media
                                                 }

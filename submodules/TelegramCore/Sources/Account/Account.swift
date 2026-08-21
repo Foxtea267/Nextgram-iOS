@@ -1304,6 +1304,7 @@ public class Account {
         
         self.messageMediaPreuploadManager = MessageMediaPreuploadManager()
         self.pendingMessageManager = PendingMessageManager(network: network, postbox: postbox, accountPeerId: peerId, auxiliaryMethods: auxiliaryMethods, stateManager: self.stateManager, localInputActivityManager: self.localInputActivityManager, messageMediaPreuploadManager: self.messageMediaPreuploadManager, revalidationContext: self.mediaReferenceRevalidationContext)
+        let _ = _internal_failStaleEphemeralOutgoingMessages(postbox: postbox).start()
         if !supplementary {
             self.pendingStoryManager = PendingStoryManager(postbox: postbox, network: network, accountPeerId: peerId, stateManager: self.stateManager, messageMediaPreuploadManager: self.messageMediaPreuploadManager, revalidationContext: self.mediaReferenceRevalidationContext, auxiliaryMethods: self.auxiliaryMethods)
         } else {
@@ -1424,7 +1425,7 @@ public class Account {
         self.managedOperationsDisposable.add(managedLocalTypingActivities(activities: self.localInputActivityManager.allActivities(), postbox: self.stateManager.postbox, network: self.stateManager.network, accountPeerId: self.stateManager.accountPeerId).start())
         
         let extractedExpr1: [Signal<AccountRunningImportantTasks, NoError>] = [
-            managedSynchronizeChatInputStateOperations(postbox: self.postbox, network: self.network) |> map { inputStates in
+            managedSynchronizeChatInputStateOperations(postbox: self.postbox, network: self.network, messageMediaPreuploadManager: self.messageMediaPreuploadManager, auxiliaryMethods: self.auxiliaryMethods) |> map { inputStates in
                 return AccountRunningImportantTasks(
                     taskTypes: inputStates ? .other : [],
                     pendingMessageCount: 0,

@@ -109,8 +109,11 @@ public func chatMapSnapshotData(engine: TelegramEngine, resource: MapSnapshotMed
 }
 
 public func chatMapSnapshotImage(engine: TelegramEngine, resource: MapSnapshotMediaResource) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
-    let signal = chatMapSnapshotData(engine: engine, resource: resource)
-    
+    // Emit an initial `nil` so a caller-supplied `emptyColor` placeholder draws during the (async
+    // MKMapSnapshotter) load instead of leaving the map area blank; the real snapshot data follows.
+    let signal = Signal<Data?, NoError>.single(nil)
+    |> then(chatMapSnapshotData(engine: engine, resource: resource))
+
     return signal |> map { fullSizeData in
         return { arguments in
             guard let context = DrawingContext(size: arguments.drawingSize, clear: true) else {
@@ -159,8 +162,19 @@ public func chatMapSnapshotImage(engine: TelegramEngine, resource: MapSnapshotMe
                         c.setBlendMode(.normal)
                     }
                 }
+            } else if let emptyColor = arguments.emptyColor {
+                // No image yet (still loading) → fill the caller's placeholder color so the map area isn't
+                // blank during the async snapshot fetch. Gated on `emptyColor`, so callers that don't opt in
+                // keep the prior transparent loading state.
+                context.withFlippedContext { c in
+                    c.setBlendMode(.copy)
+                    c.setFillColor(emptyColor.cgColor)
+                    c.fill(arguments.drawingRect)
+
+                    c.setBlendMode(.normal)
+                }
             }
-            
+
             addCorners(context, arguments: arguments)
             
             return context

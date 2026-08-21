@@ -297,10 +297,182 @@ private func filterMessageAttributesForOutgoingMessage(_ attributes: [MessageAtt
             return true
         case _ as SuggestedPostMessageAttribute:
             return true
+        case _ as EphemeralOutgoingMessageAttribute:
+            assertionFailure("EphemeralOutgoingMessageAttribute must be routed before normal outgoing enqueue")
+            return false
         default:
             return false
         }
     }
+}
+
+private func filterMessageAttributesForEphemeralOutgoingMessage(_ attributes: [MessageAttribute]) -> [MessageAttribute] {
+    return attributes.filter { attribute in
+        switch attribute {
+        case _ as TextEntitiesMessageAttribute:
+            return true
+        case _ as EmbeddedMediaStickersMessageAttribute:
+            return true
+        case _ as EmojiSearchQueryMessageAttribute:
+            return true
+        case _ as MediaSpoilerMessageAttribute:
+            return true
+        case _ as WebpagePreviewMessageAttribute:
+            return true
+        case _ as InvertMediaMessageAttribute:
+            return true
+        case _ as ForwardVideoTimestampAttribute:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
+private func transientEphemeralOutgoingAttribute(_ attributes: [MessageAttribute]) -> EphemeralOutgoingMessageAttribute? {
+    for attribute in attributes {
+        if let attribute = attribute as? EphemeralOutgoingMessageAttribute, attribute.randomId == 0, attribute.state == .sending {
+            return attribute
+        }
+    }
+    return nil
+}
+
+private func ephemeralReplyTargetBotPeerId(transaction: Transaction, accountPeerId: PeerId, replySubject: EngineMessageReplySubject) -> PeerId? {
+    guard replySubject.messageId.namespace == Namespaces.Message.EphemeralLocal, replySubject.messageId.id > 0, let replyMessage = transaction.getMessage(replySubject.messageId) else {
+        return nil
+    }
+
+    if replyMessage.flags.contains(.Incoming) {
+        guard let authorId = replyMessage.author?.id, authorId != accountPeerId else {
+            return nil
+        }
+        return authorId
+    }
+
+    if let attribute = replyMessage.attributes.first(where: { $0 is EphemeralMessageAttribute }) as? EphemeralMessageAttribute, attribute.receiverId != 0 {
+        return PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(attribute.receiverId))
+    }
+
+    return nil
+}
+
+private func ephemeralBotPeerIdForEnqueuedMessage(transaction: Transaction, accountPeerId: PeerId, message: EnqueueMessage) -> PeerId? {
+    switch message {
+    case let .message(_, attributes, _, _, _, replyToMessageId, _, _, _, _):
+        if let attribute = transientEphemeralOutgoingAttribute(attributes) {
+            return attribute.botPeerId
+        }
+        if let replyToMessageId, replyToMessageId.messageId.namespace == Namespaces.Message.EphemeralLocal {
+            return ephemeralReplyTargetBotPeerId(transaction: transaction, accountPeerId: accountPeerId, replySubject: replyToMessageId)
+        }
+        return nil
+    case .forward:
+        return nil
+    }
+}
+
+private func replyMessageAttributeForEphemeralOutgoingMessage(transaction: Transaction, peerId: PeerId, replySubject: EngineMessageReplySubject?) -> ReplyMessageAttribute? {
+    guard let replySubject else {
+        return nil
+    }
+
+    if replySubject.messageId.namespace == Namespaces.Message.EphemeralLocal {
+        guard replySubject.messageId.id > 0 else {
+            return nil
+        }
+        return ReplyMessageAttribute(messageId: replySubject.messageId, threadMessageId: nil, quote: nil, isQuote: false, innerSubject: nil)
+    }
+
+    guard replySubject.messageId.namespace == Namespaces.Message.Cloud else {
+        return nil
+    }
+
+    var threadMessageId: MessageId?
+    var quote = replySubject.quote
+    let isQuote = quote != nil
+    if let replyMessage = transaction.getMessage(replySubject.messageId) {
+        if replyMessage.id.namespace == Namespaces.Message.Cloud, let threadId = replyMessage.threadId {
+            threadMessageId = MessageId(peerId: replyMessage.id.peerId, namespace: Namespaces.Message.Cloud, id: Int32(clamping: threadId))
+        }
+        if quote == nil, replySubject.messageId.peerId != peerId {
+            let nsText = replyMessage.text as NSString
+            var replyMedia: Media?
+            for media in replyMessage.media {
+                switch media {
+                case _ as TelegramMediaImage, _ as TelegramMediaFile:
+                    replyMedia = media
+                default:
+                    break
+                }
+            }
+            quote = EngineMessageReplyQuote(text: replyMessage.text, offset: nil, entities: messageTextEntitiesInRange(entities: replyMessage.textEntitiesAttribute?.entities ?? [], range: NSRange(location: 0, length: nsText.length), onlyQuoteable: true), media: replyMedia)
+        }
+    }
+
+    return ReplyMessageAttribute(messageId: replySubject.messageId, threadMessageId: threadMessageId, quote: quote, isQuote: isQuote, innerSubject: replySubject.innerSubject)
+}
+
+private func generateEphemeralOutgoingRandomId() -> Int64 {
+    while true {
+        let value = Int64.random(in: Int64.min ... Int64.max)
+        if value != 0 {
+            return value
+        }
+    }
+}
+
+private func enqueueEphemeralOutgoingMessage(transaction: Transaction, account: Account, peerId: PeerId, transformedMedia: Bool, message: EnqueueMessage, botPeerId: PeerId) -> MessageId? {
+    guard case let .message(text, requestedAttributes, inlineStickers, mediaReference, threadId, replyToMessageId, _, _, correlationId, bubbleUpEmojiOrStickersets) = message else {
+        return nil
+    }
+    guard transaction.getPeer(peerId).flatMap(apiInputPeer) != nil, transaction.getPeer(botPeerId).flatMap(apiInputUser) != nil else {
+        return nil
+    }
+
+    for (_, file) in inlineStickers {
+        transaction.storeMediaIfNotPresent(media: file)
+    }
+
+    var flags = StoreMessageFlags()
+    flags.insert(.Sending)
+
+    let randomId = generateEphemeralOutgoingRandomId()
+    var infoFlags = OutgoingMessageInfoFlags()
+    if transformedMedia {
+        infoFlags.insert(.transformedMedia)
+    }
+
+    var partialReference: PartialMediaReference?
+    if let mediaReference {
+        partialReference = mediaReference.partial
+    }
+
+    var attributes: [MessageAttribute] = filterMessageAttributesForEphemeralOutgoingMessage(requestedAttributes)
+    attributes.append(OutgoingMessageInfoAttribute(uniqueId: randomId, flags: infoFlags, acknowledged: false, correlationId: correlationId, bubbleUpEmojiOrStickersets: bubbleUpEmojiOrStickersets, partialReference: partialReference))
+    attributes.append(EphemeralOutgoingMessageAttribute(botPeerId: botPeerId, randomId: randomId, state: .sending))
+
+    if let replyAttribute = replyMessageAttributeForEphemeralOutgoingMessage(transaction: transaction, peerId: peerId, replySubject: replyToMessageId) {
+        attributes.append(replyAttribute)
+    }
+
+    var mediaList: [Media] = []
+    if let mediaReference {
+        mediaList.append(augmentMediaWithReference(mediaReference))
+    }
+
+    if let file = mediaReference?.media as? TelegramMediaFile, file.isVoice || file.isInstantVideo {
+        if peerId.namespace == Namespaces.Peer.CloudUser || peerId.namespace == Namespaces.Peer.CloudGroup {
+            attributes.append(ConsumableContentMessageAttribute(consumed: false))
+        }
+    }
+
+    let localId = generateEphemeralLocalMessageId(peerId: peerId, transaction: transaction)
+    let timestamp = Int32(account.network.context.globalTime())
+    let storeMessage = StoreMessage(id: localId, customStableId: nil, globallyUniqueId: randomId, groupingKey: nil, threadId: threadId, timestamp: timestamp, flags: flags, tags: [], globalTags: [], localTags: [], forwardInfo: nil, authorId: account.peerId, text: text, attributes: attributes, media: mediaList)
+    let _ = transaction.addMessages([storeMessage], location: .Random)
+
+    return localId
 }
 
 private func filterMessageAttributesForForwardedMessage(_ attributes: [MessageAttribute], forwardedMessageIds: Set<MessageId>? = nil) -> [MessageAttribute] {
@@ -406,8 +578,39 @@ public func enqueueMessages(account: Account, peerId: PeerId, messages: [Enqueue
     }
     return signal
     |> mapToSignal { messages -> Signal<[MessageId?], NoError> in
-        return account.postbox.transaction { transaction -> [MessageId?] in
-            return enqueueMessages(transaction: transaction, account: account, peerId: peerId, messages: messages)
+        return account.postbox.transaction { transaction -> ([MessageId?], [MessageId]) in
+            var resultIds = Array<MessageId?>(repeating: nil, count: messages.count)
+            var ephemeralMessageIds: [MessageId] = []
+            var normalMessages: [(Bool, EnqueueMessage)] = []
+            var normalMessageIndices: [Int] = []
+
+            for i in 0 ..< messages.count {
+                let (transformedMedia, message) = messages[i]
+                if let botPeerId = ephemeralBotPeerIdForEnqueuedMessage(transaction: transaction, accountPeerId: account.peerId, message: message) {
+                    if let messageId = enqueueEphemeralOutgoingMessage(transaction: transaction, account: account, peerId: peerId, transformedMedia: transformedMedia, message: message, botPeerId: botPeerId) {
+                        resultIds[i] = messageId
+                        ephemeralMessageIds.append(messageId)
+                    }
+                } else {
+                    normalMessages.append((transformedMedia, message))
+                    normalMessageIndices.append(i)
+                }
+            }
+
+            if !normalMessages.isEmpty {
+                let normalIds = enqueueMessages(transaction: transaction, account: account, peerId: peerId, messages: normalMessages)
+                for i in 0 ..< min(normalIds.count, normalMessageIndices.count) {
+                    resultIds[normalMessageIndices[i]] = normalIds[i]
+                }
+            }
+
+            return (resultIds, ephemeralMessageIds)
+        }
+        |> map { resultIds, ephemeralMessageIds -> [MessageId?] in
+            for messageId in ephemeralMessageIds {
+                let _ = _internal_sendEphemeralOutgoingMessage(account: account, messageId: messageId).startStandalone()
+            }
+            return resultIds
         }
     }
 }
@@ -564,6 +767,20 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
         
         var globallyUniqueIds: [Int64] = []
         for (transformedMedia, message) in updatedMessages {
+            if case let .message(_, requestedAttributes, _, _, _, replyToMessageId, _, _, _, _) = message {
+                if requestedAttributes.contains(where: { $0 is EphemeralOutgoingMessageAttribute }) {
+                    assertionFailure("Ephemeral outgoing messages must be routed before normal enqueue")
+                    continue
+                }
+                if replyToMessageId?.messageId.namespace == Namespaces.Message.EphemeralLocal {
+                    assertionFailure("Normal outgoing messages must not reply to EphemeralLocal")
+                    continue
+                }
+            } else if case let .forward(_, _, _, requestedAttributes, _) = message, requestedAttributes.contains(where: { $0 is EphemeralOutgoingMessageAttribute }) {
+                assertionFailure("Ephemeral outgoing forwards are not supported")
+                continue
+            }
+
             var attributes: [MessageAttribute] = []
             var flags = StoreMessageFlags()
             flags.insert(.Unsent)

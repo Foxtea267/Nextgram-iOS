@@ -25,8 +25,14 @@ public class KeyShortcutsController: UIResponder {
             guard let viewController = viewController as? KeyShortcutResponder else {
                 return true
             }
-            shortcuts.removeAll(where: { viewController.keyShortcuts.contains($0) })
-            shortcuts.append(contentsOf: viewController.keyShortcuts)
+            // `keyShortcuts` is an EXPENSIVE computed property (a controller rebuilds its whole shortcut
+            // array — closures and all — on every access). UIKit queries `keyCommands` on every hardware
+            // key-down, so this getter is hot. Read it ONCE per controller: the old
+            // `removeAll(where: { viewController.keyShortcuts.contains($0) })` re-invoked the getter once
+            // per already-accumulated shortcut (quadratic rebuilds), then `append` invoked it again.
+            let viewControllerShortcuts = viewController.keyShortcuts
+            shortcuts.removeAll(where: { viewControllerShortcuts.contains($0) })
+            shortcuts.append(contentsOf: viewControllerShortcuts)
             return true
         })
         

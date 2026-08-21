@@ -147,14 +147,16 @@ private final class ChatListSearchPendingPane {
         parentController: ViewController?,
         peersFilter: ChatListNodePeersFilter,
         requestPeerType: [ReplyMarkupButtonRequestPeerType]?,
+        excludedPeerIds: Set<EnginePeer.Id>,
         location: ChatListControllerLocation,
+        communityId: EnginePeer.Id?,
         searchQuery: Signal<String?, NoError>,
         searchOptions: Signal<ChatListSearchOptions?, NoError>,
         globalPeerSearchContext: GlobalPeerSearchContext?,
         key: ChatListSearchPaneKey,
         hasBecomeReady: @escaping (ChatListSearchPaneKey) -> Void
     ) {
-        let paneNode = ChatListSearchListPaneNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, interaction: interaction, key: key, peersFilter: (key == .chats || key == .topics) ? peersFilter : [], requestPeerType: requestPeerType, location: location, searchQuery: searchQuery, searchOptions: searchOptions, navigationController: navigationController, parentController: parentController, globalPeerSearchContext: globalPeerSearchContext)
+        let paneNode = ChatListSearchListPaneNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, interaction: interaction, key: key, peersFilter: (key == .chats || key == .topics) ? peersFilter : [], requestPeerType: requestPeerType, excludedPeerIds: excludedPeerIds, location: location, communityId: communityId, searchQuery: searchQuery, searchOptions: searchOptions, navigationController: navigationController, parentController: parentController, globalPeerSearchContext: globalPeerSearchContext)
         
         self.pane = ChatListSearchPaneWrapper(key: key, node: paneNode)
         self.disposable = (paneNode.isReady
@@ -177,7 +179,9 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
     private let updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)?
     private let peersFilter: ChatListNodePeersFilter
     private let requestPeerType: [ReplyMarkupButtonRequestPeerType]?
+    private let excludedPeerIds: Set<EnginePeer.Id>
     var location: ChatListControllerLocation
+    private let communityId: EnginePeer.Id?
     private let searchQuery: Signal<String?, NoError>
     private let searchOptions: Signal<ChatListSearchOptions?, NoError>
     private let globalPeerSearchContext: GlobalPeerSearchContext
@@ -214,14 +218,16 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
     
     private var currentAvailablePanes: [ChatListSearchPaneKey]?
     
-    init(context: AccountContext, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, peersFilter: ChatListNodePeersFilter, requestPeerType: [ReplyMarkupButtonRequestPeerType]?, location: ChatListControllerLocation, searchQuery: Signal<String?, NoError>, searchOptions: Signal<ChatListSearchOptions?, NoError>, navigationController: NavigationController?, parentController: ViewController?) {
+    init(context: AccountContext, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, peersFilter: ChatListNodePeersFilter, requestPeerType: [ReplyMarkupButtonRequestPeerType]?, excludedPeerIds: Set<EnginePeer.Id>, location: ChatListControllerLocation, communityId: EnginePeer.Id? = nil, searchQuery: Signal<String?, NoError>, searchOptions: Signal<ChatListSearchOptions?, NoError>, navigationController: NavigationController?, parentController: ViewController?) {
         self.context = context
         self.animationCache = animationCache
         self.animationRenderer = animationRenderer
         self.updatedPresentationData = updatedPresentationData
         self.peersFilter = peersFilter
         self.requestPeerType = requestPeerType
+        self.excludedPeerIds = excludedPeerIds
         self.location = location
+        self.communityId = communityId
         self.searchQuery = searchQuery
         self.searchOptions = searchOptions
         self.navigationController = navigationController
@@ -479,7 +485,9 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
                     parentController: self.parentController,
                     peersFilter: self.peersFilter,
                     requestPeerType: self.requestPeerType,
+                    excludedPeerIds: self.excludedPeerIds,
                     location: self.location,
+                    communityId: self.communityId,
                     searchQuery: self.searchQuery,
                     searchOptions: self.searchOptions,
                     globalPeerSearchContext: self.globalPeerSearchContext,

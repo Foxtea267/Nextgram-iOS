@@ -65,6 +65,7 @@ public enum EngineConfiguration {
         public let maxConferenceParticipantCount: Int32
         public let maxBotsCreated: Int32
         public let maxOwnedAITextStyles: Int32
+        public let maxMessageLength: Int32
         
         public static var defaultValue: UserLimits {
             return UserLimits(UserLimitsConfiguration.defaultValue)
@@ -99,7 +100,8 @@ public enum EngineConfiguration {
             maxChannelRecommendationsCount: Int32,
             maxConferenceParticipantCount: Int32,
             maxBotsCreated: Int32,
-            maxOwnedAITextStyles: Int32
+            maxOwnedAITextStyles: Int32,
+            maxMessageLength: Int32
         ) {
             self.maxPinnedChatCount = maxPinnedChatCount
             self.maxPinnedSavedChatCount = maxPinnedSavedChatCount
@@ -130,6 +132,7 @@ public enum EngineConfiguration {
             self.maxConferenceParticipantCount = maxConferenceParticipantCount
             self.maxBotsCreated = maxBotsCreated
             self.maxOwnedAITextStyles = maxOwnedAITextStyles
+            self.maxMessageLength = maxMessageLength
         }
     }
 }
@@ -195,7 +198,8 @@ public extension EngineConfiguration.UserLimits {
             maxChannelRecommendationsCount: userLimitsConfiguration.maxChannelRecommendationsCount,
             maxConferenceParticipantCount: userLimitsConfiguration.maxConferenceParticipantCount,
             maxBotsCreated: userLimitsConfiguration.maxBotsCreated,
-            maxOwnedAITextStyles: userLimitsConfiguration.maxOwnedAITextStyles
+            maxOwnedAITextStyles: userLimitsConfiguration.maxOwnedAITextStyles,
+            maxMessageLength: userLimitsConfiguration.maxMessageLength
         )
     }
 }

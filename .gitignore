@@ -83,15 +83,16 @@ xcode-files
 /buildbox/*
 **/node_modules/
 tools/sim-watcher/dist/
+.mcp.json
 myconfig.json
 telegram-bazel-cache/
 .claude/
 local.bazelrc
 .worktrees/
 /bazel-Nagram-ios
- 
- # vendored 三方库 (webp 等) 的 gradle build 缓存，不应纳入版本控制
- .gradle/
+
+# vendored 三方库 (webp 等) 的 gradle build 缓存，不应纳入版本控制
+.gradle/
 
 # wip 相关 spec 文档（本地保留，不入库）
 docs/local/

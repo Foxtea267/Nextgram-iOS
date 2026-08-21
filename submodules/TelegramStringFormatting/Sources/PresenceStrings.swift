@@ -178,6 +178,12 @@ public func stringForCompactDate(timestamp: Int32, strings: PresentationStrings,
     return "\(shortStringForDayOfWeek(strings: strings, day: timeinfo.tm_wday)) \(timeinfo.tm_mday) \(monthAtIndex(Int(timeinfo.tm_mon), strings: strings))"
 }
 
+func gregorianCalendarForBirthdayCalculations() -> Calendar {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = TimeZone.current
+    return calendar
+}
+
 public func stringForCompactBirthday(_ birthday: TelegramBirthday, strings: PresentationStrings, showAge: Bool = false) -> String {
     var components: [String] = []
     components.append("\(birthday.day)")
@@ -186,16 +192,8 @@ public func stringForCompactBirthday(_ birthday: TelegramBirthday, strings: Pres
         components.append("\(year)")
         
         if showAge {
-            var dateComponents = DateComponents()
-            dateComponents.day = Int(birthday.day)
-            dateComponents.month = Int(birthday.month)
-            dateComponents.year = Int(year)
-             
-            let calendar = Calendar.current
-            if let birthDate = calendar.date(from: dateComponents) {
-                if let age = calendar.dateComponents([.year], from: birthDate, to: Date()).year, age > 0 {
-                    components.append("(\(strings.UserInfo_Age(Int32(age))))")
-                }
+            if let age = ageForBirthday(birthday), age > 0 {
+                components.append("(\(strings.UserInfo_Age(Int32(age))))")
             }
         }
     }
@@ -204,17 +202,22 @@ public func stringForCompactBirthday(_ birthday: TelegramBirthday, strings: Pres
 }
 
 public func ageForBirthday(_ birthday: TelegramBirthday) -> Int? {
+    return ageForBirthday(birthday, now: Date(), calendar: gregorianCalendarForBirthdayCalculations())
+}
+
+func ageForBirthday(_ birthday: TelegramBirthday, now: Date, calendar: Calendar) -> Int? {
     guard let year = birthday.year else {
         return nil
     }
     var dateComponents = DateComponents()
+    dateComponents.calendar = calendar
+    dateComponents.timeZone = calendar.timeZone
     dateComponents.day = Int(birthday.day)
     dateComponents.month = Int(birthday.month)
     dateComponents.year = Int(year)
      
-    let calendar = Calendar.current
     if let birthDate = calendar.date(from: dateComponents) {
-        if let age = calendar.dateComponents([.year], from: birthDate, to: Date()).year {
+        if let age = calendar.dateComponents([.year], from: birthDate, to: now).year {
             return age
         }
     }

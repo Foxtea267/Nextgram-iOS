@@ -9,6 +9,7 @@ import UndoUI
 import TranslateUI
 import TextProcessingScreen
 import Pasteboard
+import ChatRichTextEditorComposer
 import TelegramStringFormatting
 import TelegramUIPreferences
 
@@ -79,9 +80,9 @@ extension PeerInfoScreenNode {
                                 let controller = await TextProcessingScreen(
                                     context: context,
                                     mode: .translate(fromLanguage: language, applyResult: nil),
-                                    inputText: TextWithEntities(text: text, entities: []),
+                                    inputText: .plain(text: text, entities: []),
                                     copyResult: { [weak parentController] text in
-                                        storeMessageTextInPasteboard(text.text, entities: text.entities)
+                                        storeComposedRichMessageInPasteboard(text)
                                         parentController?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: presentationData.strings.Conversation_TextCopied), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                                     },
                                     translateChat: nil

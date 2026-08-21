@@ -16,6 +16,7 @@ import TranslateUI
 import TextProcessingScreen
 import ContextUI
 import Pasteboard
+import ChatRichTextEditorComposer
 import SaveToCameraRoll
 import SafariServices
 import LocationUI
@@ -1829,9 +1830,9 @@ final class BrowserInstantPageContent: UIView, BrowserContent, UIScrollViewDeleg
                             let controller = await TextProcessingScreen(
                                 context: context,
                                 mode: .translate(fromLanguage: language, applyResult: nil),
-                                inputText: TextWithEntities(text: text, entities: []),
+                                inputText: .plain(text: text, entities: []),
                                 copyResult: { [weak self] text in
-                                    storeMessageTextInPasteboard(text.text, entities: text.entities)
+                                    storeComposedRichMessageInPasteboard(text)
                                     self?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: strings.Conversation_TextCopied), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), nil)
                                 },
                                 translateChat: nil

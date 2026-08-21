@@ -471,7 +471,7 @@ struct AccountMutableState {
     }
     
     mutating func updateState(_ state: AuthorizedAccountState.State) {
-        if self.initialState.state.seq != state.qts {
+        if self.initialState.state.qts != state.qts {
             self.updatedQts = state.qts
         }
         self.addOperation(.UpdateState(state))

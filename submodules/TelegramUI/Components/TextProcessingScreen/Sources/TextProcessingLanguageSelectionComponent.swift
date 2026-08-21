@@ -275,6 +275,8 @@ final class TextProcessingLanguageSelectionComponent: Component {
                     switch updatedStyle {
                     case .neutral:
                         mappedStyle = .neutral
+                    case .prompt:
+                        mappedStyle = .prompt("")
                     case let .style(style):
                         if let styleValue = component.displayStyles?.first(where: { $0.reference.id == style }) {
                             mappedStyle = .style(styleValue.reference)
@@ -314,6 +316,8 @@ final class TextProcessingLanguageSelectionComponent: Component {
                 switch styleId {
                 case .neutral:
                     mappedStyle = .neutral
+                case .prompt:
+                    mappedStyle = .prompt("")
                 case let .style(style):
                     if let styleValue = component.displayStyles?.first(where: { $0.reference.id == style }) {
                         mappedStyle = .style(styleValue.reference)

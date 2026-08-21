@@ -133,11 +133,11 @@ public final class SuggestPostAccessoryPanelNode: AccessoryPanelNode {
                     let updatedText = NSMutableAttributedString(attributedString: text)
                     updatedText.addAttribute(.foregroundColor, value: theme.chat.inputPanel.panelControlAccentColor, range: NSRange(location: 0, length: updatedText.length))
                     return .text(updatedText)
-                case let .icon(icon):
+                case let .icon(icon, offset):
                     if let iconImage = generateTintedImage(image: icon, color: theme.chat.inputPanel.panelControlAccentColor) {
-                        return .icon(iconImage)
+                        return .icon(iconImage, offset)
                     } else {
-                        return .icon(icon)
+                        return .icon(icon, offset)
                     }
                 }
             }

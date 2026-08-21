@@ -427,6 +427,38 @@ public final class EngineChatList: Equatable {
     }
 }
 
+public extension EngineChatList.Item {
+    func withUpdatedCommunitySummary(messages: [EngineMessage], readCounters: EnginePeerReadCounters?) -> EngineChatList.Item {
+        let updatedReadCounters = readCounters.map { readCounters -> EnginePeerReadCounters in
+            return EnginePeerReadCounters(state: readCounters._asReadCounters(), isMuted: self.isMuted)
+        }
+
+        return EngineChatList.Item(
+            id: self.id,
+            index: self.index,
+            messages: messages,
+            readCounters: updatedReadCounters,
+            isMuted: self.isMuted,
+            draft: self.draft,
+            threadData: self.threadData,
+            renderedPeer: self.renderedPeer,
+            presence: self.presence,
+            hasUnseenMentions: self.hasUnseenMentions,
+            hasUnseenReactions: self.hasUnseenReactions,
+            hasUnseenPollVotes: self.hasUnseenPollVotes,
+            forumTopicData: self.forumTopicData,
+            topForumTopicItems: self.topForumTopicItems,
+            hasFailed: self.hasFailed,
+            isContact: self.isContact,
+            autoremoveTimeout: self.autoremoveTimeout,
+            storyStats: self.storyStats,
+            displayAsTopicList: self.displayAsTopicList,
+            isPremiumRequiredToMessage: self.isPremiumRequiredToMessage,
+            mediaDraftContentType: self.mediaDraftContentType
+        )
+    }
+}
+
 public extension EngineChatList.Group {
     init(_ group: PeerGroupId) {
         switch group {

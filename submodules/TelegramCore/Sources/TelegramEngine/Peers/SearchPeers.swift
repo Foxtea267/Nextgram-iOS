@@ -18,16 +18,26 @@ public struct FoundPeer: Equatable {
     }
 }
 
-public enum TelegramSearchPeersScope: Equatable {
+public enum TelegramSearchPeersScope: Equatable, Hashable {
     case everywhere
     case channels
     case groups
     case privateChats
+    case bots
     case globalPosts(allowPaidStars: Int?)
 }
 
 public func _internal_searchPeers(accountPeerId: PeerId, postbox: Postbox, network: Network, query: String, scope: TelegramSearchPeersScope) -> Signal<([FoundPeer], [FoundPeer]), NoError> {
-    let searchResult = network.request(Api.functions.contacts.search(flags: 0, q: query, limit: 20), automaticFloodWait: false)
+    var flags: Int32 = 0
+    switch scope {
+    case .channels:
+        flags = 1 << 0
+    case .bots:
+        flags = 1 << 1
+    default:
+        break
+    }
+    let searchResult = network.request(Api.functions.contacts.search(flags: flags, q: query, limit: 20), automaticFloodWait: false)
     |> map(Optional.init)
     |> `catch` { _ in
         return Signal<Api.contacts.Found?, NoError>.single(nil)
@@ -136,6 +146,21 @@ public func _internal_searchPeers(accountPeerId: PeerId, postbox: Postbox, netwo
                         }
                         renderedPeers = renderedPeers.filter { item in
                             if case .user = item.peer {
+                                return true
+                            } else {
+                                return false
+                            }
+                        }
+                    case .bots:
+                        renderedMyPeers = renderedMyPeers.filter { item in
+                            if case let .user(user) = item.peer, user.botInfo != nil {
+                                return true
+                            } else {
+                                return false
+                            }
+                        }
+                        renderedPeers = renderedPeers.filter { item in
+                            if case let .user(user) = item.peer, user.botInfo != nil {
                                 return true
                             } else {
                                 return false

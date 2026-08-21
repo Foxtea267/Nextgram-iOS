@@ -268,6 +268,44 @@ private let nagramRegexFilterDisabledPeerIdsKey = "nagram.regexFilters.disabledP
 private let nagramRegexFiltersEnabledKey = "nagram.regexFilters.isEnabled"
 private let nagramRegexFiltersFilterOutgoingKey = "nagram.regexFilters.filterOutgoing"
 
+// NotificationService 与主 App 不共享 standard defaults，屏蔽规则额外镜像到现有 App Group。
+private let nagramRegexFilterSharedDefaults: UserDefaults? = {
+    guard let bundleIdentifier = Bundle.main.bundleIdentifier else {
+        return nil
+    }
+    let extensionSuffix = ".NotificationService"
+    let baseBundleIdentifier = bundleIdentifier.hasSuffix(extensionSuffix) ? String(bundleIdentifier.dropLast(extensionSuffix.count)) : bundleIdentifier
+    return UserDefaults(suiteName: "group.\(baseBundleIdentifier)")
+}()
+
+private let nagramRegexFilterDefaults: UserDefaults = {
+    let standardDefaults = UserDefaults.standard
+    guard Bundle.main.bundleIdentifier?.hasSuffix(".NotificationService") != true else {
+        return nagramRegexFilterSharedDefaults ?? standardDefaults
+    }
+    if let sharedDefaults = nagramRegexFilterSharedDefaults {
+        for key in [nagramRegexFilterRulesKey, nagramRegexFilterDisabledPeerIdsKey, nagramRegexFiltersEnabledKey, nagramRegexFiltersFilterOutgoingKey] {
+            if let value = standardDefaults.object(forKey: key) {
+                sharedDefaults.set(value, forKey: key)
+            } else {
+                sharedDefaults.removeObject(forKey: key)
+            }
+        }
+    }
+    return standardDefaults
+}()
+
+private func nagramMirrorRegexFilterValue(_ value: Any?, forKey key: String) {
+    guard let sharedDefaults = nagramRegexFilterSharedDefaults else {
+        return
+    }
+    if let value {
+        sharedDefaults.set(value, forKey: key)
+    } else {
+        sharedDefaults.removeObject(forKey: key)
+    }
+}
+
 private final class NagramRegexFilterMatcherCache {
     private var rules: [NagramRegexFilterRule]?
     private var matcher: NagramRegexFilterMatcher?
@@ -300,10 +338,10 @@ private let nagramRegexFilterMatcherCache = NagramRegexFilterMatcherCache()
 public extension NagramSettings {
     var regexFiltersEnabled: Bool {
         get {
-            guard UserDefaults.standard.object(forKey: nagramRegexFiltersEnabledKey) != nil else {
+            guard nagramRegexFilterDefaults.object(forKey: nagramRegexFiltersEnabledKey) != nil else {
                 return true
             }
-            return UserDefaults.standard.bool(forKey: nagramRegexFiltersEnabledKey)
+            return nagramRegexFilterDefaults.bool(forKey: nagramRegexFiltersEnabledKey)
         }
         set {
             guard self.regexFiltersEnabled != newValue else {
@@ -311,8 +349,10 @@ public extension NagramSettings {
             }
             if newValue {
                 UserDefaults.standard.removeObject(forKey: nagramRegexFiltersEnabledKey)
+                nagramMirrorRegexFilterValue(nil, forKey: nagramRegexFiltersEnabledKey)
             } else {
                 UserDefaults.standard.set(false, forKey: nagramRegexFiltersEnabledKey)
+                nagramMirrorRegexFilterValue(false, forKey: nagramRegexFiltersEnabledKey)
             }
             self.notifyRegexFiltersChanged()
         }
@@ -320,10 +360,10 @@ public extension NagramSettings {
 
     var regexFiltersFilterOutgoing: Bool {
         get {
-            guard UserDefaults.standard.object(forKey: nagramRegexFiltersFilterOutgoingKey) != nil else {
+            guard nagramRegexFilterDefaults.object(forKey: nagramRegexFiltersFilterOutgoingKey) != nil else {
                 return true
             }
-            return UserDefaults.standard.bool(forKey: nagramRegexFiltersFilterOutgoingKey)
+            return nagramRegexFilterDefaults.bool(forKey: nagramRegexFiltersFilterOutgoingKey)
         }
         set {
             guard self.regexFiltersFilterOutgoing != newValue else {
@@ -331,8 +371,10 @@ public extension NagramSettings {
             }
             if newValue {
                 UserDefaults.standard.removeObject(forKey: nagramRegexFiltersFilterOutgoingKey)
+                nagramMirrorRegexFilterValue(nil, forKey: nagramRegexFiltersFilterOutgoingKey)
             } else {
                 UserDefaults.standard.set(false, forKey: nagramRegexFiltersFilterOutgoingKey)
+                nagramMirrorRegexFilterValue(false, forKey: nagramRegexFiltersFilterOutgoingKey)
             }
             self.notifyRegexFiltersChanged()
         }
@@ -340,7 +382,7 @@ public extension NagramSettings {
 
     var regexFilterRules: [NagramRegexFilterRule] {
         get {
-            guard let data = UserDefaults.standard.data(forKey: nagramRegexFilterRulesKey),
+            guard let data = nagramRegexFilterDefaults.data(forKey: nagramRegexFilterRulesKey),
                   let rules = try? JSONDecoder().decode([NagramRegexFilterRule].self, from: data) else {
                 return []
             }
@@ -349,8 +391,10 @@ public extension NagramSettings {
         set {
             if newValue.isEmpty {
                 NagramSettingsCloudSync.shared.removeObject(forKey: nagramRegexFilterRulesKey)
+                nagramMirrorRegexFilterValue(nil, forKey: nagramRegexFilterRulesKey)
             } else if let data = try? JSONEncoder().encode(newValue) {
                 NagramSettingsCloudSync.shared.set(data, forKey: nagramRegexFilterRulesKey)
+                nagramMirrorRegexFilterValue(data, forKey: nagramRegexFilterRulesKey)
             }
             self.notifyRegexFiltersChanged()
         }
@@ -420,14 +464,17 @@ public extension NagramSettings {
 private extension NagramSettings {
     var regexFilterDisabledPeerIds: Set<Int64> {
         get {
-            let values = UserDefaults.standard.stringArray(forKey: nagramRegexFilterDisabledPeerIdsKey) ?? []
+            let values = nagramRegexFilterDefaults.stringArray(forKey: nagramRegexFilterDisabledPeerIdsKey) ?? []
             return Set(values.compactMap(Int64.init))
         }
         set {
             if newValue.isEmpty {
                 NagramSettingsCloudSync.shared.removeObject(forKey: nagramRegexFilterDisabledPeerIdsKey)
+                nagramMirrorRegexFilterValue(nil, forKey: nagramRegexFilterDisabledPeerIdsKey)
             } else {
-                NagramSettingsCloudSync.shared.set(newValue.map { String($0) }.sorted(), forKey: nagramRegexFilterDisabledPeerIdsKey)
+                let values = newValue.map { String($0) }.sorted()
+                NagramSettingsCloudSync.shared.set(values, forKey: nagramRegexFilterDisabledPeerIdsKey)
+                nagramMirrorRegexFilterValue(values, forKey: nagramRegexFilterDisabledPeerIdsKey)
             }
         }
     }

@@ -793,7 +793,13 @@ final class ChatPinnedMessageTitlePanelNode: ChatTitleAccessoryPanelNode {
                 messageText = NSAttributedString(string: foldLineBreaks(text), font: textFont, textColor: textColor)
             }
         } else {
-            messageText = NSAttributedString(string: foldLineBreaks(textString.string), font: textFont, textColor: message.media.isEmpty || message.media.first is TelegramMediaWebpage ? theme.chat.inputPanel.primaryTextColor : theme.chat.inputPanel.secondaryTextColor)
+            let textColor = message.media.isEmpty || message.media.first is TelegramMediaWebpage ? theme.chat.inputPanel.primaryTextColor : theme.chat.inputPanel.secondaryTextColor
+            let mutableTextString = NSMutableAttributedString(attributedString: foldLineBreaks(textString))
+            mutableTextString.addAttributes([
+                .font: textFont,
+                .foregroundColor: textColor
+            ], range: NSRange(location: 0, length: mutableTextString.length))
+            messageText = renderInstantPagePreviewIcons(mutableTextString, font: textFont, textColor: textColor)
         }
         
         let textConstrainedSize = CGSize(width: width - textLineInset - contentLeftInset - rightInset - textRightInset - 10.0, height: CGFloat.greatestFiniteMagnitude)

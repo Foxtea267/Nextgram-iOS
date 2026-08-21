@@ -217,7 +217,8 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
             
             var author = arguments.message?.effectiveAuthor
             
-            if let forwardInfo = arguments.message?.forwardInfo {
+            // MARK: NAGRAM — Show the forwarding sender for regular forwarded-message replies.
+            if let forwardInfo = arguments.message?.forwardInfo, forwardInfo.flags.contains(.isImported) {
                 if let peer = forwardInfo.author {
                     author = peer
                 } else if let authorSignature = forwardInfo.authorSignature {
@@ -288,7 +289,8 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                 let rawTitleString = author.flatMap(EnginePeer.init)?.displayTitle(strings: arguments.strings, displayOrder: arguments.presentationData.nameDisplayOrder) ?? arguments.strings.User_DeletedAccount
                 titleString = NSAttributedString(string: rawTitleString, font: titleFont, textColor: titleColor)
                 
-                if let forwardInfo = message.forwardInfo {
+                // MARK: NAGRAM — Keep imported-history attribution without replacing a regular forwarder.
+                if let forwardInfo = message.forwardInfo, forwardInfo.flags.contains(.isImported) {
                     if let author = forwardInfo.author {
                         let rawTitleString = EnginePeer(author).displayTitle(strings: arguments.strings, displayOrder: arguments.presentationData.nameDisplayOrder)
                         titleString = NSAttributedString(string: rawTitleString, font: titleFont, textColor: titleColor)
@@ -514,7 +516,12 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                     messageText = NSAttributedString(string: quote.text, font: textFont, textColor: textColor)
                 }
             } else {
-                messageText = NSAttributedString(string: textString.string, font: textFont, textColor: textColor)
+                let mutableTextString = NSMutableAttributedString(attributedString: foldLineBreaks(textString))
+                mutableTextString.addAttributes([
+                    .font: textFont,
+                    .foregroundColor: textColor
+                ], range: NSRange(location: 0, length: mutableTextString.length))
+                messageText = renderInstantPagePreviewIcons(mutableTextString, font: textFont, textColor: textColor)
                 
                 if let _ = arguments.message?.media.first(where: { $0 is TelegramMediaPoll }) as? TelegramMediaPoll {
                     isPoll = true

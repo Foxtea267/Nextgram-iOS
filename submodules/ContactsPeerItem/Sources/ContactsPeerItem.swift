@@ -464,6 +464,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
     
     private let offsetContainerNode: ASDisplayNode
     private let avatarNodeContainer: ASDisplayNode
+    private let avatarShadowNode: ASImageNode
     public let avatarNode: AvatarNode
     private var avatarBadgeBackground: UIImageView?
     private var avatarBadge: UIImageView?
@@ -604,6 +605,9 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
         self.offsetContainerNode = ASDisplayNode()
         
         self.avatarNodeContainer = ASDisplayNode()
+        self.avatarShadowNode = ASImageNode()
+        self.avatarShadowNode.displaysAsynchronously = false
+        self.avatarShadowNode.displayWithoutProcessing = true
         self.avatarNode = AvatarNode(font: avatarFont)
         self.avatarNode.isLayerBacked = false
         
@@ -631,6 +635,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
         self.contextSourceNode.contentNode.addSubnode(self.extractedBackgroundImageNode)
         self.contextSourceNode.contentNode.addSubnode(self.offsetContainerNode)
         
+        self.avatarNodeContainer.addSubnode(self.avatarShadowNode)
         self.avatarNodeContainer.addSubnode(self.avatarNode)
         self.offsetContainerNode.addSubnode(self.avatarNodeContainer)
         self.offsetContainerNode.addSubnode(self.titleNode)
@@ -974,6 +979,8 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                         titleAttributedString = NSAttributedString(string: group.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor)
                     } else if case let .channel(channel) = peer {
                         titleAttributedString = NSAttributedString(string: channel.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor)
+                    } else if case let .community(community) = peer {
+                        titleAttributedString = NSAttributedString(string: community.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor)
                     }
                     
                     switch item.status {
@@ -1196,7 +1203,7 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                 verticalInset += 2.0
             }
             if case .glass = item.systemStyle {
-                verticalInset += 4.0
+                verticalInset += 2.0
             }
             
             let statusHeightComponent: CGFloat
@@ -1319,6 +1326,8 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                                                     clipStyle = .round
                                                 }
                                             }
+                                        } else if case .community = peer {
+                                            clipStyle = .roundedRect
                                         } else {
                                             clipStyle = .round
                                         }
@@ -1426,6 +1435,17 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                             
                             strongSelf.avatarNode.frame = CGRect(origin: CGPoint(), size: avatarFrame.size)
                             
+                            if case let .peer(peer?, _) = item.peer, case .community = peer, let shadowImage = UIImage(bundleImageName: "Components/CommunityShadow") {
+                                strongSelf.avatarShadowNode.isHidden = false
+                                strongSelf.avatarShadowNode.image = generateTintedImage(image: shadowImage, color: item.presentationData.theme.list.itemSecondaryTextColor)
+
+                                let aspectRatio = shadowImage.size.width / shadowImage.size.height
+                                let shadowSize = CGSize(width: floor(avatarFrame.width * aspectRatio * 0.98), height: avatarFrame.width)
+                                transition.updateFrame(node: strongSelf.avatarShadowNode, frame: shadowSize.centered(around: CGPoint(x: avatarFrame.width / 2.0, y: avatarFrame.height / 2.0)).offsetBy(dx: -6.0 + UIScreenPixel, dy: 0.0))
+                            } else {
+                                strongSelf.avatarShadowNode.isHidden = true
+                            }
+
                             if item.requiresPremiumForMessaging {
                                 let avatarBadgeBackground: UIImageView
                                 if let current = strongSelf.avatarBadgeBackground {

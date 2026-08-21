@@ -33,19 +33,36 @@ private func sharedSetupProfilePhotoUpload(context: AccountContext, image: UIIma
     return resource
 }
 
+private func mediaEditorAvatarClipStyle(peer: EnginePeer) -> MediaEditorScreenImpl.AvatarClipStyle {
+    if case .community = peer {
+        return .roundedRect
+    } else if case let .channel(channel) = peer, channel.isForumOrMonoForum {
+        return .roundedRect
+    } else {
+        return .round
+    }
+}
+
+private func mediaEditorAvatarTransitionCornerRadius(size: CGSize, clipStyle: MediaEditorScreenImpl.AvatarClipStyle) -> CGFloat {
+    switch clipStyle {
+    case .round:
+        return min(size.width, size.height) * 0.5
+    case .roundedRect:
+        return min(size.width, size.height) * 0.25
+    }
+}
+
 public extension PeerInfoScreenImpl {
     static func displaySetPhoto(
         parentController: ViewController,
         context: AccountContext,
         peer: EnginePeer,
+        canDelete: Bool? = nil,
+        performDelete: @escaping () -> Void = {},
         completion: @escaping (UIImage?) -> Void = { _ in },
         completedWithUploadingImage: @escaping (UIImage, Signal<PeerInfoAvatarUploadStatus, NoError>) -> UIView? = { _, _ in nil }
     ) {
-        var isForum = false
-        if case let .channel(channel) = peer, channel.isForumOrMonoForum {
-            isForum = true
-        }
-        let _ = isForum
+        let avatarClipStyle = mediaEditorAvatarClipStyle(peer: peer)
         
         let emojiMarkup: TelegramMediaImage.EmojiMarkup? = nil
         
@@ -59,7 +76,7 @@ public extension PeerInfoScreenImpl {
             hasPhotos = true
         }
 
-        let hasDeleteButton = hasPhotos
+        let hasDeleteButton = canDelete ?? hasPhotos
         
         struct ConfirmationAlert {
             let title: String
@@ -74,6 +91,7 @@ public extension PeerInfoScreenImpl {
         let _ = avatarPickerHolder
         
         let (mainController, pickerHolder) = context.sharedContext.makeAvatarMediaPickerScreen(context: context, peerType: PeerType.getType(for: peer), getSourceRect: { return nil }, canDelete: hasDeleteButton, performDelete: {
+            performDelete()
         }, completion: { [weak parentController] result, transitionView, transitionRect, transitionImage, fromCamera, transitionOut, cancelled in
             avatarPickerHolder = nil
             
@@ -139,7 +157,7 @@ public extension PeerInfoScreenImpl {
             
             let editorController = MediaEditorScreenImpl(
                 context: context,
-                mode: .avatarEditor,
+                mode: .avatarEditor(clipStyle: avatarClipStyle),
                 subject: subject,
                 transitionIn: fromCamera ? .camera : transitionView.flatMap({ .gallery(
                     MediaEditorScreenImpl.TransitionIn.GalleryTransitionIn(
@@ -162,7 +180,7 @@ public extension PeerInfoScreenImpl {
                         return MediaEditorScreenImpl.TransitionOut(
                             destinationView: transitionOutView,
                             destinationRect: transitionOutView.bounds,
-                            destinationCornerRadius: transitionOutView.bounds.height * 0.5,
+                            destinationCornerRadius: mediaEditorAvatarTransitionCornerRadius(size: transitionOutView.bounds.size, clipStyle: avatarClipStyle),
                             completion: { [weak transitionOutView] in
                                 transitionOutView?.isHidden = false
                             }
@@ -253,7 +271,7 @@ public extension PeerInfoScreenImpl {
         
         var dismissStatus: (() -> Void)?
         let presentationData = context.sharedContext.currentPresentationData.with({ $0 })
-        if "".isEmpty {
+        if !"".isEmpty {
             let statusController = OverlayStatusController(theme: presentationData.theme, type: .loading(cancelled: {
                 //self?.controllerNode.updateAvatarDisposable.set(nil)
                 dismissStatus?()
@@ -438,10 +456,7 @@ extension PeerInfoScreenImpl {
         self.view.endEditing(true)
         
         let peerId = self.peerId
-        var isForum = false
-        if case let .channel(peer) = peer, peer.isForumOrMonoForum {
-            isForum = true
-        }
+        let avatarClipStyle = mediaEditorAvatarClipStyle(peer: peer)
         
         var currentIsVideo = false
         var emojiMarkup: TelegramMediaImage.EmojiMarkup?
@@ -451,7 +466,6 @@ extension PeerInfoScreenImpl {
             emojiMarkup = emojiMarkupValue
         }
         
-        let _ = isForum
         let _ = currentIsVideo
         
         let _ = (self.context.engine.data.get(
@@ -573,7 +587,7 @@ extension PeerInfoScreenImpl {
                 
                 let editorController = MediaEditorScreenImpl(
                     context: self.context,
-                    mode: .avatarEditor,
+                    mode: .avatarEditor(clipStyle: avatarClipStyle),
                     subject: subject,
                     transitionIn: fromCamera ? .camera : transitionView.flatMap({ .gallery(
                         MediaEditorScreenImpl.TransitionIn.GalleryTransitionIn(
@@ -596,7 +610,7 @@ extension PeerInfoScreenImpl {
                             return MediaEditorScreenImpl.TransitionOut(
                                 destinationView: transitionOutView,
                                 destinationRect: transitionOutView.bounds,
-                                destinationCornerRadius: transitionOutView.bounds.height * 0.5,
+                                destinationCornerRadius: mediaEditorAvatarTransitionCornerRadius(size: transitionOutView.bounds.size, clipStyle: avatarClipStyle),
                                 completion: { [weak transitionOutView] in
                                     transitionOutView?.isHidden = false
                                 }

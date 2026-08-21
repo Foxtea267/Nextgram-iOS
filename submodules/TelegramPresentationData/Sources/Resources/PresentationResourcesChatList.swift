@@ -259,6 +259,12 @@ public struct PresentationResourcesChatList {
         })
     }
     
+    public static func hiddenIcon(_ theme: PresentationTheme) -> UIImage? {
+        return theme.image(PresentationResourceKey.chatListHiddenIcon.rawValue, { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat List/HiddenIcon"), color: theme.chatList.muteIconColor)
+        })
+    }
+    
     public static func forwardedIcon(_ theme: PresentationTheme) -> UIImage? {
         return theme.image(PresentationResourceKey.chatListForwardedIcon.rawValue, { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Chat List/ForwardedIcon"), color: theme.chatList.muteIconColor)
@@ -352,6 +358,12 @@ public struct PresentationResourcesChatList {
     public static func voiceMessageIcon(_ theme: PresentationTheme) -> UIImage? {
         return theme.image(PresentationResourceKey.chatListVoiceMessageIcon.rawValue, { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Chat List/VoiceMessageIcon"), color: theme.chatList.muteIconColor)
+        })
+    }
+    
+    public static func audioIcon(_ theme: PresentationTheme) -> UIImage? {
+        return theme.image(PresentationResourceKey.chatListAudioIcon.rawValue, { theme in
+            return generateTintedImage(image: UIImage(bundleImageName: "Chat List/AudioIcon"), color: theme.chatList.muteIconColor)
         })
     }
     

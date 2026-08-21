@@ -26,6 +26,7 @@ swift_library(
         "//submodules/TelegramUI/Components/MultiAnimationRenderer",
         "//submodules/TelegramUI/Components/TextLoadingEffect",
         "//submodules/AvatarNode",
+        "//Nagram/Settings:NagramSettings",
     ],
     visibility = [
         "//visibility:public",

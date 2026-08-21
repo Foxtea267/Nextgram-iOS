@@ -335,10 +335,10 @@ public final class ChatTextInputPanelComponent: Component {
         }
         
         public func deleteBackward() {
-            guard let panelNode = self.panelNode, let textView = panelNode.textInputNode?.textView else {
+            guard let panelNode = self.panelNode, let richTextInputNode = panelNode.richTextInputNode else {
                 return
             }
-            textView.deleteBackward()
+            richTextInputNode.deleteBackward()
         }
         
         public func activateInput() {
@@ -516,8 +516,8 @@ public final class ChatTextInputPanelComponent: Component {
                             }*/
                         }
                         
-                        if let panelNode = self.panelNode, let textView = panelNode.textInputNode?.textView {
-                            component.externalState.isEditing = textView.isFirstResponder
+                        if let panelNode = self.panelNode, let richTextInputNode = panelNode.richTextInputNode {
+                            component.externalState.isEditing = richTextInputNode.isInputFirstResponder
                         } else {
                             component.externalState.isEditing = false
                         }
@@ -759,6 +759,8 @@ public final class ChatTextInputPanelComponent: Component {
                     },
                     openAICompose: {
                     },
+                    openExpandedInput: {
+                    },
                     openSetPeerAvatar: {
                     },
                     updateHistoryFilter: { _ in
@@ -891,15 +893,15 @@ public final class ChatTextInputPanelComponent: Component {
                 }
             }
             
-            if let textView = panelNode.textInputNode?.textView {
+            if let richTextInputNode = panelNode.richTextInputNode {
                 if component.hideKeyboard {
-                    if textView.inputView == nil {
-                        textView.inputView = EmptyInputView()
-                        textView.reloadInputViews()
+                    if richTextInputNode.keyboardInputView == nil {
+                        richTextInputNode.keyboardInputView = EmptyInputView()
+                        richTextInputNode.reloadInputViews()
                     }
-                } else if textView.inputView != nil {
-                    textView.inputView = nil
-                    textView.reloadInputViews()
+                } else if richTextInputNode.keyboardInputView != nil {
+                    richTextInputNode.keyboardInputView = nil
+                    richTextInputNode.reloadInputViews()
                 }
             }
             

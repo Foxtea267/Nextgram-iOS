@@ -172,6 +172,11 @@ private func synchronizePinnedChats(transaction: Transaction, postbox: Postbox, 
                     apiNotificationSettings = peerNotificationSettings
                     apiChannelPts = pts
                     apiTtlPeriod = ttlPeriod
+                case let .dialogCommunity(dialogCommunityData):
+                    let peerId = peerIdFromApiCommunityId(dialogCommunityData.communityId)
+                    remoteItemIds.append(.peer(peerId))
+                    notificationSettings[peerId] = TelegramPeerNotificationSettings(apiSettings: dialogCommunityData.notifySettings)
+                    continue loop
                 case .dialogFolder:
                     //assertionFailure()
                     continue loop
@@ -266,8 +271,8 @@ private func synchronizePinnedChats(transaction: Transaction, postbox: Postbox, 
                     for itemId in resultingItemIds {
                         switch itemId {
                             case let .peer(peerId):
-                                if let peer = transaction.getPeer(peerId), let inputPeer = apiInputPeer(peer) {
-                                    inputDialogPeers.append(Api.InputDialogPeer.inputDialogPeer(.init(peer: inputPeer)))
+                                if let peer = transaction.getPeer(peerId), let inputDialogPeer = apiInputDialogPeer(peer) {
+                                    inputDialogPeers.append(inputDialogPeer)
                                 }
                         }
                     }

@@ -557,7 +557,7 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
             let verticalInset: CGFloat
             switch item.systemStyle {
             case .glass:
-                verticalInset = 10.0
+                verticalInset = 8.0
             case .legacy:
                 verticalInset = 6.0
             }
@@ -647,7 +647,7 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
                                     if strongSelf.maskNode.supernode != nil {
                                         strongSelf.maskNode.removeFromSupernode()
                                     }
-                                    transition.updateFrameAdditive(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: leftInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - leftInset, height: separatorHeight)))
+                                    transition.updateFrameAdditive(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: leftInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - leftInset - separatorRightInset, height: separatorHeight)))
                                 case .blocks:
                                     if strongSelf.backgroundNode.supernode == nil {
                                         strongSelf.insertSubnode(strongSelf.backgroundNode, at: 0)

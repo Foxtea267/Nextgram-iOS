@@ -721,6 +721,7 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
         return self.containerNode
     }
     
+    private let avatarShadowNode: ASImageNode
     fileprivate let avatarNode: AvatarNode
     private var avatarIconComponent: EmojiStatusComponent?
     private var avatarIconView: ComponentView<Empty>?
@@ -828,6 +829,10 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
         
         self.containerNode = ContextControllerSourceNode()
         
+        self.avatarShadowNode = ASImageNode()
+        self.avatarShadowNode.displaysAsynchronously = false
+        self.avatarShadowNode.displayWithoutProcessing = true
+
         self.avatarNode = AvatarNode(font: avatarPlaceholderFont(size: floor(40.0 * 16.0 / 37.0)))
         //self.avatarNode.isLayerBacked = !smartInvertColorsEnabled()
         
@@ -856,6 +861,7 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
         self.isAccessibilityElement = true
         
         self.addSubnode(self.containerNode)
+        self.containerNode.addSubnode(self.avatarShadowNode)
         self.containerNode.addSubnode(self.avatarNode)
         self.containerNode.addSubnode(self.titleNode)
         self.containerNode.addSubnode(self.statusNode)
@@ -1116,6 +1122,8 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
                 titleAttributedString = NSAttributedString(string: group.title, font: currentBoldFont, textColor: titleColor)
             } else if case let .channel(channel) = item.peer {
                 titleAttributedString = NSAttributedString(string: channel.title, font: currentBoldFont, textColor: titleColor)
+            } else if case let .community(community) = item.peer {
+                titleAttributedString = NSAttributedString(string: community.title, font: currentBoldFont, textColor: titleColor)
             }
             
             switch item.text {
@@ -1636,6 +1644,16 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
                     
                     let avatarFrame = CGRect(origin: CGPoint(x: params.leftInset + additionalLeftInset + revealOffset + editingOffset + 15.0, y: floorToScreenPixels((layout.contentSize.height - avatarSize) / 2.0)), size: CGSize(width: avatarSize, height: avatarSize))
                     transition.updateFrame(node: strongSelf.avatarNode, frame: avatarFrame)
+                    if item.threadInfo == nil, case .community = item.peer, let shadowImage = UIImage(bundleImageName: "Components/CommunityShadow") {
+                        strongSelf.avatarShadowNode.isHidden = false
+                        strongSelf.avatarShadowNode.image = generateTintedImage(image: shadowImage, color: item.presentationData.theme.list.itemSecondaryTextColor)
+
+                        let aspectRatio = shadowImage.size.width / shadowImage.size.height
+                        let shadowSize = CGSize(width: floor(avatarSize * aspectRatio * 0.98), height: avatarSize)
+                        transition.updateFrame(node: strongSelf.avatarShadowNode, frame: shadowSize.centered(around: avatarFrame.center).offsetBy(dx: -6.0 + UIScreenPixel, dy: 0.0))
+                    } else {
+                        strongSelf.avatarShadowNode.isHidden = true
+                    }
                     
                     if item.storyStats != nil {
                         let avatarButton: HighlightTrackingButton
@@ -1754,6 +1772,8 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
                             
                             var clipStyle: AvatarNodeClipStyle = .round
                             if case let .channel(channel) = item.peer, channel.isForumOrMonoForum {
+                                clipStyle = .roundedRect
+                            } else if case .community = item.peer {
                                 clipStyle = .roundedRect
                             }
                             
@@ -1961,6 +1981,11 @@ public class ItemListPeerItemNode: ItemListRevealOptionsItemNode, ItemListItemNo
         
         let avatarFrame = CGRect(origin: CGPoint(x: revealOffset + editingOffset + params.leftInset + 15.0, y: self.avatarNode.frame.minY), size: self.avatarNode.bounds.size)
         transition.updateFrame(node: self.avatarNode, frame: avatarFrame)
+        if !self.avatarShadowNode.isHidden, let shadowImage = UIImage(bundleImageName: "Components/CommunityShadow") {
+            let aspectRatio = shadowImage.size.width / shadowImage.size.height
+            let shadowSize = CGSize(width: floor(avatarFrame.width * aspectRatio * 0.98), height: avatarFrame.width)
+            transition.updateFrame(node: self.avatarShadowNode, frame: shadowSize.centered(around: avatarFrame.center).offsetBy(dx: -5.0 + UIScreenPixel, dy: 0.0))
+        }
         if let avatarButton = self.avatarButton {
             avatarButton.frame = avatarFrame
         }

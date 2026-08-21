@@ -278,6 +278,10 @@ public extension EngineMessage {
     var scheduleRepeatPeriod: Int32? {
         return self._asMessage().scheduleRepeatPeriod
     }
+    
+    var editedTime: Int32? {
+        return self._asMessage().editedTime
+    }
 
     var sourceAuthorInfo: SourceAuthorInfoMessageAttribute? {
         return self._asMessage().sourceAuthorInfo

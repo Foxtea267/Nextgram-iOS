@@ -588,13 +588,15 @@ final class ColorGridComponent: Component {
                         
         func getColor(at point: CGPoint) -> DrawingColor? {
             guard let size = self.validSize,
-                  point.x >= 0 && point.x <= size.width,
-                  point.y >= 0 && point.y <= size.height
+                  size.width > 0.0, size.height > 0.0,
+                  point.x >= 0.0, point.x < size.width,
+                  point.y >= 0.0, point.y < size.height
             else {
                 return nil
             }
-            let row = max(0, min(10, Int(point.y / size.height * 10.0)))
-            let col = max(0, min(12, Int(point.x / size.width * 12.0)))
+            // MARK: NAGRAM — 边界触点必须落在实际的 10 × 12 网格内。
+            let row = max(0, min(9, Int(point.y / size.height * 10.0)))
+            let col = max(0, min(11, Int(point.x / size.width * 12.0)))
             
             let index = row * 12 + col
             if index < palleteColors.count {
@@ -778,8 +780,9 @@ final class ColorSpectrumComponent: Component {
         
         func getColor(at point: CGPoint) -> DrawingColor? {
             guard let size = self.validSize,
-                  point.x >= 0 && point.x <= size.width,
-                  point.y >= 0 && point.y <= size.height else {
+                  size.width > 0.0, size.height > 0.0,
+                  point.x >= 0.0, point.x < size.width,
+                  point.y >= 0.0, point.y < size.height else {
                 return nil
             }
             let position = CGPoint(x: point.x / size.width, y: point.y / size.height)
@@ -824,7 +827,10 @@ final class ColorSpectrumComponent: Component {
             }
             
             self.bitmapData?.withMemoryRebound(to: UInt8.self, capacity: bitmapByteCount) { pointer in
-                let offset = 4 * ((Int(imageWidth) * Int(point.y)) + Int(point.x))
+                // MARK: NAGRAM — 触点可能因像素缩放落到图片右/下边界，先收敛到有效像素。
+                let x = max(0, min(imageWidth - 1, Int(point.x)))
+                let y = max(0, min(imageHeight - 1, Int(point.y)))
+                let offset = 4 * (imageWidth * y + x)
                 
                 redComponent = CGFloat(pointer[offset + 1]) / 255.0
                 greenComponent = CGFloat(pointer[offset + 2]) / 255.0
@@ -962,8 +968,9 @@ public final class ColorSpectrumPickerView: UIView, UIGestureRecognizerDelegate 
     
     func getColor(at point: CGPoint) -> DrawingColor? {
         guard let size = self.validSize,
-              point.x >= 0 && point.x <= size.width,
-              point.y >= 0 && point.y <= size.height else {
+              size.width > 0.0, size.height > 0.0,
+              point.x >= 0.0, point.x < size.width,
+              point.y >= 0.0, point.y < size.height else {
             return nil
         }
         let position = CGPoint(x: point.x / size.width, y: point.y / size.height)
@@ -1008,7 +1015,10 @@ public final class ColorSpectrumPickerView: UIView, UIGestureRecognizerDelegate 
         }
         
         self.bitmapData?.withMemoryRebound(to: UInt8.self, capacity: bitmapByteCount) { pointer in
-            let offset = 4 * ((Int(imageWidth) * Int(point.y)) + Int(point.x))
+            // MARK: NAGRAM — 触点可能因像素缩放落到图片右/下边界，先收敛到有效像素。
+            let x = max(0, min(imageWidth - 1, Int(point.x)))
+            let y = max(0, min(imageHeight - 1, Int(point.y)))
+            let offset = 4 * (imageWidth * y + x)
             
             redComponent = CGFloat(pointer[offset + 1]) / 255.0
             greenComponent = CGFloat(pointer[offset + 2]) / 255.0

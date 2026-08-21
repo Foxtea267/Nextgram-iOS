@@ -992,7 +992,7 @@ final class AvatarEditorScreenComponent: Component {
                 }
                 
                 let previewScale = effectiveIsExpanded ? 1.0 : collapsedAvatarSize.width / avatarPreviewSize.width
-                let cornerRadius = effectiveIsExpanded ? 0.0 : availableSize.width / (component.peerType == .forum ? 4.0 : 2.0)
+                let cornerRadius = effectiveIsExpanded ? 0.0 : availableSize.width / ([.forum, .community].contains(component.peerType) ? 4.0 : 2.0)
                 let position = effectiveIsExpanded ? avatarPreviewSize.height / 2.0 : environment.navigationHeight + 10.0
                                 
                 transition.setBounds(view: previewView, bounds: CGRect(origin: .zero, size: avatarPreviewSize))
@@ -1327,6 +1327,8 @@ final class AvatarEditorScreenComponent: Component {
                 buttonText = strings.AvatarEditor_SetGroupPhoto
             case .channel:
                 buttonText = strings.AvatarEditor_SetChannelPhoto
+            case .community:
+                buttonText = strings.AvatarEditor_SetCommunityPhoto
             }
             
             var isLocked = false
@@ -1622,6 +1624,7 @@ public final class AvatarEditorScreen: ViewControllerComponentContainer {
         case group
         case channel
         case forum
+        case community
     }
     fileprivate let context: AccountContext
     fileprivate let inputData: Signal<AvatarKeyboardInputData, NoError>

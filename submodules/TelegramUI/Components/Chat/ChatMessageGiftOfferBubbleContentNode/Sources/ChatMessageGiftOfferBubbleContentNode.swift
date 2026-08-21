@@ -131,7 +131,7 @@ public class ChatMessageGiftOfferBubbleContentNode: ChatMessageBubbleContentNode
                     case .stars:
                         priceString = item.presentationData.strings.Notification_StarGiftOffer_Offer_Stars(Int32(clamping: amount.amount.value))
                     case .ton:
-                        priceString = formatTonAmountText(amount.amount.value, dateTimeFormat: item.presentationData.dateTimeFormat) + " TON"
+                        priceString = formatTonAmountText(amount.amount.value, dateTimeFormat: item.presentationData.dateTimeFormat, formatString: item.presentationData.strings.Currency_Grams)
                     }
                     
                     let peerName = item.message.peers[item.message.id.peerId].flatMap { EnginePeer($0) }?.compactDisplayTitle ?? ""

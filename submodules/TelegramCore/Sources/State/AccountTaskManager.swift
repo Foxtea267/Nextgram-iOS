@@ -104,6 +104,8 @@ final class AccountTaskManager {
                     tasks.add(managedSynchronizeAttachMenuBots(accountPeerId: self.accountPeerId, postbox: self.stateManager.postbox, network: self.stateManager.network, force: true).start())
                     tasks.add(managedSynchronizeNotificationSoundList(postbox: self.stateManager.postbox, network: self.stateManager.network).start())
                     tasks.add(managedChatListFilters(postbox: self.stateManager.postbox, network: self.stateManager.network, accountPeerId: self.stateManager.accountPeerId).start())
+                    tasks.add(managedCommunitiesState(postbox: self.stateManager.postbox, network: self.stateManager.network, accountPeerId: self.stateManager.accountPeerId).start())
+                    tasks.add(managedCommunityChatListItemSummaries(postbox: self.stateManager.postbox, network: self.stateManager.network, accountPeerId: self.stateManager.accountPeerId).start())
                     tasks.add(managedAnimatedEmojiUpdates(postbox: self.stateManager.postbox, network: self.stateManager.network).start())
                     tasks.add(managedAnimatedEmojiAnimationsUpdates(postbox: self.stateManager.postbox, network: self.stateManager.network).start())
                     tasks.add(managedGenericEmojiEffects(postbox: self.stateManager.postbox, network: self.stateManager.network).start())

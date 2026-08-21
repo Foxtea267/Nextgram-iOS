@@ -91,7 +91,7 @@ final class VideoChatListInviteComponent: Component {
                     } else {
                         highlightBackgroundLayer.maskedCorners = [.layerMinXMaxYCorner, .layerMaxXMaxYCorner]
                         highlightBackgroundLayer.masksToBounds = true
-                        highlightBackgroundLayer.cornerRadius = 10.0
+                        highlightBackgroundLayer.cornerRadius = 26.0
                     }
                 } else {
                     if let highlightBackgroundLayer = self.highlightBackgroundLayer {
@@ -133,7 +133,7 @@ final class VideoChatListInviteComponent: Component {
                 containerSize: CGSize(width: availableSize.width - 62.0 - 8.0, height: 100.0)
             )
             
-            let size = CGSize(width: availableSize.width, height: 46.0)
+            let size = CGSize(width: availableSize.width, height: 52.0)
             
             let titleFrame = CGRect(origin: CGPoint(x: 62.0, y: floor((size.height - titleSize.height) * 0.5)), size: titleSize)
             if let titleView = self.title.view {

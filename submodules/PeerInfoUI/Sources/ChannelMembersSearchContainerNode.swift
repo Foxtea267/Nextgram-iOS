@@ -629,7 +629,10 @@ public final class ChannelMembersSearchContainerNode: SearchDisplayControllerCon
             guard let query = query, !query.isEmpty else {
                 return .single(nil)
             }
-            if let channel = peerView.peers[peerId] as? TelegramChannel {
+            let isChannelOrCommunity = peerView.peers[peerId] is TelegramChannel ||  peerView.peers[peerId] is TelegramCommunity
+            let isCreator = (peerView.peers[peerId] as? TelegramChannel)?.flags.contains(.isCreator) == true || (peerView.peers[peerId] as? TelegramCommunity)?.flags.contains(.isCreator) == true
+            
+            if isChannelOrCommunity {
                 updateActivity(true)
                 let foundGroupMembers: Signal<[RenderedChannelParticipant], NoError>
                 let foundMembers: Signal<[RenderedChannelParticipant], NoError>
@@ -772,26 +775,30 @@ public final class ChannelMembersSearchContainerNode: SearchDisplayControllerCon
                                     canPromote = false
                                     canRestrict = false
                                 case let .member(_, _, adminRights, bannedRights, _, _):
-                                    if channel.hasPermission(.addAdmins) {
+                                    if (peerView.peers[peerId] as? TelegramChannel)?.hasPermission(.addAdmins) == true {
+                                        canPromote = true
+                                    } else if (peerView.peers[peerId] as? TelegramCommunity)?.hasPermission(.addAdmins) == true {
                                         canPromote = true
                                     } else {
                                         canPromote = false
                                     }
-                                    if channel.hasPermission(.banMembers) {
+                                    if (peerView.peers[peerId] as? TelegramChannel)?.hasPermission(.banMembers) == true {
+                                        canRestrict = true
+                                    } else if (peerView.peers[peerId] as? TelegramCommunity)?.hasPermission(.banUsers) == true {
                                         canRestrict = true
                                     } else {
                                         canRestrict = false
                                     }
                                     if canPromote {
                                         if let bannedRights = bannedRights {
-                                            if bannedRights.restrictedBy != context.account.peerId && !channel.flags.contains(.isCreator) {
+                                            if bannedRights.restrictedBy != context.account.peerId && !isCreator {
                                                 canPromote = false
                                             }
                                         }
                                     }
                                     if canRestrict {
                                         if let adminRights = adminRights {
-                                            if adminRights.promotedBy != context.account.peerId && !channel.flags.contains(.isCreator) {
+                                            if adminRights.promotedBy != context.account.peerId && !isCreator {
                                                 canRestrict = false
                                             }
                                         }
@@ -844,10 +851,10 @@ public final class ChannelMembersSearchContainerNode: SearchDisplayControllerCon
                                 case .searchBanned:
                                     switch participant.participant {
                                         case let .member(_, _, _, banInfo, _, _):
-                                            if let banInfo = banInfo {
+                                            if let banInfo = banInfo, let chatPeer = peerView.peers[peerId] {
                                                 var exceptionsString = ""
                                                 let sendMediaRights = banSendMediaSubList().map { $0.0 }
-                                                for (rights, _) in allGroupPermissionList(peer: .channel(channel), expandMedia: true) {
+                                                for (rights, _) in allGroupPermissionList(peer: EnginePeer(chatPeer), expandMedia: true) {
                                                     if banInfo.rights.flags.contains(rights) {
                                                         if banInfo.rights.flags.contains(.banSendMedia) && sendMediaRights.contains(rights) {
                                                             continue

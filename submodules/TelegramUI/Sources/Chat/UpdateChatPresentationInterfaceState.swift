@@ -17,6 +17,59 @@ import LegacyChatHeaderPanelComponent
 import ComponentFlow
 import ComponentDisplayAdapters
 
+extension ChatControllerImpl {
+    func updateRightNavigationButtons(presentationInterfaceState: ChatPresentationInterfaceState, transition: ContainedViewLayoutTransition) {
+        var buttonsAnimated = transition.isAnimated
+        if let button = rightNavigationButtonForChatInterfaceState(context: self.context, presentationInterfaceState: presentationInterfaceState, strings: presentationInterfaceState.strings, currentButton: self.rightNavigationButton, target: self, selector: #selector(self.rightNavigationButtonAction), chatInfoNavigationButton: self.chatInfoNavigationButton, moreInfoNavigationButton: self.moreInfoNavigationButton) {
+            if self.rightNavigationButton != button {
+                if let currentButton = self.rightNavigationButton?.action, currentButton == button.action {
+                    buttonsAnimated = false
+                }
+                self.rightNavigationButton = button
+            }
+        } else if let _ = self.rightNavigationButton {
+            self.rightNavigationButton = nil
+        }
+
+        if let button = secondaryRightNavigationButtonForChatInterfaceState(context: self.context, presentationInterfaceState: presentationInterfaceState, strings: presentationInterfaceState.strings, currentButton: self.secondaryRightNavigationButton, target: self, selector: #selector(self.secondaryRightNavigationButtonAction), chatInfoNavigationButton: self.chatInfoNavigationButton, moreInfoNavigationButton: self.moreInfoNavigationButton) {
+            if self.secondaryRightNavigationButton != button {
+                if let currentButton = self.secondaryRightNavigationButton?.action, currentButton == button.action {
+                    buttonsAnimated = false
+                }
+                if case .replyThread = self.chatLocation {
+                    buttonsAnimated = false
+                }
+                self.secondaryRightNavigationButton = button
+            }
+        } else if let _ = self.secondaryRightNavigationButton {
+            self.secondaryRightNavigationButton = nil
+        }
+
+        var rightBarButtons: [UIBarButtonItem] = []
+        if let rightNavigationButton = self.rightNavigationButton {
+            rightBarButtons.append(rightNavigationButton.buttonItem)
+        }
+        if let secondaryRightNavigationButton = self.secondaryRightNavigationButton {
+            rightBarButtons.append(secondaryRightNavigationButton.buttonItem)
+        }
+        var rightBarButtonsUpdated = false
+        let currentRightBarButtons = self.navigationItem.rightBarButtonItems ?? []
+        if rightBarButtons.count != currentRightBarButtons.count {
+            rightBarButtonsUpdated = true
+        } else {
+            for i in 0 ..< rightBarButtons.count {
+                if rightBarButtons[i] !== currentRightBarButtons[i] {
+                    rightBarButtonsUpdated = true
+                    break
+                }
+            }
+        }
+        if rightBarButtonsUpdated {
+            self.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)
+        }
+    }
+}
+
 func updateChatPresentationInterfaceStateImpl(
     selfController: ChatControllerImpl,
     transition: ContainedViewLayoutTransition,
@@ -36,7 +89,7 @@ func updateChatPresentationInterfaceStateImpl(
     
     if selfController.presentationInterfaceState.keyboardButtonsMessage?.visibleButtonKeyboardMarkup != temporaryChatPresentationInterfaceState.keyboardButtonsMessage?.visibleButtonKeyboardMarkup || selfController.presentationInterfaceState.keyboardButtonsMessage?.id != temporaryChatPresentationInterfaceState.keyboardButtonsMessage?.id {
         if let keyboardButtonsMessage = temporaryChatPresentationInterfaceState.keyboardButtonsMessage, let keyboardMarkup = keyboardButtonsMessage.visibleButtonKeyboardMarkup {
-            if selfController.presentationInterfaceState.interfaceState.editMessage == nil && selfController.presentationInterfaceState.interfaceState.composeInputState.inputText.length == 0 && keyboardButtonsMessage.id != temporaryChatPresentationInterfaceState.interfaceState.messageActionsState.closedButtonKeyboardMessageId && keyboardButtonsMessage.id != temporaryChatPresentationInterfaceState.interfaceState.messageActionsState.dismissedButtonKeyboardMessageId && temporaryChatPresentationInterfaceState.botStartPayload == nil {
+            if selfController.presentationInterfaceState.interfaceState.editMessage == nil && selfController.presentationInterfaceState.interfaceState.composeInputState.isEmpty && keyboardButtonsMessage.id != temporaryChatPresentationInterfaceState.interfaceState.messageActionsState.closedButtonKeyboardMessageId && keyboardButtonsMessage.id != temporaryChatPresentationInterfaceState.interfaceState.messageActionsState.dismissedButtonKeyboardMessageId && temporaryChatPresentationInterfaceState.botStartPayload == nil {
                 temporaryChatPresentationInterfaceState = temporaryChatPresentationInterfaceState.updatedInputMode({ _ in
                     return .inputButtons(persistent: keyboardMarkup.flags.contains(.persistent))
                 })
@@ -523,54 +576,7 @@ func updateChatPresentationInterfaceStateImpl(
         selfController.leftNavigationButton = nil
     }
     
-    var buttonsAnimated = transition.isAnimated
-    if let button = rightNavigationButtonForChatInterfaceState(context: selfController.context, presentationInterfaceState: updatedChatPresentationInterfaceState, strings: updatedChatPresentationInterfaceState.strings, currentButton: selfController.rightNavigationButton, target: selfController, selector: #selector(selfController.rightNavigationButtonAction), chatInfoNavigationButton: selfController.chatInfoNavigationButton, moreInfoNavigationButton: selfController.moreInfoNavigationButton) {
-        if selfController.rightNavigationButton != button {
-            if let currentButton = selfController.rightNavigationButton?.action, currentButton == button.action {
-                buttonsAnimated = false
-            }
-            selfController.rightNavigationButton = button
-        }
-    } else if let _ = selfController.rightNavigationButton {
-        selfController.rightNavigationButton = nil
-    }
-    
-    if let button = secondaryRightNavigationButtonForChatInterfaceState(context: selfController.context, presentationInterfaceState: updatedChatPresentationInterfaceState, strings: updatedChatPresentationInterfaceState.strings, currentButton: selfController.secondaryRightNavigationButton, target: selfController, selector: #selector(selfController.secondaryRightNavigationButtonAction), chatInfoNavigationButton: selfController.chatInfoNavigationButton, moreInfoNavigationButton: selfController.moreInfoNavigationButton) {
-        if selfController.secondaryRightNavigationButton != button {
-            if let currentButton = selfController.secondaryRightNavigationButton?.action, currentButton == button.action {
-                buttonsAnimated = false
-            }
-            if case .replyThread = selfController.chatLocation {
-                buttonsAnimated = false
-            }
-            selfController.secondaryRightNavigationButton = button
-        }
-    } else if let _ = selfController.secondaryRightNavigationButton {
-        selfController.secondaryRightNavigationButton = nil
-    }
-    
-    var rightBarButtons: [UIBarButtonItem] = []
-    if let rightNavigationButton = selfController.rightNavigationButton {
-        rightBarButtons.append(rightNavigationButton.buttonItem)
-    }
-    if let secondaryRightNavigationButton = selfController.secondaryRightNavigationButton {
-        rightBarButtons.append(secondaryRightNavigationButton.buttonItem)
-    }
-    var rightBarButtonsUpdated = false
-    let currentRightBarButtons = selfController.navigationItem.rightBarButtonItems ?? []
-    if rightBarButtons.count != currentRightBarButtons.count {
-        rightBarButtonsUpdated = true
-    } else {
-        for i in 0 ..< rightBarButtons.count {
-            if rightBarButtons[i] !== currentRightBarButtons[i] {
-                rightBarButtonsUpdated = true
-                break
-            }
-        }
-    }
-    if rightBarButtonsUpdated {
-        selfController.navigationItem.setRightBarButtonItems(rightBarButtons, animated: buttonsAnimated)
-    }
+    selfController.updateRightNavigationButtons(presentationInterfaceState: updatedChatPresentationInterfaceState, transition: transition)
     
     if let controllerInteraction = selfController.controllerInteraction {
         if updatedChatPresentationInterfaceState.interfaceState.selectionState != controllerInteraction.selectionState {
@@ -624,8 +630,10 @@ func updateChatPresentationInterfaceStateImpl(
         selfController.displayBirthdayTooltip()
     }
         
-    if case .standard(.embedded) = selfController.presentationInterfaceState.mode, let controllerInteraction = selfController.controllerInteraction, let interfaceInteraction = selfController.interfaceInteraction {
-        if let titleAccessoryPanelNode = titlePanelForChatPresentationInterfaceState(selfController.presentationInterfaceState, context: selfController.context, currentPanel: selfController.customNavigationPanelNode as? ChatTitleAccessoryPanelNode, controllerInteraction: controllerInteraction, interfaceInteraction: interfaceInteraction, force: true) {
+    if case .standard(.embedded) = selfController.presentationInterfaceState.mode {
+        if selfController.hideTopPanels {
+            selfController.customNavigationPanelNode = nil
+        } else if let controllerInteraction = selfController.controllerInteraction, let interfaceInteraction = selfController.interfaceInteraction, let titleAccessoryPanelNode = titlePanelForChatPresentationInterfaceState(selfController.presentationInterfaceState, context: selfController.context, currentPanel: selfController.customNavigationPanelNode as? ChatTitleAccessoryPanelNode, controllerInteraction: controllerInteraction, interfaceInteraction: interfaceInteraction, force: true) {
             selfController.customNavigationPanelNode = titleAccessoryPanelNode as? ChatControllerCustomNavigationPanelNode
         } else {
             selfController.customNavigationPanelNode = nil

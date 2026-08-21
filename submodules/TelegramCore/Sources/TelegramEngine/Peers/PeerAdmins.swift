@@ -129,7 +129,7 @@ public enum UpdateChannelAdminRightsError {
 func _internal_fetchChannelParticipant(account: Account, peerId: PeerId, participantId: PeerId) -> Signal<ChannelParticipant?, NoError> {
     return account.postbox.transaction { transaction -> Signal<ChannelParticipant?, NoError> in
         if let peer = transaction.getPeer(peerId), let adminPeer = transaction.getPeer(participantId), let inputPeer = apiInputPeer(adminPeer) {
-            if let channel = peer as? TelegramChannel, let inputChannel = apiInputChannel(channel) {
+            if let inputChannel = apiInputChannel(peer) {
                 return account.network.request(Api.functions.channels.getParticipant(channel: inputChannel, participant: inputPeer))
                 |> map { result -> ChannelParticipant? in
                     switch result {
@@ -151,13 +151,23 @@ func _internal_fetchChannelParticipant(account: Account, peerId: PeerId, partici
 }
 
 func _internal_updateChannelAdminRights(account: Account, peerId: PeerId, adminId: PeerId, rights: TelegramChatAdminRights?, rank: String?) -> Signal<(ChannelParticipant?, RenderedChannelParticipant), UpdateChannelAdminRightsError> {
-    return _internal_fetchChannelParticipant(account: account, peerId: peerId, participantId: adminId)
+    let currentParticipant = account.postbox.transaction { transaction -> Signal<ChannelParticipant?, NoError> in
+        if let peer = transaction.getPeer(peerId), peer is TelegramCommunity {
+            return .single(nil)
+        } else {
+            return _internal_fetchChannelParticipant(account: account, peerId: peerId, participantId: adminId)
+        }
+    }
+    |> switchToLatest
+
+    return currentParticipant
     |> mapError { error -> UpdateChannelAdminRightsError in
     }
     |> mapToSignal { currentParticipant -> Signal<(ChannelParticipant?, RenderedChannelParticipant), UpdateChannelAdminRightsError> in
         return account.postbox.transaction { transaction -> Signal<(ChannelParticipant?, RenderedChannelParticipant), UpdateChannelAdminRightsError> in
             if let peer = transaction.getPeer(peerId), let adminPeer = transaction.getPeer(adminId), let inputUser = apiInputUser(adminPeer) {
-                if let channel = peer as? TelegramChannel, let inputChannel = apiInputChannel(channel) {
+                let isCommunity = peer is TelegramCommunity
+                if let inputChannel = apiInputChannel(peer) {
                     let updatedParticipant: ChannelParticipant
                     if let currentParticipant = currentParticipant, case let .member(_, invitedAt, currentAdminInfo, _, _, subscriptionUntilDate) = currentParticipant {
                         let adminInfo: ChannelParticipantAdminInfo?
@@ -193,6 +203,9 @@ func _internal_updateChannelAdminRights(account: Account, peerId: PeerId, adminI
                     |> map { [$0] }
                     |> `catch` { error -> Signal<[Api.Updates], UpdateChannelAdminRightsError> in
                         if error.errorDescription == "USER_NOT_PARTICIPANT" {
+                            if isCommunity {
+                                return .fail(.generic)
+                            }
                             return _internal_addChannelMember(account: account, peerId: peerId, memberId: adminId)
                             |> map { _ -> [Api.Updates] in
                                 return []

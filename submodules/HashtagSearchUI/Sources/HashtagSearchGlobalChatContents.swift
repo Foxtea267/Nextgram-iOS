@@ -53,7 +53,7 @@ final class HashtagSearchGlobalChatContents: ChatCustomContentsProtocol {
             if self.publicPosts {
                 search = self.context.engine.messages.searchHashtagPosts(hashtag: self.query, state: nil)
             } else {
-                search = self.context.engine.messages.searchMessages(location: .general(scope: .everywhere, groupId: nil, tags: nil, minDate: nil, maxDate: nil, folderId: nil), query: self.query, state: nil)
+                search = self.context.engine.messages.searchMessages(location: .general(scope: .everywhere, groupId: nil, tags: nil, minDate: nil, maxDate: nil, folderId: nil, communityId: nil), query: self.query, state: nil)
             }
             
             self.isSearchingPromise.set(true)
@@ -101,7 +101,7 @@ final class HashtagSearchGlobalChatContents: ChatCustomContentsProtocol {
             if self.publicPosts {
                 search = self.context.engine.messages.searchHashtagPosts(hashtag: self.query, state: self.currentSearchState)
             } else {
-                search = self.context.engine.messages.searchMessages(location: .general(scope: .everywhere, groupId: nil, tags: nil, minDate: nil, maxDate: nil, folderId: nil), query: self.query, state: currentSearchState)
+                search = self.context.engine.messages.searchMessages(location: .general(scope: .everywhere, groupId: nil, tags: nil, minDate: nil, maxDate: nil, folderId: nil, communityId: nil), query: self.query, state: currentSearchState)
             }
             
             self.historyViewDisposable?.dispose()

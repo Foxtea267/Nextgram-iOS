@@ -53,9 +53,10 @@ extension TelegramUser {
     convenience init(user: Api.User) {
         switch user {
         case let .user(userData):
-            let (flags, flags2, id, accessHash, firstName, lastName, username, phone, photo, _, _, restrictionReason, botInlinePlaceholder, _, emojiStatus, usernames, _, color, profileColor, subscriberCount, verificationIconFileId, _) = (userData.flags, userData.flags2, userData.id, userData.accessHash, userData.firstName, userData.lastName, userData.username, userData.phone, userData.photo, userData.status, userData.botInfoVersion, userData.restrictionReason, userData.botInlinePlaceholder, userData.langCode, userData.emojiStatus, userData.usernames, userData.storiesMaxId, userData.color, userData.profileColor, userData.botActiveUsers, userData.botVerificationIcon, userData.sendPaidMessagesStars)
+            let (flags, flags2, id, accessHash, firstName, lastName, username, phone, photo, _, _, restrictionReason, botInlinePlaceholder, _, emojiStatus, usernames, _, color, profileColor, subscriberCount, verificationIconFileId, _, linkedCommunityIdValue) = (userData.flags, userData.flags2, userData.id, userData.accessHash, userData.firstName, userData.lastName, userData.username, userData.phone, userData.photo, userData.status, userData.botInfoVersion, userData.restrictionReason, userData.botInlinePlaceholder, userData.langCode, userData.emojiStatus, userData.usernames, userData.storiesMaxId, userData.color, userData.profileColor, userData.botActiveUsers, userData.botVerificationIcon, userData.sendPaidMessagesStars, userData.linkedCommunityId)
             let representations: [TelegramMediaImageRepresentation] = photo.flatMap(parsedTelegramProfilePhoto) ?? []
-            
+            let linkedCommunityId = linkedCommunityIdValue.flatMap { PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value($0)) }
+
             let isMin = (flags & (1 << 20)) != 0
             let accessHashValue = accessHash.flatMap { value -> TelegramPeerAccessHash in
                 if isMin {
@@ -182,7 +183,7 @@ extension TelegramUser {
                 }
             }
             
-            self.init(id: PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id)), accessHash: accessHashValue, firstName: firstName, lastName: lastName, username: username, phone: phone, photo: representations, botInfo: botInfo, restrictionInfo: restrictionInfo, flags: userFlags, emojiStatus: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:)), usernames: usernames?.map(TelegramPeerUsername.init(apiUsername:)) ?? [], storiesHidden: storiesHidden, nameColor: nameColor, backgroundEmojiId: backgroundEmojiId, profileColor: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }, profileBackgroundEmojiId: profileBackgroundEmojiId, subscriberCount: subscriberCount, verificationIconFileId: verificationIconFileId)
+            self.init(id: PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id)), accessHash: accessHashValue, firstName: firstName, lastName: lastName, username: username, phone: phone, photo: representations, botInfo: botInfo, restrictionInfo: restrictionInfo, flags: userFlags, emojiStatus: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:)), usernames: usernames?.map(TelegramPeerUsername.init(apiUsername:)) ?? [], storiesHidden: storiesHidden, nameColor: nameColor, backgroundEmojiId: backgroundEmojiId, profileColor: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }, profileBackgroundEmojiId: profileBackgroundEmojiId, subscriberCount: subscriberCount, verificationIconFileId: verificationIconFileId, linkedCommunityId: linkedCommunityId)
         case let .userEmpty(userEmptyData):
             let id = userEmptyData.id
             self.init(id: PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(id)), accessHash: nil, firstName: nil, lastName: nil, username: nil, phone: nil, photo: [], botInfo: nil, restrictionInfo: nil, flags: [], emojiStatus: nil, usernames: [], storiesHidden: nil, nameColor: nil, backgroundEmojiId: nil, profileColor: nil, profileBackgroundEmojiId: nil, subscriberCount: nil, verificationIconFileId: nil)
@@ -192,7 +193,7 @@ extension TelegramUser {
     static func merge(_ lhs: TelegramUser?, rhs: Api.User) -> TelegramUser? {
         switch rhs {
             case let .user(userData):
-                let (flags, _, _, rhsAccessHash, _, _, _, _, photo, _, _, restrictionReason, botInlinePlaceholder, _, emojiStatus, _, _, color, profileColor, subscriberCount, _, _) = (userData.flags, userData.flags2, userData.id, userData.accessHash, userData.firstName, userData.lastName, userData.username, userData.phone, userData.photo, userData.status, userData.botInfoVersion, userData.restrictionReason, userData.botInlinePlaceholder, userData.langCode, userData.emojiStatus, userData.usernames, userData.storiesMaxId, userData.color, userData.profileColor, userData.botActiveUsers, userData.botVerificationIcon, userData.sendPaidMessagesStars)
+                let (flags, _, _, rhsAccessHash, _, _, _, _, photo, _, _, restrictionReason, botInlinePlaceholder, _, emojiStatus, _, _, color, profileColor, subscriberCount, _, _, linkedCommunityIdValue) = (userData.flags, userData.flags2, userData.id, userData.accessHash, userData.firstName, userData.lastName, userData.username, userData.phone, userData.photo, userData.status, userData.botInfoVersion, userData.restrictionReason, userData.botInlinePlaceholder, userData.langCode, userData.emojiStatus, userData.usernames, userData.storiesMaxId, userData.color, userData.profileColor, userData.botActiveUsers, userData.botVerificationIcon, userData.sendPaidMessagesStars, userData.linkedCommunityId)
                 let isMin = (flags & (1 << 20)) != 0
                 if !isMin {
                     return TelegramUser(user: rhs)
@@ -312,8 +313,10 @@ extension TelegramUser {
                                 break
                             }
                         }
-                        
-                        return TelegramUser(id: lhs.id, accessHash: accessHash, firstName: lhs.firstName, lastName: lhs.lastName, username: lhs.username, phone: lhs.phone, photo: telegramPhoto, botInfo: botInfo, restrictionInfo: restrictionInfo, flags: userFlags, emojiStatus: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:)), usernames: lhs.usernames, storiesHidden: lhs.storiesHidden, nameColor: nameColor, backgroundEmojiId: backgroundEmojiId, profileColor: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }, profileBackgroundEmojiId: profileBackgroundEmojiId, subscriberCount: subscriberCount, verificationIconFileId: lhs.verificationIconFileId)
+
+                        let linkedCommunityId = linkedCommunityIdValue.flatMap { PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value($0)) } ?? lhs.linkedCommunityId
+
+                        return TelegramUser(id: lhs.id, accessHash: accessHash, firstName: lhs.firstName, lastName: lhs.lastName, username: lhs.username, phone: lhs.phone, photo: telegramPhoto, botInfo: botInfo, restrictionInfo: restrictionInfo, flags: userFlags, emojiStatus: emojiStatus.flatMap(PeerEmojiStatus.init(apiStatus:)), usernames: lhs.usernames, storiesHidden: lhs.storiesHidden, nameColor: nameColor, backgroundEmojiId: backgroundEmojiId, profileColor: profileColorIndex.flatMap { PeerNameColor(rawValue: $0) }, profileBackgroundEmojiId: profileBackgroundEmojiId, subscriberCount: subscriberCount, verificationIconFileId: lhs.verificationIconFileId, linkedCommunityId: linkedCommunityId)
                     } else {
                         return TelegramUser(user: rhs)
                     }
@@ -373,8 +376,10 @@ extension TelegramUser {
             } else {
                 storiesHidden = lhs.storiesHidden
             }
-            
-            return TelegramUser(id: lhs.id, accessHash: accessHash, firstName: lhs.firstName, lastName: lhs.lastName, username: lhs.username, phone: lhs.phone, photo: photo, botInfo: botInfo, restrictionInfo: restrictionInfo, flags: userFlags, emojiStatus: emojiStatus, usernames: lhs.usernames, storiesHidden: storiesHidden, nameColor: rhs.nameColor, backgroundEmojiId: rhs.backgroundEmojiId, profileColor: rhs.profileColor, profileBackgroundEmojiId: rhs.profileBackgroundEmojiId, subscriberCount: rhs.subscriberCount, verificationIconFileId: rhs.verificationIconFileId)
+
+            let linkedCommunityId = rhs.linkedCommunityId ?? lhs.linkedCommunityId
+
+            return TelegramUser(id: lhs.id, accessHash: accessHash, firstName: lhs.firstName, lastName: lhs.lastName, username: lhs.username, phone: lhs.phone, photo: photo, botInfo: botInfo, restrictionInfo: restrictionInfo, flags: userFlags, emojiStatus: emojiStatus, usernames: lhs.usernames, storiesHidden: storiesHidden, nameColor: rhs.nameColor, backgroundEmojiId: rhs.backgroundEmojiId, profileColor: rhs.profileColor, profileBackgroundEmojiId: rhs.profileBackgroundEmojiId, subscriberCount: rhs.subscriberCount, verificationIconFileId: rhs.verificationIconFileId, linkedCommunityId: linkedCommunityId)
         }
     }
 }

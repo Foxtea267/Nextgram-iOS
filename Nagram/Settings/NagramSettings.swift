@@ -84,6 +84,26 @@ public enum NagramGlassTransparencyMode: String {
     case custom
 }
 
+public enum NagramGroupProfileSettingItem: String, CaseIterable, Hashable {
+    case groupType
+    case inviteLinks
+    case linkedChannel
+    case reactions
+    case appearance
+    case history
+    case topics
+    case location
+    case members
+    case permissions
+    case admins
+    case memberRequests
+    case removedUsers
+    case recentActions
+    case community
+    case deleteGroup
+    case other
+}
+
 public enum NagramTranslationProvider: String, CaseIterable {
     case telegram
     case google
@@ -145,9 +165,14 @@ public final class NagramSettings {
         }
     }
 
-    // MARK: 波次 1 — force-copy（已落地，key 保持不变以平滑迁移）
+    // MARK: 波次 1 — 解除内容保护（沿用 forceCopy key 以平滑迁移）
     @NagramDefault("nagram.forceCopyEnabled", false)
     public var forceCopyEnabled: Bool
+
+    // MARK: 敏感内容
+    /// 自动显示受限媒体；仅跳过确认弹窗，不绕过年龄验证
+    @NagramDefault("nagram.skipSensitiveContentWarning", false)
+    public var skipSensitiveContentWarning: Bool
 
     // MARK: 波次 3 批 A — 纯 UI 单点开关
     /// 隐藏消息反应
@@ -174,6 +199,9 @@ public final class NagramSettings {
     /// 消息时间戳显示秒
     @NagramDefault("nagram.secondsInMessages", false)
     public var secondsInMessages: Bool
+    /// 在转发来源后显示原始消息时间
+    @NagramDefault("nagram.showForwardedMessageDate", false)
+    public var showForwardedMessageDate: Bool
     /// 隐藏频道底部面板按钮
     @NagramDefault("nagram.hideChannelBottomButton", false)
     public var hideChannelBottomButton: Bool
@@ -310,6 +338,9 @@ public final class NagramSettings {
     /// 在非“全部会话”分组顶部展示归档入口（默认关 = 保持 Telegram 原生行为）
     @NagramDefault("nagram.showArchiveInFolders", false)
     public var showArchiveInFolders: Bool
+    /// 在列表中隐藏收藏夹和归档会话的具体预览（默认关 = 保持 Telegram 原生行为）
+    @NagramDefault("nagram.hideSavedAndArchivedMessagesInList", false)
+    public var hideSavedAndArchivedMessagesInList: Bool
     /// 对话列表启动分组（"telegram" / "last" / "specific"）
     @NagramDefault("nagram.chatListStartupFolderMode", NagramChatListStartupFolderMode.telegramDefault.rawValue)
     public var chatListStartupFolderMode: String
@@ -319,6 +350,9 @@ public final class NagramSettings {
     /// 隐藏首页的“全部会话”分组（至少存在一个自定义分组时生效）
     @NagramDefault("nagram.hideAllChatsFolder", false)
     public var hideAllChatsFolder: Bool
+    /// 分享面板显示聊天文件夹标签
+    @NagramDefault("nagram.showFoldersInShareSheet", true)
+    public var showFoldersInShareSheet: Bool
     /// 首页分组标签显示方式（"text" / "icon" / "both"）
     @NagramDefault("nagram.chatListFolderTabDisplayMode", NagramChatListFolderTabDisplayMode.text.rawValue)
     public var chatListFolderTabDisplayMode: String
@@ -386,6 +420,12 @@ public final class NagramSettings {
     /// OpenAI-compatible LLM temperature in tenths (0...20).
     @NagramDefault("nagram.translationLLMTemperatureTenths", 7)
     public var translationLLMTemperatureTenths: Int32
+    /// 发送前翻译:长按发送按钮菜单显示「翻译」项,译文回填输入框(NAG-75)。
+    @NagramDefault("nagram.translateBeforeSend", false)
+    public var translateBeforeSend: Bool
+    /// 发送前翻译的目标语言代码(popularTranslationLanguages 短列表)。
+    @NagramDefault("nagram.translateBeforeSendTargetLang", "en")
+    public var translateBeforeSendTargetLang: String
 
     // MARK: 波次 3 批 D — 需新逻辑
     /// 回车键发送消息
@@ -409,9 +449,15 @@ public final class NagramSettings {
     /// 隐藏动态（Stories）
     @NagramDefault("nagram.hideStories", false)
     public var hideStories: Bool
+    /// 隐藏标签栏上的权限警告
+    @NagramDefault("nagram.hideTabBarPermissionWarnings", false)
+    public var hideTabBarPermissionWarnings: Bool
     /// 资料页显示注册日期（默认关 = 保持原生）
     @NagramDefault("nagram.showRegDate", false)
     public var showRegDate: Bool
+    /// 群组资料页直接展示的设置项；默认不展示，用户需逐项启用。
+    @NagramDefault("nagram.groupProfileSettingItems", "")
+    private var groupProfileSettingItems: String
     /// 设置/资料页隐藏手机号（默认关 = 保持原生）
     @NagramDefault("nagram.hidePhoneInSettings", false)
     public var hidePhoneInSettings: Bool
@@ -424,6 +470,29 @@ public final class NagramSettings {
 
     @NagramDefault("nagram.autoInlineBotEnabled", false)
     public var autoInlineBotEnabled: Bool
+
+    public func isGroupProfileSettingItemVisible(_ item: NagramGroupProfileSettingItem) -> Bool {
+        return self.visibleGroupProfileSettingItems.contains(item)
+    }
+
+    public func setGroupProfileSettingItemVisible(_ item: NagramGroupProfileSettingItem, visible: Bool) {
+        var items = self.visibleGroupProfileSettingItems
+        if visible {
+            items.insert(item)
+        } else {
+            items.remove(item)
+        }
+        self.groupProfileSettingItems = NagramGroupProfileSettingItem.allCases
+            .filter { items.contains($0) }
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
+    private var visibleGroupProfileSettingItems: Set<NagramGroupProfileSettingItem> {
+        return Set(self.groupProfileSettingItems.split(separator: ",").compactMap {
+            NagramGroupProfileSettingItem(rawValue: String($0))
+        })
+    }
 
 }
 

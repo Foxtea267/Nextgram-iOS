@@ -43,6 +43,56 @@ public extension Api {
     }
 }
 public extension Api {
+    enum ChannelCategory: TypeConstructorDescription {
+        public class Cons_channelCategory: TypeConstructorDescription {
+            public var id: Int32
+            public var title: String
+            public init(id: Int32, title: String) {
+                self.id = id
+                self.title = title
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("channelCategory", [("id", ConstructorParameterDescription(self.id)), ("title", ConstructorParameterDescription(self.title))])
+            }
+        }
+        case channelCategory(Cons_channelCategory)
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .channelCategory(let _data):
+                if boxed {
+                    buffer.appendInt32(206065458)
+                }
+                serializeInt32(_data.id, buffer: buffer, boxed: false)
+                serializeString(_data.title, buffer: buffer, boxed: false)
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .channelCategory(let _data):
+                return ("channelCategory", [("id", ConstructorParameterDescription(_data.id)), ("title", ConstructorParameterDescription(_data.title))])
+            }
+        }
+
+        public static func parse_channelCategory(_ reader: BufferReader) -> ChannelCategory? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: String?
+            _2 = parseString(reader)
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            if _c1 && _c2 {
+                return Api.ChannelCategory.channelCategory(Cons_channelCategory(id: _1!, title: _2!))
+            }
+            else {
+                return nil
+            }
+        }
+    }
+}
+public extension Api {
     enum ChannelLocation: TypeConstructorDescription {
         public class Cons_channelLocation: TypeConstructorDescription {
             public var geoPoint: Api.GeoPoint
@@ -780,7 +830,8 @@ public extension Api {
             public var botVerificationIcon: Int64?
             public var sendPaidMessagesStars: Int64?
             public var linkedMonoforumId: Int64?
-            public init(flags: Int32, flags2: Int32, id: Int64, accessHash: Int64?, title: String, username: String?, photo: Api.ChatPhoto, date: Int32, restrictionReason: [Api.RestrictionReason]?, adminRights: Api.ChatAdminRights?, bannedRights: Api.ChatBannedRights?, defaultBannedRights: Api.ChatBannedRights?, participantsCount: Int32?, usernames: [Api.Username]?, storiesMaxId: Api.RecentStory?, color: Api.PeerColor?, profileColor: Api.PeerColor?, emojiStatus: Api.EmojiStatus?, level: Int32?, subscriptionUntilDate: Int32?, botVerificationIcon: Int64?, sendPaidMessagesStars: Int64?, linkedMonoforumId: Int64?) {
+            public var linkedCommunityId: Int64?
+            public init(flags: Int32, flags2: Int32, id: Int64, accessHash: Int64?, title: String, username: String?, photo: Api.ChatPhoto, date: Int32, restrictionReason: [Api.RestrictionReason]?, adminRights: Api.ChatAdminRights?, bannedRights: Api.ChatBannedRights?, defaultBannedRights: Api.ChatBannedRights?, participantsCount: Int32?, usernames: [Api.Username]?, storiesMaxId: Api.RecentStory?, color: Api.PeerColor?, profileColor: Api.PeerColor?, emojiStatus: Api.EmojiStatus?, level: Int32?, subscriptionUntilDate: Int32?, botVerificationIcon: Int64?, sendPaidMessagesStars: Int64?, linkedMonoforumId: Int64?, linkedCommunityId: Int64?) {
                 self.flags = flags
                 self.flags2 = flags2
                 self.id = id
@@ -804,9 +855,10 @@ public extension Api {
                 self.botVerificationIcon = botVerificationIcon
                 self.sendPaidMessagesStars = sendPaidMessagesStars
                 self.linkedMonoforumId = linkedMonoforumId
+                self.linkedCommunityId = linkedCommunityId
             }
             public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("channel", [("flags", ConstructorParameterDescription(self.flags)), ("flags2", ConstructorParameterDescription(self.flags2)), ("id", ConstructorParameterDescription(self.id)), ("accessHash", ConstructorParameterDescription(self.accessHash)), ("title", ConstructorParameterDescription(self.title)), ("username", ConstructorParameterDescription(self.username)), ("photo", ConstructorParameterDescription(self.photo)), ("date", ConstructorParameterDescription(self.date)), ("restrictionReason", ConstructorParameterDescription(self.restrictionReason)), ("adminRights", ConstructorParameterDescription(self.adminRights)), ("bannedRights", ConstructorParameterDescription(self.bannedRights)), ("defaultBannedRights", ConstructorParameterDescription(self.defaultBannedRights)), ("participantsCount", ConstructorParameterDescription(self.participantsCount)), ("usernames", ConstructorParameterDescription(self.usernames)), ("storiesMaxId", ConstructorParameterDescription(self.storiesMaxId)), ("color", ConstructorParameterDescription(self.color)), ("profileColor", ConstructorParameterDescription(self.profileColor)), ("emojiStatus", ConstructorParameterDescription(self.emojiStatus)), ("level", ConstructorParameterDescription(self.level)), ("subscriptionUntilDate", ConstructorParameterDescription(self.subscriptionUntilDate)), ("botVerificationIcon", ConstructorParameterDescription(self.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(self.sendPaidMessagesStars)), ("linkedMonoforumId", ConstructorParameterDescription(self.linkedMonoforumId))])
+                return ("channel", [("flags", ConstructorParameterDescription(self.flags)), ("flags2", ConstructorParameterDescription(self.flags2)), ("id", ConstructorParameterDescription(self.id)), ("accessHash", ConstructorParameterDescription(self.accessHash)), ("title", ConstructorParameterDescription(self.title)), ("username", ConstructorParameterDescription(self.username)), ("photo", ConstructorParameterDescription(self.photo)), ("date", ConstructorParameterDescription(self.date)), ("restrictionReason", ConstructorParameterDescription(self.restrictionReason)), ("adminRights", ConstructorParameterDescription(self.adminRights)), ("bannedRights", ConstructorParameterDescription(self.bannedRights)), ("defaultBannedRights", ConstructorParameterDescription(self.defaultBannedRights)), ("participantsCount", ConstructorParameterDescription(self.participantsCount)), ("usernames", ConstructorParameterDescription(self.usernames)), ("storiesMaxId", ConstructorParameterDescription(self.storiesMaxId)), ("color", ConstructorParameterDescription(self.color)), ("profileColor", ConstructorParameterDescription(self.profileColor)), ("emojiStatus", ConstructorParameterDescription(self.emojiStatus)), ("level", ConstructorParameterDescription(self.level)), ("subscriptionUntilDate", ConstructorParameterDescription(self.subscriptionUntilDate)), ("botVerificationIcon", ConstructorParameterDescription(self.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(self.sendPaidMessagesStars)), ("linkedMonoforumId", ConstructorParameterDescription(self.linkedMonoforumId)), ("linkedCommunityId", ConstructorParameterDescription(self.linkedCommunityId))])
             }
         }
         public class Cons_channelForbidden: TypeConstructorDescription {
@@ -873,17 +925,59 @@ public extension Api {
                 return ("chatForbidden", [("id", ConstructorParameterDescription(self.id)), ("title", ConstructorParameterDescription(self.title))])
             }
         }
+        public class Cons_community: TypeConstructorDescription {
+            public var flags: Int32
+            public var flags2: Int32
+            public var id: Int64
+            public var accessHash: Int64?
+            public var title: String
+            public var photo: Api.ChatPhoto
+            public var date: Int32
+            public var adminRights: Api.ChatAdminRights?
+            public var defaultBannedRights: Api.ChatBannedRights?
+            public init(flags: Int32, flags2: Int32, id: Int64, accessHash: Int64?, title: String, photo: Api.ChatPhoto, date: Int32, adminRights: Api.ChatAdminRights?, defaultBannedRights: Api.ChatBannedRights?) {
+                self.flags = flags
+                self.flags2 = flags2
+                self.id = id
+                self.accessHash = accessHash
+                self.title = title
+                self.photo = photo
+                self.date = date
+                self.adminRights = adminRights
+                self.defaultBannedRights = defaultBannedRights
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("community", [("flags", ConstructorParameterDescription(self.flags)), ("flags2", ConstructorParameterDescription(self.flags2)), ("id", ConstructorParameterDescription(self.id)), ("accessHash", ConstructorParameterDescription(self.accessHash)), ("title", ConstructorParameterDescription(self.title)), ("photo", ConstructorParameterDescription(self.photo)), ("date", ConstructorParameterDescription(self.date)), ("adminRights", ConstructorParameterDescription(self.adminRights)), ("defaultBannedRights", ConstructorParameterDescription(self.defaultBannedRights))])
+            }
+        }
+        public class Cons_communityForbidden: TypeConstructorDescription {
+            public var flags: Int32
+            public var id: Int64
+            public var accessHash: Int64?
+            public var title: String
+            public init(flags: Int32, id: Int64, accessHash: Int64?, title: String) {
+                self.flags = flags
+                self.id = id
+                self.accessHash = accessHash
+                self.title = title
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("communityForbidden", [("flags", ConstructorParameterDescription(self.flags)), ("id", ConstructorParameterDescription(self.id)), ("accessHash", ConstructorParameterDescription(self.accessHash)), ("title", ConstructorParameterDescription(self.title))])
+            }
+        }
         case channel(Cons_channel)
         case channelForbidden(Cons_channelForbidden)
         case chat(Cons_chat)
         case chatEmpty(Cons_chatEmpty)
         case chatForbidden(Cons_chatForbidden)
+        case community(Cons_community)
+        case communityForbidden(Cons_communityForbidden)
 
         public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
             switch self {
             case .channel(let _data):
                 if boxed {
-                    buffer.appendInt32(473084188)
+                    buffer.appendInt32(-727763770)
                 }
                 serializeInt32(_data.flags, buffer: buffer, boxed: false)
                 serializeInt32(_data.flags2, buffer: buffer, boxed: false)
@@ -950,6 +1044,9 @@ public extension Api {
                 if Int(_data.flags2) & Int(1 << 18) != 0 {
                     serializeInt64(_data.linkedMonoforumId!, buffer: buffer, boxed: false)
                 }
+                if Int(_data.flags2) & Int(1 << 20) != 0 {
+                    serializeInt64(_data.linkedCommunityId!, buffer: buffer, boxed: false)
+                }
                 break
             case .channelForbidden(let _data):
                 if boxed {
@@ -997,13 +1094,44 @@ public extension Api {
                 serializeInt64(_data.id, buffer: buffer, boxed: false)
                 serializeString(_data.title, buffer: buffer, boxed: false)
                 break
+            case .community(let _data):
+                if boxed {
+                    buffer.appendInt32(1710221652)
+                }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
+                serializeInt32(_data.flags2, buffer: buffer, boxed: false)
+                serializeInt64(_data.id, buffer: buffer, boxed: false)
+                if Int(_data.flags) & Int(1 << 13) != 0 {
+                    serializeInt64(_data.accessHash!, buffer: buffer, boxed: false)
+                }
+                serializeString(_data.title, buffer: buffer, boxed: false)
+                _data.photo.serialize(buffer, true)
+                serializeInt32(_data.date, buffer: buffer, boxed: false)
+                if Int(_data.flags) & Int(1 << 14) != 0 {
+                    _data.adminRights!.serialize(buffer, true)
+                }
+                if Int(_data.flags) & Int(1 << 18) != 0 {
+                    _data.defaultBannedRights!.serialize(buffer, true)
+                }
+                break
+            case .communityForbidden(let _data):
+                if boxed {
+                    buffer.appendInt32(-46343496)
+                }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
+                serializeInt64(_data.id, buffer: buffer, boxed: false)
+                if Int(_data.flags) & Int(1 << 13) != 0 {
+                    serializeInt64(_data.accessHash!, buffer: buffer, boxed: false)
+                }
+                serializeString(_data.title, buffer: buffer, boxed: false)
+                break
             }
         }
 
         public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
             switch self {
             case .channel(let _data):
-                return ("channel", [("flags", ConstructorParameterDescription(_data.flags)), ("flags2", ConstructorParameterDescription(_data.flags2)), ("id", ConstructorParameterDescription(_data.id)), ("accessHash", ConstructorParameterDescription(_data.accessHash)), ("title", ConstructorParameterDescription(_data.title)), ("username", ConstructorParameterDescription(_data.username)), ("photo", ConstructorParameterDescription(_data.photo)), ("date", ConstructorParameterDescription(_data.date)), ("restrictionReason", ConstructorParameterDescription(_data.restrictionReason)), ("adminRights", ConstructorParameterDescription(_data.adminRights)), ("bannedRights", ConstructorParameterDescription(_data.bannedRights)), ("defaultBannedRights", ConstructorParameterDescription(_data.defaultBannedRights)), ("participantsCount", ConstructorParameterDescription(_data.participantsCount)), ("usernames", ConstructorParameterDescription(_data.usernames)), ("storiesMaxId", ConstructorParameterDescription(_data.storiesMaxId)), ("color", ConstructorParameterDescription(_data.color)), ("profileColor", ConstructorParameterDescription(_data.profileColor)), ("emojiStatus", ConstructorParameterDescription(_data.emojiStatus)), ("level", ConstructorParameterDescription(_data.level)), ("subscriptionUntilDate", ConstructorParameterDescription(_data.subscriptionUntilDate)), ("botVerificationIcon", ConstructorParameterDescription(_data.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(_data.sendPaidMessagesStars)), ("linkedMonoforumId", ConstructorParameterDescription(_data.linkedMonoforumId))])
+                return ("channel", [("flags", ConstructorParameterDescription(_data.flags)), ("flags2", ConstructorParameterDescription(_data.flags2)), ("id", ConstructorParameterDescription(_data.id)), ("accessHash", ConstructorParameterDescription(_data.accessHash)), ("title", ConstructorParameterDescription(_data.title)), ("username", ConstructorParameterDescription(_data.username)), ("photo", ConstructorParameterDescription(_data.photo)), ("date", ConstructorParameterDescription(_data.date)), ("restrictionReason", ConstructorParameterDescription(_data.restrictionReason)), ("adminRights", ConstructorParameterDescription(_data.adminRights)), ("bannedRights", ConstructorParameterDescription(_data.bannedRights)), ("defaultBannedRights", ConstructorParameterDescription(_data.defaultBannedRights)), ("participantsCount", ConstructorParameterDescription(_data.participantsCount)), ("usernames", ConstructorParameterDescription(_data.usernames)), ("storiesMaxId", ConstructorParameterDescription(_data.storiesMaxId)), ("color", ConstructorParameterDescription(_data.color)), ("profileColor", ConstructorParameterDescription(_data.profileColor)), ("emojiStatus", ConstructorParameterDescription(_data.emojiStatus)), ("level", ConstructorParameterDescription(_data.level)), ("subscriptionUntilDate", ConstructorParameterDescription(_data.subscriptionUntilDate)), ("botVerificationIcon", ConstructorParameterDescription(_data.botVerificationIcon)), ("sendPaidMessagesStars", ConstructorParameterDescription(_data.sendPaidMessagesStars)), ("linkedMonoforumId", ConstructorParameterDescription(_data.linkedMonoforumId)), ("linkedCommunityId", ConstructorParameterDescription(_data.linkedCommunityId))])
             case .channelForbidden(let _data):
                 return ("channelForbidden", [("flags", ConstructorParameterDescription(_data.flags)), ("id", ConstructorParameterDescription(_data.id)), ("accessHash", ConstructorParameterDescription(_data.accessHash)), ("title", ConstructorParameterDescription(_data.title)), ("untilDate", ConstructorParameterDescription(_data.untilDate))])
             case .chat(let _data):
@@ -1012,6 +1140,10 @@ public extension Api {
                 return ("chatEmpty", [("id", ConstructorParameterDescription(_data.id))])
             case .chatForbidden(let _data):
                 return ("chatForbidden", [("id", ConstructorParameterDescription(_data.id)), ("title", ConstructorParameterDescription(_data.title))])
+            case .community(let _data):
+                return ("community", [("flags", ConstructorParameterDescription(_data.flags)), ("flags2", ConstructorParameterDescription(_data.flags2)), ("id", ConstructorParameterDescription(_data.id)), ("accessHash", ConstructorParameterDescription(_data.accessHash)), ("title", ConstructorParameterDescription(_data.title)), ("photo", ConstructorParameterDescription(_data.photo)), ("date", ConstructorParameterDescription(_data.date)), ("adminRights", ConstructorParameterDescription(_data.adminRights)), ("defaultBannedRights", ConstructorParameterDescription(_data.defaultBannedRights))])
+            case .communityForbidden(let _data):
+                return ("communityForbidden", [("flags", ConstructorParameterDescription(_data.flags)), ("id", ConstructorParameterDescription(_data.id)), ("accessHash", ConstructorParameterDescription(_data.accessHash)), ("title", ConstructorParameterDescription(_data.title))])
             }
         }
 
@@ -1116,6 +1248,10 @@ public extension Api {
             if Int(_2 ?? 0) & Int(1 << 18) != 0 {
                 _23 = reader.readInt64()
             }
+            var _24: Int64?
+            if Int(_2 ?? 0) & Int(1 << 20) != 0 {
+                _24 = reader.readInt64()
+            }
             let _c1 = _1 != nil
             let _c2 = _2 != nil
             let _c3 = _3 != nil
@@ -1139,8 +1275,9 @@ public extension Api {
             let _c21 = (Int(_2 ?? 0) & Int(1 << 13) == 0) || _21 != nil
             let _c22 = (Int(_2 ?? 0) & Int(1 << 14) == 0) || _22 != nil
             let _c23 = (Int(_2 ?? 0) & Int(1 << 18) == 0) || _23 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 && _c10 && _c11 && _c12 && _c13 && _c14 && _c15 && _c16 && _c17 && _c18 && _c19 && _c20 && _c21 && _c22 && _c23 {
-                return Api.Chat.channel(Cons_channel(flags: _1!, flags2: _2!, id: _3!, accessHash: _4, title: _5!, username: _6, photo: _7!, date: _8!, restrictionReason: _9, adminRights: _10, bannedRights: _11, defaultBannedRights: _12, participantsCount: _13, usernames: _14, storiesMaxId: _15, color: _16, profileColor: _17, emojiStatus: _18, level: _19, subscriptionUntilDate: _20, botVerificationIcon: _21, sendPaidMessagesStars: _22, linkedMonoforumId: _23))
+            let _c24 = (Int(_2 ?? 0) & Int(1 << 20) == 0) || _24 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 && _c10 && _c11 && _c12 && _c13 && _c14 && _c15 && _c16 && _c17 && _c18 && _c19 && _c20 && _c21 && _c22 && _c23 && _c24 {
+                return Api.Chat.channel(Cons_channel(flags: _1!, flags2: _2!, id: _3!, accessHash: _4, title: _5!, username: _6, photo: _7!, date: _8!, restrictionReason: _9, adminRights: _10, bannedRights: _11, defaultBannedRights: _12, participantsCount: _13, usernames: _14, storiesMaxId: _15, color: _16, profileColor: _17, emojiStatus: _18, level: _19, subscriptionUntilDate: _20, botVerificationIcon: _21, sendPaidMessagesStars: _22, linkedMonoforumId: _23, linkedCommunityId: _24))
             }
             else {
                 return nil
@@ -1243,6 +1380,75 @@ public extension Api {
             let _c2 = _2 != nil
             if _c1 && _c2 {
                 return Api.Chat.chatForbidden(Cons_chatForbidden(id: _1!, title: _2!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_community(_ reader: BufferReader) -> Chat? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: Int32?
+            _2 = reader.readInt32()
+            var _3: Int64?
+            _3 = reader.readInt64()
+            var _4: Int64?
+            if Int(_1 ?? 0) & Int(1 << 13) != 0 {
+                _4 = reader.readInt64()
+            }
+            var _5: String?
+            _5 = parseString(reader)
+            var _6: Api.ChatPhoto?
+            if let signature = reader.readInt32() {
+                _6 = Api.parse(reader, signature: signature) as? Api.ChatPhoto
+            }
+            var _7: Int32?
+            _7 = reader.readInt32()
+            var _8: Api.ChatAdminRights?
+            if Int(_1 ?? 0) & Int(1 << 14) != 0 {
+                if let signature = reader.readInt32() {
+                    _8 = Api.parse(reader, signature: signature) as? Api.ChatAdminRights
+                }
+            }
+            var _9: Api.ChatBannedRights?
+            if Int(_1 ?? 0) & Int(1 << 18) != 0 {
+                if let signature = reader.readInt32() {
+                    _9 = Api.parse(reader, signature: signature) as? Api.ChatBannedRights
+                }
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            let _c3 = _3 != nil
+            let _c4 = (Int(_1 ?? 0) & Int(1 << 13) == 0) || _4 != nil
+            let _c5 = _5 != nil
+            let _c6 = _6 != nil
+            let _c7 = _7 != nil
+            let _c8 = (Int(_1 ?? 0) & Int(1 << 14) == 0) || _8 != nil
+            let _c9 = (Int(_1 ?? 0) & Int(1 << 18) == 0) || _9 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 {
+                return Api.Chat.community(Cons_community(flags: _1!, flags2: _2!, id: _3!, accessHash: _4, title: _5!, photo: _6!, date: _7!, adminRights: _8, defaultBannedRights: _9))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_communityForbidden(_ reader: BufferReader) -> Chat? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: Int64?
+            _2 = reader.readInt64()
+            var _3: Int64?
+            if Int(_1 ?? 0) & Int(1 << 13) != 0 {
+                _3 = reader.readInt64()
+            }
+            var _4: String?
+            _4 = parseString(reader)
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            let _c3 = (Int(_1 ?? 0) & Int(1 << 13) == 0) || _3 != nil
+            let _c4 = _4 != nil
+            if _c1 && _c2 && _c3 && _c4 {
+                return Api.Chat.communityForbidden(Cons_communityForbidden(flags: _1!, id: _2!, accessHash: _3, title: _4!))
             }
             else {
                 return nil
@@ -1548,8 +1754,32 @@ public extension Api {
                 return ("chatFull", [("flags", ConstructorParameterDescription(self.flags)), ("id", ConstructorParameterDescription(self.id)), ("about", ConstructorParameterDescription(self.about)), ("participants", ConstructorParameterDescription(self.participants)), ("chatPhoto", ConstructorParameterDescription(self.chatPhoto)), ("notifySettings", ConstructorParameterDescription(self.notifySettings)), ("exportedInvite", ConstructorParameterDescription(self.exportedInvite)), ("botInfo", ConstructorParameterDescription(self.botInfo)), ("pinnedMsgId", ConstructorParameterDescription(self.pinnedMsgId)), ("folderId", ConstructorParameterDescription(self.folderId)), ("call", ConstructorParameterDescription(self.call)), ("ttlPeriod", ConstructorParameterDescription(self.ttlPeriod)), ("groupcallDefaultJoinAs", ConstructorParameterDescription(self.groupcallDefaultJoinAs)), ("themeEmoticon", ConstructorParameterDescription(self.themeEmoticon)), ("requestsPending", ConstructorParameterDescription(self.requestsPending)), ("recentRequesters", ConstructorParameterDescription(self.recentRequesters)), ("availableReactions", ConstructorParameterDescription(self.availableReactions)), ("reactionsLimit", ConstructorParameterDescription(self.reactionsLimit))])
             }
         }
+        public class Cons_communityFull: TypeConstructorDescription {
+            public var flags: Int32
+            public var id: Int64
+            public var about: String
+            public var chatPhoto: Api.Photo
+            public var linkedPeers: [Api.CommunityPeer]
+            public var adminsCount: Int32?
+            public var kickedCount: Int32?
+            public var peerLinkRequestsPending: Int32?
+            public init(flags: Int32, id: Int64, about: String, chatPhoto: Api.Photo, linkedPeers: [Api.CommunityPeer], adminsCount: Int32?, kickedCount: Int32?, peerLinkRequestsPending: Int32?) {
+                self.flags = flags
+                self.id = id
+                self.about = about
+                self.chatPhoto = chatPhoto
+                self.linkedPeers = linkedPeers
+                self.adminsCount = adminsCount
+                self.kickedCount = kickedCount
+                self.peerLinkRequestsPending = peerLinkRequestsPending
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("communityFull", [("flags", ConstructorParameterDescription(self.flags)), ("id", ConstructorParameterDescription(self.id)), ("about", ConstructorParameterDescription(self.about)), ("chatPhoto", ConstructorParameterDescription(self.chatPhoto)), ("linkedPeers", ConstructorParameterDescription(self.linkedPeers)), ("adminsCount", ConstructorParameterDescription(self.adminsCount)), ("kickedCount", ConstructorParameterDescription(self.kickedCount)), ("peerLinkRequestsPending", ConstructorParameterDescription(self.peerLinkRequestsPending))])
+            }
+        }
         case channelFull(Cons_channelFull)
         case chatFull(Cons_chatFull)
+        case communityFull(Cons_communityFull)
 
         public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
             switch self {
@@ -1749,6 +1979,29 @@ public extension Api {
                     serializeInt32(_data.reactionsLimit!, buffer: buffer, boxed: false)
                 }
                 break
+            case .communityFull(let _data):
+                if boxed {
+                    buffer.appendInt32(-877157113)
+                }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
+                serializeInt64(_data.id, buffer: buffer, boxed: false)
+                serializeString(_data.about, buffer: buffer, boxed: false)
+                _data.chatPhoto.serialize(buffer, true)
+                buffer.appendInt32(481674261)
+                buffer.appendInt32(Int32(_data.linkedPeers.count))
+                for item in _data.linkedPeers {
+                    item.serialize(buffer, true)
+                }
+                if Int(_data.flags) & Int(1 << 1) != 0 {
+                    serializeInt32(_data.adminsCount!, buffer: buffer, boxed: false)
+                }
+                if Int(_data.flags) & Int(1 << 2) != 0 {
+                    serializeInt32(_data.kickedCount!, buffer: buffer, boxed: false)
+                }
+                if Int(_data.flags) & Int(1 << 0) != 0 {
+                    serializeInt32(_data.peerLinkRequestsPending!, buffer: buffer, boxed: false)
+                }
+                break
             }
         }
 
@@ -1758,6 +2011,8 @@ public extension Api {
                 return ("channelFull", [("flags", ConstructorParameterDescription(_data.flags)), ("flags2", ConstructorParameterDescription(_data.flags2)), ("id", ConstructorParameterDescription(_data.id)), ("about", ConstructorParameterDescription(_data.about)), ("participantsCount", ConstructorParameterDescription(_data.participantsCount)), ("adminsCount", ConstructorParameterDescription(_data.adminsCount)), ("kickedCount", ConstructorParameterDescription(_data.kickedCount)), ("bannedCount", ConstructorParameterDescription(_data.bannedCount)), ("onlineCount", ConstructorParameterDescription(_data.onlineCount)), ("readInboxMaxId", ConstructorParameterDescription(_data.readInboxMaxId)), ("readOutboxMaxId", ConstructorParameterDescription(_data.readOutboxMaxId)), ("unreadCount", ConstructorParameterDescription(_data.unreadCount)), ("chatPhoto", ConstructorParameterDescription(_data.chatPhoto)), ("notifySettings", ConstructorParameterDescription(_data.notifySettings)), ("exportedInvite", ConstructorParameterDescription(_data.exportedInvite)), ("botInfo", ConstructorParameterDescription(_data.botInfo)), ("migratedFromChatId", ConstructorParameterDescription(_data.migratedFromChatId)), ("migratedFromMaxId", ConstructorParameterDescription(_data.migratedFromMaxId)), ("pinnedMsgId", ConstructorParameterDescription(_data.pinnedMsgId)), ("stickerset", ConstructorParameterDescription(_data.stickerset)), ("availableMinId", ConstructorParameterDescription(_data.availableMinId)), ("folderId", ConstructorParameterDescription(_data.folderId)), ("linkedChatId", ConstructorParameterDescription(_data.linkedChatId)), ("location", ConstructorParameterDescription(_data.location)), ("slowmodeSeconds", ConstructorParameterDescription(_data.slowmodeSeconds)), ("slowmodeNextSendDate", ConstructorParameterDescription(_data.slowmodeNextSendDate)), ("statsDc", ConstructorParameterDescription(_data.statsDc)), ("pts", ConstructorParameterDescription(_data.pts)), ("call", ConstructorParameterDescription(_data.call)), ("ttlPeriod", ConstructorParameterDescription(_data.ttlPeriod)), ("pendingSuggestions", ConstructorParameterDescription(_data.pendingSuggestions)), ("groupcallDefaultJoinAs", ConstructorParameterDescription(_data.groupcallDefaultJoinAs)), ("themeEmoticon", ConstructorParameterDescription(_data.themeEmoticon)), ("requestsPending", ConstructorParameterDescription(_data.requestsPending)), ("recentRequesters", ConstructorParameterDescription(_data.recentRequesters)), ("defaultSendAs", ConstructorParameterDescription(_data.defaultSendAs)), ("availableReactions", ConstructorParameterDescription(_data.availableReactions)), ("reactionsLimit", ConstructorParameterDescription(_data.reactionsLimit)), ("stories", ConstructorParameterDescription(_data.stories)), ("wallpaper", ConstructorParameterDescription(_data.wallpaper)), ("boostsApplied", ConstructorParameterDescription(_data.boostsApplied)), ("boostsUnrestrict", ConstructorParameterDescription(_data.boostsUnrestrict)), ("emojiset", ConstructorParameterDescription(_data.emojiset)), ("botVerification", ConstructorParameterDescription(_data.botVerification)), ("stargiftsCount", ConstructorParameterDescription(_data.stargiftsCount)), ("sendPaidMessagesStars", ConstructorParameterDescription(_data.sendPaidMessagesStars)), ("mainTab", ConstructorParameterDescription(_data.mainTab)), ("guardBotId", ConstructorParameterDescription(_data.guardBotId))])
             case .chatFull(let _data):
                 return ("chatFull", [("flags", ConstructorParameterDescription(_data.flags)), ("id", ConstructorParameterDescription(_data.id)), ("about", ConstructorParameterDescription(_data.about)), ("participants", ConstructorParameterDescription(_data.participants)), ("chatPhoto", ConstructorParameterDescription(_data.chatPhoto)), ("notifySettings", ConstructorParameterDescription(_data.notifySettings)), ("exportedInvite", ConstructorParameterDescription(_data.exportedInvite)), ("botInfo", ConstructorParameterDescription(_data.botInfo)), ("pinnedMsgId", ConstructorParameterDescription(_data.pinnedMsgId)), ("folderId", ConstructorParameterDescription(_data.folderId)), ("call", ConstructorParameterDescription(_data.call)), ("ttlPeriod", ConstructorParameterDescription(_data.ttlPeriod)), ("groupcallDefaultJoinAs", ConstructorParameterDescription(_data.groupcallDefaultJoinAs)), ("themeEmoticon", ConstructorParameterDescription(_data.themeEmoticon)), ("requestsPending", ConstructorParameterDescription(_data.requestsPending)), ("recentRequesters", ConstructorParameterDescription(_data.recentRequesters)), ("availableReactions", ConstructorParameterDescription(_data.availableReactions)), ("reactionsLimit", ConstructorParameterDescription(_data.reactionsLimit))])
+            case .communityFull(let _data):
+                return ("communityFull", [("flags", ConstructorParameterDescription(_data.flags)), ("id", ConstructorParameterDescription(_data.id)), ("about", ConstructorParameterDescription(_data.about)), ("chatPhoto", ConstructorParameterDescription(_data.chatPhoto)), ("linkedPeers", ConstructorParameterDescription(_data.linkedPeers)), ("adminsCount", ConstructorParameterDescription(_data.adminsCount)), ("kickedCount", ConstructorParameterDescription(_data.kickedCount)), ("peerLinkRequestsPending", ConstructorParameterDescription(_data.peerLinkRequestsPending))])
             }
         }
 
@@ -2127,199 +2382,43 @@ public extension Api {
                 return nil
             }
         }
-    }
-}
-public extension Api {
-    indirect enum ChatInvite: TypeConstructorDescription {
-        public class Cons_chatInvite: TypeConstructorDescription {
-            public var flags: Int32
-            public var title: String
-            public var about: String?
-            public var photo: Api.Photo
-            public var participantsCount: Int32
-            public var participants: [Api.User]?
-            public var color: Int32
-            public var subscriptionPricing: Api.StarsSubscriptionPricing?
-            public var subscriptionFormId: Int64?
-            public var botVerification: Api.BotVerification?
-            public init(flags: Int32, title: String, about: String?, photo: Api.Photo, participantsCount: Int32, participants: [Api.User]?, color: Int32, subscriptionPricing: Api.StarsSubscriptionPricing?, subscriptionFormId: Int64?, botVerification: Api.BotVerification?) {
-                self.flags = flags
-                self.title = title
-                self.about = about
-                self.photo = photo
-                self.participantsCount = participantsCount
-                self.participants = participants
-                self.color = color
-                self.subscriptionPricing = subscriptionPricing
-                self.subscriptionFormId = subscriptionFormId
-                self.botVerification = botVerification
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("chatInvite", [("flags", ConstructorParameterDescription(self.flags)), ("title", ConstructorParameterDescription(self.title)), ("about", ConstructorParameterDescription(self.about)), ("photo", ConstructorParameterDescription(self.photo)), ("participantsCount", ConstructorParameterDescription(self.participantsCount)), ("participants", ConstructorParameterDescription(self.participants)), ("color", ConstructorParameterDescription(self.color)), ("subscriptionPricing", ConstructorParameterDescription(self.subscriptionPricing)), ("subscriptionFormId", ConstructorParameterDescription(self.subscriptionFormId)), ("botVerification", ConstructorParameterDescription(self.botVerification))])
-            }
-        }
-        public class Cons_chatInviteAlready: TypeConstructorDescription {
-            public var chat: Api.Chat
-            public init(chat: Api.Chat) {
-                self.chat = chat
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("chatInviteAlready", [("chat", ConstructorParameterDescription(self.chat))])
-            }
-        }
-        public class Cons_chatInvitePeek: TypeConstructorDescription {
-            public var chat: Api.Chat
-            public var expires: Int32
-            public init(chat: Api.Chat, expires: Int32) {
-                self.chat = chat
-                self.expires = expires
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("chatInvitePeek", [("chat", ConstructorParameterDescription(self.chat)), ("expires", ConstructorParameterDescription(self.expires))])
-            }
-        }
-        case chatInvite(Cons_chatInvite)
-        case chatInviteAlready(Cons_chatInviteAlready)
-        case chatInvitePeek(Cons_chatInvitePeek)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .chatInvite(let _data):
-                if boxed {
-                    buffer.appendInt32(1553807106)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                serializeString(_data.title, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 5) != 0 {
-                    serializeString(_data.about!, buffer: buffer, boxed: false)
-                }
-                _data.photo.serialize(buffer, true)
-                serializeInt32(_data.participantsCount, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 4) != 0 {
-                    buffer.appendInt32(481674261)
-                    buffer.appendInt32(Int32(_data.participants!.count))
-                    for item in _data.participants! {
-                        item.serialize(buffer, true)
-                    }
-                }
-                serializeInt32(_data.color, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 10) != 0 {
-                    _data.subscriptionPricing!.serialize(buffer, true)
-                }
-                if Int(_data.flags) & Int(1 << 12) != 0 {
-                    serializeInt64(_data.subscriptionFormId!, buffer: buffer, boxed: false)
-                }
-                if Int(_data.flags) & Int(1 << 13) != 0 {
-                    _data.botVerification!.serialize(buffer, true)
-                }
-                break
-            case .chatInviteAlready(let _data):
-                if boxed {
-                    buffer.appendInt32(1516793212)
-                }
-                _data.chat.serialize(buffer, true)
-                break
-            case .chatInvitePeek(let _data):
-                if boxed {
-                    buffer.appendInt32(1634294960)
-                }
-                _data.chat.serialize(buffer, true)
-                serializeInt32(_data.expires, buffer: buffer, boxed: false)
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .chatInvite(let _data):
-                return ("chatInvite", [("flags", ConstructorParameterDescription(_data.flags)), ("title", ConstructorParameterDescription(_data.title)), ("about", ConstructorParameterDescription(_data.about)), ("photo", ConstructorParameterDescription(_data.photo)), ("participantsCount", ConstructorParameterDescription(_data.participantsCount)), ("participants", ConstructorParameterDescription(_data.participants)), ("color", ConstructorParameterDescription(_data.color)), ("subscriptionPricing", ConstructorParameterDescription(_data.subscriptionPricing)), ("subscriptionFormId", ConstructorParameterDescription(_data.subscriptionFormId)), ("botVerification", ConstructorParameterDescription(_data.botVerification))])
-            case .chatInviteAlready(let _data):
-                return ("chatInviteAlready", [("chat", ConstructorParameterDescription(_data.chat))])
-            case .chatInvitePeek(let _data):
-                return ("chatInvitePeek", [("chat", ConstructorParameterDescription(_data.chat)), ("expires", ConstructorParameterDescription(_data.expires))])
-            }
-        }
-
-        public static func parse_chatInvite(_ reader: BufferReader) -> ChatInvite? {
+        public static func parse_communityFull(_ reader: BufferReader) -> ChatFull? {
             var _1: Int32?
             _1 = reader.readInt32()
-            var _2: String?
-            _2 = parseString(reader)
+            var _2: Int64?
+            _2 = reader.readInt64()
             var _3: String?
-            if Int(_1 ?? 0) & Int(1 << 5) != 0 {
-                _3 = parseString(reader)
-            }
+            _3 = parseString(reader)
             var _4: Api.Photo?
             if let signature = reader.readInt32() {
                 _4 = Api.parse(reader, signature: signature) as? Api.Photo
             }
-            var _5: Int32?
-            _5 = reader.readInt32()
-            var _6: [Api.User]?
-            if Int(_1 ?? 0) & Int(1 << 4) != 0 {
-                if let _ = reader.readInt32() {
-                    _6 = Api.parseVector(reader, elementSignature: 0, elementType: Api.User.self)
-                }
+            var _5: [Api.CommunityPeer]?
+            if let _ = reader.readInt32() {
+                _5 = Api.parseVector(reader, elementSignature: 0, elementType: Api.CommunityPeer.self)
+            }
+            var _6: Int32?
+            if Int(_1 ?? 0) & Int(1 << 1) != 0 {
+                _6 = reader.readInt32()
             }
             var _7: Int32?
-            _7 = reader.readInt32()
-            var _8: Api.StarsSubscriptionPricing?
-            if Int(_1 ?? 0) & Int(1 << 10) != 0 {
-                if let signature = reader.readInt32() {
-                    _8 = Api.parse(reader, signature: signature) as? Api.StarsSubscriptionPricing
-                }
+            if Int(_1 ?? 0) & Int(1 << 2) != 0 {
+                _7 = reader.readInt32()
             }
-            var _9: Int64?
-            if Int(_1 ?? 0) & Int(1 << 12) != 0 {
-                _9 = reader.readInt64()
-            }
-            var _10: Api.BotVerification?
-            if Int(_1 ?? 0) & Int(1 << 13) != 0 {
-                if let signature = reader.readInt32() {
-                    _10 = Api.parse(reader, signature: signature) as? Api.BotVerification
-                }
+            var _8: Int32?
+            if Int(_1 ?? 0) & Int(1 << 0) != 0 {
+                _8 = reader.readInt32()
             }
             let _c1 = _1 != nil
             let _c2 = _2 != nil
-            let _c3 = (Int(_1 ?? 0) & Int(1 << 5) == 0) || _3 != nil
+            let _c3 = _3 != nil
             let _c4 = _4 != nil
             let _c5 = _5 != nil
-            let _c6 = (Int(_1 ?? 0) & Int(1 << 4) == 0) || _6 != nil
-            let _c7 = _7 != nil
-            let _c8 = (Int(_1 ?? 0) & Int(1 << 10) == 0) || _8 != nil
-            let _c9 = (Int(_1 ?? 0) & Int(1 << 12) == 0) || _9 != nil
-            let _c10 = (Int(_1 ?? 0) & Int(1 << 13) == 0) || _10 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 && _c9 && _c10 {
-                return Api.ChatInvite.chatInvite(Cons_chatInvite(flags: _1!, title: _2!, about: _3, photo: _4!, participantsCount: _5!, participants: _6, color: _7!, subscriptionPricing: _8, subscriptionFormId: _9, botVerification: _10))
-            }
-            else {
-                return nil
-            }
-        }
-        public static func parse_chatInviteAlready(_ reader: BufferReader) -> ChatInvite? {
-            var _1: Api.Chat?
-            if let signature = reader.readInt32() {
-                _1 = Api.parse(reader, signature: signature) as? Api.Chat
-            }
-            let _c1 = _1 != nil
-            if _c1 {
-                return Api.ChatInvite.chatInviteAlready(Cons_chatInviteAlready(chat: _1!))
-            }
-            else {
-                return nil
-            }
-        }
-        public static func parse_chatInvitePeek(_ reader: BufferReader) -> ChatInvite? {
-            var _1: Api.Chat?
-            if let signature = reader.readInt32() {
-                _1 = Api.parse(reader, signature: signature) as? Api.Chat
-            }
-            var _2: Int32?
-            _2 = reader.readInt32()
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            if _c1 && _c2 {
-                return Api.ChatInvite.chatInvitePeek(Cons_chatInvitePeek(chat: _1!, expires: _2!))
+            let _c6 = (Int(_1 ?? 0) & Int(1 << 1) == 0) || _6 != nil
+            let _c7 = (Int(_1 ?? 0) & Int(1 << 2) == 0) || _7 != nil
+            let _c8 = (Int(_1 ?? 0) & Int(1 << 0) == 0) || _8 != nil
+            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 {
+                return Api.ChatFull.communityFull(Cons_communityFull(flags: _1!, id: _2!, about: _3!, chatPhoto: _4!, linkedPeers: _5!, adminsCount: _6, kickedCount: _7, peerLinkRequestsPending: _8))
             }
             else {
                 return nil

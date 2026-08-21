@@ -102,10 +102,12 @@ enum ChatListNodeEntry: Comparable, Identifiable {
         var messages: [EngineMessage]
         var readState: EnginePeerReadCounters?
         var nagramIgnoreUnreadBadge: Bool // MARK: NAGRAM
+        var nagramSuppressActivateInput: Bool // MARK: NAGRAM
         var isRemovedFromTotalUnreadCount: Bool
         var draftState: ChatListItemContent.DraftState?
         var mediaDraftContentType: EngineChatList.MediaDraftContentType?
         var peer: EngineRenderedPeer
+        var avatarPeer: EngineRenderedPeer?
         var threadInfo: ChatListItemContent.ThreadInfo?
         var presence: EnginePeer.Presence?
         var hasUnseenMentions: Bool
@@ -132,10 +134,12 @@ enum ChatListNodeEntry: Comparable, Identifiable {
             messages: [EngineMessage],
             readState: EnginePeerReadCounters?,
             nagramIgnoreUnreadBadge: Bool = false, // MARK: NAGRAM
+            nagramSuppressActivateInput: Bool = false, // MARK: NAGRAM
             isRemovedFromTotalUnreadCount: Bool,
             draftState: ChatListItemContent.DraftState?,
             mediaDraftContentType: EngineChatList.MediaDraftContentType?,
             peer: EngineRenderedPeer,
+            avatarPeer: EngineRenderedPeer? = nil,
             threadInfo: ChatListItemContent.ThreadInfo?,
             presence: EnginePeer.Presence?,
             hasUnseenMentions: Bool,
@@ -161,10 +165,12 @@ enum ChatListNodeEntry: Comparable, Identifiable {
             self.messages = messages
             self.readState = readState
             self.nagramIgnoreUnreadBadge = nagramIgnoreUnreadBadge // MARK: NAGRAM
+            self.nagramSuppressActivateInput = nagramSuppressActivateInput // MARK: NAGRAM
             self.isRemovedFromTotalUnreadCount = isRemovedFromTotalUnreadCount
             self.draftState = draftState
             self.mediaDraftContentType = mediaDraftContentType
             self.peer = peer
+            self.avatarPeer = avatarPeer
             self.threadInfo = threadInfo
             self.presence = presence
             self.hasUnseenMentions = hasUnseenMentions
@@ -197,6 +203,9 @@ enum ChatListNodeEntry: Comparable, Identifiable {
                 return false
             }
             if lhs.nagramIgnoreUnreadBadge != rhs.nagramIgnoreUnreadBadge { // MARK: NAGRAM
+                return false
+            }
+            if lhs.nagramSuppressActivateInput != rhs.nagramSuppressActivateInput { // MARK: NAGRAM
                 return false
             }
             if lhs.messages.count != rhs.messages.count {
@@ -252,6 +261,9 @@ enum ChatListNodeEntry: Comparable, Identifiable {
                 return false
             }
             if lhs.peer != rhs.peer {
+                return false
+            }
+            if lhs.avatarPeer != rhs.avatarPeer {
                 return false
             }
             if lhs.threadInfo != rhs.threadInfo {
@@ -619,7 +631,7 @@ private func nagramFilteredChatListMessages(_ messages: [EngineMessage], peerId:
             return engineMessage
         }
         var message = engineMessage._asMessage()
-        switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.toInt64()) {
+        switch nagramRegexFilterMatcher.apply(to: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
         case .hidden:
             return nil
         case .contentHidden:
@@ -674,7 +686,7 @@ private func nagramShouldIgnoreRegexFilteredUnreadBadge(messages: [EngineMessage
         guard !readState.isIncomingMessageIndexRead(message.index) else {
             continue
         }
-        if nagramRegexFilterMatcher.isHidden(text: message.text, authorPeerId: message.author?.id.toInt64()) {
+        if nagramRegexFilterMatcher.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
             hiddenUnreadCount += 1
         }
     }
@@ -778,9 +790,19 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
             updatedMessages = []
             updatedCombinedReadState = nil
         }
-        let nagramIgnoreUnreadBadge = nagramShouldIgnoreRegexFilteredUnreadBadge(messages: updatedMessages, readState: updatedCombinedReadState, peerId: peerId, accountPeerId: accountPeerId)
+        let nagramMessagePeerId: EnginePeer.Id?
+        if let peer = entry.renderedPeer.peer, case .community = peer {
+            nagramMessagePeerId = updatedMessages.last?.id.peerId ?? peerId
+        } else {
+            nagramMessagePeerId = peerId
+        }
+        let nagramIgnoreUnreadBadge = nagramShouldIgnoreRegexFilteredUnreadBadge(messages: updatedMessages, readState: updatedCombinedReadState, peerId: nagramMessagePeerId, accountPeerId: accountPeerId) // MARK: NAGRAM — 聚合会话按来源会话应用过滤规则
+        // MARK: NAGRAM — hide 规则把预览消息全部过滤掉时，条目会退化成"空会话"，
+        // ChatListItem.selected 会走 peerSelected（该路径恒 activateInput=true）导致进入聊天时误弹键盘。
+        var nagramSuppressActivateInput = false
         if !updatedMessages.isEmpty {
-            updatedMessages = nagramFilteredChatListMessages(updatedMessages, peerId: peerId, accountPeerId: accountPeerId, presentationData: state.presentationData)
+            updatedMessages = nagramFilteredChatListMessages(updatedMessages, peerId: nagramMessagePeerId, accountPeerId: accountPeerId, presentationData: state.presentationData)
+            nagramSuppressActivateInput = updatedMessages.isEmpty // MARK: NAGRAM
         }
 
         var draftState: ChatListItemContent.DraftState?
@@ -826,6 +848,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
             messages: updatedMessages,
             readState: updatedCombinedReadState,
             nagramIgnoreUnreadBadge: nagramIgnoreUnreadBadge,
+            nagramSuppressActivateInput: nagramSuppressActivateInput,
             isRemovedFromTotalUnreadCount: entry.isMuted,
             draftState: draftState,
             mediaDraftContentType: entry.mediaDraftContentType,
@@ -966,6 +989,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                     let peerId = index.messageIndex.id.peerId
                     let isSelected = state.selectedPeerIds.contains(peerId)
                     let nagramIgnoreUnreadBadge = nagramShouldIgnoreRegexFilteredUnreadBadge(messages: item.item.messages, readState: item.item.readCounters, peerId: peerId, accountPeerId: accountPeerId)
+                    let nagramFilteredMessages = nagramFilteredChatListMessages(item.item.messages, peerId: peerId, accountPeerId: accountPeerId, presentationData: state.presentationData) // MARK: NAGRAM
                     
                     var threadId: Int64 = 0
                     switch item.item.index {
@@ -977,9 +1001,10 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                     result.append(.PeerEntry(ChatListNodeEntry.PeerEntryData(
                         index: .chatList(EngineChatList.Item.Index.ChatList(pinningIndex: pinningIndex, messageIndex: index.messageIndex)),
                         presentationData: state.presentationData,
-                        messages: nagramFilteredChatListMessages(item.item.messages, peerId: peerId, accountPeerId: accountPeerId, presentationData: state.presentationData),
+                        messages: nagramFilteredMessages,
                         readState: item.item.readCounters,
                         nagramIgnoreUnreadBadge: nagramIgnoreUnreadBadge,
+                        nagramSuppressActivateInput: !item.item.messages.isEmpty && nagramFilteredMessages.isEmpty, // MARK: NAGRAM
                         isRemovedFromTotalUnreadCount: item.item.isMuted,
                         draftState: draftState,
                         mediaDraftContentType: item.item.mediaDraftContentType,
@@ -1068,7 +1093,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                     result.append(.TopPeer(index: index, peer: topPeer))
                     index += 1
                 }
-            } else if case let .peerType(types, hasCreate) = mode, !result.isEmpty && hasCreate {
+            } else if case let .peerType(types, hasCreate, _, _) = mode, !result.isEmpty && hasCreate {
                 for type in types {
                     switch type {
                     case .group:

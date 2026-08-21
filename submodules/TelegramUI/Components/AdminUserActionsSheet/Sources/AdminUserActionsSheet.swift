@@ -16,6 +16,9 @@ import PlainButtonComponent
 import ResizableSheetComponent
 import GlassBarButtonComponent
 import BundleIconComponent
+import Markdown
+import AlertPeerComponent
+import AlertComponent
 
 struct MediaRight: OptionSet, Hashable {
     var rawValue: Int
@@ -209,6 +212,18 @@ private enum AdminUserActionConfigItem: Hashable, CaseIterable {
     case changeInfo
 }
 
+private struct AdminUserActionsCommunityBanContext: Equatable {
+    let communityId: EnginePeer.Id
+    let creatorChatIds: [EnginePeer.Id]
+    let joinedChatIds: [EnginePeer.Id]
+    let peers: [EnginePeer.Id: EnginePeer]
+    let participantCounts: [EnginePeer.Id: Int32]
+
+    var chatCount: Int {
+        return Set(self.creatorChatIds + self.joinedChatIds).count
+    }
+}
+
 private struct AdminUserActionsSheetState: Equatable {
     var isOptionReportExpanded: Bool
     var optionReportSelectedPeers: Set<EnginePeer.Id>
@@ -223,6 +238,8 @@ private struct AdminUserActionsSheetState: Equatable {
     var allowedMediaRights: MediaRight
     var participantRights: ParticipantRight
     var mediaRights: MediaRight
+    var communityBanContext: AdminUserActionsCommunityBanContext?
+    var banFromCommunity: Bool
 }
 
 private func availableAdminUserActionOptionSections(
@@ -327,6 +344,8 @@ private final class AdminUserActionsContentComponent: Component {
     let toggleConfigItem: (AdminUserActionConfigItem) -> Void
     let toggleMediaSectionExpansion: () -> Void
     let toggleMediaRight: (MediaRight) -> Void
+    let setBanFromCommunity: (Bool) -> Void
+    let openCommunity: (EnginePeer.Id) -> Void
     
     init(
         context: AccountContext,
@@ -345,7 +364,9 @@ private final class AdminUserActionsContentComponent: Component {
         toggleConfiguration: @escaping () -> Void,
         toggleConfigItem: @escaping (AdminUserActionConfigItem) -> Void,
         toggleMediaSectionExpansion: @escaping () -> Void,
-        toggleMediaRight: @escaping (MediaRight) -> Void
+        toggleMediaRight: @escaping (MediaRight) -> Void,
+        setBanFromCommunity: @escaping (Bool) -> Void,
+        openCommunity: @escaping (EnginePeer.Id) -> Void
     ) {
         self.context = context
         self.chatPeer = chatPeer
@@ -364,6 +385,8 @@ private final class AdminUserActionsContentComponent: Component {
         self.toggleConfigItem = toggleConfigItem
         self.toggleMediaSectionExpansion = toggleMediaSectionExpansion
         self.toggleMediaRight = toggleMediaRight
+        self.setBanFromCommunity = setBanFromCommunity
+        self.openCommunity = openCommunity
     }
     
     static func ==(lhs: AdminUserActionsContentComponent, rhs: AdminUserActionsContentComponent) -> Bool {
@@ -374,6 +397,8 @@ private final class AdminUserActionsContentComponent: Component {
         private let optionsSection = ComponentView<Empty>()
         private let optionsFooter = ComponentView<Empty>()
         private let configSection = ComponentView<Empty>()
+        private let communityBanSection = ComponentView<Empty>()
+        private var cachedChevronImage: (UIImage, PresentationTheme)?
         
         func update(component: AdminUserActionsContentComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<ViewControllerComponentContainer.Environment>, transition: ComponentTransition) -> CGSize {
             let environment = environment[ViewControllerComponentContainer.Environment.self].value
@@ -944,6 +969,106 @@ private final class AdminUserActionsContentComponent: Component {
                 }
             }
             
+            if let communityBanContext = component.sheetState.communityBanContext {
+                contentHeight += 18.0
+                
+                var transition = transition
+                if self.communityBanSection.view == nil {
+                    transition = .immediate
+                }
+
+                if self.cachedChevronImage == nil || self.cachedChevronImage?.1 !== component.theme {
+                    self.cachedChevronImage = (generateTintedImage(image: UIImage(bundleImageName: "Item List/InlineTextRightArrow"), color: component.theme.list.itemAccentColor)!, component.theme)
+                }
+
+                let linkAttributeKey = NSAttributedString.Key(rawValue: "URL")
+                let footerAttributes = MarkdownAttributes(
+                    body: MarkdownAttributeSet(font: Font.regular(component.presentationData.listsFontSize.itemListBaseHeaderFontSize), textColor: component.theme.list.freeTextColor),
+                    bold: MarkdownAttributeSet(font: Font.semibold(component.presentationData.listsFontSize.itemListBaseHeaderFontSize), textColor: component.theme.list.freeTextColor),
+                    link: MarkdownAttributeSet(font: Font.regular(component.presentationData.listsFontSize.itemListBaseHeaderFontSize), textColor: component.theme.list.itemAccentColor),
+                    linkAttribute: { link in
+                        return ("URL", link)
+                    }
+                )
+                let footerRawText = component.strings.Community_AdminActions_Footer(Int32(clamping: communityBanContext.chatCount)).replacingOccurrences(of: " >]", with: "\u{00A0}>]")
+                let footerText = NSMutableAttributedString(attributedString: parseMarkdownIntoAttributedString(footerRawText, attributes: footerAttributes))
+                if let range = footerText.string.range(of: ">"), let chevronImage = self.cachedChevronImage?.0 {
+                    footerText.addAttribute(.attachment, value: chevronImage, range: NSRange(range, in: footerText.string))
+                }
+
+                let communityBanSectionSize = self.communityBanSection.update(
+                    transition: transition,
+                    component: AnyComponent(ListSectionComponent(
+                        theme: component.theme,
+                        style: .glass,
+                        header: nil,
+                        footer: AnyComponent(MultilineTextComponent(
+                            text: .plain(footerText),
+                            maximumNumberOfLines: 0,
+                            highlightColor: component.theme.list.itemAccentColor.withMultipliedAlpha(0.1),
+                            highlightInset: UIEdgeInsets(top: 0.0, left: 0.0, bottom: 0.0, right: -8.0),
+                            highlightAction: { attributes in
+                                if let _ = attributes[linkAttributeKey] {
+                                    return linkAttributeKey
+                                } else {
+                                    return nil
+                                }
+                            },
+                            tapAction: { attributes, _ in
+                                guard let link = attributes[linkAttributeKey] as? String, link == "community" else {
+                                    return
+                                }
+                                component.openCommunity(communityBanContext.communityId)
+                            }
+                        )),
+                        items: [
+                            AnyComponentWithIdentity(id: "ban", component: AnyComponent(ListActionItemComponent(
+                                theme: component.theme,
+                                style: .glass,
+                                title: AnyComponent(MultilineTextComponent(
+                                    text: .plain(NSAttributedString(
+                                        string: component.strings.Community_AdminActions_BanFromCommunity,
+                                        font: Font.regular(component.presentationData.listsFontSize.baseDisplaySize),
+                                        textColor: component.theme.list.itemPrimaryTextColor
+                                    )),
+                                    maximumNumberOfLines: 1
+                                )),
+                                accessory: .toggle(ListActionItemComponent.Toggle(
+                                    style: .regular,
+                                    isOn: component.sheetState.banFromCommunity,
+                                    action: { value in
+                                        component.setBanFromCommunity(value)
+                                    }
+                                )),
+                                action: { _ in
+                                    component.setBanFromCommunity(!component.sheetState.banFromCommunity)
+                                },
+                                highlighting: .disabled
+                            )))
+                        ],
+                        isModal: true
+                    )),
+                    environment: {},
+                    containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: 100000.0)
+                )
+                let communityBanSectionFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: communityBanSectionSize)
+                self.communityBanSection.parentState = state
+                if let communityBanSectionView = self.communityBanSection.view {
+                    if communityBanSectionView.superview == nil {
+                        self.addSubview(communityBanSectionView)
+                    }
+                    transition.setFrame(view: communityBanSectionView, frame: communityBanSectionFrame)
+                    transition.setAlpha(view: communityBanSectionView, alpha: 1.0)
+                }
+                contentHeight += communityBanSectionSize.height
+            } else {
+                self.communityBanSection.parentState = state
+                if let communityBanSectionView = self.communityBanSection.view {
+                    transition.setFrame(view: communityBanSectionView, frame: CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: CGSize(width: availableSize.width - sideInset * 2.0, height: 0.0)))
+                    transition.setAlpha(view: communityBanSectionView, alpha: 0.0)
+                }
+            }
+
             contentHeight += 36.0 + 52.0 + 30.0
             
             return CGSize(width: availableSize.width, height: contentHeight)
@@ -1008,6 +1133,10 @@ private final class AdminUserActionsSheetComponent: Component {
         private var allowedMediaRights: MediaRight = []
         private var participantRights: ParticipantRight = []
         private var mediaRights: MediaRight = []
+        private var communityBanContext: AdminUserActionsCommunityBanContext?
+        private var banFromCommunity: Bool = false
+        private var communityBanContextKey: (communityId: EnginePeer.Id, participantId: EnginePeer.Id)?
+        private let communityBanDisposable = MetaDisposable()
         
         private var previousWasConfigurationExpanded: Bool = false
         
@@ -1015,8 +1144,108 @@ private final class AdminUserActionsSheetComponent: Component {
             super.init(frame: frame)
         }
         
+        deinit {
+            self.communityBanDisposable.dispose()
+        }
+
         required init?(coder: NSCoder) {
             fatalError("init(coder:) has not been implemented")
+        }
+
+        private func resetCommunityBanContext() {
+            self.communityBanContextKey = nil
+            self.communityBanContext = nil
+            self.banFromCommunity = false
+            self.communityBanDisposable.set(nil)
+        }
+
+        private func updateCommunityBanContext(component: AdminUserActionsSheetComponent) {
+            guard component.peers.count == 1 else {
+                if self.communityBanContextKey != nil || self.communityBanContext != nil || self.banFromCommunity {
+                    self.resetCommunityBanContext()
+                }
+                return
+            }
+            guard case let .channel(channel) = component.chatPeer, case .group = channel.info, let communityId = channel.linkedCommunityId else {
+                if self.communityBanContextKey != nil || self.communityBanContext != nil || self.banFromCommunity {
+                    self.resetCommunityBanContext()
+                }
+                return
+            }
+
+            let participantId = component.peers[0].peer.id
+            if let communityBanContextKey = self.communityBanContextKey, communityBanContextKey.communityId == communityId, communityBanContextKey.participantId == participantId {
+                return
+            }
+
+            self.communityBanContextKey = (communityId: communityId, participantId: participantId)
+            self.communityBanContext = nil
+            self.banFromCommunity = false
+
+            let signal = combineLatest(
+                component.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: communityId)),
+                component.context.engine.peers.fetchChannelParticipant(peerId: communityId, participantId: participantId),
+                component.context.engine.peers.communityParticipantJoinedChats(communityId: communityId, participantId: participantId)
+            )
+            |> mapToSignal { communityPeer, participant, joinedChats -> Signal<(EnginePeer?, ChannelParticipant?, CommunityParticipantJoinedChats, [EnginePeer.Id: Int32]), NoError> in
+                if joinedChats.creatorChatIds.isEmpty {
+                    return .single((communityPeer, participant, joinedChats, [:]))
+                }
+                return component.context.engine.data.get(EngineDataMap(
+                    joinedChats.creatorChatIds.map(TelegramEngine.EngineData.Item.Peer.ParticipantCount.init)
+                ))
+                |> map { participantCountMap -> (EnginePeer?, ChannelParticipant?, CommunityParticipantJoinedChats, [EnginePeer.Id: Int32]) in
+                    var participantCounts: [EnginePeer.Id: Int32] = [:]
+                    for peerId in joinedChats.creatorChatIds {
+                        if let maybeParticipantCount = participantCountMap[peerId], let participantCount = maybeParticipantCount {
+                            participantCounts[peerId] = Int32(participantCount)
+                        }
+                    }
+                    return (communityPeer, participant, joinedChats, participantCounts)
+                }
+            }
+            |> deliverOnMainQueue
+
+            self.communityBanDisposable.set(signal.startStrict(next: { [weak self] communityPeer, _, joinedChats, participantCounts in
+                guard let self else {
+                    return
+                }
+                guard let communityBanContextKey = self.communityBanContextKey, communityBanContextKey.communityId == communityId, communityBanContextKey.participantId == participantId else {
+                    return
+                }
+
+                var communityBanContext: AdminUserActionsCommunityBanContext?
+                if let communityPeer, case let .community(community) = communityPeer, community.hasPermission(.banUsers) {
+                    let isRegularMember = true
+//                    if let participant {
+//                        switch participant {
+//                        case .creator:
+//                            isRegularMember = false
+//                        case let .member(_, _, adminInfo, _, _, _):
+//                            isRegularMember = adminInfo == nil
+//                        }
+//                    }
+
+                    let chatIds = Set(joinedChats.creatorChatIds + joinedChats.joinedChatIds)
+                    if isRegularMember && !chatIds.isEmpty {
+                        communityBanContext = AdminUserActionsCommunityBanContext(
+                            communityId: communityId,
+                            creatorChatIds: joinedChats.creatorChatIds,
+                            joinedChatIds: joinedChats.joinedChatIds,
+                            peers: joinedChats.peers,
+                            participantCounts: participantCounts
+                        )
+                    }
+                }
+
+                self.communityBanContext = communityBanContext
+                if communityBanContext == nil {
+                    self.banFromCommunity = false
+                }
+                if !self.isUpdating {
+                    self.state?.updated(transition: .spring(duration: 0.35))
+                }
+            }))
         }
         
         private func calculateMonoforumResult() -> AdminUserActionsSheet.MonoforumResult {
@@ -1056,12 +1285,21 @@ private final class AdminUserActionsSheetComponent: Component {
                 }
             }
             
+            var banFromCommunity: AdminUserActionsSheet.CommunityBanResult?
+            if self.banFromCommunity, let communityBanContext = self.communityBanContext, let participantId = self.component?.peers.first?.peer.id {
+                banFromCommunity = AdminUserActionsSheet.CommunityBanResult(
+                    communityId: communityBanContext.communityId,
+                    participantId: participantId
+                )
+            }
+
             return AdminUserActionsSheet.ChatResult(
                 reportSpamPeers: reportSpamPeers,
                 deleteAllFromPeers: deleteAllFromPeers,
                 deleteAllReactionsFromPeers: deleteAllReactionsFromPeers,
                 banPeers: banPeers,
-                updateBannedRights: updateBannedRights
+                updateBannedRights: updateBannedRights,
+                banFromCommunity: banFromCommunity
             )
         }
         
@@ -1151,6 +1389,7 @@ private final class AdminUserActionsSheetComponent: Component {
             
             self.component = component
             self.state = state
+            self.updateCommunityBanContext(component: component)
             
             let environmentValue = environment[ViewControllerComponentContainer.Environment.self].value
             self.environment = environmentValue
@@ -1196,10 +1435,12 @@ private final class AdminUserActionsSheetComponent: Component {
                 allowedParticipantRights: self.allowedParticipantRights,
                 allowedMediaRights: self.allowedMediaRights,
                 participantRights: self.participantRights,
-                mediaRights: self.mediaRights
+                mediaRights: self.mediaRights,
+                communityBanContext: self.communityBanContext,
+                banFromCommunity: self.banFromCommunity
             )
             
-            let performMainAction: () -> Void = { [weak self] in
+            let commitMainAction: () -> Void = { [weak self] in
                 guard let self, let component = self.component else {
                     return
                 }
@@ -1218,6 +1459,59 @@ private final class AdminUserActionsSheetComponent: Component {
                     completion(liveStreamResult)
                 case let .chatReaction(completion):
                     completion(chatResult)
+                }
+            }
+
+            let performMainAction: () -> Void = { [weak self] in
+                guard let self, let component = self.component else {
+                    return
+                }
+
+                if self.banFromCommunity, let communityBanContext = self.communityBanContext, !communityBanContext.creatorChatIds.isEmpty, let peer = component.peers.first {
+                    let warningChatCount = environmentValue.strings.Community_AdminActions_WarningChatCount(Int32(clamping: communityBanContext.creatorChatIds.count))
+                    var alertContent: [AnyComponentWithIdentity<AlertComponentEnvironment>] = [
+                        AnyComponentWithIdentity(
+                            id: "title",
+                            component: AnyComponent(
+                                AlertTitleComponent(title: environmentValue.strings.Community_AdminActions_WarningTitle)
+                            )
+                        ),
+                        AnyComponentWithIdentity(
+                            id: "text",
+                            component: AnyComponent(
+                                AlertTextComponent(content: .plain(environmentValue.strings.Community_AdminActions_WarningText(peer.peer.compactDisplayTitle, warningChatCount).string))
+                            )
+                        )
+                    ]
+
+                    for creatorChatId in communityBanContext.creatorChatIds {
+                        guard let creatorChatPeer = communityBanContext.peers[creatorChatId] else {
+                            continue
+                        }
+                        alertContent.append(AnyComponentWithIdentity(
+                            id: AnyHashable(creatorChatId),
+                            component: AnyComponent(AlertPeerComponent(
+                                context: component.context,
+                                peer: creatorChatPeer,
+                                memberCount: communityBanContext.participantCounts[creatorChatId]
+                            ))
+                        ))
+                    }
+
+                    let alertScreen = AlertScreen(
+                        context: component.context,
+                        content: alertContent,
+                        actions: [
+                            .init(title: environmentValue.strings.Common_Cancel),
+                            .init(title: environmentValue.strings.Conversation_ContextMenuBanFull, type: .defaultDestructive, action: {
+                                commitMainAction()
+                            })
+                        ]
+                    )
+
+                    environmentValue.controller()?.present(alertScreen, in: .window(.root))
+                } else {
+                    commitMainAction()
                 }
             }
             
@@ -1430,6 +1724,17 @@ private final class AdminUserActionsSheetComponent: Component {
                             }
                             
                             self.state?.updated(transition: .spring(duration: 0.35))
+                        },
+                        setBanFromCommunity: { [weak self] value in
+                            guard let self else {
+                                return
+                            }
+                            self.banFromCommunity = value
+                            self.state?.updated(transition: .spring(duration: 0.35))
+                        },
+                        openCommunity: { communityId in
+                            let controller = component.context.sharedContext.makeCommunityViewScreen(context: component.context, communityId: communityId, mode: .sheet)
+                            environmentValue.controller()?.present(controller, in: .window(.root))
                         }
                     )),
                     titleItem: AnyComponent(MultilineTextComponent(
@@ -1539,19 +1844,31 @@ public class AdminUserActionsSheet: ViewControllerComponentContainer {
         case chatReaction(completion: (ChatResult) -> Void)
     }
     
+    public struct CommunityBanResult {
+        public let communityId: EnginePeer.Id
+        public let participantId: EnginePeer.Id
+
+        init(communityId: EnginePeer.Id, participantId: EnginePeer.Id) {
+            self.communityId = communityId
+            self.participantId = participantId
+        }
+    }
+
     public final class ChatResult {
         public let reportSpamPeers: [EnginePeer.Id]
         public let deleteAllFromPeers: [EnginePeer.Id]
         public let deleteAllReactionsFromPeers: [EnginePeer.Id]
         public let banPeers: [EnginePeer.Id]
         public let updateBannedRights: [EnginePeer.Id: TelegramChatBannedRights]
+        public let banFromCommunity: CommunityBanResult?
         
-        init(reportSpamPeers: [EnginePeer.Id], deleteAllFromPeers: [EnginePeer.Id], deleteAllReactionsFromPeers: [EnginePeer.Id], banPeers: [EnginePeer.Id], updateBannedRights: [EnginePeer.Id: TelegramChatBannedRights]) {
+        init(reportSpamPeers: [EnginePeer.Id], deleteAllFromPeers: [EnginePeer.Id], deleteAllReactionsFromPeers: [EnginePeer.Id], banPeers: [EnginePeer.Id], updateBannedRights: [EnginePeer.Id: TelegramChatBannedRights], banFromCommunity: CommunityBanResult?) {
             self.reportSpamPeers = reportSpamPeers
             self.deleteAllFromPeers = deleteAllFromPeers
             self.deleteAllReactionsFromPeers = deleteAllReactionsFromPeers
             self.banPeers = banPeers
             self.updateBannedRights = updateBannedRights
+            self.banFromCommunity = banFromCommunity
         }
     }
     

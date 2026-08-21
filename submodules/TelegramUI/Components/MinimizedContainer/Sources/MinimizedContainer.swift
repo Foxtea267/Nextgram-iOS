@@ -100,7 +100,7 @@ public class MinimizedContainerImpl: ASDisplayNode, MinimizedContainer, ASScroll
             
             self.containerNode = ASDisplayNode()
             self.containerNode.isUserInteractionEnabled = false
-            self.containerNode.cornerRadius = 10.0
+            self.containerNode.cornerRadius = 25.0
             
             self.headerNode = MinimizedHeaderNode(theme: NavigationControllerTheme(presentationTheme: theme), strings: strings)
             self.headerNode.layer.allowsGroupOpacity = true
@@ -115,7 +115,7 @@ public class MinimizedContainerImpl: ASDisplayNode, MinimizedContainer, ASScroll
             super.init()
 
             self.clipsToBounds = true
-            self.cornerRadius = 10.0
+            self.cornerRadius = 25.0
             applySmoothRoundedCorners(self.layer)
             applySmoothRoundedCorners(self.containerNode.layer)
             

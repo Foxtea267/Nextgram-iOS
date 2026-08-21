@@ -13,6 +13,7 @@ import PresentationDataUtils
 import TextFormat
 import Markdown
 import TelegramNotices
+import TelegramStringFormatting
 import ChatPresentationInterfaceState
 import TextNodeWithEntities
 import AnimationCache
@@ -22,68 +23,73 @@ import AppBundle
 import ComponentFlow
 import AlertComponent
 
-func textStringForForwardedMessage(_ message: EngineRawMessage, strings: PresentationStrings) -> (text: String, entities: [MessageTextEntity], isMedia: Bool) {
+func textStringForForwardedMessage(_ message: EngineRawMessage, strings: PresentationStrings) -> (text: NSAttributedString, entities: [MessageTextEntity], isMedia: Bool) {
+    for attribute in message.attributes {
+        if let attribute = attribute as? RichTextMessageAttribute {
+            return (attribute.instantPage.previewAttributedText(strings: strings), [], false)
+        }
+    }
     for media in message.media {
         switch media {
         case _ as TelegramMediaImage:
-            return (strings.Message_Photo, [], true)
+            return (NSAttributedString(string: strings.Message_Photo), [], true)
         case let file as TelegramMediaFile:
             if file.isVideoSticker || file.isAnimatedSticker {
-                return (strings.Message_Sticker, [], true)
+                return (NSAttributedString(string: strings.Message_Sticker), [], true)
             }
             var fileName: String = strings.Message_File
             for attribute in file.attributes {
                 switch attribute {
                 case .Sticker:
-                    return (strings.Message_Sticker, [], true)
+                    return (NSAttributedString(string: strings.Message_Sticker), [], true)
                 case let .FileName(name):
                     fileName = name
                 case let .Audio(isVoice, _, title, performer, _):
                     if isVoice {
-                        return (strings.Message_Audio, [], true)
+                        return (NSAttributedString(string: strings.Message_Audio), [], true)
                     } else {
                         if let title = title, let performer = performer, !title.isEmpty, !performer.isEmpty {
-                            return (title + " — " + performer, [], true)
+                            return (NSAttributedString(string: title + " — " + performer), [], true)
                         } else if let title = title, !title.isEmpty {
-                            return (title, [], true)
+                            return (NSAttributedString(string: title), [], true)
                         } else if let performer = performer, !performer.isEmpty {
-                            return (performer, [], true)
+                            return (NSAttributedString(string: performer), [], true)
                         } else {
-                            return (strings.Message_Audio, [], true)
+                            return (NSAttributedString(string: strings.Message_Audio), [], true)
                         }
                     }
                 case .Video:
                     if file.isAnimated {
-                        return (strings.Message_Animation, [], true)
+                        return (NSAttributedString(string: strings.Message_Animation), [], true)
                     } else {
-                        return (strings.Message_Video, [], true)
+                        return (NSAttributedString(string: strings.Message_Video), [], true)
                     }
                 default:
                     break
                 }
             }
-            return (fileName, [], true)
+            return (NSAttributedString(string: fileName), [], true)
         case _ as TelegramMediaContact:
-            return (strings.Message_Contact, [], true)
+            return (NSAttributedString(string: strings.Message_Contact), [], true)
         case let game as TelegramMediaGame:
-            return (game.title, [], true)
+            return (NSAttributedString(string: game.title), [], true)
         case _ as TelegramMediaMap:
-            return (strings.Message_Location, [], true)
+            return (NSAttributedString(string: strings.Message_Location), [], true)
         case _ as TelegramMediaAction:
-            return ("", [], true)
+            return (NSAttributedString(), [], true)
         case _ as TelegramMediaPoll:
-            return (strings.ForwardedPolls(1), [], true)
+            return (NSAttributedString(string: strings.ForwardedPolls(1)), [], true)
         case let todo as TelegramMediaTodo:
-            return (todo.text, [], true)
+            return (NSAttributedString(string: todo.text), [], true)
         case let dice as TelegramMediaDice:
-            return (dice.emoji, [], true)
+            return (NSAttributedString(string: dice.emoji), [], true)
         case let invoice as TelegramMediaInvoice:
-            return (invoice.title, [], true)
+            return (NSAttributedString(string: invoice.title), [], true)
         default:
             break
         }
     }
-    return (message.text, message.textEntitiesAttribute?.entities ?? [], false)
+    return (NSAttributedString(string: message.text), message.textEntitiesAttribute?.entities ?? [], false)
 }
 
 public final class ForwardAccessoryPanelNode: AccessoryPanelNode {
@@ -321,7 +327,11 @@ public final class ForwardAccessoryPanelNode: AccessoryPanelNode {
             
             text = NSMutableAttributedString(attributedString: NSAttributedString(string: "\(authors): ", font: Font.regular(15.0), textColor: self.theme.chat.inputPanel.secondaryTextColor))
             
-            let additionalText = NSMutableAttributedString(attributedString: NSAttributedString(string: string, font: Font.regular(15.0), textColor: self.theme.chat.inputPanel.secondaryTextColor))
+            let additionalText = NSMutableAttributedString(attributedString: string)
+            additionalText.addAttributes([
+                .font: Font.regular(15.0),
+                .foregroundColor: self.theme.chat.inputPanel.secondaryTextColor
+            ], range: NSRange(location: 0, length: additionalText.length))
             for entity in entities {
                 switch entity.type {
                 case let .CustomEmoji(_, fileId):
@@ -343,6 +353,9 @@ public final class ForwardAccessoryPanelNode: AccessoryPanelNode {
         if interfaceState.interfaceState.forwardOptionsState?.hideNames == true {
             text = NSMutableAttributedString(attributedString: NSAttributedString(string: self.strings.Conversation_ForwardOptions_SenderNamesRemoved, font: Font.regular(15.0), textColor: self.theme.chat.inputPanel.secondaryTextColor))
         }
+
+        let accessibilityText = text.string
+        text = NSMutableAttributedString(attributedString: renderInstantPagePreviewIcons(text, font: Font.regular(15.0), textColor: self.theme.chat.inputPanel.secondaryTextColor))
         
         self.titleNode.attributedText = NSAttributedString(string: title, font: Font.medium(15.0), textColor: self.theme.chat.inputPanel.panelControlAccentColor)
         self.textNode.attributedText = text
@@ -355,7 +368,7 @@ public final class ForwardAccessoryPanelNode: AccessoryPanelNode {
         } else {
             headerString = "Forward messages"
         }
-        self.actionArea.accessibilityLabel = "\(headerString). From: \(authors).\n\(text)"
+        self.actionArea.accessibilityLabel = "\(headerString). From: \(authors).\n\(accessibilityText)"
         
         let titleSize = self.titleNode.updateLayout(CGSize(width: bounds.size.width - leftInset - textLineInset - rightInset - textRightInset, height: bounds.size.height))
         self.titleNode.frame = CGRect(origin: CGPoint(x: leftInset + textLineInset, y: 7.0), size: titleSize)

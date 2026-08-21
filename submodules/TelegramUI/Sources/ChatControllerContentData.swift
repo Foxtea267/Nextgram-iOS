@@ -925,6 +925,9 @@ extension ChatControllerImpl {
                         if let associatedPeerId = peer.associatedPeerId, let associatedPeer = peerView.peers[associatedPeerId] {
                             peers[associatedPeer.id] = associatedPeer
                         }
+                        if let containerPeerId = peer.containerPeerId, let containerPeer = peerView.peers[containerPeerId] {
+                            peers[containerPeer.id] = containerPeer
+                        }
                         renderedPeer = RenderedPeer(peerId: peer.id, peers: peers, associatedMedia: peerView.media)
                     }
                     
@@ -1507,6 +1510,9 @@ extension ChatControllerImpl {
                         if let associatedPeerId = peer.associatedPeerId, let associatedPeer = peerView.peers[associatedPeerId] {
                             peers[associatedPeer.id] = associatedPeer
                         }
+                        if let containerPeerId = peer.containerPeerId, let containerPeer = peerView.peers[containerPeerId] {
+                            peers[containerPeer.id] = containerPeer
+                        }
                         renderedPeer = RenderedPeer(peerId: peer.id, peers: peers, associatedMedia: peerView.media)
                     }
                     
@@ -1881,6 +1887,9 @@ extension ChatControllerImpl {
                         peers[peer.id] = peer
                         if let associatedPeerId = peer.associatedPeerId, let associatedPeer = peerView.peers[associatedPeerId] {
                             peers[associatedPeer.id] = associatedPeer
+                        }
+                        if let containerPeerId = peer.containerPeerId, let containerPeer = peerView.peers[containerPeerId] {
+                            peers[containerPeer.id] = containerPeer
                         }
                         renderedPeer = RenderedPeer(peerId: peer.id, peers: peers, associatedMedia: peerView.media)
                         

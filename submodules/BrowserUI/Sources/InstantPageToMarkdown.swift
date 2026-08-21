@@ -43,7 +43,7 @@ private func markdownString(from block: InstantPageBlock) -> String? {
         // through markdownInline (which re-wraps `.fixed` content in backticks and escapes markdown
         // special chars). Use plainText to emit the literal source.
         return "```\(language)\n\(text.plainText)\n```"
-    case let .blockQuote(blocks, _):
+    case let .blockQuote(blocks, _, _):
         return markdownBlockQuoteBlocks(blocks)
     case let .pullQuote(text, _):
         return markdownBlockQuote(text)

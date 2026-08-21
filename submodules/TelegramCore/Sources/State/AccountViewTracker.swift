@@ -845,6 +845,9 @@ public final class AccountViewTracker {
             var addedMessageIds: [MessageId] = []
             let timestamp = Int32(CFAbsoluteTimeGetCurrent())
             for messageId in messageIds {
+                guard messageId.namespace == Namespaces.Message.Cloud else {
+                    continue
+                }
                 let messageTimestamp = self.updatedReactionsMessageIdsAndTimestamps[messageId]
                 if messageTimestamp == nil || messageTimestamp! < timestamp - 1 * 20 || force {
                     self.updatedReactionsMessageIdsAndTimestamps[messageId] = timestamp
@@ -2037,6 +2040,9 @@ public final class AccountViewTracker {
                     let resetPeerHoleManagement = self.resetPeerHoleManagement
                     let isAutomaticallyTracked = self.account!.postbox.transaction { transaction -> Bool in
                         if transaction.getPeerChatListIndex(peerId) == nil {
+                            if isPeerHiddenByCollapsedCommunity(transaction: transaction, peerId: peerId) {
+                                return true
+                            }
                             transaction.resetIncomingReadStates([peerId: [Namespaces.Message.Cloud : PeerReadState.idBased(
                                 maxIncomingReadId: 1, maxOutgoingReadId: 1, maxKnownId: 1, count: 0, markedUnread: false)]])
                             if addHole {

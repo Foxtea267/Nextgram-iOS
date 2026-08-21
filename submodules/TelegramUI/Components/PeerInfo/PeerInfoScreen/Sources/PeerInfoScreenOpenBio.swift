@@ -10,6 +10,7 @@ import ContextUI
 import TranslateUI
 import TextProcessingScreen
 import Pasteboard
+import ChatRichTextEditorComposer
 import UndoUI
 
 extension PeerInfoScreenNode {
@@ -116,9 +117,9 @@ extension PeerInfoScreenNode {
                             let controller = await TextProcessingScreen(
                                 context: self.context,
                                 mode: .translate(fromLanguage: language, applyResult: nil),
-                                inputText: TextWithEntities(text: bioText, entities: []),
+                                inputText: .plain(text: bioText, entities: []),
                                 copyResult: { [weak parentController] text in
-                                    storeMessageTextInPasteboard(text.text, entities: text.entities)
+                                    storeComposedRichMessageInPasteboard(text)
                                     parentController?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: presentationData.strings.Conversation_TextCopied), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                                 },
                                 translateChat: nil

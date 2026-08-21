@@ -680,6 +680,17 @@ public extension Api {
                 return ("messageActionBotAllowed", [("flags", ConstructorParameterDescription(self.flags)), ("domain", ConstructorParameterDescription(self.domain)), ("app", ConstructorParameterDescription(self.app))])
             }
         }
+        public class Cons_messageActionChangeCommunity: TypeConstructorDescription {
+            public var flags: Int32
+            public var communityId: Int64?
+            public init(flags: Int32, communityId: Int64?) {
+                self.flags = flags
+                self.communityId = communityId
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("messageActionChangeCommunity", [("flags", ConstructorParameterDescription(self.flags)), ("communityId", ConstructorParameterDescription(self.communityId))])
+            }
+        }
         public class Cons_messageActionChangeCreator: TypeConstructorDescription {
             public var newCreatorId: Int64
             public init(newCreatorId: Int64) {
@@ -1432,6 +1443,7 @@ public extension Api {
         }
         case messageActionBoostApply(Cons_messageActionBoostApply)
         case messageActionBotAllowed(Cons_messageActionBotAllowed)
+        case messageActionChangeCommunity(Cons_messageActionChangeCommunity)
         case messageActionChangeCreator(Cons_messageActionChangeCreator)
         case messageActionChannelCreate(Cons_messageActionChannelCreate)
         case messageActionChannelMigrateFrom(Cons_messageActionChannelMigrateFrom)
@@ -1516,6 +1528,15 @@ public extension Api {
                 }
                 if Int(_data.flags) & Int(1 << 2) != 0 {
                     _data.app!.serialize(buffer, true)
+                }
+                break
+            case .messageActionChangeCommunity(let _data):
+                if boxed {
+                    buffer.appendInt32(1562426088)
+                }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
+                if Int(_data.flags) & Int(1 << 0) != 0 {
+                    serializeInt64(_data.communityId!, buffer: buffer, boxed: false)
                 }
                 break
             case .messageActionChangeCreator(let _data):
@@ -2178,6 +2199,8 @@ public extension Api {
                 return ("messageActionBoostApply", [("boosts", ConstructorParameterDescription(_data.boosts))])
             case .messageActionBotAllowed(let _data):
                 return ("messageActionBotAllowed", [("flags", ConstructorParameterDescription(_data.flags)), ("domain", ConstructorParameterDescription(_data.domain)), ("app", ConstructorParameterDescription(_data.app))])
+            case .messageActionChangeCommunity(let _data):
+                return ("messageActionChangeCommunity", [("flags", ConstructorParameterDescription(_data.flags)), ("communityId", ConstructorParameterDescription(_data.communityId))])
             case .messageActionChangeCreator(let _data):
                 return ("messageActionChangeCreator", [("newCreatorId", ConstructorParameterDescription(_data.newCreatorId))])
             case .messageActionChannelCreate(let _data):
@@ -2340,6 +2363,22 @@ public extension Api {
             let _c3 = (Int(_1 ?? 0) & Int(1 << 2) == 0) || _3 != nil
             if _c1 && _c2 && _c3 {
                 return Api.MessageAction.messageActionBotAllowed(Cons_messageActionBotAllowed(flags: _1!, domain: _2, app: _3))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_messageActionChangeCommunity(_ reader: BufferReader) -> MessageAction? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: Int64?
+            if Int(_1 ?? 0) & Int(1 << 0) != 0 {
+                _2 = reader.readInt64()
+            }
+            let _c1 = _1 != nil
+            let _c2 = (Int(_1 ?? 0) & Int(1 << 0) == 0) || _2 != nil
+            if _c1 && _c2 {
+                return Api.MessageAction.messageActionChangeCommunity(Cons_messageActionChangeCommunity(flags: _1!, communityId: _2))
             }
             else {
                 return nil

@@ -48,7 +48,7 @@ private enum InviteContactsEntry: Comparable, Identifiable {
     func item(context: AccountContext, presentationData: PresentationData, interaction: InviteContactsInteraction) -> ListViewItem {
         switch self {
             case let .option(_, option, _, _):
-                return ContactListActionItem(presentationData: ItemListPresentationData(presentationData), title: option.title, icon: option.icon, header: nil, action: option.action)
+                return ContactListActionItem(presentationData: ItemListPresentationData(presentationData), systemStyle: .glass, title: option.title, icon: option.icon, header: nil, action: option.action)
             case let .peer(_, id, contact, count, selection, theme, strings, nameSortOrder, nameDisplayOrder):
                 let status: ContactsPeerItemStatus
                 if count != 0 {
@@ -57,7 +57,7 @@ private enum InviteContactsEntry: Comparable, Identifiable {
                     status = .none
                 }
                 let peer: EnginePeer = .user(TelegramUser(id: EnginePeer.Id(namespace: .max, id: EnginePeer.Id.Id._internalFromInt64Value(0)), accessHash: nil, firstName: contact.firstName, lastName: contact.lastName, username: nil, phone: nil, photo: [], botInfo: nil, restrictionInfo: nil, flags: [], emojiStatus: nil, usernames: [], storiesHidden: nil, nameColor: nil, backgroundEmojiId: nil, profileColor: nil, profileBackgroundEmojiId: nil, subscriberCount: nil, verificationIconFileId: nil))
-                return ContactsPeerItem(presentationData: ItemListPresentationData(presentationData), sortOrder: nameSortOrder, displayOrder: nameDisplayOrder, context: context, peerMode: .peer, peer: .peer(peer: peer, chatPeer: peer), status: status, enabled: true, selection: selection, editing: ContactsPeerItemEditing(editable: false, editing: false, revealed: false), index: nil, header: ChatListSearchItemHeader(type: .contacts, theme: theme, strings: strings, actionTitle: nil, action: nil), action: { _ in
+                return ContactsPeerItem(presentationData: ItemListPresentationData(presentationData), systemStyle: .glass, sortOrder: nameSortOrder, displayOrder: nameDisplayOrder, context: context, peerMode: .peer, peer: .peer(peer: peer, chatPeer: peer), status: status, enabled: true, selection: selection, editing: ContactsPeerItemEditing(editable: false, editing: false, revealed: false), index: nil, header: ChatListSearchItemHeader(type: .contacts, theme: theme, strings: strings, actionTitle: nil, action: nil), action: { _ in
                     interaction.toggleContact(id)
                 })
         }

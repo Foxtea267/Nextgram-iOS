@@ -4,6 +4,15 @@ import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
 
+public enum ComposedRichMessage: Equatable {
+    /// Structured content → a rich message (`RichTextMessageAttribute(instantPage:)`, sent with `text: ""`).
+    case rich(instantPage: InstantPage)
+    /// Entity-expressible content → a normal message (`text` + `TextEntitiesMessageAttribute`).
+    case plain(text: String, entities: [MessageTextEntity])
+    /// Nothing worth sending (empty / whitespace-only document).
+    case empty
+}
+
 public enum TranslationError {
     case generic
     case invalidMessageId
@@ -113,6 +122,55 @@ func _internal_composeMessageWithAI(account: Account, text: String, entities: [M
     }
 }
 
+func _internal_composeRichMessageWithAI(account: Account, instantPage: InstantPage?, proofread: Bool = false, translateToLang: String? = nil, changeStyle: TelegramComposeAIMessageMode.CloudStyle.Reference? = nil, customPrompt: String? = nil, emojify: Bool = false) -> Signal<InstantPage, TranslationError> {
+    var flags: Int32 = 0
+    if proofread {
+        flags |= (1 << 0)
+    }
+    if translateToLang != nil {
+        flags |= (1 << 1)
+    }
+
+    var changeTone: Api.InputAiComposeTone?
+    if let customPrompt {
+        flags |= (1 << 2)
+        changeTone = .inputAiComposeToneSingleUse(Api.InputAiComposeTone.Cons_inputAiComposeToneSingleUse(customPrompt: customPrompt))
+    } else if let changeStyle {
+        flags |= (1 << 2)
+        changeTone = changeStyle.apiInputStyle
+    }
+    if emojify {
+        flags |= (1 << 3)
+    }
+
+    var inputRichMessage: Api.InputRichMessage?
+    if let instantPage {
+        flags |= (1 << 4)
+        inputRichMessage = RichTextMessageAttribute(instantPage: instantPage, fullInstantPage: nil).apiInputRichMessage()
+    }
+
+    return account.network.request(Api.functions.messages.composeRichMessageWithAI(flags: flags, text: inputRichMessage, translateToLang: translateToLang, tone: changeTone))
+    |> mapError { error -> TranslationError in
+        if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+            return .limitExceeded
+        } else if error.errorDescription == "INPUT_TEXT_EMPTY" {
+            return .textIsEmpty
+        } else if error.errorDescription == "INPUT_TEXT_TOO_LONG" {
+            return .textTooLong
+        } else if error.errorDescription.hasPrefix("AICOMPOSE_FLOOD_PREMIUM ") {
+            return .limitExceeded
+        } else {
+            return .generic
+        }
+    }
+    |> map { result -> InstantPage in
+        switch result {
+        case let .composedRichMessageWithAI(data):
+            return RichTextMessageAttribute(apiRichMessage: data.result).instantPage
+        }
+    }
+}
+
 func _internal_translateTexts(network: Network, texts: [(String, [MessageTextEntity])], toLang: String, tone: TranslationTone = .neutral) -> Signal<[(String, [MessageTextEntity])], TranslationError> {
     var flags: Int32 = 0
     flags |= (1 << 1)
@@ -173,6 +231,55 @@ public protocol ExperimentalInternalTranslationService: AnyObject {
 
 public var engineExperimentalInternalTranslationService: ExperimentalInternalTranslationService?
 
+/// Translates rich messages (those carrying a `RichTextMessageAttribute`) by id via
+/// `messages.translateRichMessage`, stores each result as a `TranslationMessageAttribute` with the
+/// translated `InstantPage`, and returns the pages keyed by message id.
+func _internal_translateRichMessages(account: Account, inputPeer: Api.InputPeer, messageIds: [EngineMessage.Id], toLang: String, tone: TranslationTone = .neutral) -> Signal<[EngineMessage.Id: InstantPage], TranslationError> {
+    var flags: Int32 = 0
+    flags |= (1 << 0)
+    if tone != .neutral {
+        flags |= (1 << 2)
+    }
+    return account.network.request(Api.functions.messages.translateRichMessage(flags: flags, peer: inputPeer, id: messageIds.map { $0.id }, text: nil, toLang: toLang, tone: tone != .neutral ? tone.rawValue : nil))
+    |> mapError { error -> TranslationError in
+        if error.errorDescription.hasPrefix("FLOOD_WAIT") {
+            return .limitExceeded
+        } else if error.errorDescription == "MSG_ID_INVALID" {
+            return .invalidMessageId
+        } else if error.errorDescription == "INPUT_TEXT_EMPTY" {
+            return .textIsEmpty
+        } else if error.errorDescription == "INPUT_TEXT_TOO_LONG" {
+            return .textTooLong
+        } else if error.errorDescription == "TO_LANG_INVALID" {
+            return .invalidLanguage
+        } else {
+            return .generic
+        }
+    }
+    |> mapToSignal { result -> Signal<[EngineMessage.Id: InstantPage], TranslationError> in
+        var pages: [EngineMessage.Id: InstantPage] = [:]
+        switch result {
+        case let .translatedRichMessage(data):
+            for (i, richMessage) in data.result.enumerated() where i < messageIds.count {
+                pages[messageIds[i]] = RichTextMessageAttribute(apiRichMessage: richMessage).instantPage
+            }
+        }
+        return account.postbox.transaction { transaction -> [EngineMessage.Id: InstantPage] in
+            for (messageId, page) in pages {
+                let updatedAttribute = TranslationMessageAttribute(text: "", entities: [], toLang: toLang, instantPage: page)
+                transaction.updateMessage(messageId, update: { currentMessage in
+                    let storeForwardInfo = currentMessage.forwardInfo.flatMap(StoreMessageForwardInfo.init)
+                    var attributes = currentMessage.attributes.filter { !($0 is TranslationMessageAttribute) }
+                    attributes.append(updatedAttribute)
+                    return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: currentMessage.tags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: currentMessage.media))
+                })
+            }
+            return pages
+        }
+        |> castError(TranslationError.self)
+    }
+}
+
 private func _internal_translateMessagesByPeerId(account: Account, peerId: EnginePeer.Id, messageIds: [EngineMessage.Id], fromLang: String?, toLang: String, enableLocalIfPossible: Bool, tone: TranslationTone = .neutral) -> Signal<Void, TranslationError> {
     return account.postbox.transaction { transaction -> (Api.InputPeer?, [Message]) in
         return (transaction.getPeer(peerId).flatMap(apiInputPeer), messageIds.compactMap({ transaction.getMessage($0) }))
@@ -219,7 +326,20 @@ private func _internal_translateMessagesByPeerId(account: Account, peerId: Engin
             flags |= (1 << 2)
         }
 
-        let id: [Int32] = messageIds.map { $0.id }
+        // Rich messages (a `RichTextMessageAttribute`) translate through `messages.translateRichMessage`
+        // (per the layer-228 contract: pick translateText vs translateRichMessage by message type).
+        let richMessageIds = messages.filter { $0.attributes.contains(where: { $0 is RichTextMessageAttribute }) }.map { $0.id }
+        let plainMessageIds = messageIds.filter { !richMessageIds.contains($0) }
+
+        let richSignal: Signal<Void, TranslationError>
+        if richMessageIds.isEmpty {
+            richSignal = .single(Void())
+        } else {
+            richSignal = _internal_translateRichMessages(account: account, inputPeer: inputPeer, messageIds: richMessageIds, toLang: toLang, tone: tone)
+            |> map { _ in Void() }
+        }
+
+        let id: [Int32] = plainMessageIds.map { $0.id }
 
         let msgs: Signal<Api.messages.TranslatedText?, TranslationError>
         if id.isEmpty {
@@ -228,7 +348,7 @@ private func _internal_translateMessagesByPeerId(account: Account, peerId: Engin
             if enableLocalIfPossible, let engineExperimentalInternalTranslationService, let fromLang {
                 msgs = account.postbox.transaction { transaction -> [MessageId: String] in
                     var texts: [MessageId: String] = [:]
-                    for messageId in messageIds {
+                    for messageId in plainMessageIds {
                         if let message = transaction.getMessage(messageId) {
                             texts[message.id] = message.text
                         }
@@ -248,7 +368,7 @@ private func _internal_translateMessagesByPeerId(account: Account, peerId: Engin
                             return .fail(.generic)
                         }
                         var result: [Api.TextWithEntities] = []
-                        for messageId in messageIds {
+                        for messageId in plainMessageIds {
                             if let text = resultTexts[AnyHashable(messageId)] {
                                 result.append(.textWithEntities(.init(text: text, entities: [])))
                             } else if let text = messageTexts[messageId] {
@@ -281,14 +401,15 @@ private func _internal_translateMessagesByPeerId(account: Account, peerId: Engin
             }
         }
         
-        return combineLatest(msgs, combineLatest(pollSignals), combineLatest(audioTranscriptionsSignals))
-        |> mapToSignal { (result, pollResults, audioTranscriptionsResults) -> Signal<Void, TranslationError> in
+        return combineLatest(msgs, richSignal, combineLatest(pollSignals), combineLatest(audioTranscriptionsSignals))
+        |> mapToSignal { (result, _, pollResults, audioTranscriptionsResults) -> Signal<Void, TranslationError> in
             return account.postbox.transaction { transaction in
                 if case let .translateResult(translateResultData) = result {
                     let results = translateResultData.result
                     var index = 0
                     for result in results {
-                        let messageId = messageIds[index]
+                        guard index < plainMessageIds.count else { break }
+                        let messageId = plainMessageIds[index]
                         if case let .textWithEntities(textWithEntitiesData) = result {
                             let (text, entities) = (textWithEntitiesData.text, textWithEntitiesData.entities)
                             let updatedAttribute: TranslationMessageAttribute = TranslationMessageAttribute(text: text, entities: messageTextEntitiesFromApiEntities(entities), toLang: toLang)
@@ -642,17 +763,21 @@ public enum TelegramComposeAIMessageMode {
     
     public enum StyleId: Hashable {
         case neutral
+        case prompt
         case style(CloudStyle.Id)
     }
     
     public enum StyleReference: Hashable {
         case neutral
+        case prompt(String)
         case style(CloudStyle.Reference)
         
         public var id: StyleId {
             switch self {
             case .neutral:
                 return .neutral
+            case .prompt:
+                return .prompt
             case let .style(style):
                 return .style(style.id)
             }
@@ -662,14 +787,11 @@ public enum TelegramComposeAIMessageMode {
     case translate(toLanguage: String, emojify: Bool, style: StyleReference)
     case stylize(emojify: Bool, style: StyleReference)
     case proofread
+    case generate(prompt: String)
 }
 
 extension TelegramComposeAIMessageMode.CloudStyle {
     convenience init(apiTone: Api.AiComposeTone) {
-        /*
-         aiComposeTone#12ea1465 flags:# creator:flags.0?true id:long access_hash:long slug:string title:string emoji_id:flags.1?long prompt:string installs_count:flags.2?int author_id:flags.3?long = AiComposeTone;
-         aiComposeToneDefault#9bad6414 tone:string emoji_id:long title:string = AiComposeTone;
-         */
         switch apiTone {
         case let .aiComposeTone(aiComposeTone):
             self.init(content: .custom(Custom(
@@ -696,10 +818,10 @@ extension TelegramComposeAIMessageMode.CloudStyle {
 }
 
 public final class TelegramAIComposeMessageResult {
-    public let text: TextWithEntities
+    public let text: ComposedRichMessage
     public let diffRanges: [Range<Int>]
     
-    public init(text: TextWithEntities, diffRanges: [Range<Int>]) {
+    public init(text: ComposedRichMessage, diffRanges: [Range<Int>]) {
         self.text = text
         self.diffRanges = diffRanges
     }
@@ -730,7 +852,7 @@ public enum TelegramAIComposeMessageError {
     case nonPremiumFlood
 }
 
-func _internal_composeAIMessage(account: Account, text: TextWithEntities, mode: TelegramComposeAIMessageMode) -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> {
+func _internal_composeAIMessage(account: Account, text: ComposedRichMessage, mode: TelegramComposeAIMessageMode) -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> {
     var flags: Int32 = 0
     var translateToLang: String?
     var changeTone: Api.InputAiComposeTone?
@@ -755,58 +877,112 @@ func _internal_composeAIMessage(account: Account, text: TextWithEntities, mode: 
         if case let .style(reference) = style {
             changeTone = reference.apiInputStyle
             flags |= (1 << 2)
+        } else if case let .prompt(prompt) = style {
+            changeTone = .inputAiComposeToneSingleUse(Api.InputAiComposeTone.Cons_inputAiComposeToneSingleUse(customPrompt: prompt))
+            flags |= (1 << 2)
         }
     case .proofread:
         flags |= (1 << 0)
-    }
-    
-    let inputText: Api.TextWithEntities = .textWithEntities(Api.TextWithEntities.Cons_textWithEntities(text: text.text, entities: apiEntitiesFromMessageTextEntities(text.entities, associatedPeers: SimpleDictionary())))
-    
-    return account.network.request(Api.functions.messages.composeMessageWithAI(flags: flags, text: inputText, translateToLang: translateToLang, tone: changeTone))
-    |> `catch` { error -> Signal<Api.messages.ComposedMessageWithAI, TelegramAIComposeMessageError> in
-        if error.errorDescription == "AICOMPOSE_FLOOD_PREMIUM" {
-            return .fail(.nonPremiumFlood)
-        } else {
-            return .fail(.generic)
+    case let .generate(prompt):
+        flags = 0
+        flags |= (1 << 2)
+        return account.network.request(Api.functions.messages.composeRichMessageWithAI(flags: flags, text: nil, translateToLang: nil, tone: .inputAiComposeToneSingleUse(Api.InputAiComposeTone.Cons_inputAiComposeToneSingleUse(customPrompt: prompt))))
+        |> `catch` { error -> Signal<Api.messages.ComposedRichMessageWithAI, TelegramAIComposeMessageError> in
+            if error.errorDescription == "AICOMPOSE_FLOOD_PREMIUM" {
+                return .fail(.nonPremiumFlood)
+            } else {
+                return .fail(.generic)
+            }
+        }
+        |> mapToSignal { result -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> in
+            switch result {
+            case let .composedRichMessageWithAI(composedMessageWithAI):
+                let diffRanges: [Range<Int>] = []
+                return .single(TelegramAIComposeMessageResult(
+                    text: .rich(instantPage: RichTextMessageAttribute(apiRichMessage: composedMessageWithAI.result).instantPage),
+                    diffRanges: diffRanges
+                ))
+            }
         }
     }
-    |> mapToSignal { result -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> in
-        switch result {
-        case let .composedMessageWithAI(composedMessageWithAI):
-            var diffRanges: [Range<Int>] = []
-            if let diffText = composedMessageWithAI.diffText {
-                switch diffText {
-                case let .textWithEntities(textWithEntities):
-                    for entity in textWithEntities.entities {
-                        switch entity {
-                        case let .messageEntityDiffReplace(messageEntityDiffReplace):
-                            if messageEntityDiffReplace.length >= 0 {
-                                diffRanges.append(Int(messageEntityDiffReplace.offset) ..< Int(messageEntityDiffReplace.offset + messageEntityDiffReplace.length))
+    
+    switch text {
+    case .empty, .plain:
+        let inputText: Api.TextWithEntities
+        if case let .plain(text, entities) = text {
+            inputText = .textWithEntities(Api.TextWithEntities.Cons_textWithEntities(text: text, entities: apiEntitiesFromMessageTextEntities(entities, associatedPeers: SimpleDictionary())))
+        } else {
+            inputText = .textWithEntities(Api.TextWithEntities.Cons_textWithEntities(text: "", entities: []))
+        }
+        
+        return account.network.request(Api.functions.messages.composeMessageWithAI(flags: flags, text: inputText, translateToLang: translateToLang, tone: changeTone))
+        |> `catch` { error -> Signal<Api.messages.ComposedMessageWithAI, TelegramAIComposeMessageError> in
+            if error.errorDescription == "AICOMPOSE_FLOOD_PREMIUM" {
+                return .fail(.nonPremiumFlood)
+            } else {
+                return .fail(.generic)
+            }
+        }
+        |> mapToSignal { result -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> in
+            switch result {
+            case let .composedMessageWithAI(composedMessageWithAI):
+                var diffRanges: [Range<Int>] = []
+                if let diffText = composedMessageWithAI.diffText {
+                    switch diffText {
+                    case let .textWithEntities(textWithEntities):
+                        for entity in textWithEntities.entities {
+                            switch entity {
+                            case let .messageEntityDiffReplace(messageEntityDiffReplace):
+                                if messageEntityDiffReplace.length >= 0 {
+                                    diffRanges.append(Int(messageEntityDiffReplace.offset) ..< Int(messageEntityDiffReplace.offset + messageEntityDiffReplace.length))
+                                }
+                            case let .messageEntityDiffInsert(messageEntityDiffInsert):
+                                if messageEntityDiffInsert.length >= 0 {
+                                    diffRanges.append(Int(messageEntityDiffInsert.offset) ..< Int(messageEntityDiffInsert.offset + messageEntityDiffInsert.length))
+                                }
+                            default:
+                                break
                             }
-                        case let .messageEntityDiffInsert(messageEntityDiffInsert):
-                            if messageEntityDiffInsert.length >= 0 {
-                                diffRanges.append(Int(messageEntityDiffInsert.offset) ..< Int(messageEntityDiffInsert.offset + messageEntityDiffInsert.length))
-                            }
-                        default:
-                            break
                         }
                     }
                 }
+                let resultText = TextWithEntities(apiValue: composedMessageWithAI.resultText)
+                return .single(TelegramAIComposeMessageResult(
+                    text: .plain(text: resultText.text, entities: resultText.entities),
+                    diffRanges: diffRanges
+                ))
             }
-            return .single(TelegramAIComposeMessageResult(
-                text: TextWithEntities(apiValue: composedMessageWithAI.resultText),
-                diffRanges: diffRanges
-            ))
+        }
+    case let .rich(instantPage):
+        flags |= (1 << 4)
+        let inputText = RichTextMessageAttribute(instantPage: instantPage, fullInstantPage: nil).apiInputRichMessage()
+        return account.network.request(Api.functions.messages.composeRichMessageWithAI(flags: flags, text: inputText, translateToLang: translateToLang, tone: changeTone))
+        |> `catch` { error -> Signal<Api.messages.ComposedRichMessageWithAI, TelegramAIComposeMessageError> in
+            if error.errorDescription == "AICOMPOSE_FLOOD_PREMIUM" {
+                return .fail(.nonPremiumFlood)
+            } else {
+                return .fail(.generic)
+            }
+        }
+        |> mapToSignal { result -> Signal<TelegramAIComposeMessageResult, TelegramAIComposeMessageError> in
+            switch result {
+            case let .composedRichMessageWithAI(composedMessageWithAI):
+                let diffRanges: [Range<Int>] = []
+                return .single(TelegramAIComposeMessageResult(
+                    text: .rich(instantPage: RichTextMessageAttribute(apiRichMessage: composedMessageWithAI.result).instantPage),
+                    diffRanges: diffRanges
+                ))
+            }
         }
     }
 }
 
 public final class AIMessageStylePreview {
-    public let from: TextWithEntities
-    public let to: TextWithEntities
+    public let from: ComposedRichMessage
+    public let to: ComposedRichMessage
     public let index: Int?
     
-    public init(from: TextWithEntities, to: TextWithEntities, index: Int?) {
+    public init(from: ComposedRichMessage, to: ComposedRichMessage, index: Int?) {
         self.from = from
         self.to = to
         self.index = index
@@ -817,7 +993,9 @@ extension AIMessageStylePreview {
     convenience init(apiPreview: Api.AiComposeToneExample, index: Int) {
         switch apiPreview {
         case let .aiComposeToneExample(aiComposeToneExample):
-            self.init(from: TextWithEntities(apiValue: aiComposeToneExample.from), to: TextWithEntities(apiValue: aiComposeToneExample.to), index: index)
+            let fromText = TextWithEntities(apiValue: aiComposeToneExample.from)
+            let toText = TextWithEntities(apiValue: aiComposeToneExample.to)
+            self.init(from: .plain(text: fromText.text, entities: fromText.entities), to: .plain(text: toText.text, entities: toText.entities), index: index)
         }
     }
 }

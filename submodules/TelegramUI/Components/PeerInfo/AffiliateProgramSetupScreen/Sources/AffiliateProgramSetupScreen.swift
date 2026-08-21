@@ -17,7 +17,7 @@ import ListSectionComponent
 import ListItemSliderSelectorComponent
 import ListActionItemComponent
 import Markdown
-import BlurredBackgroundComponent
+import EdgeEffect
 import PresentationDataUtils
 import PeerListItemComponent
 import TelegramStringFormatting
@@ -116,8 +116,7 @@ final class AffiliateProgramSetupScreenComponent: Component {
         private let activeProgramsSection = ComponentView<Empty>()
         private let suggestedProgramsSection = ComponentView<Empty>()
         
-        private let bottomPanelSeparator = SimpleLayer()
-        private let bottomPanelBackground = ComponentView<Empty>()
+        private let bottomPanelEdgeEffect = EdgeEffectView()
         private let bottomPanelButton = ComponentView<Empty>()
         private let bottomPanelText = ComponentView<Empty>()
         
@@ -172,8 +171,7 @@ final class AffiliateProgramSetupScreenComponent: Component {
             
             self.scrollView.delegate = self
             self.addSubview(self.scrollView)
-            
-            self.layer.addSublayer(self.bottomPanelSeparator)
+            self.bottomPanelEdgeEffect.isUserInteractionEnabled = false
         }
         
         required init?(coder: NSCoder) {
@@ -386,10 +384,8 @@ final class AffiliateProgramSetupScreenComponent: Component {
             let bottomPanelAlphaFraction: CGFloat = max(0.0, min(1.0, bottomPanelDistance / bottomPanelAlphaDistance))
             
             let bottomPanelAlpha: CGFloat = bottomPanelAlphaFraction
-            if let bottomPanelBackgroundView = self.bottomPanelBackground.view, bottomPanelBackgroundView.alpha != bottomPanelAlpha{
-                let alphaTransition = transition
-                alphaTransition.setAlpha(view: bottomPanelBackgroundView, alpha: bottomPanelAlpha)
-                alphaTransition.setAlpha(layer: self.bottomPanelSeparator, alpha: bottomPanelAlpha)
+            if self.bottomPanelEdgeEffect.alpha != bottomPanelAlpha {
+                transition.setAlpha(view: self.bottomPanelEdgeEffect, alpha: bottomPanelAlpha)
             }
             
             if self.scrollView.bounds.maxY >= self.scrollView.contentSize.height - 100.0 {
@@ -551,7 +547,6 @@ final class AffiliateProgramSetupScreenComponent: Component {
             
             if themeUpdated {
                 self.backgroundColor = environment.theme.list.blocksBackgroundColor
-                self.bottomPanelSeparator.backgroundColor = environment.theme.rootController.navigationBar.separatorColor.cgColor
             }
             
             if self.component == nil {
@@ -1215,22 +1210,19 @@ final class AffiliateProgramSetupScreenComponent: Component {
                 let bottomPanelHeight: CGFloat = bottomPanelButtonInsets.top + bottomPanelButtonSize.height + bottomPanelButtonInsets.bottom + bottomPanelTextSize.height + 8.0 + environment.safeInsets.bottom
                 let bottomPanelFrame = CGRect(origin: CGPoint(x: 0.0, y: availableSize.height - bottomPanelHeight), size: CGSize(width: availableSize.width, height: bottomPanelHeight))
                 
-                let _ = self.bottomPanelBackground.update(
-                    transition: transition,
-                    component: AnyComponent(BlurredBackgroundComponent(
-                        color: environment.theme.rootController.navigationBar.blurredBackgroundColor
-                    )),
-                    environment: {},
-                    containerSize: bottomPanelFrame.size
-                )
-                
-                if let bottomPanelBackgroundView = self.bottomPanelBackground.view {
-                    if bottomPanelBackgroundView.superview == nil {
-                        self.addSubview(bottomPanelBackgroundView)
-                    }
-                    transition.setFrame(view: bottomPanelBackgroundView, frame: bottomPanelFrame)
+                if self.bottomPanelEdgeEffect.superview == nil {
+                    self.addSubview(self.bottomPanelEdgeEffect)
                 }
-                transition.setFrame(layer: self.bottomPanelSeparator, frame: CGRect(origin: CGPoint(x: 0.0, y: bottomPanelFrame.minY - UIScreenPixel), size: CGSize(width: availableSize.width, height: UIScreenPixel)))
+                transition.setFrame(view: self.bottomPanelEdgeEffect, frame: bottomPanelFrame)
+                self.bottomPanelEdgeEffect.update(
+                    content: environment.theme.list.blocksBackgroundColor,
+                    blur: true,
+                    alpha: 1.0,
+                    rect: bottomPanelFrame,
+                    edge: .bottom,
+                    edgeSize: bottomPanelFrame.height,
+                    transition: transition
+                )
                 
                 let bottomPanelButtonFrame = CGRect(origin: CGPoint(x: bottomPanelFrame.minX + bottomPanelButtonInsets.left, y: bottomPanelFrame.minY + bottomPanelButtonInsets.top), size: bottomPanelButtonSize)
                 if let bottomPanelButtonView = self.bottomPanelButton.view {

@@ -559,7 +559,7 @@ private final class PeerInfoPendingPane {
         case .savedMessagesChats:
             paneNode = PeerInfoChatListPaneNode(context: context, navigationController: chatControllerInteraction.navigationController)
         case .savedMessages:
-            paneNode = PeerInfoChatPaneNode(context: context, chatLocation: .replyThread(message: ChatReplyThreadMessage(peerId: context.account.peerId, threadId: peerId.toInt64(), channelMessageId: nil, isChannelPost: false, isForumPost: false, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false)), tag: nil, navigationController: chatControllerInteraction.navigationController)
+            paneNode = PeerInfoChatPaneNode(context: context, chatLocation: .replyThread(message: ChatReplyThreadMessage(peerId: context.account.peerId, threadId: peerId.toInt64(), channelMessageId: nil, isChannelPost: false, isForumPost: false, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false)), tag: nil, hideTopPanels: true, navigationController: chatControllerInteraction.navigationController)
         case .polls:
             paneNode = PeerInfoChatPaneNode(context: context, chatLocation: .peer(id: peerId), tag: .polls, navigationController: chatControllerInteraction.navigationController)
         }

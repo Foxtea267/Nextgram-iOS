@@ -23,6 +23,7 @@ swift_library(
         "//submodules/TextFormat",
         "//submodules/Markdown",
         "//submodules/TelegramNotices",
+        "//submodules/TelegramStringFormatting",
         "//submodules/ChatPresentationInterfaceState",
         "//submodules/TelegramUI/Components/TextNodeWithEntities",
         "//submodules/TelegramUI/Components/AnimationCache",

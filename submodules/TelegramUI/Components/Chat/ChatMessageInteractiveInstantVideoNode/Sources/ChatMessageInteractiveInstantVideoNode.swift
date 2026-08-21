@@ -455,7 +455,8 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                     }
                 }
                 let availableWidth: CGFloat = max(60.0, availableContentWidth - 220.0 + 6.0)
-                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource.flatMap(EnginePeer.init), forwardAuthorSignature, forwardPsaType, nil, CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude))
+                // MARK: NAGRAM — Include the original timestamp in the shared forward header.
+                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource.flatMap(EnginePeer.init), forwardAuthorSignature, forwardPsaType, nil, forwardInfo.date, CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude))
             }
             
             var notConsumed = false
@@ -552,7 +553,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             } else {
                 dateFormat = .regular
             }
-            let dateText = stringForMessageTimestampStatus(accountPeerId: item.context.account.peerId, message: EngineMessage(item.message), dateTimeFormat: item.presentationData.dateTimeFormat, nameDisplayOrder: item.presentationData.nameDisplayOrder, strings: item.presentationData.strings, format: dateFormat, associatedData: item.associatedData, ignoreAuthor: item.presentationData.isPreview)
+            let dateText = stringForMessageTimestampStatus(context: item.context, message: EngineMessage(item.message), dateTimeFormat: item.presentationData.dateTimeFormat, nameDisplayOrder: item.presentationData.nameDisplayOrder, strings: item.presentationData.strings, format: dateFormat, associatedData: item.associatedData, ignoreAuthor: item.presentationData.isPreview)
             
             let maxDateAndStatusWidth: CGFloat
             if case .bubble = statusDisplayType {

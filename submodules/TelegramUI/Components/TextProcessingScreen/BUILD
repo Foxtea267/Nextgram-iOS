@@ -51,6 +51,7 @@ swift_library(
         "//submodules/Pasteboard",
         "//submodules/Speak",
         "//submodules/ContextUI",
+        "//submodules/InstantPageUI",
     ],
     visibility = [
         "//visibility:public",

@@ -1,4 +1,188 @@
 public extension Api.help {
+    enum DeepLinkInfo: TypeConstructorDescription {
+        public class Cons_deepLinkInfo: TypeConstructorDescription {
+            public var flags: Int32
+            public var message: String
+            public var entities: [Api.MessageEntity]?
+            public init(flags: Int32, message: String, entities: [Api.MessageEntity]?) {
+                self.flags = flags
+                self.message = message
+                self.entities = entities
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("deepLinkInfo", [("flags", ConstructorParameterDescription(self.flags)), ("message", ConstructorParameterDescription(self.message)), ("entities", ConstructorParameterDescription(self.entities))])
+            }
+        }
+        case deepLinkInfo(Cons_deepLinkInfo)
+        case deepLinkInfoEmpty
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .deepLinkInfo(let _data):
+                if boxed {
+                    buffer.appendInt32(1783556146)
+                }
+                serializeInt32(_data.flags, buffer: buffer, boxed: false)
+                serializeString(_data.message, buffer: buffer, boxed: false)
+                if Int(_data.flags) & Int(1 << 1) != 0 {
+                    buffer.appendInt32(481674261)
+                    buffer.appendInt32(Int32(_data.entities!.count))
+                    for item in _data.entities! {
+                        item.serialize(buffer, true)
+                    }
+                }
+                break
+            case .deepLinkInfoEmpty:
+                if boxed {
+                    buffer.appendInt32(1722786150)
+                }
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .deepLinkInfo(let _data):
+                return ("deepLinkInfo", [("flags", ConstructorParameterDescription(_data.flags)), ("message", ConstructorParameterDescription(_data.message)), ("entities", ConstructorParameterDescription(_data.entities))])
+            case .deepLinkInfoEmpty:
+                return ("deepLinkInfoEmpty", [])
+            }
+        }
+
+        public static func parse_deepLinkInfo(_ reader: BufferReader) -> DeepLinkInfo? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: String?
+            _2 = parseString(reader)
+            var _3: [Api.MessageEntity]?
+            if Int(_1 ?? 0) & Int(1 << 1) != 0 {
+                if let _ = reader.readInt32() {
+                    _3 = Api.parseVector(reader, elementSignature: 0, elementType: Api.MessageEntity.self)
+                }
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            let _c3 = (Int(_1 ?? 0) & Int(1 << 1) == 0) || _3 != nil
+            if _c1 && _c2 && _c3 {
+                return Api.help.DeepLinkInfo.deepLinkInfo(Cons_deepLinkInfo(flags: _1!, message: _2!, entities: _3))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_deepLinkInfoEmpty(_ reader: BufferReader) -> DeepLinkInfo? {
+            return Api.help.DeepLinkInfo.deepLinkInfoEmpty
+        }
+    }
+}
+public extension Api.help {
+    enum InviteText: TypeConstructorDescription {
+        public class Cons_inviteText: TypeConstructorDescription {
+            public var message: String
+            public init(message: String) {
+                self.message = message
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("inviteText", [("message", ConstructorParameterDescription(self.message))])
+            }
+        }
+        case inviteText(Cons_inviteText)
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .inviteText(let _data):
+                if boxed {
+                    buffer.appendInt32(415997816)
+                }
+                serializeString(_data.message, buffer: buffer, boxed: false)
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .inviteText(let _data):
+                return ("inviteText", [("message", ConstructorParameterDescription(_data.message))])
+            }
+        }
+
+        public static func parse_inviteText(_ reader: BufferReader) -> InviteText? {
+            var _1: String?
+            _1 = parseString(reader)
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.help.InviteText.inviteText(Cons_inviteText(message: _1!))
+            }
+            else {
+                return nil
+            }
+        }
+    }
+}
+public extension Api.help {
+    enum PassportConfig: TypeConstructorDescription {
+        public class Cons_passportConfig: TypeConstructorDescription {
+            public var hash: Int32
+            public var countriesLangs: Api.DataJSON
+            public init(hash: Int32, countriesLangs: Api.DataJSON) {
+                self.hash = hash
+                self.countriesLangs = countriesLangs
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("passportConfig", [("hash", ConstructorParameterDescription(self.hash)), ("countriesLangs", ConstructorParameterDescription(self.countriesLangs))])
+            }
+        }
+        case passportConfig(Cons_passportConfig)
+        case passportConfigNotModified
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .passportConfig(let _data):
+                if boxed {
+                    buffer.appendInt32(-1600596305)
+                }
+                serializeInt32(_data.hash, buffer: buffer, boxed: false)
+                _data.countriesLangs.serialize(buffer, true)
+                break
+            case .passportConfigNotModified:
+                if boxed {
+                    buffer.appendInt32(-1078332329)
+                }
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .passportConfig(let _data):
+                return ("passportConfig", [("hash", ConstructorParameterDescription(_data.hash)), ("countriesLangs", ConstructorParameterDescription(_data.countriesLangs))])
+            case .passportConfigNotModified:
+                return ("passportConfigNotModified", [])
+            }
+        }
+
+        public static func parse_passportConfig(_ reader: BufferReader) -> PassportConfig? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            var _2: Api.DataJSON?
+            if let signature = reader.readInt32() {
+                _2 = Api.parse(reader, signature: signature) as? Api.DataJSON
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            if _c1 && _c2 {
+                return Api.help.PassportConfig.passportConfig(Cons_passportConfig(hash: _1!, countriesLangs: _2!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_passportConfigNotModified(_ reader: BufferReader) -> PassportConfig? {
+            return Api.help.PassportConfig.passportConfigNotModified
+        }
+    }
+}
+public extension Api.help {
     enum PeerColorOption: TypeConstructorDescription {
         public class Cons_peerColorOption: TypeConstructorDescription {
             public var flags: Int32
@@ -1460,292 +1644,6 @@ public extension Api.messages {
         }
         public static func parse_availableReactionsNotModified(_ reader: BufferReader) -> AvailableReactions? {
             return Api.messages.AvailableReactions.availableReactionsNotModified
-        }
-    }
-}
-public extension Api.messages {
-    enum BotApp: TypeConstructorDescription {
-        public class Cons_botApp: TypeConstructorDescription {
-            public var flags: Int32
-            public var app: Api.BotApp
-            public init(flags: Int32, app: Api.BotApp) {
-                self.flags = flags
-                self.app = app
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("botApp", [("flags", ConstructorParameterDescription(self.flags)), ("app", ConstructorParameterDescription(self.app))])
-            }
-        }
-        case botApp(Cons_botApp)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .botApp(let _data):
-                if boxed {
-                    buffer.appendInt32(-347034123)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                _data.app.serialize(buffer, true)
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .botApp(let _data):
-                return ("botApp", [("flags", ConstructorParameterDescription(_data.flags)), ("app", ConstructorParameterDescription(_data.app))])
-            }
-        }
-
-        public static func parse_botApp(_ reader: BufferReader) -> BotApp? {
-            var _1: Int32?
-            _1 = reader.readInt32()
-            var _2: Api.BotApp?
-            if let signature = reader.readInt32() {
-                _2 = Api.parse(reader, signature: signature) as? Api.BotApp
-            }
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            if _c1 && _c2 {
-                return Api.messages.BotApp.botApp(Cons_botApp(flags: _1!, app: _2!))
-            }
-            else {
-                return nil
-            }
-        }
-    }
-}
-public extension Api.messages {
-    enum BotCallbackAnswer: TypeConstructorDescription {
-        public class Cons_botCallbackAnswer: TypeConstructorDescription {
-            public var flags: Int32
-            public var message: String?
-            public var url: String?
-            public var cacheTime: Int32
-            public init(flags: Int32, message: String?, url: String?, cacheTime: Int32) {
-                self.flags = flags
-                self.message = message
-                self.url = url
-                self.cacheTime = cacheTime
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("botCallbackAnswer", [("flags", ConstructorParameterDescription(self.flags)), ("message", ConstructorParameterDescription(self.message)), ("url", ConstructorParameterDescription(self.url)), ("cacheTime", ConstructorParameterDescription(self.cacheTime))])
-            }
-        }
-        case botCallbackAnswer(Cons_botCallbackAnswer)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .botCallbackAnswer(let _data):
-                if boxed {
-                    buffer.appendInt32(911761060)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 0) != 0 {
-                    serializeString(_data.message!, buffer: buffer, boxed: false)
-                }
-                if Int(_data.flags) & Int(1 << 2) != 0 {
-                    serializeString(_data.url!, buffer: buffer, boxed: false)
-                }
-                serializeInt32(_data.cacheTime, buffer: buffer, boxed: false)
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .botCallbackAnswer(let _data):
-                return ("botCallbackAnswer", [("flags", ConstructorParameterDescription(_data.flags)), ("message", ConstructorParameterDescription(_data.message)), ("url", ConstructorParameterDescription(_data.url)), ("cacheTime", ConstructorParameterDescription(_data.cacheTime))])
-            }
-        }
-
-        public static func parse_botCallbackAnswer(_ reader: BufferReader) -> BotCallbackAnswer? {
-            var _1: Int32?
-            _1 = reader.readInt32()
-            var _2: String?
-            if Int(_1 ?? 0) & Int(1 << 0) != 0 {
-                _2 = parseString(reader)
-            }
-            var _3: String?
-            if Int(_1 ?? 0) & Int(1 << 2) != 0 {
-                _3 = parseString(reader)
-            }
-            var _4: Int32?
-            _4 = reader.readInt32()
-            let _c1 = _1 != nil
-            let _c2 = (Int(_1 ?? 0) & Int(1 << 0) == 0) || _2 != nil
-            let _c3 = (Int(_1 ?? 0) & Int(1 << 2) == 0) || _3 != nil
-            let _c4 = _4 != nil
-            if _c1 && _c2 && _c3 && _c4 {
-                return Api.messages.BotCallbackAnswer.botCallbackAnswer(Cons_botCallbackAnswer(flags: _1!, message: _2, url: _3, cacheTime: _4!))
-            }
-            else {
-                return nil
-            }
-        }
-    }
-}
-public extension Api.messages {
-    enum BotPreparedInlineMessage: TypeConstructorDescription {
-        public class Cons_botPreparedInlineMessage: TypeConstructorDescription {
-            public var id: String
-            public var expireDate: Int32
-            public init(id: String, expireDate: Int32) {
-                self.id = id
-                self.expireDate = expireDate
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("botPreparedInlineMessage", [("id", ConstructorParameterDescription(self.id)), ("expireDate", ConstructorParameterDescription(self.expireDate))])
-            }
-        }
-        case botPreparedInlineMessage(Cons_botPreparedInlineMessage)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .botPreparedInlineMessage(let _data):
-                if boxed {
-                    buffer.appendInt32(-1899035375)
-                }
-                serializeString(_data.id, buffer: buffer, boxed: false)
-                serializeInt32(_data.expireDate, buffer: buffer, boxed: false)
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .botPreparedInlineMessage(let _data):
-                return ("botPreparedInlineMessage", [("id", ConstructorParameterDescription(_data.id)), ("expireDate", ConstructorParameterDescription(_data.expireDate))])
-            }
-        }
-
-        public static func parse_botPreparedInlineMessage(_ reader: BufferReader) -> BotPreparedInlineMessage? {
-            var _1: String?
-            _1 = parseString(reader)
-            var _2: Int32?
-            _2 = reader.readInt32()
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            if _c1 && _c2 {
-                return Api.messages.BotPreparedInlineMessage.botPreparedInlineMessage(Cons_botPreparedInlineMessage(id: _1!, expireDate: _2!))
-            }
-            else {
-                return nil
-            }
-        }
-    }
-}
-public extension Api.messages {
-    enum BotResults: TypeConstructorDescription {
-        public class Cons_botResults: TypeConstructorDescription {
-            public var flags: Int32
-            public var queryId: Int64
-            public var nextOffset: String?
-            public var switchPm: Api.InlineBotSwitchPM?
-            public var switchWebview: Api.InlineBotWebView?
-            public var results: [Api.BotInlineResult]
-            public var cacheTime: Int32
-            public var users: [Api.User]
-            public init(flags: Int32, queryId: Int64, nextOffset: String?, switchPm: Api.InlineBotSwitchPM?, switchWebview: Api.InlineBotWebView?, results: [Api.BotInlineResult], cacheTime: Int32, users: [Api.User]) {
-                self.flags = flags
-                self.queryId = queryId
-                self.nextOffset = nextOffset
-                self.switchPm = switchPm
-                self.switchWebview = switchWebview
-                self.results = results
-                self.cacheTime = cacheTime
-                self.users = users
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("botResults", [("flags", ConstructorParameterDescription(self.flags)), ("queryId", ConstructorParameterDescription(self.queryId)), ("nextOffset", ConstructorParameterDescription(self.nextOffset)), ("switchPm", ConstructorParameterDescription(self.switchPm)), ("switchWebview", ConstructorParameterDescription(self.switchWebview)), ("results", ConstructorParameterDescription(self.results)), ("cacheTime", ConstructorParameterDescription(self.cacheTime)), ("users", ConstructorParameterDescription(self.users))])
-            }
-        }
-        case botResults(Cons_botResults)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .botResults(let _data):
-                if boxed {
-                    buffer.appendInt32(-534646026)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                serializeInt64(_data.queryId, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 1) != 0 {
-                    serializeString(_data.nextOffset!, buffer: buffer, boxed: false)
-                }
-                if Int(_data.flags) & Int(1 << 2) != 0 {
-                    _data.switchPm!.serialize(buffer, true)
-                }
-                if Int(_data.flags) & Int(1 << 3) != 0 {
-                    _data.switchWebview!.serialize(buffer, true)
-                }
-                buffer.appendInt32(481674261)
-                buffer.appendInt32(Int32(_data.results.count))
-                for item in _data.results {
-                    item.serialize(buffer, true)
-                }
-                serializeInt32(_data.cacheTime, buffer: buffer, boxed: false)
-                buffer.appendInt32(481674261)
-                buffer.appendInt32(Int32(_data.users.count))
-                for item in _data.users {
-                    item.serialize(buffer, true)
-                }
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .botResults(let _data):
-                return ("botResults", [("flags", ConstructorParameterDescription(_data.flags)), ("queryId", ConstructorParameterDescription(_data.queryId)), ("nextOffset", ConstructorParameterDescription(_data.nextOffset)), ("switchPm", ConstructorParameterDescription(_data.switchPm)), ("switchWebview", ConstructorParameterDescription(_data.switchWebview)), ("results", ConstructorParameterDescription(_data.results)), ("cacheTime", ConstructorParameterDescription(_data.cacheTime)), ("users", ConstructorParameterDescription(_data.users))])
-            }
-        }
-
-        public static func parse_botResults(_ reader: BufferReader) -> BotResults? {
-            var _1: Int32?
-            _1 = reader.readInt32()
-            var _2: Int64?
-            _2 = reader.readInt64()
-            var _3: String?
-            if Int(_1 ?? 0) & Int(1 << 1) != 0 {
-                _3 = parseString(reader)
-            }
-            var _4: Api.InlineBotSwitchPM?
-            if Int(_1 ?? 0) & Int(1 << 2) != 0 {
-                if let signature = reader.readInt32() {
-                    _4 = Api.parse(reader, signature: signature) as? Api.InlineBotSwitchPM
-                }
-            }
-            var _5: Api.InlineBotWebView?
-            if Int(_1 ?? 0) & Int(1 << 3) != 0 {
-                if let signature = reader.readInt32() {
-                    _5 = Api.parse(reader, signature: signature) as? Api.InlineBotWebView
-                }
-            }
-            var _6: [Api.BotInlineResult]?
-            if let _ = reader.readInt32() {
-                _6 = Api.parseVector(reader, elementSignature: 0, elementType: Api.BotInlineResult.self)
-            }
-            var _7: Int32?
-            _7 = reader.readInt32()
-            var _8: [Api.User]?
-            if let _ = reader.readInt32() {
-                _8 = Api.parseVector(reader, elementSignature: 0, elementType: Api.User.self)
-            }
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            let _c3 = (Int(_1 ?? 0) & Int(1 << 1) == 0) || _3 != nil
-            let _c4 = (Int(_1 ?? 0) & Int(1 << 2) == 0) || _4 != nil
-            let _c5 = (Int(_1 ?? 0) & Int(1 << 3) == 0) || _5 != nil
-            let _c6 = _6 != nil
-            let _c7 = _7 != nil
-            let _c8 = _8 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 && _c6 && _c7 && _c8 {
-                return Api.messages.BotResults.botResults(Cons_botResults(flags: _1!, queryId: _2!, nextOffset: _3, switchPm: _4, switchWebview: _5, results: _6!, cacheTime: _7!, users: _8!))
-            }
-            else {
-                return nil
-            }
         }
     }
 }

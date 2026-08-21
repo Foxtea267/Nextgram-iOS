@@ -204,7 +204,9 @@ func withResolvedAssociatedMessages<T>(postbox: Postbox, source: FetchMessageHis
             storedIds.insert(id)
             for attribute in message.attributes {
                 if let attribute = attribute as? ReplyMessageAttribute {
-                    referencedReplyIds.add(sourceId: id, targetId: attribute.messageId)
+                    if id.namespace != Namespaces.Message.EphemeralLocal && attribute.messageId.namespace != Namespaces.Message.EphemeralLocal {
+                        referencedReplyIds.add(sourceId: id, targetId: attribute.messageId)
+                    }
                 } else {
                     referencedGeneralIds.formUnion(attribute.associatedMessageIds)
                 }
@@ -1192,7 +1194,8 @@ func fetchChatListHole(postbox: Postbox, network: Network, accountPeerId: PeerId
         }
         return withResolvedAssociatedMessages(postbox: postbox, source: .network(network), accountPeerId: accountPeerId, parsedPeers: fetchedChats.peers, storeMessages: fetchedChats.storeMessages, resolveThreads: false, { transaction, additionalPeers, additionalMessages -> Void in
             updatePeers(transaction: transaction, accountPeerId: accountPeerId, peers: fetchedChats.peers.union(with: additionalPeers))
-            
+            _internal_applyFetchedChatInputStates(transaction: transaction, accountPeerId: accountPeerId, inputStates: fetchedChats.inputStates)
+
             for (threadMessageId, data) in fetchedChats.threadInfos {
                 if let entry = StoredMessageHistoryThreadInfo(data.data) {
                     transaction.setMessageHistoryThreadInfo(peerId: threadMessageId.peerId, threadId: threadMessageId.threadId, info: entry)

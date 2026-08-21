@@ -190,19 +190,20 @@ private enum DebugControllerEntry: ItemListNodeEntry {
         case .redactSensitiveData:
             return 12
         case .emptyControlNotificationLogging:
-            return 105
-        case .webViewInspection:
+            // MARK: NAGRAM - Keep the inserted entry ordered before web settings.
             return 13
-        case .resetWebViewCache:
+        case .webViewInspection:
             return 14
-        case .keepChatNavigationStack:
+        case .resetWebViewCache:
             return 15
-        case .skipReadHistory:
+        case .keepChatNavigationStack:
             return 16
-        case .alwaysDisplayTyping:
+        case .skipReadHistory:
             return 17
-        case .debugRatingLayout:
+        case .alwaysDisplayTyping:
             return 18
+        case .debugRatingLayout:
+            return 19
         case .crashOnSlowQueries:
             return 20
         case .crashOnMemoryPressure:
@@ -1325,11 +1326,11 @@ private enum DebugControllerEntry: ItemListNodeEntry {
                 }).start()
             })
         case let .debugRichText(value):
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Debug Text", value: value, sectionId: self.section, style: .blocks, updated: { value in
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "Force Text Field v2", value: value, sectionId: self.section, style: .blocks, updated: { value in
                 let _ = arguments.sharedContext.accountManager.transaction ({ transaction in
                     transaction.updateSharedData(ApplicationSpecificSharedDataKeys.experimentalUISettings, { settings in
                         var settings = settings?.get(ExperimentalUISettings.self) ?? ExperimentalUISettings.defaultSettings
-                        settings.debugRichText = value
+                        settings.forceNewTextInput = value
                         return EnginePreferencesEntry(settings)
                     })
                 }).start()
@@ -1613,7 +1614,7 @@ private func debugControllerEntries(context: AccountContext?, sharedContext: Sha
         entries.append(.fakeGlass(experimentalSettings.fakeGlass))
         entries.append(.forceClearGlass(experimentalSettings.forceClearGlass))
         entries.append(.debugRipple(experimentalSettings.debugRipple))
-        entries.append(.debugRichText(experimentalSettings.debugRichText))
+        entries.append(.debugRichText(experimentalSettings.forceNewTextInput))
         #if DEBUG
         entries.append(.browserExperiment(experimentalSettings.browserExperiment))
         #else

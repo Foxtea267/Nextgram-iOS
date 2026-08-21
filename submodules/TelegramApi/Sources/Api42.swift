@@ -3642,6 +3642,21 @@ public extension Api.functions.channels {
     }
 }
 public extension Api.functions.channels {
+    static func getCategories(langCode: String) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<[Api.ChannelCategory]>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1814446679)
+        serializeString(langCode, buffer: buffer, boxed: false)
+        return (FunctionDescription(name: "channels.getCategories", parameters: [("langCode", ConstructorParameterDescription(langCode))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> [Api.ChannelCategory]? in
+            let reader = BufferReader(buffer)
+            var result: [Api.ChannelCategory]?
+            if let _ = reader.readInt32() {
+                result = Api.parseVector(reader, elementSignature: 0, elementType: Api.ChannelCategory.self)
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.channels {
     static func getChannelRecommendations(flags: Int32, channel: Api.InputChannel?) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.messages.Chats>) {
         let buffer = Buffer()
         buffer.appendInt32(631707458)
@@ -3673,6 +3688,20 @@ public extension Api.functions.channels {
             var result: Api.messages.Chats?
             if let signature = reader.readInt32() {
                 result = Api.parse(reader, signature: signature) as? Api.messages.Chats
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.channels {
+    static func getContactPersonalChannels() -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.channels.PersonalChannels>) {
+        let buffer = Buffer()
+        buffer.appendInt32(1352350822)
+        return (FunctionDescription(name: "channels.getContactPersonalChannels", parameters: []), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.channels.PersonalChannels? in
+            let reader = BufferReader(buffer)
+            var result: Api.channels.PersonalChannels?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.channels.PersonalChannels
             }
             return result
         })
@@ -3977,6 +4006,28 @@ public extension Api.functions.channels {
             var result: Api.Updates?
             if let signature = reader.readInt32() {
                 result = Api.parse(reader, signature: signature) as? Api.Updates
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.channels {
+    static func search(flags: Int32, q: String?, categoryId: Int32?, offset: String) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.channels.Found>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-940686817)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 0) != 0 {
+            serializeString(q!, buffer: buffer, boxed: false)
+        }
+        if Int(flags) & Int(1 << 1) != 0 {
+            serializeInt32(categoryId!, buffer: buffer, boxed: false)
+        }
+        serializeString(offset, buffer: buffer, boxed: false)
+        return (FunctionDescription(name: "channels.search", parameters: [("flags", ConstructorParameterDescription(flags)), ("q", ConstructorParameterDescription(q)), ("categoryId", ConstructorParameterDescription(categoryId)), ("offset", ConstructorParameterDescription(offset))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.channels.Found? in
+            let reader = BufferReader(buffer)
+            var result: Api.channels.Found?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.channels.Found
             }
             return result
         })
@@ -4542,6 +4593,156 @@ public extension Api.functions.chatlists {
         })
     }
 }
+public extension Api.functions.communities {
+    static func create(flags: Int32, title: String, about: String?, peer: Api.InputPeer) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Updates>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1506256404)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        serializeString(title, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 0) != 0 {
+            serializeString(about!, buffer: buffer, boxed: false)
+        }
+        peer.serialize(buffer, true)
+        return (FunctionDescription(name: "communities.create", parameters: [("flags", ConstructorParameterDescription(flags)), ("title", ConstructorParameterDescription(title)), ("about", ConstructorParameterDescription(about)), ("peer", ConstructorParameterDescription(peer))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Updates? in
+            let reader = BufferReader(buffer)
+            var result: Api.Updates?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Updates
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func getJoinedCommunities() -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.messages.Chats>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1503401936)
+        return (FunctionDescription(name: "communities.getJoinedCommunities", parameters: []), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.messages.Chats? in
+            let reader = BufferReader(buffer)
+            var result: Api.messages.Chats?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.messages.Chats
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func getParticipantJoinedChats(community: Api.InputChannel, participant: Api.InputPeer) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.communities.ParticipantJoinedChats>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-125916245)
+        community.serialize(buffer, true)
+        participant.serialize(buffer, true)
+        return (FunctionDescription(name: "communities.getParticipantJoinedChats", parameters: [("community", ConstructorParameterDescription(community)), ("participant", ConstructorParameterDescription(participant))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.communities.ParticipantJoinedChats? in
+            let reader = BufferReader(buffer)
+            var result: Api.communities.ParticipantJoinedChats?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.communities.ParticipantJoinedChats
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func getPeerLinkRequests(community: Api.InputChannel, offset: String, limit: Int32) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.communities.PeerLinkRequests>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1820904636)
+        community.serialize(buffer, true)
+        serializeString(offset, buffer: buffer, boxed: false)
+        serializeInt32(limit, buffer: buffer, boxed: false)
+        return (FunctionDescription(name: "communities.getPeerLinkRequests", parameters: [("community", ConstructorParameterDescription(community)), ("offset", ConstructorParameterDescription(offset)), ("limit", ConstructorParameterDescription(limit))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.communities.PeerLinkRequests? in
+            let reader = BufferReader(buffer)
+            var result: Api.communities.PeerLinkRequests?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.communities.PeerLinkRequests
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func toggleAllPeerLinkRequestApproval(flags: Int32, community: Api.InputChannel) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Bool>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1075585731)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        community.serialize(buffer, true)
+        return (FunctionDescription(name: "communities.toggleAllPeerLinkRequestApproval", parameters: [("flags", ConstructorParameterDescription(flags)), ("community", ConstructorParameterDescription(community))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Bool? in
+            let reader = BufferReader(buffer)
+            var result: Api.Bool?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Bool
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func toggleCommunityCollapsedInDialogs(flags: Int32, community: Api.InputChannel) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Updates>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-681122838)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        community.serialize(buffer, true)
+        return (FunctionDescription(name: "communities.toggleCommunityCollapsedInDialogs", parameters: [("flags", ConstructorParameterDescription(flags)), ("community", ConstructorParameterDescription(community))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Updates? in
+            let reader = BufferReader(buffer)
+            var result: Api.Updates?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Updates
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func toggleParticipantBanned(flags: Int32, community: Api.InputChannel, participant: Api.InputPeer) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Bool>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1721258737)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        community.serialize(buffer, true)
+        participant.serialize(buffer, true)
+        return (FunctionDescription(name: "communities.toggleParticipantBanned", parameters: [("flags", ConstructorParameterDescription(flags)), ("community", ConstructorParameterDescription(community)), ("participant", ConstructorParameterDescription(participant))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Bool? in
+            let reader = BufferReader(buffer)
+            var result: Api.Bool?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Bool
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func togglePeerLink(flags: Int32, community: Api.InputChannel, peer: Api.InputPeer) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Bool>) {
+        let buffer = Buffer()
+        buffer.appendInt32(1936576490)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        community.serialize(buffer, true)
+        peer.serialize(buffer, true)
+        return (FunctionDescription(name: "communities.togglePeerLink", parameters: [("flags", ConstructorParameterDescription(flags)), ("community", ConstructorParameterDescription(community)), ("peer", ConstructorParameterDescription(peer))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Bool? in
+            let reader = BufferReader(buffer)
+            var result: Api.Bool?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Bool
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.communities {
+    static func togglePeerLinkRequestApproval(flags: Int32, community: Api.InputChannel, peer: Api.InputPeer) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Bool>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1937630808)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        community.serialize(buffer, true)
+        peer.serialize(buffer, true)
+        return (FunctionDescription(name: "communities.togglePeerLinkRequestApproval", parameters: [("flags", ConstructorParameterDescription(flags)), ("community", ConstructorParameterDescription(community)), ("peer", ConstructorParameterDescription(peer))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Bool? in
+            let reader = BufferReader(buffer)
+            var result: Api.Bool?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Bool
+            }
+            return result
+        })
+    }
+}
 public extension Api.functions.contacts {
     static func acceptContact(id: Api.InputUser) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Updates>) {
         let buffer = Buffer()
@@ -5001,6 +5202,102 @@ public extension Api.functions.contacts {
             var result: Api.Bool?
             if let signature = reader.readInt32() {
                 result = Api.parse(reader, signature: signature) as? Api.Bool
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.ephemeral {
+    static func deleteMessage(peer: Api.InputPeer, receiverId: Api.InputUser, id: Int32) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Bool>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1547643631)
+        peer.serialize(buffer, true)
+        receiverId.serialize(buffer, true)
+        serializeInt32(id, buffer: buffer, boxed: false)
+        return (FunctionDescription(name: "ephemeral.deleteMessage", parameters: [("peer", ConstructorParameterDescription(peer)), ("receiverId", ConstructorParameterDescription(receiverId)), ("id", ConstructorParameterDescription(id))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Bool? in
+            let reader = BufferReader(buffer)
+            var result: Api.Bool?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Bool
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.ephemeral {
+    static func getCallbackAnswer(flags: Int32, peer: Api.InputPeer, id: Int32, data: Buffer?) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.messages.BotCallbackAnswer>) {
+        let buffer = Buffer()
+        buffer.appendInt32(1067738312)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        peer.serialize(buffer, true)
+        serializeInt32(id, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 1) != 0 {
+            serializeBytes(data!, buffer: buffer, boxed: false)
+        }
+        return (FunctionDescription(name: "ephemeral.getCallbackAnswer", parameters: [("flags", ConstructorParameterDescription(flags)), ("peer", ConstructorParameterDescription(peer)), ("id", ConstructorParameterDescription(id)), ("data", ConstructorParameterDescription(data))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.messages.BotCallbackAnswer? in
+            let reader = BufferReader(buffer)
+            var result: Api.messages.BotCallbackAnswer?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.messages.BotCallbackAnswer
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.ephemeral {
+    static func reportMessage(peer: Api.InputPeer, id: Int32, option: Buffer, message: String) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.ReportResult>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-2029718849)
+        peer.serialize(buffer, true)
+        serializeInt32(id, buffer: buffer, boxed: false)
+        serializeBytes(option, buffer: buffer, boxed: false)
+        serializeString(message, buffer: buffer, boxed: false)
+        return (FunctionDescription(name: "ephemeral.reportMessage", parameters: [("peer", ConstructorParameterDescription(peer)), ("id", ConstructorParameterDescription(id)), ("option", ConstructorParameterDescription(option)), ("message", ConstructorParameterDescription(message))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.ReportResult? in
+            let reader = BufferReader(buffer)
+            var result: Api.ReportResult?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.ReportResult
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.ephemeral {
+    static func sendMessage(flags: Int32, peer: Api.InputPeer, receiverId: Api.InputUser, queryId: Int64?, message: String, entities: [Api.MessageEntity]?, media: Api.InputMedia?, replyMarkup: Api.ReplyMarkup?, richMessage: Api.InputRichMessage?, randomId: Int64, replyTo: Api.InputReplyTo?) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.Updates>) {
+        let buffer = Buffer()
+        buffer.appendInt32(1758187679)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        peer.serialize(buffer, true)
+        receiverId.serialize(buffer, true)
+        if Int(flags) & Int(1 << 0) != 0 {
+            serializeInt64(queryId!, buffer: buffer, boxed: false)
+        }
+        serializeString(message, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 1) != 0 {
+            buffer.appendInt32(481674261)
+            buffer.appendInt32(Int32(entities!.count))
+            for item in entities! {
+                item.serialize(buffer, true)
+            }
+        }
+        if Int(flags) & Int(1 << 2) != 0 {
+            media!.serialize(buffer, true)
+        }
+        if Int(flags) & Int(1 << 3) != 0 {
+            replyMarkup!.serialize(buffer, true)
+        }
+        if Int(flags) & Int(1 << 4) != 0 {
+            richMessage!.serialize(buffer, true)
+        }
+        serializeInt64(randomId, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 5) != 0 {
+            replyTo!.serialize(buffer, true)
+        }
+        return (FunctionDescription(name: "ephemeral.sendMessage", parameters: [("flags", ConstructorParameterDescription(flags)), ("peer", ConstructorParameterDescription(peer)), ("receiverId", ConstructorParameterDescription(receiverId)), ("queryId", ConstructorParameterDescription(queryId)), ("message", ConstructorParameterDescription(message)), ("entities", ConstructorParameterDescription(entities)), ("media", ConstructorParameterDescription(media)), ("replyMarkup", ConstructorParameterDescription(replyMarkup)), ("richMessage", ConstructorParameterDescription(richMessage)), ("randomId", ConstructorParameterDescription(randomId)), ("replyTo", ConstructorParameterDescription(replyTo))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.Updates? in
+            let reader = BufferReader(buffer)
+            var result: Api.Updates?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.Updates
             }
             return result
         })
@@ -5772,6 +6069,30 @@ public extension Api.functions.messages {
             var result: Api.messages.ComposedMessageWithAI?
             if let signature = reader.readInt32() {
                 result = Api.parse(reader, signature: signature) as? Api.messages.ComposedMessageWithAI
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.messages {
+    static func composeRichMessageWithAI(flags: Int32, text: Api.InputRichMessage?, translateToLang: String?, tone: Api.InputAiComposeTone?) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.messages.ComposedRichMessageWithAI>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1921325393)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 4) != 0 {
+            text!.serialize(buffer, true)
+        }
+        if Int(flags) & Int(1 << 1) != 0 {
+            serializeString(translateToLang!, buffer: buffer, boxed: false)
+        }
+        if Int(flags) & Int(1 << 2) != 0 {
+            tone!.serialize(buffer, true)
+        }
+        return (FunctionDescription(name: "messages.composeRichMessageWithAI", parameters: [("flags", ConstructorParameterDescription(flags)), ("text", ConstructorParameterDescription(text)), ("translateToLang", ConstructorParameterDescription(translateToLang)), ("tone", ConstructorParameterDescription(tone))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.messages.ComposedRichMessageWithAI? in
+            let reader = BufferReader(buffer)
+            var result: Api.messages.ComposedRichMessageWithAI?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.messages.ComposedRichMessageWithAI
             }
             return result
         })
@@ -8882,6 +9203,26 @@ public extension Api.functions.messages {
     }
 }
 public extension Api.functions.messages {
+    static func requestChatJoinWebView(flags: Int32, queryId: Int64, themeParams: Api.DataJSON?, platform: String) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.WebViewResult>) {
+        let buffer = Buffer()
+        buffer.appendInt32(-1163991431)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        serializeInt64(queryId, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 0) != 0 {
+            themeParams!.serialize(buffer, true)
+        }
+        serializeString(platform, buffer: buffer, boxed: false)
+        return (FunctionDescription(name: "messages.requestChatJoinWebView", parameters: [("flags", ConstructorParameterDescription(flags)), ("queryId", ConstructorParameterDescription(queryId)), ("themeParams", ConstructorParameterDescription(themeParams)), ("platform", ConstructorParameterDescription(platform))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.WebViewResult? in
+            let reader = BufferReader(buffer)
+            var result: Api.WebViewResult?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.WebViewResult
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.messages {
     static func requestEncryption(userId: Api.InputUser, randomId: Int32, gA: Buffer) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.EncryptedChat>) {
         let buffer = Buffer()
         buffer.appendInt32(-162681021)
@@ -9199,12 +9540,15 @@ public extension Api.functions.messages {
     }
 }
 public extension Api.functions.messages {
-    static func searchGlobal(flags: Int32, folderId: Int32?, q: String, filter: Api.MessagesFilter, minDate: Int32, maxDate: Int32, offsetRate: Int32, offsetPeer: Api.InputPeer, offsetId: Int32, limit: Int32) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.messages.Messages>) {
+    static func searchGlobal(flags: Int32, folderId: Int32?, community: Api.InputChannel?, q: String, filter: Api.MessagesFilter, minDate: Int32, maxDate: Int32, offsetRate: Int32, offsetPeer: Api.InputPeer, offsetId: Int32, limit: Int32) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.messages.Messages>) {
         let buffer = Buffer()
-        buffer.appendInt32(1271290010)
+        buffer.appendInt32(1629922364)
         serializeInt32(flags, buffer: buffer, boxed: false)
         if Int(flags) & Int(1 << 0) != 0 {
             serializeInt32(folderId!, buffer: buffer, boxed: false)
+        }
+        if Int(flags) & Int(1 << 4) != 0 {
+            community!.serialize(buffer, true)
         }
         serializeString(q, buffer: buffer, boxed: false)
         filter.serialize(buffer, true)
@@ -9214,7 +9558,7 @@ public extension Api.functions.messages {
         offsetPeer.serialize(buffer, true)
         serializeInt32(offsetId, buffer: buffer, boxed: false)
         serializeInt32(limit, buffer: buffer, boxed: false)
-        return (FunctionDescription(name: "messages.searchGlobal", parameters: [("flags", ConstructorParameterDescription(flags)), ("folderId", ConstructorParameterDescription(folderId)), ("q", ConstructorParameterDescription(q)), ("filter", ConstructorParameterDescription(filter)), ("minDate", ConstructorParameterDescription(minDate)), ("maxDate", ConstructorParameterDescription(maxDate)), ("offsetRate", ConstructorParameterDescription(offsetRate)), ("offsetPeer", ConstructorParameterDescription(offsetPeer)), ("offsetId", ConstructorParameterDescription(offsetId)), ("limit", ConstructorParameterDescription(limit))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.messages.Messages? in
+        return (FunctionDescription(name: "messages.searchGlobal", parameters: [("flags", ConstructorParameterDescription(flags)), ("folderId", ConstructorParameterDescription(folderId)), ("community", ConstructorParameterDescription(community)), ("q", ConstructorParameterDescription(q)), ("filter", ConstructorParameterDescription(filter)), ("minDate", ConstructorParameterDescription(minDate)), ("maxDate", ConstructorParameterDescription(maxDate)), ("offsetRate", ConstructorParameterDescription(offsetRate)), ("offsetPeer", ConstructorParameterDescription(offsetPeer)), ("offsetId", ConstructorParameterDescription(offsetId)), ("limit", ConstructorParameterDescription(limit))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.messages.Messages? in
             let reader = BufferReader(buffer)
             var result: Api.messages.Messages?
             if let signature = reader.readInt32() {
@@ -10262,6 +10606,42 @@ public extension Api.functions.messages {
             var result: Api.messages.TranscribedAudio?
             if let signature = reader.readInt32() {
                 result = Api.parse(reader, signature: signature) as? Api.messages.TranscribedAudio
+            }
+            return result
+        })
+    }
+}
+public extension Api.functions.messages {
+    static func translateRichMessage(flags: Int32, peer: Api.InputPeer?, id: [Int32]?, text: [Api.InputRichMessage]?, toLang: String, tone: String?) -> (FunctionDescription, Buffer, DeserializeFunctionResponse<Api.messages.TranslatedRichMessage>) {
+        let buffer = Buffer()
+        buffer.appendInt32(441720836)
+        serializeInt32(flags, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 0) != 0 {
+            peer!.serialize(buffer, true)
+        }
+        if Int(flags) & Int(1 << 0) != 0 {
+            buffer.appendInt32(481674261)
+            buffer.appendInt32(Int32(id!.count))
+            for item in id! {
+                serializeInt32(item, buffer: buffer, boxed: false)
+            }
+        }
+        if Int(flags) & Int(1 << 1) != 0 {
+            buffer.appendInt32(481674261)
+            buffer.appendInt32(Int32(text!.count))
+            for item in text! {
+                item.serialize(buffer, true)
+            }
+        }
+        serializeString(toLang, buffer: buffer, boxed: false)
+        if Int(flags) & Int(1 << 2) != 0 {
+            serializeString(tone!, buffer: buffer, boxed: false)
+        }
+        return (FunctionDescription(name: "messages.translateRichMessage", parameters: [("flags", ConstructorParameterDescription(flags)), ("peer", ConstructorParameterDescription(peer)), ("id", ConstructorParameterDescription(id)), ("text", ConstructorParameterDescription(text)), ("toLang", ConstructorParameterDescription(toLang)), ("tone", ConstructorParameterDescription(tone))]), buffer, DeserializeFunctionResponse { (buffer: Buffer) -> Api.messages.TranslatedRichMessage? in
+            let reader = BufferReader(buffer)
+            var result: Api.messages.TranslatedRichMessage?
+            if let signature = reader.readInt32() {
+                result = Api.parse(reader, signature: signature) as? Api.messages.TranslatedRichMessage
             }
             return result
         })

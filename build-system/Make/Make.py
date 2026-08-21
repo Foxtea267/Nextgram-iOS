@@ -319,7 +319,7 @@ class BazelCommandLine:
         print(subprocess.list2cmdline(combined_arguments))
         call_executable(combined_arguments)
 
-    def invoke_test(self):
+    def invoke_test(self, test_target='Tests/AllTests'):
         combined_arguments = [
             self.build_environment.bazel_path
         ]
@@ -329,7 +329,7 @@ class BazelCommandLine:
         combined_arguments += ['--cache_test_results=no']
         combined_arguments += ['--test_output=errors']
 
-        combined_arguments += ['Tests/AllTests']
+        combined_arguments += [test_target]
 
         combined_arguments += self.common_args
         combined_arguments += self.common_build_args
@@ -1069,7 +1069,7 @@ def test(bazel, arguments):
     bazel_command_line.set_configuration('debug_sim_arm64')
     bazel_command_line.set_build_number('10000')
 
-    bazel_command_line.invoke_test()
+    bazel_command_line.invoke_test(test_target=arguments.target)
 
 
 def query(bazel, arguments):
@@ -1269,6 +1269,12 @@ if __name__ == '__main__':
             '''
     )
     add_project_and_build_common_arguments(testParser)
+    testParser.add_argument(
+        '--target',
+        type=str,
+        default='Tests/AllTests',
+        help='Bazel test target to run (default: Tests/AllTests, the full suite).'
+    )
 
     generateProjectParser = subparsers.add_parser('generateProject', help='Generate Xcode project')
     generateProjectParser.add_argument(

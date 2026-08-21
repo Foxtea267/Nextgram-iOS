@@ -65,12 +65,12 @@ enum ChannelMemberListCategory {
 }
 
 private protocol ChannelMemberCategoryListContext {
-    //var listStateValue: ChannelMemberListState { get }
     var listState: Signal<ChannelMemberListState, NoError> { get }
     func loadMore()
     func reset(_ force: Bool)
     func replayUpdates(_ updates: [(ChannelParticipant?, RenderedChannelParticipant?, Bool?)])
     func forceUpdateHead()
+    func remove(memberId: EnginePeer.Id)
 }
 
 private func isParticipantMember(_ participant: ChannelParticipant, infoIsMember: Bool?) -> Bool {
@@ -556,6 +556,26 @@ private final class ChannelMemberSingleCategoryListContext: ChannelMemberCategor
             self.listStateValue = listState
         }
     }
+    
+    func remove(memberId: EnginePeer.Id) {
+        guard case .banned = self.category else {
+            return
+        }
+        var list = self.listStateValue.list
+        var updatedList = false
+        loop: for i in 0 ..< list.count {
+            if list[i].peer.id == memberId {
+                list.remove(at: i)
+                updatedList = true
+                break loop
+            }
+        }
+        if updatedList {
+            var listState = self.listStateValue
+            listState.list = list
+            self.listStateValue = listState
+        }
+    }
 }
 
 private final class ChannelMemberMultiCategoryListContext: ChannelMemberCategoryListContext {
@@ -648,6 +668,12 @@ private final class ChannelMemberMultiCategoryListContext: ChannelMemberCategory
     func replayUpdates(_ updates: [(ChannelParticipant?, RenderedChannelParticipant?, Bool?)]) {
         for context in self.contexts {
             context.replayUpdates(updates)
+        }
+    }
+    
+    func remove(memberId: EnginePeer.Id) {
+        for context in self.contexts {
+            context.remove(memberId: memberId)
         }
     }
 }
@@ -815,6 +841,12 @@ final class PeerChannelMemberCategoriesContext {
     func replayUpdates(_ updates: [(ChannelParticipant?, RenderedChannelParticipant?, Bool?)]) {
         for (_, context) in self.contexts {
             context.context.replayUpdates(updates)
+        }
+    }
+    
+    func remove(memberId: EnginePeer.Id) {
+        for (_, context) in self.contexts {
+            context.context.remove(memberId: memberId)
         }
     }
 }

@@ -36,6 +36,80 @@ public struct ChatListNodeViewUpdate {
     }
 }
 
+private func communityPeerId(item: EngineChatList.Item) -> EnginePeer.Id? {
+    guard case let .chatList(peerId) = item.id else {
+        return nil
+    }
+    if let peer = item.renderedPeer.peer, case let .community(community) = peer, community.collapsedInDialogs == true {
+        return peerId
+    } else {
+        return nil
+    }
+}
+
+private func filteredCommunityChatListItems(_ items: [EngineChatList.Item]) -> [EngineChatList.Item] {
+    return items.filter { item in
+        if let peer = item.renderedPeer.peer, case let .community(community) = peer {
+            return community.collapsedInDialogs == true
+        } else {
+            return true
+        }
+    }
+}
+
+private func chatListNodeViewUpdateWithCommunitySummaries(account: Account, update: ChatListNodeViewUpdate) -> Signal<ChatListNodeViewUpdate, NoError> {
+    let baseItems = filteredCommunityChatListItems(update.list.items)
+    let baseList = EngineChatList(
+        items: baseItems,
+        groupItems: update.list.groupItems,
+        additionalItems: update.list.additionalItems,
+        hasEarlier: update.list.hasEarlier,
+        hasLater: update.list.hasLater,
+        isLoading: update.list.isLoading
+    )
+    let baseUpdate = ChatListNodeViewUpdate(list: baseList, type: update.type, scrollPosition: update.scrollPosition)
+
+    let communityIds = baseItems.compactMap { item in
+        return communityPeerId(item: item)
+    }
+    if communityIds.isEmpty {
+        return .single(baseUpdate)
+    }
+
+    var isFirstSummary = true
+    return communityChatListItemSummaries(postbox: account.postbox, communityIds: communityIds)
+    |> map { summaries -> ChatListNodeViewUpdate in
+        let updatedType: ViewUpdateType
+        let updatedScrollPosition: ChatListNodeViewScrollPosition?
+        if isFirstSummary {
+            updatedType = update.type
+            updatedScrollPosition = update.scrollPosition
+            isFirstSummary = false
+        } else {
+            updatedType = .Generic
+            updatedScrollPosition = nil
+        }
+
+        let items = baseItems.map { item -> EngineChatList.Item in
+            guard let communityId = communityPeerId(item: item), let summary = summaries[communityId], summary.hasLinkedPeers else {
+                return item
+            }
+            let messages = summary.topMessage.map { [$0] } ?? item.messages
+            return item.withUpdatedCommunitySummary(messages: messages, readCounters: summary.readCounters ?? item.readCounters)
+        }
+
+        let list = EngineChatList(
+            items: items,
+            groupItems: baseList.groupItems,
+            additionalItems: baseList.additionalItems,
+            hasEarlier: baseList.hasEarlier,
+            hasLater: baseList.hasLater,
+            isLoading: baseList.isLoading
+        )
+        return ChatListNodeViewUpdate(list: list, type: updatedType, scrollPosition: updatedScrollPosition)
+    }
+}
+
 public func chatListFilterPredicate(filter: ChatListFilterData, accountPeerId: EnginePeer.Id, includeRecentPeerIds: Set<EnginePeer.Id> = Set()) -> ChatListFilterPredicate {
     var includePeers = Set(filter.includePeers.peers)
     var excludePeers = Set(filter.excludePeers)
@@ -117,6 +191,8 @@ public func chatListFilterPredicate(filter: ChatListFilterData, accountPeerId: E
                 if case .group = channel.info {
                     return false
                 }
+            } else if let _ = peer as? TelegramCommunity {
+                return false
             }
         }
         if !filter.categories.contains(.channels) {
@@ -130,13 +206,49 @@ public func chatListFilterPredicate(filter: ChatListFilterData, accountPeerId: E
     })
 }
 
+// MARK: NAGRAM — 最近会话文件夹同时匹配已折叠的聚合容器。
 public func nagramChatListFilterRecentPeerIds(accountPeerId: EnginePeer.Id, filterId: Int32) -> Set<EnginePeer.Id> {
     let accountPeerIdValue = accountPeerId.toInt64()
     guard NagramSettings.shared.isRecentChatFolderEnabled(accountPeerId: accountPeerIdValue, filterId: filterId)
     else {
         return Set()
     }
-    return Set(NagramSettings.shared.recentChatIds(accountPeerId: accountPeerIdValue).map(EnginePeer.Id.init))
+    return Set(NagramSettings.shared.recentChatFilterPeerIds(accountPeerId: accountPeerIdValue).map(EnginePeer.Id.init))
+}
+
+private func nagramResolveRecentChatContainerPeerIds(account: Account, filterId: Int32) -> Signal<Set<EnginePeer.Id>, NoError> {
+    let accountPeerId = account.peerId.toInt64()
+    guard NagramSettings.shared.isRecentChatFolderEnabled(accountPeerId: accountPeerId, filterId: filterId) else {
+        return .single(Set())
+    }
+    let recentChatIds = NagramSettings.shared.recentChatIds(accountPeerId: accountPeerId)
+    return account.postbox.transaction { transaction -> ([Int64: Int64], Set<Int64>) in
+        var containerPeerIds: [Int64: Int64] = [:]
+        var resolvedPeerIds = Set<Int64>()
+        for recentChatId in recentChatIds {
+            let peerId = EnginePeer.Id(recentChatId)
+            guard let peer = transaction.getPeer(peerId) else {
+                continue
+            }
+            guard let containerPeerId = peer.containerPeerId else {
+                resolvedPeerIds.insert(recentChatId)
+                continue
+            }
+            guard let community = transaction.getPeer(containerPeerId) as? TelegramCommunity else {
+                continue
+            }
+            resolvedPeerIds.insert(recentChatId)
+            if community.collapsedInDialogs == true {
+                containerPeerIds[recentChatId] = containerPeerId.toInt64()
+            }
+        }
+        return (containerPeerIds, resolvedPeerIds)
+    }
+    |> deliverOnMainQueue
+    |> map { containerPeerIds, resolvedPeerIds -> Set<EnginePeer.Id> in
+        NagramSettings.shared.updateRecentChatContainerPeerIds(containerPeerIds, resolvedPeerIds: resolvedPeerIds, accountPeerId: accountPeerId)
+        return nagramChatListFilterRecentPeerIds(accountPeerId: account.peerId, filterId: filterId)
+    }
 }
 
 private func nagramRecentChatsFilterUpdates(accountPeerId: Int64, filterId: Int32) -> Signal<Void, NoError> {
@@ -171,9 +283,11 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
         if let filter = location.filter, case let .filter(id, _, _, data) = filter {
             let nagramAccountPeerId = account.peerId.toInt64()
             filterPredicate = nagramRecentChatsFilterUpdates(accountPeerId: nagramAccountPeerId, filterId: id)
-            |> map { _ -> ChatListFilterPredicate? in
-                let includeRecentPeerIds = nagramChatListFilterRecentPeerIds(accountPeerId: account.peerId, filterId: id)
-                return chatListFilterPredicate(filter: data, accountPeerId: account.peerId, includeRecentPeerIds: includeRecentPeerIds)
+            |> mapToSignal { _ -> Signal<ChatListFilterPredicate?, NoError> in
+                return nagramResolveRecentChatContainerPeerIds(account: account, filterId: id)
+                |> map { includeRecentPeerIds -> ChatListFilterPredicate? in
+                    return chatListFilterPredicate(filter: data, accountPeerId: account.peerId, includeRecentPeerIds: includeRecentPeerIds)
+                }
             }
         } else {
             filterPredicate = .single(nil)
@@ -189,6 +303,9 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
                 |> map { view, updateType -> ChatListNodeViewUpdate in
                     return ChatListNodeViewUpdate(list: EngineChatList(view, accountPeerId: accountPeerId), type: updateType, scrollPosition: nil)
                 }
+            }
+            |> mapToSignal { update -> Signal<ChatListNodeViewUpdate, NoError> in
+                return chatListNodeViewUpdateWithCommunitySummaries(account: account, update: update)
             }
         case let .navigation(index, _):
             guard case let .chatList(index) = index else {
@@ -208,6 +325,9 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
                     }
                     return ChatListNodeViewUpdate(list: EngineChatList(view, accountPeerId: accountPeerId), type: genericType, scrollPosition: nil)
                 }
+            }
+            |> mapToSignal { update -> Signal<ChatListNodeViewUpdate, NoError> in
+                return chatListNodeViewUpdateWithCommunitySummaries(account: account, update: update)
             }
         case let .scroll(index, sourceIndex, scrollPosition, animated, _):
             guard case let .chatList(index) = index else {
@@ -231,6 +351,9 @@ public func chatListViewForLocation(chatListLocation: ChatListControllerLocation
                     }
                     return ChatListNodeViewUpdate(list: EngineChatList(view, accountPeerId: accountPeerId), type: genericType, scrollPosition: scrollPosition)
                 }
+            }
+            |> mapToSignal { update -> Signal<ChatListNodeViewUpdate, NoError> in
+                return chatListNodeViewUpdateWithCommunitySummaries(account: account, update: update)
             }
         }
     case let .forum(peerId):

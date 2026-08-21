@@ -27,46 +27,57 @@ public class TranslationMessageAttribute: MessageAttribute, Equatable {
 
     public let additional: [Additional]
     public let pollSolution: Additional?
+    /// The translated rich content, for messages carrying a `RichTextMessageAttribute` (translated via
+    /// `messages.translateRichMessage`). `text`/`entities` stay empty for those.
+    public let instantPage: InstantPage?
 
     public var associatedPeerIds: [PeerId] {
         return []
     }
-    
+
     public init(
         text: String,
         entities: [MessageTextEntity],
         additional:[Additional] = [],
         pollSolution: Additional? = nil,
-        toLang: String
+        toLang: String,
+        instantPage: InstantPage? = nil
     ) {
         self.text = text
         self.entities = entities
         self.toLang = toLang
         self.additional = additional
         self.pollSolution = pollSolution
+        self.instantPage = instantPage
     }
-    
+
     required public init(decoder: PostboxDecoder) {
         self.text = decoder.decodeStringForKey("text", orElse: "")
         self.entities = decoder.decodeObjectArrayWithDecoderForKey("entities")
         self.additional = decoder.decodeObjectArrayWithDecoderForKey("additional")
         self.toLang = decoder.decodeStringForKey("toLang", orElse: "")
         self.pollSolution = decoder.decodeObjectForKey("pollSolution") as? Additional
+        self.instantPage = decoder.decodeObjectForKey("ipage", decoder: { InstantPage(decoder: $0) }) as? InstantPage
     }
-    
+
     public func encode(_ encoder: PostboxEncoder) {
         encoder.encodeString(self.text, forKey: "text")
         encoder.encodeObjectArray(self.entities, forKey: "entities")
         encoder.encodeString(self.toLang, forKey: "toLang")
         encoder.encodeObjectArray(self.additional, forKey: "additional")
-        
+
         if let pollSolution {
             encoder.encodeObject(pollSolution, forKey: "pollSolution")
         } else {
             encoder.encodeNil(forKey: "pollSolution")
         }
+        if let instantPage {
+            encoder.encodeObject(instantPage, forKey: "ipage")
+        } else {
+            encoder.encodeNil(forKey: "ipage")
+        }
     }
-    
+
     public static func ==(lhs: TranslationMessageAttribute, rhs: TranslationMessageAttribute) -> Bool {
         if lhs.text != rhs.text {
             return false
@@ -81,6 +92,9 @@ public class TranslationMessageAttribute: MessageAttribute, Equatable {
             return false
         }
         if lhs.pollSolution != rhs.pollSolution {
+            return false
+        }
+        if lhs.instantPage != rhs.instantPage {
             return false
         }
         return true

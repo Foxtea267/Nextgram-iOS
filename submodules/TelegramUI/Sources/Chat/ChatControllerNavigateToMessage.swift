@@ -11,6 +11,18 @@ import TelegramPresentationData
 import PresentationDataUtils
 import UndoUI
 
+// When navigating to a message in a forum/monoforum we must target the message's topic
+// (a `.replyThread` location). Targeting the bare `.peer` makes navigateToChatController
+// open the forum's topic list instead of the specific topic. Mirrors the inline resolution
+// used by the `.peer`-chatLocation branches of navigateToMessage.
+private func forumAwareNavigateLocation(peer: EnginePeer, threadId: Int64?) -> NavigateToChatControllerParams.Location {
+    if case let .channel(channel) = peer, channel.isForumOrMonoForum, let threadId {
+        return .replyThread(ChatReplyThreadMessage(peerId: peer.id, threadId: threadId, channelMessageId: nil, isChannelPost: false, isForumPost: true, isMonoforumPost: false, maxMessage: nil, maxReadIncomingMessageId: nil, maxReadOutgoingMessageId: nil, unreadCount: 0, initialFilledHoles: IndexSet(), initialAnchor: .automatic, isNotAvailable: false))
+    } else {
+        return .peer(peer)
+    }
+}
+
 extension ChatControllerImpl {
     func navigateToMessage(
         fromId: EngineMessage.Id,
@@ -543,12 +555,21 @@ extension ChatControllerImpl {
                             strongSelf.chatDisplayNode.historyNode.scrollToMessage(from: fromIndex, to: index, animated: animated, scrollPosition: scrollPosition)
                             completion?()
                         } else {
-                            let _ = (strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: messageLocation.peerId))
-                            |> deliverOnMainQueue).startStandalone(next: { peer in
+                            let messageSignal: Signal<EngineMessage?, NoError>
+                            if let messageId = messageLocation.messageId {
+                                messageSignal = strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Messages.Message(id: messageId))
+                            } else {
+                                messageSignal = .single(nil)
+                            }
+                            let _ = (combineLatest(
+                                strongSelf.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: messageLocation.peerId)),
+                                messageSignal
+                            )
+                            |> deliverOnMainQueue).startStandalone(next: { peer, message in
                                 guard let strongSelf = self, let peer = peer else {
                                     return
                                 }
-                                
+
                                 if let navigationController = strongSelf.effectiveNavigationController {
                                     var quote: ChatControllerSubject.MessageHighlight.Quote?
                                     var setupReply = false
@@ -556,8 +577,9 @@ extension ChatControllerImpl {
                                         quote = params.quote.flatMap { quote in ChatControllerSubject.MessageHighlight.Quote(string: quote.string, offset: quote.offset) }
                                         setupReply = params.setupReply
                                     }
-                                    
-                                    strongSelf.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: strongSelf.context, chatLocation: .peer(peer), subject: messageLocation.messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: quote), timecode: nil, setupReply: setupReply) }, keepStack: .always))
+
+                                    let navigateToLocation = forumAwareNavigateLocation(peer: peer, threadId: message?.threadId)
+                                    strongSelf.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: strongSelf.context, chatLocation: navigateToLocation, subject: messageLocation.messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: quote), timecode: nil, setupReply: setupReply) }, keepStack: .always))
                                 }
                             })
                             completion?()
@@ -569,13 +591,23 @@ extension ChatControllerImpl {
                     }
                 }))
             } else {
-                let _ = (self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: messageLocation.peerId))
-                |> deliverOnMainQueue).startStandalone(next: { [weak self] peer in
+                let messageSignal: Signal<EngineMessage?, NoError>
+                if let messageId = messageLocation.messageId {
+                    messageSignal = self.context.engine.data.get(TelegramEngine.EngineData.Item.Messages.Message(id: messageId))
+                } else {
+                    messageSignal = .single(nil)
+                }
+                let _ = (combineLatest(
+                    self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: messageLocation.peerId)),
+                    messageSignal
+                )
+                |> deliverOnMainQueue).startStandalone(next: { [weak self] peer, message in
                     guard let self, let peer = peer else {
                         return
                     }
                     if let navigationController = self.effectiveNavigationController {
-                        self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(peer), subject: messageLocation.messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false) }))
+                        let navigateToLocation = forumAwareNavigateLocation(peer: peer, threadId: message?.threadId)
+                        self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: navigateToLocation, subject: messageLocation.messageId.flatMap { .message(id: .id($0), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false) }))
                     }
                     completion?()
                 })

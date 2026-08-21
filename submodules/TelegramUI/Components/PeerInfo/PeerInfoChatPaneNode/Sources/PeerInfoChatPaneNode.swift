@@ -140,14 +140,14 @@ public final class PeerInfoChatPaneNode: ASDisplayNode, PeerInfoPaneNode, ASScro
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
         
-    public init(context: AccountContext, chatLocation: ChatLocation, tag: EngineMessage.Tags?, navigationController: @escaping () -> NavigationController?) {
+    public init(context: AccountContext, chatLocation: ChatLocation, tag: EngineMessage.Tags?, hideTopPanels: Bool = false, navigationController: @escaping () -> NavigationController?) {
         self.context = context
         self.navigationController = navigationController
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         
         self.coveringView = UIView()
         
-        self.chatController = context.sharedContext.makeChatController(context: context, chatLocation: chatLocation, subject: tag.flatMap { .tag($0) }, botStart: nil, mode: .standard(.embedded(invertDirection: true)), params: nil)
+        self.chatController = context.sharedContext.makeChatController(context: context, chatLocation: chatLocation, subject: tag.flatMap { .tag($0) }, botStart: nil, mode: .standard(.embedded(invertDirection: true)), params: hideTopPanels ? ChatControllerParams(hideTopPanels: true) : nil)
         self.chatController.navigation_setNavigationController(navigationController())
         
         super.init()

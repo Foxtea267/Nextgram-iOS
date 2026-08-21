@@ -31,6 +31,7 @@ swift_library(
         "//submodules/Components/BlurredBackgroundComponent:BlurredBackgroundComponent",
         "//submodules/TelegramUI/Components/MinimizedContainer",
         "//submodules/Pasteboard",
+        "//submodules/TelegramUI/Components/Chat/ChatRichTextEditorComposer",
         "//submodules/SaveToCameraRoll",
         "//submodules/TextFormat:TextFormat",
         "//submodules/TelegramUI/Components/NavigationStackComponent",

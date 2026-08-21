@@ -73,6 +73,15 @@ public extension Api {
 }
 public extension Api {
     indirect enum InputReplyTo: TypeConstructorDescription {
+        public class Cons_inputReplyToEphemeralMessage: TypeConstructorDescription {
+            public var id: Int32
+            public init(id: Int32) {
+                self.id = id
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("inputReplyToEphemeralMessage", [("id", ConstructorParameterDescription(self.id))])
+            }
+        }
         public class Cons_inputReplyToMessage: TypeConstructorDescription {
             public var flags: Int32
             public var replyToMsgId: Int32
@@ -120,12 +129,19 @@ public extension Api {
                 return ("inputReplyToStory", [("peer", ConstructorParameterDescription(self.peer)), ("storyId", ConstructorParameterDescription(self.storyId))])
             }
         }
+        case inputReplyToEphemeralMessage(Cons_inputReplyToEphemeralMessage)
         case inputReplyToMessage(Cons_inputReplyToMessage)
         case inputReplyToMonoForum(Cons_inputReplyToMonoForum)
         case inputReplyToStory(Cons_inputReplyToStory)
 
         public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
             switch self {
+            case .inputReplyToEphemeralMessage(let _data):
+                if boxed {
+                    buffer.appendInt32(1092204894)
+                }
+                serializeInt32(_data.id, buffer: buffer, boxed: false)
+                break
             case .inputReplyToMessage(let _data):
                 if boxed {
                     buffer.appendInt32(1003796418)
@@ -179,6 +195,8 @@ public extension Api {
 
         public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
             switch self {
+            case .inputReplyToEphemeralMessage(let _data):
+                return ("inputReplyToEphemeralMessage", [("id", ConstructorParameterDescription(_data.id))])
             case .inputReplyToMessage(let _data):
                 return ("inputReplyToMessage", [("flags", ConstructorParameterDescription(_data.flags)), ("replyToMsgId", ConstructorParameterDescription(_data.replyToMsgId)), ("topMsgId", ConstructorParameterDescription(_data.topMsgId)), ("replyToPeerId", ConstructorParameterDescription(_data.replyToPeerId)), ("quoteText", ConstructorParameterDescription(_data.quoteText)), ("quoteEntities", ConstructorParameterDescription(_data.quoteEntities)), ("quoteOffset", ConstructorParameterDescription(_data.quoteOffset)), ("monoforumPeerId", ConstructorParameterDescription(_data.monoforumPeerId)), ("todoItemId", ConstructorParameterDescription(_data.todoItemId)), ("pollOption", ConstructorParameterDescription(_data.pollOption))])
             case .inputReplyToMonoForum(let _data):
@@ -188,6 +206,17 @@ public extension Api {
             }
         }
 
+        public static func parse_inputReplyToEphemeralMessage(_ reader: BufferReader) -> InputReplyTo? {
+            var _1: Int32?
+            _1 = reader.readInt32()
+            let _c1 = _1 != nil
+            if _c1 {
+                return Api.InputReplyTo.inputReplyToEphemeralMessage(Cons_inputReplyToEphemeralMessage(id: _1!))
+            }
+            else {
+                return nil
+            }
+        }
         public static func parse_inputReplyToMessage(_ reader: BufferReader) -> InputReplyTo? {
             var _1: Int32?
             _1 = reader.readInt32()
@@ -280,6 +309,95 @@ public extension Api {
     }
 }
 public extension Api {
+    enum InputRichFile: TypeConstructorDescription {
+        public class Cons_inputRichFileDocument: TypeConstructorDescription {
+            public var id: String
+            public var document: Api.InputDocument
+            public init(id: String, document: Api.InputDocument) {
+                self.id = id
+                self.document = document
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("inputRichFileDocument", [("id", ConstructorParameterDescription(self.id)), ("document", ConstructorParameterDescription(self.document))])
+            }
+        }
+        public class Cons_inputRichFilePhoto: TypeConstructorDescription {
+            public var id: String
+            public var photo: Api.InputPhoto
+            public init(id: String, photo: Api.InputPhoto) {
+                self.id = id
+                self.photo = photo
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("inputRichFilePhoto", [("id", ConstructorParameterDescription(self.id)), ("photo", ConstructorParameterDescription(self.photo))])
+            }
+        }
+        case inputRichFileDocument(Cons_inputRichFileDocument)
+        case inputRichFilePhoto(Cons_inputRichFilePhoto)
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .inputRichFileDocument(let _data):
+                if boxed {
+                    buffer.appendInt32(-2094522947)
+                }
+                serializeString(_data.id, buffer: buffer, boxed: false)
+                _data.document.serialize(buffer, true)
+                break
+            case .inputRichFilePhoto(let _data):
+                if boxed {
+                    buffer.appendInt32(-1694473685)
+                }
+                serializeString(_data.id, buffer: buffer, boxed: false)
+                _data.photo.serialize(buffer, true)
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .inputRichFileDocument(let _data):
+                return ("inputRichFileDocument", [("id", ConstructorParameterDescription(_data.id)), ("document", ConstructorParameterDescription(_data.document))])
+            case .inputRichFilePhoto(let _data):
+                return ("inputRichFilePhoto", [("id", ConstructorParameterDescription(_data.id)), ("photo", ConstructorParameterDescription(_data.photo))])
+            }
+        }
+
+        public static func parse_inputRichFileDocument(_ reader: BufferReader) -> InputRichFile? {
+            var _1: String?
+            _1 = parseString(reader)
+            var _2: Api.InputDocument?
+            if let signature = reader.readInt32() {
+                _2 = Api.parse(reader, signature: signature) as? Api.InputDocument
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            if _c1 && _c2 {
+                return Api.InputRichFile.inputRichFileDocument(Cons_inputRichFileDocument(id: _1!, document: _2!))
+            }
+            else {
+                return nil
+            }
+        }
+        public static func parse_inputRichFilePhoto(_ reader: BufferReader) -> InputRichFile? {
+            var _1: String?
+            _1 = parseString(reader)
+            var _2: Api.InputPhoto?
+            if let signature = reader.readInt32() {
+                _2 = Api.parse(reader, signature: signature) as? Api.InputPhoto
+            }
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            if _c1 && _c2 {
+                return Api.InputRichFile.inputRichFilePhoto(Cons_inputRichFilePhoto(id: _1!, photo: _2!))
+            }
+            else {
+                return nil
+            }
+        }
+    }
+}
+public extension Api {
     enum InputRichMessage: TypeConstructorDescription {
         public class Cons_inputRichMessage: TypeConstructorDescription {
             public var flags: Int32
@@ -301,35 +419,27 @@ public extension Api {
         public class Cons_inputRichMessageHTML: TypeConstructorDescription {
             public var flags: Int32
             public var html: String
-            public var photos: [Api.InputPhoto]?
-            public var documents: [Api.InputDocument]?
-            public var users: [Api.InputUser]?
-            public init(flags: Int32, html: String, photos: [Api.InputPhoto]?, documents: [Api.InputDocument]?, users: [Api.InputUser]?) {
+            public var files: [Api.InputRichFile]?
+            public init(flags: Int32, html: String, files: [Api.InputRichFile]?) {
                 self.flags = flags
                 self.html = html
-                self.photos = photos
-                self.documents = documents
-                self.users = users
+                self.files = files
             }
             public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("inputRichMessageHTML", [("flags", ConstructorParameterDescription(self.flags)), ("html", ConstructorParameterDescription(self.html)), ("photos", ConstructorParameterDescription(self.photos)), ("documents", ConstructorParameterDescription(self.documents)), ("users", ConstructorParameterDescription(self.users))])
+                return ("inputRichMessageHTML", [("flags", ConstructorParameterDescription(self.flags)), ("html", ConstructorParameterDescription(self.html)), ("files", ConstructorParameterDescription(self.files))])
             }
         }
         public class Cons_inputRichMessageMarkdown: TypeConstructorDescription {
             public var flags: Int32
             public var markdown: String
-            public var photos: [Api.InputPhoto]?
-            public var documents: [Api.InputDocument]?
-            public var users: [Api.InputUser]?
-            public init(flags: Int32, markdown: String, photos: [Api.InputPhoto]?, documents: [Api.InputDocument]?, users: [Api.InputUser]?) {
+            public var files: [Api.InputRichFile]?
+            public init(flags: Int32, markdown: String, files: [Api.InputRichFile]?) {
                 self.flags = flags
                 self.markdown = markdown
-                self.photos = photos
-                self.documents = documents
-                self.users = users
+                self.files = files
             }
             public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("inputRichMessageMarkdown", [("flags", ConstructorParameterDescription(self.flags)), ("markdown", ConstructorParameterDescription(self.markdown)), ("photos", ConstructorParameterDescription(self.photos)), ("documents", ConstructorParameterDescription(self.documents)), ("users", ConstructorParameterDescription(self.users))])
+                return ("inputRichMessageMarkdown", [("flags", ConstructorParameterDescription(self.flags)), ("markdown", ConstructorParameterDescription(self.markdown)), ("files", ConstructorParameterDescription(self.files))])
             }
         }
         case inputRichMessage(Cons_inputRichMessage)
@@ -372,56 +482,28 @@ public extension Api {
                 break
             case .inputRichMessageHTML(let _data):
                 if boxed {
-                    buffer.appendInt32(-722815663)
+                    buffer.appendInt32(-624196758)
                 }
                 serializeInt32(_data.flags, buffer: buffer, boxed: false)
                 serializeString(_data.html, buffer: buffer, boxed: false)
                 if Int(_data.flags) & Int(1 << 2) != 0 {
                     buffer.appendInt32(481674261)
-                    buffer.appendInt32(Int32(_data.photos!.count))
-                    for item in _data.photos! {
-                        item.serialize(buffer, true)
-                    }
-                }
-                if Int(_data.flags) & Int(1 << 3) != 0 {
-                    buffer.appendInt32(481674261)
-                    buffer.appendInt32(Int32(_data.documents!.count))
-                    for item in _data.documents! {
-                        item.serialize(buffer, true)
-                    }
-                }
-                if Int(_data.flags) & Int(1 << 4) != 0 {
-                    buffer.appendInt32(481674261)
-                    buffer.appendInt32(Int32(_data.users!.count))
-                    for item in _data.users! {
+                    buffer.appendInt32(Int32(_data.files!.count))
+                    for item in _data.files! {
                         item.serialize(buffer, true)
                     }
                 }
                 break
             case .inputRichMessageMarkdown(let _data):
                 if boxed {
-                    buffer.appendInt32(162300294)
+                    buffer.appendInt32(4937516)
                 }
                 serializeInt32(_data.flags, buffer: buffer, boxed: false)
                 serializeString(_data.markdown, buffer: buffer, boxed: false)
                 if Int(_data.flags) & Int(1 << 2) != 0 {
                     buffer.appendInt32(481674261)
-                    buffer.appendInt32(Int32(_data.photos!.count))
-                    for item in _data.photos! {
-                        item.serialize(buffer, true)
-                    }
-                }
-                if Int(_data.flags) & Int(1 << 3) != 0 {
-                    buffer.appendInt32(481674261)
-                    buffer.appendInt32(Int32(_data.documents!.count))
-                    for item in _data.documents! {
-                        item.serialize(buffer, true)
-                    }
-                }
-                if Int(_data.flags) & Int(1 << 4) != 0 {
-                    buffer.appendInt32(481674261)
-                    buffer.appendInt32(Int32(_data.users!.count))
-                    for item in _data.users! {
+                    buffer.appendInt32(Int32(_data.files!.count))
+                    for item in _data.files! {
                         item.serialize(buffer, true)
                     }
                 }
@@ -434,9 +516,9 @@ public extension Api {
             case .inputRichMessage(let _data):
                 return ("inputRichMessage", [("flags", ConstructorParameterDescription(_data.flags)), ("blocks", ConstructorParameterDescription(_data.blocks)), ("photos", ConstructorParameterDescription(_data.photos)), ("documents", ConstructorParameterDescription(_data.documents)), ("users", ConstructorParameterDescription(_data.users))])
             case .inputRichMessageHTML(let _data):
-                return ("inputRichMessageHTML", [("flags", ConstructorParameterDescription(_data.flags)), ("html", ConstructorParameterDescription(_data.html)), ("photos", ConstructorParameterDescription(_data.photos)), ("documents", ConstructorParameterDescription(_data.documents)), ("users", ConstructorParameterDescription(_data.users))])
+                return ("inputRichMessageHTML", [("flags", ConstructorParameterDescription(_data.flags)), ("html", ConstructorParameterDescription(_data.html)), ("files", ConstructorParameterDescription(_data.files))])
             case .inputRichMessageMarkdown(let _data):
-                return ("inputRichMessageMarkdown", [("flags", ConstructorParameterDescription(_data.flags)), ("markdown", ConstructorParameterDescription(_data.markdown)), ("photos", ConstructorParameterDescription(_data.photos)), ("documents", ConstructorParameterDescription(_data.documents)), ("users", ConstructorParameterDescription(_data.users))])
+                return ("inputRichMessageMarkdown", [("flags", ConstructorParameterDescription(_data.flags)), ("markdown", ConstructorParameterDescription(_data.markdown)), ("files", ConstructorParameterDescription(_data.files))])
             }
         }
 
@@ -482,31 +564,17 @@ public extension Api {
             _1 = reader.readInt32()
             var _2: String?
             _2 = parseString(reader)
-            var _3: [Api.InputPhoto]?
+            var _3: [Api.InputRichFile]?
             if Int(_1 ?? 0) & Int(1 << 2) != 0 {
                 if let _ = reader.readInt32() {
-                    _3 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputPhoto.self)
-                }
-            }
-            var _4: [Api.InputDocument]?
-            if Int(_1 ?? 0) & Int(1 << 3) != 0 {
-                if let _ = reader.readInt32() {
-                    _4 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputDocument.self)
-                }
-            }
-            var _5: [Api.InputUser]?
-            if Int(_1 ?? 0) & Int(1 << 4) != 0 {
-                if let _ = reader.readInt32() {
-                    _5 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputUser.self)
+                    _3 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputRichFile.self)
                 }
             }
             let _c1 = _1 != nil
             let _c2 = _2 != nil
             let _c3 = (Int(_1 ?? 0) & Int(1 << 2) == 0) || _3 != nil
-            let _c4 = (Int(_1 ?? 0) & Int(1 << 3) == 0) || _4 != nil
-            let _c5 = (Int(_1 ?? 0) & Int(1 << 4) == 0) || _5 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 {
-                return Api.InputRichMessage.inputRichMessageHTML(Cons_inputRichMessageHTML(flags: _1!, html: _2!, photos: _3, documents: _4, users: _5))
+            if _c1 && _c2 && _c3 {
+                return Api.InputRichMessage.inputRichMessageHTML(Cons_inputRichMessageHTML(flags: _1!, html: _2!, files: _3))
             }
             else {
                 return nil
@@ -517,31 +585,17 @@ public extension Api {
             _1 = reader.readInt32()
             var _2: String?
             _2 = parseString(reader)
-            var _3: [Api.InputPhoto]?
+            var _3: [Api.InputRichFile]?
             if Int(_1 ?? 0) & Int(1 << 2) != 0 {
                 if let _ = reader.readInt32() {
-                    _3 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputPhoto.self)
-                }
-            }
-            var _4: [Api.InputDocument]?
-            if Int(_1 ?? 0) & Int(1 << 3) != 0 {
-                if let _ = reader.readInt32() {
-                    _4 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputDocument.self)
-                }
-            }
-            var _5: [Api.InputUser]?
-            if Int(_1 ?? 0) & Int(1 << 4) != 0 {
-                if let _ = reader.readInt32() {
-                    _5 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputUser.self)
+                    _3 = Api.parseVector(reader, elementSignature: 0, elementType: Api.InputRichFile.self)
                 }
             }
             let _c1 = _1 != nil
             let _c2 = _2 != nil
             let _c3 = (Int(_1 ?? 0) & Int(1 << 2) == 0) || _3 != nil
-            let _c4 = (Int(_1 ?? 0) & Int(1 << 3) == 0) || _4 != nil
-            let _c5 = (Int(_1 ?? 0) & Int(1 << 4) == 0) || _5 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 {
-                return Api.InputRichMessage.inputRichMessageMarkdown(Cons_inputRichMessageMarkdown(flags: _1!, markdown: _2!, photos: _3, documents: _4, users: _5))
+            if _c1 && _c2 && _c3 {
+                return Api.InputRichMessage.inputRichMessageMarkdown(Cons_inputRichMessageMarkdown(flags: _1!, markdown: _2!, files: _3))
             }
             else {
                 return nil
@@ -1313,163 +1367,6 @@ public extension Api {
         }
         public static func parse_inputStickerSetTonGifts(_ reader: BufferReader) -> InputStickerSet? {
             return Api.InputStickerSet.inputStickerSetTonGifts
-        }
-    }
-}
-public extension Api {
-    enum InputStickerSetItem: TypeConstructorDescription {
-        public class Cons_inputStickerSetItem: TypeConstructorDescription {
-            public var flags: Int32
-            public var document: Api.InputDocument
-            public var emoji: String
-            public var maskCoords: Api.MaskCoords?
-            public var keywords: String?
-            public init(flags: Int32, document: Api.InputDocument, emoji: String, maskCoords: Api.MaskCoords?, keywords: String?) {
-                self.flags = flags
-                self.document = document
-                self.emoji = emoji
-                self.maskCoords = maskCoords
-                self.keywords = keywords
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("inputStickerSetItem", [("flags", ConstructorParameterDescription(self.flags)), ("document", ConstructorParameterDescription(self.document)), ("emoji", ConstructorParameterDescription(self.emoji)), ("maskCoords", ConstructorParameterDescription(self.maskCoords)), ("keywords", ConstructorParameterDescription(self.keywords))])
-            }
-        }
-        case inputStickerSetItem(Cons_inputStickerSetItem)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .inputStickerSetItem(let _data):
-                if boxed {
-                    buffer.appendInt32(853188252)
-                }
-                serializeInt32(_data.flags, buffer: buffer, boxed: false)
-                _data.document.serialize(buffer, true)
-                serializeString(_data.emoji, buffer: buffer, boxed: false)
-                if Int(_data.flags) & Int(1 << 0) != 0 {
-                    _data.maskCoords!.serialize(buffer, true)
-                }
-                if Int(_data.flags) & Int(1 << 1) != 0 {
-                    serializeString(_data.keywords!, buffer: buffer, boxed: false)
-                }
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .inputStickerSetItem(let _data):
-                return ("inputStickerSetItem", [("flags", ConstructorParameterDescription(_data.flags)), ("document", ConstructorParameterDescription(_data.document)), ("emoji", ConstructorParameterDescription(_data.emoji)), ("maskCoords", ConstructorParameterDescription(_data.maskCoords)), ("keywords", ConstructorParameterDescription(_data.keywords))])
-            }
-        }
-
-        public static func parse_inputStickerSetItem(_ reader: BufferReader) -> InputStickerSetItem? {
-            var _1: Int32?
-            _1 = reader.readInt32()
-            var _2: Api.InputDocument?
-            if let signature = reader.readInt32() {
-                _2 = Api.parse(reader, signature: signature) as? Api.InputDocument
-            }
-            var _3: String?
-            _3 = parseString(reader)
-            var _4: Api.MaskCoords?
-            if Int(_1 ?? 0) & Int(1 << 0) != 0 {
-                if let signature = reader.readInt32() {
-                    _4 = Api.parse(reader, signature: signature) as? Api.MaskCoords
-                }
-            }
-            var _5: String?
-            if Int(_1 ?? 0) & Int(1 << 1) != 0 {
-                _5 = parseString(reader)
-            }
-            let _c1 = _1 != nil
-            let _c2 = _2 != nil
-            let _c3 = _3 != nil
-            let _c4 = (Int(_1 ?? 0) & Int(1 << 0) == 0) || _4 != nil
-            let _c5 = (Int(_1 ?? 0) & Int(1 << 1) == 0) || _5 != nil
-            if _c1 && _c2 && _c3 && _c4 && _c5 {
-                return Api.InputStickerSetItem.inputStickerSetItem(Cons_inputStickerSetItem(flags: _1!, document: _2!, emoji: _3!, maskCoords: _4, keywords: _5))
-            }
-            else {
-                return nil
-            }
-        }
-    }
-}
-public extension Api {
-    enum InputStickeredMedia: TypeConstructorDescription {
-        public class Cons_inputStickeredMediaDocument: TypeConstructorDescription {
-            public var id: Api.InputDocument
-            public init(id: Api.InputDocument) {
-                self.id = id
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("inputStickeredMediaDocument", [("id", ConstructorParameterDescription(self.id))])
-            }
-        }
-        public class Cons_inputStickeredMediaPhoto: TypeConstructorDescription {
-            public var id: Api.InputPhoto
-            public init(id: Api.InputPhoto) {
-                self.id = id
-            }
-            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-                return ("inputStickeredMediaPhoto", [("id", ConstructorParameterDescription(self.id))])
-            }
-        }
-        case inputStickeredMediaDocument(Cons_inputStickeredMediaDocument)
-        case inputStickeredMediaPhoto(Cons_inputStickeredMediaPhoto)
-
-        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
-            switch self {
-            case .inputStickeredMediaDocument(let _data):
-                if boxed {
-                    buffer.appendInt32(70813275)
-                }
-                _data.id.serialize(buffer, true)
-                break
-            case .inputStickeredMediaPhoto(let _data):
-                if boxed {
-                    buffer.appendInt32(1251549527)
-                }
-                _data.id.serialize(buffer, true)
-                break
-            }
-        }
-
-        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
-            switch self {
-            case .inputStickeredMediaDocument(let _data):
-                return ("inputStickeredMediaDocument", [("id", ConstructorParameterDescription(_data.id))])
-            case .inputStickeredMediaPhoto(let _data):
-                return ("inputStickeredMediaPhoto", [("id", ConstructorParameterDescription(_data.id))])
-            }
-        }
-
-        public static func parse_inputStickeredMediaDocument(_ reader: BufferReader) -> InputStickeredMedia? {
-            var _1: Api.InputDocument?
-            if let signature = reader.readInt32() {
-                _1 = Api.parse(reader, signature: signature) as? Api.InputDocument
-            }
-            let _c1 = _1 != nil
-            if _c1 {
-                return Api.InputStickeredMedia.inputStickeredMediaDocument(Cons_inputStickeredMediaDocument(id: _1!))
-            }
-            else {
-                return nil
-            }
-        }
-        public static func parse_inputStickeredMediaPhoto(_ reader: BufferReader) -> InputStickeredMedia? {
-            var _1: Api.InputPhoto?
-            if let signature = reader.readInt32() {
-                _1 = Api.parse(reader, signature: signature) as? Api.InputPhoto
-            }
-            let _c1 = _1 != nil
-            if _c1 {
-                return Api.InputStickeredMedia.inputStickeredMediaPhoto(Cons_inputStickeredMediaPhoto(id: _1!))
-            }
-            else {
-                return nil
-            }
         }
     }
 }

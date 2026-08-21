@@ -71,9 +71,15 @@ private final class PendingUpdateMessageManagerImpl {
         }
         
         let disposable = MetaDisposable()
-        let context = PendingUpdateMessageContext(value: ChatUpdatingMessageMedia(text: text, entities: entities, disableUrlPreview: disableUrlPreview, media: media, invertMediaAttribute: invertMediaAttribute, progress: 0.0), disposable: disposable)
+        let context = PendingUpdateMessageContext(value: ChatUpdatingMessageMedia(text: text, entities: entities, disableUrlPreview: disableUrlPreview, media: media, invertMediaAttribute: invertMediaAttribute, richText: richText, progress: 0.0), disposable: disposable)
         self.contexts[messageId] = context
-        
+        // Publish the optimistic value immediately. Otherwise it only becomes visible on the first
+        // `.progress`/`.done` event from `requestEditMessage` — which, for a media-bearing rich edit,
+        // does not arrive until the inline-media upload finishes (the `uploadedRichMessage` resolver
+        // swallows progress and runs the upload before the `uploadedMedia` chain), leaving the pending
+        // edit invisible for the whole upload window.
+        self.updateValues()
+
         let queue = self.queue
         disposable.set((requestEditMessage(accountPeerId: self.stateManager.accountPeerId, postbox: self.postbox, network: self.network, stateManager: self.stateManager, transformOutgoingMessageMedia: self.transformOutgoingMessageMedia, messageMediaPreuploadManager: self.messageMediaPreuploadManager, mediaReferenceRevalidationContext: self.mediaReferenceRevalidationContext, messageId: messageId, text: text, media: media, entities: entities, richText: richText, inlineStickers: inlineStickers, webpagePreviewAttribute: webpagePreviewAttribute, disableUrlPreview: disableUrlPreview, scheduleInfoAttribute: nil, invertMediaAttribute: invertMediaAttribute)
         |> deliverOn(self.queue)).start(next: { [weak self, weak context] value in

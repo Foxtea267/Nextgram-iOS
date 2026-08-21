@@ -50,7 +50,8 @@ final class ChatSearchResultsController: ViewController {
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         
         self.title = searchQuery
-        self.navigationItem.leftBarButtonItem = UIBarButtonItem(title: self.presentationData.strings.Common_Done, style: .done, target: self, action: #selector(donePressed))
+        self.navigationItem.leftBarButtonItem = UIBarButtonItem(customView: UIView())
+        self.navigationItem.rightBarButtonItem = UIBarButtonItem(title: "___done", style: .done, target: self, action: #selector(donePressed))
     }
     
     required init(coder aDecoder: NSCoder) {

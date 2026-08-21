@@ -381,7 +381,7 @@ public final class ChatButtonKeyboardInputNode: ChatInputNode, UIScrollViewDeleg
             var dismissIfOnce = false
             switch markupButton.action {
                 case .text:
-                    self.controllerInteraction.sendMessage(markupButton.title, self.message?.id)
+                    self.controllerInteraction.sendMessage(markupButton.title, nil)
                     dismissIfOnce = true
                 case let .url(url):
                     self.controllerInteraction.openUrl(ChatControllerInteraction.OpenUrl(url: url, concealed: true, progress: Promise()))
@@ -429,7 +429,7 @@ public final class ChatButtonKeyboardInputNode: ChatInputNode, UIScrollViewDeleg
                         self.controllerInteraction.requestMessageActionUrlAuth(url, .message(id: message.id, buttonId: buttonId))
                     }
                 case let .setupPoll(isQuiz):
-                    self.controllerInteraction.openPollCreation(self.message?.id, isQuiz)
+                    self.controllerInteraction.openPollCreation(nil, isQuiz)
                 case let .openUserProfile(peerId):
                     let _ = (self.context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId))
                     |> deliverOnMainQueue).startStandalone(next: { [weak self] peer in

@@ -938,8 +938,13 @@ public class ItemListAvatarAndNameInfoItemNode: ListViewItemNode, ItemListItemNo
                                     strongSelf.addSubnode(strongSelf.inputFirstClearButton!)
                                 }
                                 
-                                strongSelf.inputSeparator?.frame = CGRect(origin: CGPoint(x: params.leftInset + 100.0, y: 64.0), size: CGSize(width: params.width - params.leftInset - 100.0 - separatorRightInset, height: separatorHeight))
-                                strongSelf.inputFirstField?.frame = CGRect(origin: CGPoint(x: params.leftInset + 111.0, y: 28.0), size: CGSize(width: params.width - params.leftInset - params.rightInset - 111.0 - 36.0, height: 35.0))
+                                let inputFieldHeight: CGFloat = 35.0
+                                let inputFieldFrame = CGRect(
+                                    origin: CGPoint(x: params.leftInset + 111.0, y: floorToScreenPixels((contentSize.height - inputFieldHeight) * 0.5)),
+                                    size: CGSize(width: params.width - params.leftInset - params.rightInset - 111.0 - 36.0, height: inputFieldHeight)
+                                )
+                                strongSelf.inputSeparator?.frame = CGRect(origin: CGPoint(x: params.leftInset + 100.0, y: floor(inputFieldFrame.maxY + 1.0)), size: CGSize(width: params.width - params.leftInset - 100.0 - separatorRightInset, height: separatorHeight))
+                                strongSelf.inputFirstField?.frame = inputFieldFrame
                                 
                                 if let image = strongSelf.inputFirstClearButton?.image(for: []), let inputFieldFrame = strongSelf.inputFirstField?.frame {
                                     strongSelf.inputFirstClearButton?.frame = CGRect(origin: CGPoint(x: inputFieldFrame.maxX, y: inputFieldFrame.minY + floor((inputFieldFrame.size.height - image.size.height) / 2.0) - 1.0 + UIScreenPixel), size: image.size)

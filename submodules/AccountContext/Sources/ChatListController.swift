@@ -32,3 +32,7 @@ public protocol ChatListController: ViewController {
     func activateEdit()
     func openEmojiStatusSetup()
 }
+
+public protocol CommunityViewScreen: ViewController {
+    
+}

@@ -29,6 +29,8 @@ import ChatControllerInteraction
 import ChatPresentationInterfaceState
 import ChatMessageItemView
 import ChatLoadingNode
+import GlassBackgroundComponent
+import ComponentFlow
 
 private final class ChatRecentActionsListOpaqueState {
     let entries: [ChatRecentActionsEntry]
@@ -37,6 +39,167 @@ private final class ChatRecentActionsListOpaqueState {
     init(entries: [ChatRecentActionsEntry], canLoadEarlier: Bool) {
         self.entries = entries
         self.canLoadEarlier = canLoadEarlier
+    }
+}
+
+private final class RecentActionsGlassButtonView: UIView {
+    private struct Params: Equatable {
+        let theme: PresentationTheme
+        let preferClearGlass: Bool
+        let size: CGSize
+
+        static func ==(lhs: Params, rhs: Params) -> Bool {
+            if lhs.theme !== rhs.theme {
+                return false
+            }
+            if lhs.preferClearGlass != rhs.preferClearGlass {
+                return false
+            }
+            if lhs.size != rhs.size {
+                return false
+            }
+            return true
+        }
+    }
+
+    private let backgroundView: GlassBackgroundView
+    let button: HighlightTrackingButton
+    private let iconView: GlassBackgroundView.ContentImageView
+
+    private var params: Params?
+
+    var icon: String? {
+        didSet {
+            if self.icon == oldValue {
+                return
+            }
+            if let icon = self.icon {
+                self.iconView.image = UIImage(bundleImageName: icon)?.withRenderingMode(.alwaysTemplate)
+            } else {
+                self.iconView.image = nil
+            }
+            if let params = self.params {
+                self.updateImpl(params: params, transition: .immediate)
+            }
+        }
+    }
+
+    override init(frame: CGRect) {
+        self.backgroundView = GlassBackgroundView()
+        self.button = HighlightTrackingButton()
+        self.iconView = GlassBackgroundView.ContentImageView()
+
+        super.init(frame: frame)
+
+        self.backgroundView.contentView.addSubview(self.iconView)
+        self.backgroundView.contentView.addSubview(self.button)
+        self.addSubview(self.backgroundView)
+
+        self.isAccessibilityElement = true
+        self.accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func accessibilityActivate() -> Bool {
+        self.button.sendActions(for: .touchUpInside)
+        return true
+    }
+
+    func update(theme: PresentationTheme, preferClearGlass: Bool, size: CGSize, transition: ComponentTransition) {
+        let params = Params(theme: theme, preferClearGlass: preferClearGlass, size: size)
+        if self.params != params {
+            self.params = params
+            self.iconView.tintColor = theme.chat.inputPanel.panelControlColor
+            self.updateImpl(params: params, transition: transition)
+        }
+    }
+
+    private func updateImpl(params: Params, transition: ComponentTransition) {
+        if let image = self.iconView.image {
+            transition.setFrame(view: self.iconView, frame: image.size.centered(in: CGRect(origin: CGPoint(), size: params.size)))
+        }
+
+        transition.setFrame(view: self.button, frame: CGRect(origin: CGPoint(), size: params.size))
+        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
+        self.backgroundView.update(size: params.size, cornerRadius: min(params.size.width, params.size.height) * 0.5, isDark: params.theme.overallDarkAppearance, tintColor: .init(kind: params.preferClearGlass ? .clear : .panel), isInteractive: true, transition: transition)
+    }
+}
+
+private final class RecentActionsGlassTextButtonView: UIView {
+    private struct Params: Equatable {
+        let theme: PresentationTheme
+        let preferClearGlass: Bool
+        let size: CGSize
+        let title: String
+
+        static func ==(lhs: Params, rhs: Params) -> Bool {
+            if lhs.theme !== rhs.theme {
+                return false
+            }
+            if lhs.preferClearGlass != rhs.preferClearGlass {
+                return false
+            }
+            if lhs.size != rhs.size {
+                return false
+            }
+            if lhs.title != rhs.title {
+                return false
+            }
+            return true
+        }
+    }
+
+    private let backgroundView: GlassBackgroundView
+    let button: HighlightTrackingButton
+    private let titleLabel: UILabel
+
+    private var params: Params?
+
+    override init(frame: CGRect) {
+        self.backgroundView = GlassBackgroundView()
+        self.button = HighlightTrackingButton()
+        self.titleLabel = UILabel()
+
+        super.init(frame: frame)
+
+        self.titleLabel.font = Font.regular(17.0)
+        self.titleLabel.textAlignment = .center
+        self.backgroundView.contentView.addSubview(self.titleLabel)
+        self.backgroundView.contentView.addSubview(self.button)
+        self.addSubview(self.backgroundView)
+
+        self.isAccessibilityElement = true
+        self.accessibilityTraits = .button
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func accessibilityActivate() -> Bool {
+        self.button.sendActions(for: .touchUpInside)
+        return true
+    }
+
+    func update(theme: PresentationTheme, preferClearGlass: Bool, title: String, size: CGSize, transition: ComponentTransition) {
+        let params = Params(theme: theme, preferClearGlass: preferClearGlass, size: size, title: title)
+        if self.params != params {
+            self.params = params
+            self.titleLabel.text = title
+            self.titleLabel.textColor = theme.chat.inputPanel.panelControlColor
+            self.accessibilityLabel = title
+            self.updateImpl(params: params, transition: transition)
+        }
+    }
+
+    private func updateImpl(params: Params, transition: ComponentTransition) {
+        transition.setFrame(view: self.titleLabel, frame: CGRect(origin: CGPoint(x: 0.0, y: -1.0), size: params.size))
+        transition.setFrame(view: self.button, frame: CGRect(origin: CGPoint(), size: params.size))
+        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(), size: params.size))
+        self.backgroundView.update(size: params.size, cornerRadius: min(params.size.width, params.size.height) * 0.5, isDark: params.theme.overallDarkAppearance, tintColor: .init(kind: params.preferClearGlass ? .clear : .panel), isInteractive: true, transition: transition)
     }
 }
 
@@ -49,6 +212,7 @@ final class ChatRecentActionsControllerNode: ViewControllerTracingNode {
     private let presentController: (ViewController, PresentationContextType,  Any?) -> Void
     private let getNavigationController: () -> NavigationController?
     var isEmptyUpdated: (Bool) -> Void = { _ in }
+    var contentStatsUpdated: () -> Void = { }
     
     private var controllerInteraction: ChatControllerInteraction!
     
@@ -64,10 +228,10 @@ final class ChatRecentActionsControllerNode: ViewControllerTracingNode {
     private var visibleAreaInset = UIEdgeInsets()
     
     private let backgroundNode: WallpaperBackgroundNode
-    private let panelBackgroundNode: NavigationBackgroundNode
-    private let panelSeparatorNode: ASDisplayNode
-    private let panelButtonNode: HighlightableButtonNode
-    private let panelInfoButtonNode: HighlightableButtonNode
+    private var bottomBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
+    private let panelButtonNode: RecentActionsGlassTextButtonView
+    private let panelInfoButtonNode: RecentActionsGlassButtonView
+    private var preferredGlassType: ChatPresentationInterfaceState.GlassType = .default
     
     fileprivate let listNode: ListView
     private let loadingNode: ChatLoadingNode
@@ -121,12 +285,11 @@ final class ChatRecentActionsControllerNode: ViewControllerTracingNode {
         self.backgroundNode = createWallpaperBackgroundNode(context: context, forChatDisplay: true)
         self.backgroundNode.isUserInteractionEnabled = false
         
-        self.panelBackgroundNode = NavigationBackgroundNode(color: self.presentationData.theme.chat.inputPanel.panelBackgroundColor)
-        self.panelSeparatorNode = ASDisplayNode()
-        self.panelSeparatorNode.backgroundColor = self.presentationData.theme.chat.inputPanel.panelSeparatorColor
-        self.panelButtonNode = HighlightableButtonNode()
-        self.panelButtonNode.setTitle(self.presentationData.strings.Channel_AdminLog_Settings, with: Font.regular(17.0), with: self.presentationData.theme.chat.inputPanel.panelControlAccentColor, for: [])
-        self.panelInfoButtonNode = HighlightableButtonNode()
+        self.panelButtonNode = RecentActionsGlassTextButtonView()
+        self.panelButtonNode.accessibilityLabel = self.presentationData.strings.Channel_AdminLog_Settings
+        self.panelInfoButtonNode = RecentActionsGlassButtonView()
+        self.panelInfoButtonNode.icon = "Chat/Recent Actions/Info"
+        self.panelInfoButtonNode.accessibilityLabel = self.presentationData.strings.Channel_AdminLog_InfoPanelAlertTitle
         
         self.listNode = ListViewImpl()
         self.listNode.transform = CATransform3DMakeRotation(CGFloat(Double.pi), 0.0, 0.0, 1.0)
@@ -149,14 +312,16 @@ final class ChatRecentActionsControllerNode: ViewControllerTracingNode {
         self.addSubnode(self.listNode)
         self.addSubnode(self.loadingNode)
         self.addSubnode(self.emptyNode)
-        self.addSubnode(self.panelBackgroundNode)
-        self.addSubnode(self.panelSeparatorNode)
-        self.addSubnode(self.panelButtonNode)
-        self.addSubnode(self.panelInfoButtonNode)
-        
-        self.panelButtonNode.addTarget(self, action: #selector(self.settingsButtonPressed), forControlEvents: .touchUpInside)
-        self.panelInfoButtonNode.addTarget(self, action: #selector(self.infoButtonPressed), forControlEvents: .touchUpInside)
-        
+        self.view.addSubview(self.panelButtonNode)
+        self.view.addSubview(self.panelInfoButtonNode)
+
+        self.panelButtonNode.button.addTarget(self, action: #selector(self.settingsButtonPressed), for: .touchUpInside)
+        self.panelInfoButtonNode.button.addTarget(self, action: #selector(self.infoButtonPressed), for: .touchUpInside)
+
+        self.backgroundNode.contentStatsUpdated = { [weak self] in
+            self?.contentStatsUpdated()
+        }
+
         let (adminsDisposable, _) = self.context.peerChannelMemberCategoriesContextsManager.admins(engine: self.context.engine, accountPeerId: context.account.peerId, peerId: self.peer.id, searchQuery: nil, updated: { [weak self] state in
             self?.adminsState = state
         })
@@ -791,44 +956,114 @@ final class ChatRecentActionsControllerNode: ViewControllerTracingNode {
         
         self.backgroundNode.update(wallpaper: presentationData.chatWallpaper, animated: false)
         self.backgroundNode.updateBubbleTheme(bubbleTheme: presentationData.theme, bubbleCorners: presentationData.chatBubbleCorners)
-        
-        self.panelBackgroundNode.updateColor(color: presentationData.theme.chat.inputPanel.panelBackgroundColor, transition: .immediate)
-        self.panelSeparatorNode.backgroundColor = presentationData.theme.chat.inputPanel.panelSeparatorColor
-        self.panelButtonNode.setTitle(presentationData.strings.Channel_AdminLog_Settings, with: Font.regular(17.0), with: presentationData.theme.chat.inputPanel.panelControlAccentColor, for: [])
-        self.panelInfoButtonNode.setImage(generateTintedImage(image: UIImage(bundleImageName: "Chat/Recent Actions/Info"), color: presentationData.theme.chat.inputPanel.panelControlAccentColor), for: .normal)
+
+        self.panelButtonNode.accessibilityLabel = presentationData.strings.Channel_AdminLog_Settings
+        self.panelInfoButtonNode.accessibilityLabel = presentationData.strings.Channel_AdminLog_InfoPanelAlertTitle
+        self.updatePanelButtons(transition: .immediate)
     }
-    
+
+    var backgroundContentIsSaturated: Bool {
+        return self.backgroundNode.contentStats?.isSaturated == true
+    }
+
+    func updatePreferredGlassType(_ preferredGlassType: ChatPresentationInterfaceState.GlassType, transition: ContainedViewLayoutTransition) {
+        if self.preferredGlassType != preferredGlassType {
+            self.preferredGlassType = preferredGlassType
+            self.updatePanelButtons(transition: transition)
+        }
+    }
+
+    private func updatePanelButtons(transition: ContainedViewLayoutTransition) {
+        let componentTransition = ComponentTransition(transition)
+        let preferClearGlass = self.preferredGlassType == .clear
+        if !self.panelButtonNode.bounds.isEmpty {
+            self.panelButtonNode.update(theme: self.presentationData.theme, preferClearGlass: preferClearGlass, title: self.presentationData.strings.Channel_AdminLog_Settings, size: self.panelButtonNode.bounds.size, transition: componentTransition)
+        }
+        if !self.panelInfoButtonNode.bounds.isEmpty {
+            self.panelInfoButtonNode.update(theme: self.presentationData.theme, preferClearGlass: preferClearGlass, size: self.panelInfoButtonNode.bounds.size, transition: componentTransition)
+        }
+    }
+
     func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
         let isFirstLayout = self.containerLayout == nil
-        
+
         self.containerLayout = (layout, navigationBarHeight)
-        
+
         var insets = layout.insets(options: [.input])
         insets.top += navigationBarHeight
-        
+
         let cleanInsets = layout.insets(options: [])
-        
+
         transition.updateFrame(node: self.backgroundNode, frame: CGRect(origin: CGPoint(), size: layout.size))
         self.backgroundNode.updateLayout(size: self.backgroundNode.bounds.size, displayMode: .aspectFill, transition: transition)
-        
-        let intrinsicPanelHeight: CGFloat = 47.0
-        var panelHeight = intrinsicPanelHeight + cleanInsets.bottom
+
+        let intrinsicPanelHeight: CGFloat = 40.0
+        var panelHeight = intrinsicPanelHeight + cleanInsets.bottom + 8.0
         var panelOffset: CGFloat = panelHeight
         if insets.bottom > cleanInsets.bottom {
             panelHeight = intrinsicPanelHeight
             panelOffset = insets.bottom + panelHeight
         }
-        transition.updateFrame(node: self.panelBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - panelOffset), size: CGSize(width: layout.size.width, height: panelHeight)))
-        self.panelBackgroundNode.update(size: self.panelBackgroundNode.bounds.size, transition: transition)
-        transition.updateFrame(node: self.panelSeparatorNode, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - panelOffset), size: CGSize(width: layout.size.width, height: UIScreenPixel)))
-        
-        let infoButtonSize = CGSize(width: 56.0, height: intrinsicPanelHeight)
-        transition.updateFrame(node: self.panelButtonNode, frame: CGRect(origin: CGPoint(x: insets.left + infoButtonSize.width, y: layout.size.height - panelOffset), size: CGSize(width: layout.size.width - insets.left - insets.right - infoButtonSize.width * 2.0, height: intrinsicPanelHeight)))
-        
-        transition.updateFrame(node: self.panelInfoButtonNode, frame: CGRect(origin: CGPoint(x: layout.size.width - insets.right - infoButtonSize.width, y: layout.size.height - panelOffset), size: infoButtonSize))
-        
+
+        let edgeEffectAlpha: CGFloat
+        if case .image = self.presentationData.chatWallpaper {
+            edgeEffectAlpha = 0.7
+        } else {
+            edgeEffectAlpha = self.presentationData.chatWallpaper.singleColor != nil ? 0.85 : 0.75
+        }
+
+        let bottomBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
+        if let current = self.bottomBackgroundEdgeEffectNode {
+            bottomBackgroundEdgeEffectNode = current
+        } else if let value = self.backgroundNode.makeEdgeEffectNode() {
+            bottomBackgroundEdgeEffectNode = value
+            self.bottomBackgroundEdgeEffectNode = value
+            value.isUserInteractionEnabled = false
+            self.insertSubnode(value, aboveSubnode: self.listNode)
+        } else {
+            bottomBackgroundEdgeEffectNode = nil
+        }
+        if let bottomBackgroundEdgeEffectNode {
+            var blurFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - panelOffset - 20.0), size: CGSize(width: layout.size.width, height: panelOffset + 20.0))
+            blurFrame.size.height = max(100.0, blurFrame.height)
+            transition.updateFrame(node: bottomBackgroundEdgeEffectNode, frame: blurFrame)
+            bottomBackgroundEdgeEffectNode.update(
+                rect: blurFrame,
+                edge: WallpaperEdgeEffectEdge(edge: .bottom, size: min(60.0, blurFrame.height)),
+                alpha: edgeEffectAlpha,
+                blur: false,
+                containerSize: layout.size,
+                transition: transition
+            )
+        }
+
+        var width = layout.size.width
+        if layout.additionalInsets.right > 0.0 {
+            width -= layout.additionalInsets.right
+        }
+
+        var leftInset = layout.safeInsets.left + 8.0
+        var rightInset = layout.safeInsets.right + 8.0
+        if cleanInsets.bottom <= 32.0 && layout.deviceMetrics.screenCornerRadius > 0.0 {
+            leftInset += 18.0
+            rightInset += 18.0
+        }
+
+        let buttonSize = CGSize(width: 40.0, height: 40.0)
+        let panelButtonTitle = self.presentationData.strings.Channel_AdminLog_Settings
+        let panelButtonTitleSize = (panelButtonTitle as NSString).size(withAttributes: [NSAttributedString.Key.font: Font.regular(17.0)])
+        let maxPanelButtonWidth = max(80.0, min(width - leftInset * 2.0, width - rightInset * 2.0 - buttonSize.width * 2.0 - 24.0))
+        let panelButtonWidth = min(max(120.0, ceil(panelButtonTitleSize.width) + 40.0), maxPanelButtonWidth)
+        let panelButtonFrame = CGRect(origin: CGPoint(x: floor((width - panelButtonWidth) * 0.5), y: layout.size.height - panelOffset), size: CGSize(width: panelButtonWidth, height: intrinsicPanelHeight))
+        transition.updateFrame(view: self.panelButtonNode, frame: panelButtonFrame)
+        self.panelButtonNode.update(theme: self.presentationData.theme, preferClearGlass: self.preferredGlassType == .clear, title: panelButtonTitle, size: panelButtonFrame.size, transition: ComponentTransition(transition))
+
+        let infoButtonFrame = CGRect(origin: CGPoint(x: width - rightInset - buttonSize.width, y: layout.size.height - panelOffset), size: buttonSize)
+        transition.updateFrame(view: self.panelInfoButtonNode, frame: infoButtonFrame)
+        self.panelInfoButtonNode.update(theme: self.presentationData.theme, preferClearGlass: self.preferredGlassType == .clear, size: infoButtonFrame.size, transition: ComponentTransition(transition))
+
         self.visibleAreaInset = UIEdgeInsets(top: 0.0, left: 0.0, bottom: panelHeight, right: 0.0)
-        
+
         transition.updateBounds(node: self.listNode, bounds: CGRect(origin: CGPoint(), size: layout.size))
         transition.updatePosition(node: self.listNode, position: CGRect(origin: CGPoint(), size: layout.size).center)
         

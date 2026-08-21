@@ -527,24 +527,72 @@ public final class ChatInterfaceState: Codable, Equatable {
     public let postSuggestionState: PostSuggestionState?
     
     public var synchronizeableInputState: SynchronizeableChatInputState? {
-        if self.composeInputState.inputText.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && self.replyMessageSubject == nil {
+        // Content-aware emptiness (NOT flat-text): a media/table block has empty `inputText.string` but IS
+        // content, so gating on `inputText.string...isEmpty` dropped a media-only draft — it never synced, and
+        // `parse` overrides the composer back to empty from the nil synchronizeable form on restore, losing it.
+        // `isEmptyWhitespaceTrimmed` keeps whitespace-only text treated as empty while preserving media/table drafts.
+        if self.composeInputState.content.isEmptyWhitespaceTrimmed && self.replyMessageSubject == nil {
             return nil
         } else {
-            let sourceText = expandedInputStateAttributedString(self.composeInputState.inputText)
-            
+            // Build the draft body through the structural model. The common case — content the entity set can
+            // express (every block type today) — derives the same flat text/entities as before, byte-identical.
+            // Only content the entity set can't represent serializes as a structured `.instantPage`.
+            let syncContent: SynchronizeableChatInputState.Content
+            if self.composeInputState.content.isEntityExpressible() {
+                let sourceText = expandedInputStateAttributedString(self.composeInputState.inputText)
+                syncContent = .textEntities(text: sourceText.string, entities: generateChatInputTextEntities(sourceText))
+            } else {
+                syncContent = .instantPage(instantPage(from: self.composeInputState.content))
+            }
+
             let suggestedPost = self.postSuggestionState.flatMap { postSuggestionState -> SynchronizeableChatInputState.SuggestedPost in
                 return SynchronizeableChatInputState.SuggestedPost(
                     price: postSuggestionState.price,
                     timestamp: postSuggestionState.timestamp
                 )
             }
-            
-            return SynchronizeableChatInputState(replySubject: self.replyMessageSubject?.subjectModel, text: sourceText.string, entities: generateChatInputTextEntities(sourceText), timestamp: self.timestamp, textSelection: self.composeInputState.selectionRange, messageEffectId: self.sendMessageEffect, suggestedPost: suggestedPost)
+
+            return SynchronizeableChatInputState(replySubject: self.replyMessageSubject?.subjectModel, content: syncContent, timestamp: self.timestamp, textSelection: self.composeInputState.selectionRange, messageEffectId: self.sendMessageEffect, suggestedPost: suggestedPost)
         }
     }
 
     public func withUpdatedSynchronizeableInputState(_ state: SynchronizeableChatInputState?) -> ChatInterfaceState {
-        var result = self.withUpdatedComposeInputState(ChatTextInputState(inputText: chatInputStateStringWithAppliedEntities(state?.text ?? "", entities: state?.entities ?? []))).withUpdatedReplyMessageSubject((state?.replySubject).flatMap {
+        let inputState: ChatTextInputState
+        switch state?.content {
+        case let .instantPage(page):
+            // Structured draft body: rebuild the model directly from the InstantPage, preserving the structure
+            // the flat entity set can't carry. The persisted caret/selection is clamped against the model's
+            // flat length, mirroring the `.textEntities` clamping below.
+            let content = chatInputContent(fromInstantPage: page)
+            if let textSelection = state?.textSelection {
+                let length = content.length
+                let lowerBound = max(0, min(textSelection.lowerBound, length))
+                let upperBound = max(lowerBound, min(textSelection.upperBound, length))
+                inputState = ChatTextInputState(content: content, selectionRange: lowerBound ..< upperBound)
+            } else {
+                inputState = ChatTextInputState(content: content, selectionRange: content.length ..< content.length)
+            }
+        case let .textEntities(text, entities):
+            // Common path — behaviorally identical to the pre-model code: same applied-entity attributed string
+            // and same `ChatTextInputState(inputText:...)` construction / `textSelection` clamping.
+            let inputText = chatInputStateStringWithAppliedEntities(text, entities: entities)
+            if let textSelection = state?.textSelection {
+                // Restore the persisted caret/selection (clamped to the restored text) rather than defaulting to the
+                // end. `textSelection` is set by `synchronizeableInputState` for locally-saved drafts; server drafts
+                // carry `nil`, which correctly falls back to caret-at-end.
+                let length = inputText.length
+                let lowerBound = max(0, min(textSelection.lowerBound, length))
+                let upperBound = max(lowerBound, min(textSelection.upperBound, length))
+                inputState = ChatTextInputState(inputText: inputText, selectionRange: lowerBound ..< upperBound)
+            } else {
+                inputState = ChatTextInputState(inputText: inputText)
+            }
+        case nil:
+            // No persisted state — identical to the previous code's empty derivation (`state?.text ?? ""`,
+            // `state?.entities ?? []`, no `textSelection`).
+            inputState = ChatTextInputState(inputText: chatInputStateStringWithAppliedEntities("", entities: []))
+        }
+        var result = self.withUpdatedComposeInputState(inputState).withUpdatedReplyMessageSubject((state?.replySubject).flatMap {
             return ReplyMessageSubject(
                 messageId: $0.messageId,
                 quote: $0.quote,

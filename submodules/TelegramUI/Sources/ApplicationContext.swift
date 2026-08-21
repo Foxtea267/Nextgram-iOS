@@ -33,6 +33,77 @@ import PhoneNumberFormat
 import AttachmentUI
 import MinimizedContainer
 import BrowserUI
+import NagramSettings
+import NagramSettingsSignal
+
+// MARK: NAGRAM — 从桌面角标中扣除被消息屏蔽规则隐藏的未读消息。
+private func nagramFilteredUnreadBadgeAdjustment(transaction: Transaction, accountPeerId: PeerId, seedConfiguration: SeedConfiguration, inAppSettings: InAppNotificationSettings) -> Int32 {
+    var unreadPeerIds = Set(transaction.getUnreadChatListPeerIds(groupId: .root, filterPredicate: nil, additionalFilter: nil, stopOnFirstMatch: false))
+    unreadPeerIds.formUnion(transaction.getUnreadChatListPeerIds(groupId: Namespaces.PeerGroup.archive, filterPredicate: nil, additionalFilter: nil, stopOnFirstMatch: false))
+    
+    let globalNotificationSettings = transaction.getGlobalNotificationSettings()
+    var hiddenMessageCount: Int32 = 0
+    var hiddenChatCount: Int32 = 0
+    
+    for peerId in unreadPeerIds {
+        guard let readState = transaction.getCombinedPeerReadState(peerId), readState.count > 0 else {
+            continue
+        }
+        guard let peer = transaction.getPeer(peerId) else {
+            continue
+        }
+        
+        let peerTags = seedConfiguration.peerSummaryCounterTags(peer, transaction.isPeerContact(peerId: peerId))
+        guard !peerTags.isDisjoint(with: inAppSettings.totalUnreadCountIncludeTags) else {
+            continue
+        }
+        
+        let notificationPeerId: PeerId
+        if let associatedPeerId = peer.associatedPeerId, peer.associatedPeerOverridesIdentity {
+            notificationPeerId = associatedPeerId
+        } else {
+            notificationPeerId = peerId
+        }
+        guard !resolvedIsRemovedFromTotalUnreadCount(globalSettings: globalNotificationSettings, peer: peer, peerSettings: transaction.getPeerNotificationSettings(id: notificationPeerId)) else {
+            continue
+        }
+        guard let matcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId.toInt64(), isOutgoing: false) else {
+            continue
+        }
+        
+        let historyView = transaction.getMessagesHistoryViewState(
+            input: .single(peerId: peerId, threadId: nil),
+            ignoreMessagesInTimestampRange: nil,
+            ignoreMessageIds: Set(),
+            count: Int(readState.count) + 10,
+            clipHoles: true,
+            anchor: .upperBound,
+            namespaces: .not(Namespaces.Message.allNonRegular)
+        )
+        var peerHiddenMessageCount: Int32 = 0
+        for entry in historyView.entries {
+            let message = entry.message
+            guard !entry.isRead, message.id.peerId == peerId, message.effectivelyIncoming(accountPeerId) else {
+                continue
+            }
+            if matcher.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
+                peerHiddenMessageCount += 1
+            }
+        }
+        
+        hiddenMessageCount += peerHiddenMessageCount
+        if peerHiddenMessageCount >= readState.count {
+            hiddenChatCount += 1
+        }
+    }
+    
+    switch inAppSettings.totalUnreadCountDisplayCategory {
+    case .messages:
+        return hiddenMessageCount
+    case .chats:
+        return hiddenChatCount
+    }
+}
 
 final class UnauthorizedApplicationContext {
     let sharedContext: SharedAccountContextImpl
@@ -137,10 +208,25 @@ final class AuthorizedApplicationContext {
     }
     
     var applicationBadge: Signal<Int32, NoError> {
-        return renderedTotalUnreadCount(accountManager: self.context.sharedContext.accountManager, engine: self.context.engine)
-        |> map {
-            $0.0
+        let accountManager = self.context.sharedContext.accountManager
+        return combineLatest(
+            renderedTotalUnreadCount(accountManager: accountManager, engine: self.context.engine),
+            accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.inAppNotificationSettings]),
+            nagramRegexFiltersSignal()
+        )
+        |> mapToSignal { [context = self.context] renderedCount, sharedData, _ -> Signal<Int32, NoError> in
+            let inAppSettings = sharedData.entries[ApplicationSpecificSharedDataKeys.inAppNotificationSettings]?.get(InAppNotificationSettings.self) ?? .defaultSettings
+            return context.account.postbox.transaction { transaction -> Int32 in
+                let adjustment = nagramFilteredUnreadBadgeAdjustment(
+                    transaction: transaction,
+                    accountPeerId: context.account.peerId,
+                    seedConfiguration: context.account.postbox.seedConfiguration,
+                    inAppSettings: inAppSettings
+                )
+                return max(0, renderedCount.0 - adjustment)
+            }
         }
+        |> distinctUntilChanged
     }
     
     let isReady = Promise<Bool>()

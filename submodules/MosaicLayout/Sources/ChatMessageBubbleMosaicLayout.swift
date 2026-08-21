@@ -1,6 +1,26 @@
 import Foundation
+import CoreGraphics
+#if canImport(UIKit)
 import UIKit
-import Display
+#endif
+
+/// Screen-pixel snapping, vendored so this module has no `Display`/`UIKit` link dependency (it must
+/// compile under SwiftPM on macOS for the RichText editor's `swift test`). On device the UIKit path is
+/// always taken; the macOS fallback (scale 2.0) is only exercised by `swift test`.
+///
+/// The scale is cached at module load, mirroring `Display`'s module-level `UIScreenScale` global —
+/// this function runs during off-main-thread async layout for all 5 shared callers (chat bubbles,
+/// InstantPage V1/V2 collage, media picker, audio preview), and reading `UIScreen.main` off-main on
+/// every call is both a Main Thread Checker violation and unnecessary per-call cost.
+#if canImport(UIKit)
+private let mosaicScreenScale: CGFloat = UIScreen.main.scale
+#else
+private let mosaicScreenScale: CGFloat = 2.0
+#endif
+
+private func floorToScreenPixels(_ value: CGFloat) -> CGFloat {
+    return floor(value * mosaicScreenScale) / mosaicScreenScale
+}
 
 public struct MosaicItemPosition: OptionSet {
     public var rawValue: Int32

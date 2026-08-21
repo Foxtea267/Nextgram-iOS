@@ -41,6 +41,7 @@ import Speak
 import TranslateUI
 import TextProcessingScreen
 import Pasteboard
+import ChatRichTextEditorComposer
 import TelegramNotices
 import ObjectiveC
 import LocationUI
@@ -1554,12 +1555,12 @@ final class StoryItemSetContainerSendMessage: @unchecked(Sendable) {
                     context: component.context,
                     theme: defaultDarkPresentationTheme,
                     mode: .translate(fromLanguage: language, applyResult: nil),
-                    inputText: TextWithEntities(text: text, entities: entities),
+                    inputText: .plain(text: text, entities: entities),
                     copyResult: { [weak view] text in
                         guard let component = view?.component else {
                             return
                         }
-                        storeMessageTextInPasteboard(text.text, entities: text.entities)
+                        storeComposedRichMessageInPasteboard(text)
                         component.controller()?.present(UndoOverlayController(presentationData: presentationData, content: .copy(text: presentationData.strings.Conversation_TextCopied), elevatedLayout: true, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                     },
                     translateChat: nil

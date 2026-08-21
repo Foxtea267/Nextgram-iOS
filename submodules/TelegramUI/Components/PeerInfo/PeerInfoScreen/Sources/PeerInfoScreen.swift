@@ -6,7 +6,9 @@ import Postbox
 import TelegramCore
 import SwiftSignalKit
 import AccountContext
+// MARK: NAGRAM
 import NagramSettings
+import NagramSettingsSignal
 import TelegramPresentationData
 import TelegramUIPreferences
 import AvatarNode
@@ -114,6 +116,80 @@ import PeerMessagesMediaPlaylist
 import EdgeEffect
 import Pasteboard
 import AccountPeerContextItem
+
+// MARK: NAGRAM — Map upstream group settings item ids to user-selectable profile items.
+private func nagramGroupProfileSettingItem(peer: EnginePeer, itemId: AnyHashable) -> NagramGroupProfileSettingItem {
+    guard let itemId = itemId.base as? Int else {
+        return .other
+    }
+    switch peer {
+    case let .channel(channel):
+        guard case .group = channel.info else {
+            return .other
+        }
+        switch itemId {
+        case 101:
+            return .groupType
+        case 102:
+            return .inviteLinks
+        case 103:
+            return .linkedChannel
+        case 104:
+            return .history
+        case 106:
+            return .members
+        case 107:
+            return .permissions
+        case 108:
+            return .admins
+        case 109:
+            return .memberRequests
+        case 110:
+            return .removedUsers
+        case 111:
+            return .recentActions
+        case 112, 113:
+            return .location
+        case 115:
+            return .deleteGroup
+        case 116:
+            return .reactions
+        case 117, 118:
+            return .topics
+        case 119:
+            return .appearance
+        case 120, 121, 122, 123:
+            return .community
+        default:
+            return .other
+        }
+    case .legacyGroup:
+        switch itemId {
+        case 101:
+            return .groupType
+        case 102:
+            return .inviteLinks
+        case 103:
+            return .history
+        case 104:
+            return .permissions
+        case 105:
+            return .admins
+        case 106:
+            return .memberRequests
+        case 107:
+            return .reactions
+        case 108, 109:
+            return .topics
+        case 110, 111:
+            return .community
+        default:
+            return .other
+        }
+    default:
+        return .other
+    }
+}
 
 public enum PeerInfoAvatarEditingMode {
     case generic
@@ -303,6 +379,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     let selectAddMemberDisposable = MetaDisposable()
     let addMemberDisposable = MetaDisposable()
     let preloadHistoryDisposable = MetaDisposable()
+    let nagramProfileSettingsDisposable = MetaDisposable()
     var shareStatusDisposable: MetaDisposable?
     let joinChannelDisposable = MetaDisposable()
     
@@ -494,6 +571,12 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             },
             editingOpenDiscussionGroupSetup: { [weak self] in
                 self?.editingOpenDiscussionGroupSetup()
+            },
+            editingOpenAddToCommunity: { [weak self] in
+                self?.editingOpenAddToCommunity()
+            },
+            editingRemoveFromCommunity: { [weak self] communityId in
+                self?.editingRemoveFromCommunity(communityId: communityId)
             },
             editingOpenPostSuggestionsSetup: { [weak self] in
                 self?.editingOpenPostSuggestionsSetup()
@@ -2586,6 +2669,16 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             strongSelf.cachedDataPromise.set(.single(data.cachedData))
         })
         
+        // MARK: NAGRAM — 资料页增强开关变化后重建 infoItems。
+        self.nagramProfileSettingsDisposable.set(combineLatest(
+            queue: Queue.mainQueue(),
+            nagramBoolSignal("nagram.showProfileId", defaultValue: false),
+            nagramBoolSignal("nagram.showDC", defaultValue: false),
+            nagramBoolSignal("nagram.showRegDate", defaultValue: false)
+        ).startStrict(next: { [weak self] _, _, _ in
+            self?.requestLayout(animated: false)
+        }))
+        
         self.customStatusDisposable = (self.customStatusPromise.get()
         |> deliverOnMainQueue).startStrict(next: { [weak self] value in
             guard let strongSelf = self else {
@@ -2717,6 +2810,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.selectAddMemberDisposable.dispose()
         self.addMemberDisposable.dispose()
         self.preloadHistoryDisposable.dispose()
+        self.nagramProfileSettingsDisposable.dispose()
         self.resolvePeerByNameDisposable?.dispose()
         self.navigationActionDisposable.dispose()
         self.enqueueMediaMessageDisposable.dispose()
@@ -3061,7 +3155,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         }
         
         if bot.flags.contains(.notActivated) || bot.flags.contains(.showInSettingsDisclaimer) {
-            let alertController = webAppTermsAlertController(context: self.context, updatedPresentationData: controller.updatedPresentationData, bot: bot, completion: { [weak self] allowWrite in
+            let alertController = webAppTermsAlertController(context: self.context, updatedPresentationData: controller.updatedPresentationData, completion: { [weak self] allowWrite in
                 guard let self else {
                     return
                 }
@@ -4123,6 +4217,70 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.controller?.push(channelDiscussionGroupSetupController(context: self.context, updatedPresentationData: self.controller?.updatedPresentationData, peerId: peer.id))
     }
     
+    private func editingOpenAddToCommunity() {
+        guard let data = self.data, let peer = data.peer else {
+            return
+        }
+        self.controller?.push(self.context.sharedContext.makeCommunitiesScreen(context: self.context, peerId: peer.id))
+    }
+
+    private func editingRemoveFromCommunity(communityId: EnginePeer.Id) {
+        guard let data = self.data, let peer = data.peer else {
+            return
+        }
+        
+        let action = { [weak self] in
+            guard let self else {
+                return
+            }
+            self.activeActionDisposable.set((self.context.engine.peers.toggleCommunityPeerLink(
+                communityId: communityId,
+                peerId: peer.id,
+                action: .unlink
+            )
+            |> deliverOnMainQueue).startStrict(error: { [weak self] _ in
+                guard let self else {
+                    return
+                }
+                self.controller?.present(textAlertController(context: self.context, updatedPresentationData: self.controller?.updatedPresentationData, title: nil, text: self.presentationData.strings.Login_UnknownError, actions: [
+                    TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})
+                ]), in: .window(.root))
+            }, completed: { [weak self] in
+                guard let self else {
+                    return
+                }
+                let _ = self.context.account.postbox.transaction { transaction -> Void in
+                    if case let .channel(channel) = peer {
+                        updatePeersCustom(transaction: transaction, peers: [channel.withUpdatedLinkedCommunityId(nil)], update: { _, updated in
+                            guard let channel = updated as? TelegramChannel else {
+                                return updated
+                            }
+                            return channel.withUpdatedLinkedCommunityId(nil)
+                        })
+                    }
+                    transaction.updatePeerCachedData(peerIds: Set([communityId]), update: { _, current in
+                        guard let current = current as? CachedCommunityData else {
+                            return current
+                        }
+                        return current.withUpdatedLinkedPeers(current.linkedPeers.filter { $0.peerId != peer.id })
+                    })
+                }.startStandalone()
+            }))
+        }
+        
+        self.controller?.present(textAlertController(
+            context: self.context,
+            title: self.presentationData.strings.Community_RemoveChat_Title,
+            text: self.presentationData.strings.Community_RemoveChat_Text,
+            actions: [
+                TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {}),
+                TextAlertAction(type: .defaultDestructiveAction, title: self.presentationData.strings.Community_RemoveChat_Remove, action: {
+                    action()
+                })
+            ]
+        ), in: .window(.root))
+    }
+
     private func editingOpenPostSuggestionsSetup() {
         if #available(iOS 13.0, *) {
             guard let data = self.data, let peer = data.peer else {
@@ -5465,7 +5623,39 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             insets.left += sectionInset
             insets.right += sectionInset
             
-            let items = self.isSettings ? settingsItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
+            let editItems = (self.isSettings || self.isMyProfile) ? settingsEditingItems(data: self.data, state: self.state, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isMyProfile: self.isMyProfile) : editingItems(data: self.data, boostStatus: self.boostStatus, state: self.state, chatLocation: self.chatLocation, context: self.context, presentationData: self.presentationData, interaction: self.interaction)
+            var items = self.isSettings ? settingsItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
+            
+            // MARK: NAGRAM — Expose user-selected group settings items on the group profile.
+            if let peer = self.data?.peer {
+                let isGroup: Bool
+                switch peer {
+                case let .channel(channel):
+                    if case .group = channel.info {
+                        isGroup = true
+                    } else {
+                        isGroup = false
+                    }
+                case .legacyGroup:
+                    isGroup = true
+                default:
+                    isGroup = false
+                }
+                if isGroup {
+                    let filteredEditItems = editItems.compactMap { sectionId, sectionItems -> (AnyHashable, [PeerInfoScreenItem])? in
+                        let filteredSectionItems = sectionItems.filter { item in
+                            let settingItem = nagramGroupProfileSettingItem(peer: peer, itemId: item.id)
+                            return NagramSettings.shared.isGroupProfileSettingItemVisible(settingItem)
+                        }
+                        guard !filteredSectionItems.isEmpty else {
+                            return nil
+                        }
+                        return (sectionId, filteredSectionItems)
+                    }
+                    let insertionIndex = items.firstIndex(where: { $0.0 == AnyHashable(InfoSection.nagram) }) ?? items.endIndex
+                    items.insert(contentsOf: filteredEditItems, at: insertionIndex)
+                }
+            }
             
             contentHeight += headerHeight
             if !((self.isSettings || self.isMyProfile) && self.state.isEditing) {
@@ -5540,7 +5730,6 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             }
             
             var validEditingSections: [AnyHashable] = []
-            let editItems = (self.isSettings || self.isMyProfile) ? settingsEditingItems(data: self.data, state: self.state, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isMyProfile: self.isMyProfile) : editingItems(data: self.data, boostStatus: self.boostStatus, state: self.state, chatLocation: self.chatLocation, context: self.context, presentationData: self.presentationData, interaction: self.interaction)
 
             for (sectionId, sectionItems) in editItems {
                 var insets = UIEdgeInsets()
@@ -6208,7 +6397,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 self.controller?.present(UndoOverlayController(presentationData: presentationData, content: .succeed(text: presentationData.strings.Chat_SimilarChannels_JoinedChannel(peer.compactDisplayTitle).string, timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
             case let .webView(webView):
                 if let controller = self.controller {
-                    self.context.sharedContext.openJoinChatWebView(context: self.context, parentController: controller, updatedPresentationData: self.controller?.updatedPresentationData, webView: webView)
+                    self.context.sharedContext.openJoinChatWebView(context: self.context, parentController: controller, updatedPresentationData: self.controller?.updatedPresentationData, webView: webView, chatTitle: peer.compactDisplayTitle)
                 }
             }
         }, error: { [weak self] error in
@@ -6699,6 +6888,12 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                 )
             }
             
+            // MARK: NAGRAM
+            let effectiveNotificationsWarningSuppressed = combineLatest(notificationsWarningSuppressed.get(), nagramBoolSignal("nagram.hideTabBarPermissionWarnings", defaultValue: false))
+            |> map { notificationsWarningSuppressed, hidePermissionWarnings in
+                return notificationsWarningSuppressed || hidePermissionWarnings
+            }
+
             let icon: UIImage?
             if useSpecialTabBarIcons() {
                 icon = UIImage(bundleImageName: "Chat List/Tabs/Holiday/IconSettings")
@@ -6706,7 +6901,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
                 icon = UIImage(bundleImageName: "Chat List/Tabs/IconSettings")
             }
             
-            let tabBarItem: Signal<(String, UIImage?, UIImage?, String?, Bool, Bool), NoError> = combineLatest(queue: .mainQueue(), self.context.sharedContext.presentationData, notificationsAuthorizationStatus.get(), notificationsWarningSuppressed.get(), context.engine.notices.getServerProvidedSuggestions(), accountTabBarAvatar, accountTabBarAvatarBadge)
+            let tabBarItem: Signal<(String, UIImage?, UIImage?, String?, Bool, Bool), NoError> = combineLatest(queue: .mainQueue(), self.context.sharedContext.presentationData, notificationsAuthorizationStatus.get(), effectiveNotificationsWarningSuppressed, context.engine.notices.getServerProvidedSuggestions(), accountTabBarAvatar, accountTabBarAvatarBadge)
             |> map { presentationData, notificationsAuthorizationStatus, notificationsWarningSuppressed, suggestions, accountTabBarAvatar, accountTabBarAvatarBadge -> (String, UIImage?, UIImage?, String?, Bool, Bool) in
                 let notificationsWarning = shouldDisplayNotificationsPermissionWarning(status: notificationsAuthorizationStatus, suppressed:  notificationsWarningSuppressed)
                 let phoneNumberWarning = suggestions.contains(.validatePhoneNumber)

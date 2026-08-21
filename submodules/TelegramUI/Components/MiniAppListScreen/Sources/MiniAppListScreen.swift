@@ -247,14 +247,13 @@ final class MiniAppListScreenComponent: Component {
             
             let titleText: String = strings.MiniAppList_Title
             
-            let closeTitle: String = strings.Common_Close
             let headerContent: ChatListHeaderComponent.Content? = ChatListHeaderComponent.Content(
                 title: titleText,
                 navigationBackTitle: nil,
                 titleComponent: nil,
                 chatListTitle: nil,
                 leftButton: isModal ? AnyComponentWithIdentity(id: "close", component: AnyComponent(NavigationButtonComponent(
-                    content: .text(title: closeTitle, isBold: false),
+                    content: .icon(imageName: "Navigation/Close"),
                     pressed: { [weak self] _ in
                         guard let self else {
                             return
@@ -461,7 +460,7 @@ final class MiniAppListScreenComponent: Component {
                         theme: searchBarTheme,
                         presentationTheme: environment.theme,
                         strings: environment.strings,
-                        fieldStyle: .modern,
+                        fieldStyle: .glass,
                         displayBackground: false
                     )
                     searchBarNode.placeholderString = NSAttributedString(string: environment.strings.Common_Search, font: Font.regular(17.0), textColor: searchBarTheme.placeholder)

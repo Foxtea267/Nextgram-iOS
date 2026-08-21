@@ -30,6 +30,8 @@ final class PeerInfoInteraction {
     let editingOpenNameColorSetup: () -> Void
     let editingOpenInviteLinksSetup: () -> Void
     let editingOpenDiscussionGroupSetup: () -> Void
+    let editingOpenAddToCommunity: () -> Void
+    let editingRemoveFromCommunity: (EnginePeer.Id) -> Void
     let editingOpenPostSuggestionsSetup: () -> Void
     let editingOpenRevenue: () -> Void
     let editingOpenStars: () -> Void
@@ -109,6 +111,8 @@ final class PeerInfoInteraction {
         editingOpenNameColorSetup: @escaping () -> Void,
         editingOpenInviteLinksSetup: @escaping () -> Void,
         editingOpenDiscussionGroupSetup: @escaping () -> Void,
+        editingOpenAddToCommunity: @escaping () -> Void,
+        editingRemoveFromCommunity: @escaping (EnginePeer.Id) -> Void,
         editingOpenPostSuggestionsSetup: @escaping () -> Void,
         editingOpenRevenue: @escaping () -> Void,
         editingOpenStars: @escaping () -> Void,
@@ -187,6 +191,8 @@ final class PeerInfoInteraction {
         self.editingOpenNameColorSetup = editingOpenNameColorSetup
         self.editingOpenInviteLinksSetup = editingOpenInviteLinksSetup
         self.editingOpenDiscussionGroupSetup = editingOpenDiscussionGroupSetup
+        self.editingOpenAddToCommunity = editingOpenAddToCommunity
+        self.editingRemoveFromCommunity = editingRemoveFromCommunity
         self.editingOpenPostSuggestionsSetup = editingOpenPostSuggestionsSetup
         self.editingOpenRevenue = editingOpenRevenue
         self.editingOpenStars = editingOpenStars

@@ -1,4 +1,66 @@
 public extension Api {
+    enum SavedContact: TypeConstructorDescription {
+        public class Cons_savedPhoneContact: TypeConstructorDescription {
+            public var phone: String
+            public var firstName: String
+            public var lastName: String
+            public var date: Int32
+            public init(phone: String, firstName: String, lastName: String, date: Int32) {
+                self.phone = phone
+                self.firstName = firstName
+                self.lastName = lastName
+                self.date = date
+            }
+            public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+                return ("savedPhoneContact", [("phone", ConstructorParameterDescription(self.phone)), ("firstName", ConstructorParameterDescription(self.firstName)), ("lastName", ConstructorParameterDescription(self.lastName)), ("date", ConstructorParameterDescription(self.date))])
+            }
+        }
+        case savedPhoneContact(Cons_savedPhoneContact)
+
+        public func serialize(_ buffer: Buffer, _ boxed: Swift.Bool) {
+            switch self {
+            case .savedPhoneContact(let _data):
+                if boxed {
+                    buffer.appendInt32(289586518)
+                }
+                serializeString(_data.phone, buffer: buffer, boxed: false)
+                serializeString(_data.firstName, buffer: buffer, boxed: false)
+                serializeString(_data.lastName, buffer: buffer, boxed: false)
+                serializeInt32(_data.date, buffer: buffer, boxed: false)
+                break
+            }
+        }
+
+        public func descriptionFields() -> (String, [(String, ConstructorParameterDescription)]) {
+            switch self {
+            case .savedPhoneContact(let _data):
+                return ("savedPhoneContact", [("phone", ConstructorParameterDescription(_data.phone)), ("firstName", ConstructorParameterDescription(_data.firstName)), ("lastName", ConstructorParameterDescription(_data.lastName)), ("date", ConstructorParameterDescription(_data.date))])
+            }
+        }
+
+        public static func parse_savedPhoneContact(_ reader: BufferReader) -> SavedContact? {
+            var _1: String?
+            _1 = parseString(reader)
+            var _2: String?
+            _2 = parseString(reader)
+            var _3: String?
+            _3 = parseString(reader)
+            var _4: Int32?
+            _4 = reader.readInt32()
+            let _c1 = _1 != nil
+            let _c2 = _2 != nil
+            let _c3 = _3 != nil
+            let _c4 = _4 != nil
+            if _c1 && _c2 && _c3 && _c4 {
+                return Api.SavedContact.savedPhoneContact(Cons_savedPhoneContact(phone: _1!, firstName: _2!, lastName: _3!, date: _4!))
+            }
+            else {
+                return nil
+            }
+        }
+    }
+}
+public extension Api {
     indirect enum SavedDialog: TypeConstructorDescription {
         public class Cons_monoForumDialog: TypeConstructorDescription {
             public var flags: Int32

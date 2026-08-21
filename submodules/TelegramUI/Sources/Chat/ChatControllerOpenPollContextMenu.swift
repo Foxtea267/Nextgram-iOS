@@ -63,7 +63,7 @@ extension ChatControllerImpl {
                 accountTestingEnvironment: self.context.account.testingEnvironment,
                 currentTimestamp: Int32(CFAbsoluteTimeGetCurrent() + kCFAbsoluteTimeIntervalSince1970)
             ) ?? false
-            let canVote = poll.pollId.namespace == Namespaces.Media.CloudPoll && !Namespaces.Message.allNonRegular.contains(message.id.namespace) && !isPollEffectivelyClosed(message: EngineMessage(message), poll: poll) && !isRestricted && (selectedOptions.isEmpty || !poll.revotingDisabled)
+            let canVote = poll.pollId.namespace == Namespaces.Media.CloudPoll && !Namespaces.Message.allNonRegular.contains(message.id.namespace) && !Namespaces.Message.allEphemeral.contains(message.id.namespace) && !isPollEffectivelyClosed(message: EngineMessage(message), poll: poll) && !isRestricted && (selectedOptions.isEmpty || !poll.revotingDisabled)
             if canVote {
                 if selectedOptions.contains(pollOption.opaqueIdentifier) {
                     items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Chat_Poll_RetractOptionVote, icon: { theme in return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Unvote"), color: theme.contextMenu.primaryColor) }, action: { [weak self] c, _ in

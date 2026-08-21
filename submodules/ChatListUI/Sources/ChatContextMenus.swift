@@ -54,6 +54,33 @@ enum ChatContextMenuSource {
     case search(ChatListSearchContextActionSource)
 }
 
+private func chatContextMenuPeerIsMuted(peer: EnginePeer, notificationSettings: EnginePeer.NotificationSettings, globalNotificationSettings: EngineGlobalNotificationSettings) -> Bool {
+    switch notificationSettings.muteState {
+    case let .muted(until):
+        return until >= Int32(CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970)
+    case .unmuted:
+        return false
+    case .default:
+        switch peer {
+        case .user:
+            return !globalNotificationSettings.privateChats.enabled
+        case .legacyGroup:
+            return !globalNotificationSettings.groupChats.enabled
+        case let .channel(channel):
+            switch channel.info {
+            case .group:
+                return !globalNotificationSettings.groupChats.enabled
+            case .broadcast:
+                return !globalNotificationSettings.channels.enabled
+            }
+        case .community:
+            return true
+        case .secretChat:
+            return false
+        }
+    }
+}
+
 func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoInfo: ChatListNodeEntryPromoInfo?, source: ChatContextMenuSource, chatListController: ChatListControllerImpl?, joined: Bool) -> Signal<[ContextMenuItem], NoError> {
     let presentationData = context.sharedContext.currentPresentationData.with({ $0 })
     let strings = presentationData.strings
@@ -171,23 +198,7 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                             }
                         }
                         
-                        var isMuted = false
-                        if case let .muted(until) = notificationSettings.muteState, until >= Int32(CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970) {
-                            isMuted = true
-                        } else if case .default = notificationSettings.muteState {
-                            if case .user = peer {
-                                isMuted = !globalNotificationSettings.privateChats.enabled
-                            } else if case .legacyGroup = peer {
-                                isMuted = !globalNotificationSettings.groupChats.enabled
-                            } else if case let .channel(channel) = peer {
-                                switch channel.info {
-                                case .group:
-                                    isMuted = !globalNotificationSettings.groupChats.enabled
-                                case .broadcast:
-                                    isMuted = !globalNotificationSettings.channels.enabled
-                                }
-                            }
-                        }
+                        let isMuted = chatContextMenuPeerIsMuted(peer: peer, notificationSettings: notificationSettings, globalNotificationSettings: globalNotificationSettings)
                         
                         var isUnread = false
                         if readCounters.isUnread {
@@ -198,6 +209,12 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                         if case let .channel(channel) = peer, channel.isForumOrMonoForum {
                             isForum = true
                         }
+                        let isCommunity: Bool
+                        if case .community = peer {
+                            isCommunity = true
+                        } else {
+                            isCommunity = false
+                        }
                         
                         var hasRemoveFromFolder = false
                         if case let .chatList(currentFilter) = source {
@@ -206,11 +223,11 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                                     let nagramAccountPeerId = context.account.peerId.toInt64() // MARK: NAGRAM
                                     let nagramPeerId = peer.id.toInt64()
                                     if NagramSettings.shared.isRecentChatFolderEnabled(accountPeerId: nagramAccountPeerId, filterId: id),
-                                       NagramSettings.shared.recentChatIds(accountPeerId: nagramAccountPeerId).contains(nagramPeerId) {
+                                       NagramSettings.shared.recentChatFilterPeerIds(accountPeerId: nagramAccountPeerId).contains(nagramPeerId) {
                                         let predicateWithoutRecent = chatListFilterPredicate(filter: data, accountPeerId: context.account.peerId, includeRecentPeerIds: Set())
                                         let includedWithoutRecent = predicateWithoutRecent.includes(peer: peer._asPeer(), groupId: .root, isRemovedFromTotalUnreadCount: isMuted, isUnread: isUnread, isContact: isContact, messageTagSummaryResult: false)
                                         if !includedWithoutRecent {
-                                            NagramSettings.shared.removeRecentChatId(nagramPeerId, accountPeerId: nagramAccountPeerId)
+                                            NagramSettings.shared.removeRecentChatIds(matchingFilterPeerId: nagramPeerId, accountPeerId: nagramAccountPeerId)
                                             c?.dismiss(completion: {
                                                 chatListController?.present(UndoOverlayController(presentationData: presentationData, content: .chatRemovedFromFolder(context: context, chatTitle: peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder), folderTitle: title.rawAttributedString), elevatedLayout: false, animateInAsReplacement: true, action: { _ in
                                                     return false
@@ -361,21 +378,23 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                             }
                         }
                         
-                        if isUnread {
-                            items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_MarkAsRead, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsRead"), color: theme.contextMenu.primaryColor) }, action: { _, f in
-                                let _ = context.engine.messages.togglePeersUnreadMarkInteractively(peerIds: [peerId], setToValue: nil).startStandalone()
-                                f(.default)
-                            })))
-                        } else if !isForum {
-                            var canMarkAsUnread = true
-                            if peerId.namespace == Namespaces.Peer.CloudChannel && joined {
-                                canMarkAsUnread = false
-                            }
-                            if canMarkAsUnread {
-                                items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_MarkAsUnread, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsUnread"), color: theme.contextMenu.primaryColor) }, action: { _, f in
+                        if !isCommunity {
+                            if isUnread {
+                                items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_MarkAsRead, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsRead"), color: theme.contextMenu.primaryColor) }, action: { _, f in
                                     let _ = context.engine.messages.togglePeersUnreadMarkInteractively(peerIds: [peerId], setToValue: nil).startStandalone()
                                     f(.default)
                                 })))
+                            } else if !isForum {
+                                var canMarkAsUnread = true
+                                if peerId.namespace == Namespaces.Peer.CloudChannel && joined {
+                                    canMarkAsUnread = false
+                                }
+                                if canMarkAsUnread {
+                                    items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_MarkAsUnread, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsUnread"), color: theme.contextMenu.primaryColor) }, action: { _, f in
+                                        let _ = context.engine.messages.togglePeersUnreadMarkInteractively(peerIds: [peerId], setToValue: nil).startStandalone()
+                                        f(.default)
+                                    })))
+                                }
                             }
                         }
                         
@@ -457,23 +476,7 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                             }
                             
                             if !isSavedMessages {
-                                var isMuted = false
-                                if case let .muted(until) = notificationSettings.muteState, until >= Int32(CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970) {
-                                    isMuted = true
-                                } else if case .default = notificationSettings.muteState {
-                                    if case .user = peer {
-                                        isMuted = !globalNotificationSettings.privateChats.enabled
-                                    } else if case .legacyGroup = peer {
-                                        isMuted = !globalNotificationSettings.groupChats.enabled
-                                    } else if case let .channel(channel) = peer {
-                                        switch channel.info {
-                                        case .group:
-                                            isMuted = !globalNotificationSettings.groupChats.enabled
-                                        case .broadcast:
-                                            isMuted = !globalNotificationSettings.channels.enabled
-                                        }
-                                    }
-                                }
+                                let isMuted = chatContextMenuPeerIsMuted(peer: peer, notificationSettings: notificationSettings, globalNotificationSettings: globalNotificationSettings)
                                 items.append(.action(ContextMenuActionItem(text: isMuted ? strings.ChatList_Context_Unmute : strings.ChatList_Context_Mute, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: isMuted ? "Chat/Context Menu/Unmute" : "Chat/Context Menu/Muted"), color: theme.contextMenu.primaryColor) }, action: { _, f in
                                     let _ = (context.engine.peers.togglePeerMuted(peerId: peerId, threadId: nil)
                                              |> deliverOnMainQueue).startStandalone(completed: {
@@ -528,7 +531,7 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                                                 didJoin = true
                                             case let .webView(webView):
                                                 if let chatListController = chatListController {
-                                                    context.sharedContext.openJoinChatWebView(context: context, parentController: chatListController, updatedPresentationData: nil, webView: webView)
+                                                    context.sharedContext.openJoinChatWebView(context: context, parentController: chatListController, updatedPresentationData: nil, webView: webView, chatTitle: EnginePeer(peer).compactDisplayTitle)
                                                 }
                                             }
                                         }, error: { _ in
@@ -556,13 +559,24 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                             }
                         }
                         
+                        let appendDeleteOrUngroupItem = {
+                            if case .community = peer {
+                                items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_Ungroup, textColor: .destructive, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Ungroup"), color: theme.contextMenu.destructiveColor) }, action: { _, f in
+                                    chatListController?.ungroupCommunity(communityId: peerId)
+                                    f(.default)
+                                })))
+                            } else {
+                                items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_Delete, textColor: .destructive, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.contextMenu.destructiveColor) }, action: { _, f in
+                                    if let chatListController = chatListController {
+                                        chatListController.deletePeerChat(peerId: peerId, joined: joined)
+                                    }
+                                    f(.default)
+                                })))
+                            }
+                        }
+
                         if case .chatList = source, peerGroup != nil {
-                            items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_Delete, textColor: .destructive, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.contextMenu.destructiveColor) }, action: { _, f in
-                                if let chatListController = chatListController {
-                                    chatListController.deletePeerChat(peerId: peerId, joined: joined)
-                                }
-                                f(.default)
-                            })))
+                            appendDeleteOrUngroupItem()
                         } else if case let .search(search) = source {
                             switch search {
                             case .recentPeers, .search:
@@ -591,12 +605,7 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                                             addedSeparator = true
                                         }
                                     }
-                                    items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_Delete, textColor: .destructive, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Delete"), color: theme.contextMenu.destructiveColor) }, action: { _, f in
-                                        if let chatListController = chatListController {
-                                            chatListController.deletePeerChat(peerId: peerId, joined: joined)
-                                        }
-                                        f(.default)
-                                    })))
+                                    appendDeleteOrUngroupItem()
                                 }
                             default:
                                  break

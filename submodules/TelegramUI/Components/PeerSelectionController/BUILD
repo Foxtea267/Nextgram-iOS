@@ -38,6 +38,7 @@ swift_library(
         "//submodules/ComponentFlow",
         "//submodules/Components/ComponentDisplayAdapters",
         "//submodules/TelegramUI/Components/EdgeEffect",
+        "//submodules/UndoUI",
     ],
     visibility = [
         "//visibility:public",
