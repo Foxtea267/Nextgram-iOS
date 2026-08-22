@@ -351,9 +351,23 @@ alternate_icon_folders = [
 
 # MARK: NAGRAM — the IPA post-processor selects the matching icon set from the
 # active Xcode toolchain. The Xcode 26 Composer sources are supplied separately.
-composer_source_icon_folders = ["Nagram", "NagramBlock", "NagramColorful"]
+composer_source_icon_folders = [
+    "Nagram",
+    "NagramBlock",
+    "NagramBlockBlue",
+    "NagramBlockNiello",
+    "NagramClassic",
+    "NagramColorful",
+]
 composer_build_icon_folders = ["NagramBuild"]
-composer_xcode26_icon_folders = ["Nagram26", "NagramBlock26", "NagramColorful26"]
+composer_xcode26_icon_folders = [
+    "Nagram26",
+    "NagramBlock26",
+    "NagramBlockBlue26",
+    "NagramBlockNiello26",
+    "NagramClassic26",
+    "NagramColorful26",
+]
 
 [
     filegroup(
@@ -368,8 +382,7 @@ composer_xcode26_icon_folders = ["Nagram26", "NagramBlock26", "NagramColorful26"
 filegroup(
     name = "NagramIconPreviews",
     srcs = glob([
-        "Telegram-iOS/NagramBlock*.png",
-        "Telegram-iOS/NagramColorful*.png",
+        "Telegram-iOS/Nagram*.png",
     ]),
 )
 
@@ -1021,9 +1034,15 @@ sh_binary(
         ":Icons",
         ":Nagram26_icon",
         ":NagramBlock26_icon",
+        ":NagramBlockBlue26_icon",
+        ":NagramBlockNiello26_icon",
+        ":NagramClassic26_icon",
         ":NagramColorful26_icon",
         ":Nagram_icon",
         ":NagramBlock_icon",
+        ":NagramBlockBlue_icon",
+        ":NagramBlockNiello_icon",
+        ":NagramClassic_icon",
         ":NagramColorful_icon",
         "//submodules/LegacyComponents:LegacyComponentsAssets",
         "//submodules/PasswordSetupUI:PasswordSetupUIAssets",

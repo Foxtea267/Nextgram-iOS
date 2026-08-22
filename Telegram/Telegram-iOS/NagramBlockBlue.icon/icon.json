@@ -1,53 +1,52 @@
 {
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "features" : [
+    "refractivity",
+    "specular-location"
+  ],
   "fill-specializations" : [
     {
       "value" : {
-        "automatic-gradient" : "srgb:1.00000,1.00000,1.00000,1.00000",
-        "orientation" : {
-          "start" : {
-            "x" : 0.5,
-            "y" : 1
-          },
-          "stop" : {
-            "x" : 0.5,
-            "y" : 0.3
-          }
-        }
+        "linear-gradient" : [
+          "display-p3:0.00000,0.58431,1.00000,1.00000",
+          "srgb:0.00000,0.58431,1.00000,1.00000"
+        ]
       }
     },
     {
       "appearance" : "dark",
       "value" : {
-        "automatic-gradient" : "srgb:0.00000,0.16471,0.28235,1.00000",
-        "orientation" : {
-          "start" : {
-            "x" : 0.5,
-            "y" : 1
-          },
-          "stop" : {
-            "x" : 0.5,
-            "y" : 0.3
-          }
-        }
+        "automatic-gradient" : "display-p3:0.12549,0.12941,0.14118,1.00000"
       }
     }
   ],
   "groups" : [
     {
-      "blur-material" : null,
+      "blur-material-specializations" : [
+        {
+          "value" : null
+        },
+        {
+          "appearance" : "dark",
+          "value" : null
+        },
+        {
+          "appearance" : "tinted",
+          "value" : 0.5
+        }
+      ],
       "layers" : [
         {
           "fill-specializations" : [
             {
-              "appearance" : "dark",
               "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+                "solid" : "extended-gray:1.00000,1.00000"
               }
             },
             {
-              "appearance" : "tinted",
+              "appearance" : "dark",
               "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+                "solid" : "srgb:0.00000,0.58431,1.00000,1.00000"
               }
             }
           ],
@@ -57,15 +56,14 @@
         {
           "fill-specializations" : [
             {
-              "appearance" : "dark",
               "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+                "solid" : "extended-gray:1.00000,1.00000"
               }
             },
             {
-              "appearance" : "tinted",
+              "appearance" : "dark",
               "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+                "solid" : "srgb:0.00000,0.58431,1.00000,1.00000"
               }
             }
           ],
@@ -75,23 +73,24 @@
         {
           "fill-specializations" : [
             {
-              "appearance" : "dark",
               "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+                "solid" : "extended-gray:1.00000,1.00000"
               }
             },
             {
-              "appearance" : "tinted",
+              "appearance" : "dark",
               "value" : {
-                "solid" : "srgb:1.00000,1.00000,1.00000,1.00000"
+                "solid" : "srgb:0.00000,0.58431,1.00000,1.00000"
               }
             }
           ],
+          "glass" : true,
           "image-name" : "block-3.svg",
           "name" : "block-3"
         }
       ],
       "name" : "layer",
+      "opacity" : 1,
       "position" : {
         "scale" : 1.18,
         "translation-in-points" : [
@@ -99,19 +98,53 @@
           0
         ]
       },
+      "refractivity-specializations" : [
+        {
+          "value" : {
+            "depth" : 0.875,
+            "enabled" : false,
+            "strength" : 0
+          }
+        },
+        {
+          "appearance" : "dark",
+          "value" : {
+            "depth" : 0,
+            "enabled" : false,
+            "strength" : 0.5
+          }
+        },
+        {
+          "appearance" : "tinted",
+          "value" : {
+            "depth" : 0.77,
+            "enabled" : true,
+            "strength" : 0
+          }
+        }
+      ],
       "shadow-specializations" : [
         {
           "value" : {
             "kind" : "neutral",
-            "opacity" : 0.3
+            "opacity" : 1.2
           }
         },
         {
           "appearance" : "dark",
           "value" : {
             "kind" : "neutral",
-            "opacity" : 0.05
+            "opacity" : 0.2
           }
+        }
+      ],
+      "specular-specializations" : [
+        {
+          "value" : "outside"
+        },
+        {
+          "appearance" : "dark",
+          "value" : "outside"
         }
       ],
       "translucency-specializations" : [

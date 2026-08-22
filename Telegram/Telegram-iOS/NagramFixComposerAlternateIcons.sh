@@ -40,10 +40,16 @@ fi
 if (( XCODE_MAJOR == 26 )); then
 	NAGRAM_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/Nagram26.icon"
 	NAGRAM_BLOCK_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlock26.icon"
+	NAGRAM_BLOCK_BLUE_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlockBlue26.icon"
+	NAGRAM_BLOCK_NIELLO_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlockNiello26.icon"
+	NAGRAM_CLASSIC_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramClassic26.icon"
 	NAGRAM_COLORFUL_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramColorful26.icon"
 elif (( XCODE_MAJOR >= 27 )); then
 	NAGRAM_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/Nagram.icon"
 	NAGRAM_BLOCK_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlock.icon"
+	NAGRAM_BLOCK_BLUE_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlockBlue.icon"
+	NAGRAM_BLOCK_NIELLO_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlockNiello.icon"
+	NAGRAM_CLASSIC_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramClassic.icon"
 	NAGRAM_COLORFUL_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramColorful.icon"
 else
 	echo "Unsupported Xcode version for Nagram Icon Composer assets: ${XCODE_VERSION}" >&2
@@ -51,7 +57,13 @@ else
 fi
 
 MISSING_ICON_SOURCE=0
-for icon_source in "${NAGRAM_ICON_SOURCE}" "${NAGRAM_BLOCK_ICON_SOURCE}" "${NAGRAM_COLORFUL_ICON_SOURCE}"; do
+for icon_source in \
+	"${NAGRAM_ICON_SOURCE}" \
+	"${NAGRAM_BLOCK_ICON_SOURCE}" \
+	"${NAGRAM_BLOCK_BLUE_ICON_SOURCE}" \
+	"${NAGRAM_BLOCK_NIELLO_ICON_SOURCE}" \
+	"${NAGRAM_CLASSIC_ICON_SOURCE}" \
+	"${NAGRAM_COLORFUL_ICON_SOURCE}"; do
 	if [ ! -f "${icon_source}/icon.json" ]; then
 		echo "Missing Nagram Icon Composer source for Xcode ${XCODE_MAJOR}: ${icon_source}" >&2
 		MISSING_ICON_SOURCE=1
@@ -59,7 +71,7 @@ for icon_source in "${NAGRAM_ICON_SOURCE}" "${NAGRAM_BLOCK_ICON_SOURCE}" "${NAGR
 done
 if (( MISSING_ICON_SOURCE == 1 )); then
 	if (( XCODE_MAJOR == 26 )); then
-		echo "Add the Xcode 26 exports as Nagram26.icon, NagramBlock26.icon, and NagramColorful26.icon." >&2
+		echo "Add all required Xcode 26-compatible Nagram icon sources." >&2
 	fi
 	exit 1
 fi
@@ -101,9 +113,15 @@ CALL_SCREEN_XCASSETS="$(real_dir "${RUNFILES_ROOT}/submodules/TelegramUI/Compone
 # Keep the compiled icon names stable even though their sources vary by Xcode.
 NAGRAM_ICON="${WORK_DIR}/Nagram.icon"
 NAGRAM_BLOCK_ICON="${WORK_DIR}/NagramBlock.icon"
+NAGRAM_BLOCK_BLUE_ICON="${WORK_DIR}/NagramBlockBlue.icon"
+NAGRAM_BLOCK_NIELLO_ICON="${WORK_DIR}/NagramBlockNiello.icon"
+NAGRAM_CLASSIC_ICON="${WORK_DIR}/NagramClassic.icon"
 NAGRAM_COLORFUL_ICON="${WORK_DIR}/NagramColorful.icon"
 ditto "$(real_file_dir "${NAGRAM_ICON_SOURCE}")" "${NAGRAM_ICON}"
 ditto "$(real_file_dir "${NAGRAM_BLOCK_ICON_SOURCE}")" "${NAGRAM_BLOCK_ICON}"
+ditto "$(real_file_dir "${NAGRAM_BLOCK_BLUE_ICON_SOURCE}")" "${NAGRAM_BLOCK_BLUE_ICON}"
+ditto "$(real_file_dir "${NAGRAM_BLOCK_NIELLO_ICON_SOURCE}")" "${NAGRAM_BLOCK_NIELLO_ICON}"
+ditto "$(real_file_dir "${NAGRAM_CLASSIC_ICON_SOURCE}")" "${NAGRAM_CLASSIC_ICON}"
 ditto "$(real_file_dir "${NAGRAM_COLORFUL_ICON_SOURCE}")" "${NAGRAM_COLORFUL_ICON}"
 
 COMPILED_ICONS_DIR="${WORK_DIR}/out"
@@ -117,6 +135,9 @@ mkdir -p "${COMPILED_ICONS_DIR}"
 	--compress-pngs \
 	--app-icon Nagram \
 	--alternate-app-icon NagramBlock \
+	--alternate-app-icon NagramBlockBlue \
+	--alternate-app-icon NagramBlockNiello \
+	--alternate-app-icon NagramClassic \
 	--alternate-app-icon NagramColorful \
 	--target-device iphone \
 	--target-device ipad \
@@ -128,6 +149,9 @@ mkdir -p "${COMPILED_ICONS_DIR}"
 	"${CALL_SCREEN_XCASSETS}" \
 	"${NAGRAM_ICON}" \
 	"${NAGRAM_BLOCK_ICON}" \
+	"${NAGRAM_BLOCK_BLUE_ICON}" \
+	"${NAGRAM_BLOCK_NIELLO_ICON}" \
+	"${NAGRAM_CLASSIC_ICON}" \
 	"${NAGRAM_COLORFUL_ICON}"
 
 ditto "${COMPILED_ICONS_DIR}" "${APP_DIR}"
@@ -165,7 +189,7 @@ set_icon_name() {
 reset_primary_icon ":CFBundleIcons" Nagram60x60
 reset_primary_icon ":CFBundleIcons~ipad" Nagram60x60 Nagram76x76
 
-for icon in NagramBlock NagramColorful; do
+for icon in NagramBlock NagramBlockBlue NagramBlockNiello NagramClassic NagramColorful; do
 	set_icon_name ":CFBundleIcons" "${icon}"
 	set_icon_name ":CFBundleIcons~ipad" "${icon}"
 done
