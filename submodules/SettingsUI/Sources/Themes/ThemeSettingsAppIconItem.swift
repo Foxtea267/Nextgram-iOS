@@ -42,6 +42,12 @@ private func nagramAppIconTitle(_ iconName: String, strings: PresentationStrings
             return isChinese ? "轻盈" : "Light"
         case "NagramBlock":
             return isChinese ? "几何" : "Geometric"
+        case "NagramBlockBlue":
+            return isChinese ? "蓝色" : "Blue"
+        case "NagramBlockNiello":
+            return isChinese ? "黑金" : "Black Gold"
+        case "NagramClassic":
+            return isChinese ? "经典" : "Classic"
         case "NagramColorful":
             return isChinese ? "缤纷" : "Colorful"
         default:
@@ -50,7 +56,7 @@ private func nagramAppIconTitle(_ iconName: String, strings: PresentationStrings
 }
 
 private func loadThemeSettingsAppIconImage(_ icon: PresentationAppIcon) -> UIImage? {
-    if icon.name == "Nagram" || icon.name == "NagramBlock" || icon.name == "NagramColorful" {
+    if icon.name.hasPrefix("Nagram") {
         for suffix in ["@3x", "@2x", "Ipad@2x", "LargeIpad@2x", "Ipad"] {
             let imageName = "\(icon.name)\(suffix)"
             if let path = getAppBundle().path(forResource: imageName, ofType: "png"), let image = UIImage(contentsOfFile: path) {
