@@ -354,19 +354,25 @@ alternate_icon_folders = [
 composer_source_icon_folders = [
     "Nagram",
     "NagramBlock",
+    "NagramBlockBlack",
     "NagramBlockBlue",
     "NagramBlockNiello",
+    "NagramBlockPurple",
     "NagramClassic",
     "NagramColorful",
+    "NagramCyan",
 ]
 composer_build_icon_folders = ["NagramBuild"]
 composer_xcode26_icon_folders = [
     "Nagram26",
     "NagramBlock26",
+    "NagramBlockBlack26",
     "NagramBlockBlue26",
     "NagramBlockNiello26",
+    "NagramBlockPurple26",
     "NagramClassic26",
     "NagramColorful26",
+    "NagramCyan26",
 ]
 
 [
@@ -1034,16 +1040,22 @@ sh_binary(
         ":Icons",
         ":Nagram26_icon",
         ":NagramBlock26_icon",
+        ":NagramBlockBlack26_icon",
         ":NagramBlockBlue26_icon",
         ":NagramBlockNiello26_icon",
+        ":NagramBlockPurple26_icon",
         ":NagramClassic26_icon",
         ":NagramColorful26_icon",
+        ":NagramCyan26_icon",
         ":Nagram_icon",
         ":NagramBlock_icon",
+        ":NagramBlockBlack_icon",
         ":NagramBlockBlue_icon",
         ":NagramBlockNiello_icon",
+        ":NagramBlockPurple_icon",
         ":NagramClassic_icon",
         ":NagramColorful_icon",
+        ":NagramCyan_icon",
         "//submodules/LegacyComponents:LegacyComponentsAssets",
         "//submodules/PasswordSetupUI:PasswordSetupUIAssets",
         "//submodules/TelegramUI:TelegramUIAssets",

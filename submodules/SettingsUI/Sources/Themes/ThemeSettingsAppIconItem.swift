@@ -42,14 +42,20 @@ private func nagramAppIconTitle(_ iconName: String, strings: PresentationStrings
             return isChinese ? "轻盈" : "Light"
         case "NagramBlock":
             return isChinese ? "几何" : "Geometric"
+        case "NagramBlockBlack":
+            return isChinese ? "黑色" : "Black"
         case "NagramBlockBlue":
             return isChinese ? "蓝色" : "Blue"
         case "NagramBlockNiello":
             return isChinese ? "黑金" : "Black Gold"
+        case "NagramBlockPurple":
+            return isChinese ? "紫色" : "Purple"
         case "NagramClassic":
             return isChinese ? "经典" : "Classic"
         case "NagramColorful":
             return isChinese ? "缤纷" : "Colorful"
+        case "NagramCyan":
+            return isChinese ? "青色" : "Cyan"
         default:
             return nil
     }
