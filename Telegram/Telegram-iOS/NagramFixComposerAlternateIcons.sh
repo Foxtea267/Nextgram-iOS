@@ -47,6 +47,7 @@ if (( XCODE_MAJOR == 26 )); then
 	NAGRAM_CLASSIC_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramClassic26.icon"
 	NAGRAM_COLORFUL_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramColorful26.icon"
 	NAGRAM_CYAN_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramCyan26.icon"
+	NAGRAM_BLACK_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlack26.icon"
 elif (( XCODE_MAJOR >= 27 )); then
 	NAGRAM_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/Nagram.icon"
 	NAGRAM_BLOCK_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlock.icon"
@@ -57,6 +58,7 @@ elif (( XCODE_MAJOR >= 27 )); then
 	NAGRAM_CLASSIC_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramClassic.icon"
 	NAGRAM_COLORFUL_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramColorful.icon"
 	NAGRAM_CYAN_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramCyan.icon"
+	NAGRAM_BLACK_ICON_SOURCE="${RUNFILES_ROOT}/Telegram/Telegram-iOS/NagramBlack.icon"
 else
 	echo "Unsupported Xcode version for Nagram Icon Composer assets: ${XCODE_VERSION}" >&2
 	exit 1
@@ -72,7 +74,8 @@ for icon_source in \
 	"${NAGRAM_BLOCK_PURPLE_ICON_SOURCE}" \
 	"${NAGRAM_CLASSIC_ICON_SOURCE}" \
 	"${NAGRAM_COLORFUL_ICON_SOURCE}" \
-	"${NAGRAM_CYAN_ICON_SOURCE}"; do
+	"${NAGRAM_CYAN_ICON_SOURCE}" \
+	"${NAGRAM_BLACK_ICON_SOURCE}"; do
 	if [ ! -f "${icon_source}/icon.json" ]; then
 		echo "Missing Nagram Icon Composer source for Xcode ${XCODE_MAJOR}: ${icon_source}" >&2
 		MISSING_ICON_SOURCE=1
@@ -129,6 +132,7 @@ NAGRAM_BLOCK_PURPLE_ICON="${WORK_DIR}/NagramBlockPurple.icon"
 NAGRAM_CLASSIC_ICON="${WORK_DIR}/NagramClassic.icon"
 NAGRAM_COLORFUL_ICON="${WORK_DIR}/NagramColorful.icon"
 NAGRAM_CYAN_ICON="${WORK_DIR}/NagramCyan.icon"
+NAGRAM_BLACK_ICON="${WORK_DIR}/NagramBlack.icon"
 ditto "$(real_file_dir "${NAGRAM_ICON_SOURCE}")" "${NAGRAM_ICON}"
 ditto "$(real_file_dir "${NAGRAM_BLOCK_ICON_SOURCE}")" "${NAGRAM_BLOCK_ICON}"
 ditto "$(real_file_dir "${NAGRAM_BLOCK_BLACK_ICON_SOURCE}")" "${NAGRAM_BLOCK_BLACK_ICON}"
@@ -138,6 +142,7 @@ ditto "$(real_file_dir "${NAGRAM_BLOCK_PURPLE_ICON_SOURCE}")" "${NAGRAM_BLOCK_PU
 ditto "$(real_file_dir "${NAGRAM_CLASSIC_ICON_SOURCE}")" "${NAGRAM_CLASSIC_ICON}"
 ditto "$(real_file_dir "${NAGRAM_COLORFUL_ICON_SOURCE}")" "${NAGRAM_COLORFUL_ICON}"
 ditto "$(real_file_dir "${NAGRAM_CYAN_ICON_SOURCE}")" "${NAGRAM_CYAN_ICON}"
+ditto "$(real_file_dir "${NAGRAM_BLACK_ICON_SOURCE}")" "${NAGRAM_BLACK_ICON}"
 
 COMPILED_ICONS_DIR="${WORK_DIR}/out"
 mkdir -p "${COMPILED_ICONS_DIR}"
@@ -157,6 +162,7 @@ mkdir -p "${COMPILED_ICONS_DIR}"
 	--alternate-app-icon NagramClassic \
 	--alternate-app-icon NagramColorful \
 	--alternate-app-icon NagramCyan \
+	--alternate-app-icon NagramBlack \
 	--target-device iphone \
 	--target-device ipad \
 	--output-partial-info-plist "${WORK_DIR}/xcassets-info.plist" \
@@ -173,7 +179,8 @@ mkdir -p "${COMPILED_ICONS_DIR}"
 	"${NAGRAM_BLOCK_PURPLE_ICON}" \
 	"${NAGRAM_CLASSIC_ICON}" \
 	"${NAGRAM_COLORFUL_ICON}" \
-	"${NAGRAM_CYAN_ICON}"
+	"${NAGRAM_CYAN_ICON}" \
+	"${NAGRAM_BLACK_ICON}"
 
 ditto "${COMPILED_ICONS_DIR}" "${APP_DIR}"
 
@@ -210,7 +217,7 @@ set_icon_name() {
 reset_primary_icon ":CFBundleIcons" Nagram60x60
 reset_primary_icon ":CFBundleIcons~ipad" Nagram60x60 Nagram76x76
 
-for icon in NagramBlock NagramBlockBlack NagramBlockBlue NagramBlockNiello NagramBlockPurple NagramClassic NagramColorful NagramCyan; do
+for icon in NagramBlock NagramBlockBlack NagramBlockBlue NagramBlockNiello NagramBlockPurple NagramClassic NagramColorful NagramCyan NagramBlack; do
 	set_icon_name ":CFBundleIcons" "${icon}"
 	set_icon_name ":CFBundleIcons~ipad" "${icon}"
 done
