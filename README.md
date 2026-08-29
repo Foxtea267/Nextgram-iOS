@@ -13,6 +13,8 @@
   and <a href="https://github.com/NextAlone/Nagram-iOS">Nagram-iOS</a>.
 </p>
 
+[![Telegram Group](https://img.shields.io/badge/Telegram-加入群组-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/Nextgram_Chat)
+
 ---
 
 ## About
