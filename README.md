@@ -182,7 +182,7 @@ Nextgram-iOS is based on the following projects:
 
 Thanks to their developers and contributors.
 
-License & Branding
+## License & Branding
 
 Telegram-iOS 及其相关代码、资源与商标归对应权利人所有，并继续适用其原有许可证及版权声明。
 
@@ -194,7 +194,7 @@ Nextgram 名称、Logo、应用图标及其他品牌资产与源码许可相互�
 
 Fork、修改版或第三方发行版本不应使用可能使用户误认为其属于 Nextgram 官方发行版的名称、Logo 或其他品牌资产。
 
-Disclaimer
+## Disclaimer
 
 Nextgram is an unofficial Telegram client.
 
