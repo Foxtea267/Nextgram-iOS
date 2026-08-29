@@ -14,7 +14,11 @@
 </p>
 
 <div align="center">
-[![Telegram Group](https://img.shields.io/badge/Telegram-加入群组-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/Nextgram_Chat)
+<p align="center">
+  <a href="https://t.me/Nextgram_Chat">
+    <img src="https://img.shields.io/badge/Telegram-加入群组-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
+  </a>
+</p>
 </div>
 
 ---
