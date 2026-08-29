@@ -1,0 +1,900 @@
+From 8670dba9a9764e7840123796055b1171e695fdaf Mon Sep 17 00:00:00 2001
+From: Codex <codex@openai.com>
+Date: Sat, 29 Aug 2026 12:53:00 +0700
+Subject: [PATCH] feat: rebrand app as Nextgram and modernize IPA CI
+
+---
+ .github/workflows/build.yml                   | 182 ++++-----
+ .github/workflows/testflight.yml              | 381 ------------------
+ AGENTS.md                                     |   6 +-
+ .../en.lproj/NagramLocalizable.strings        |   4 +-
+ .../ja.lproj/NagramLocalizable.strings        |   4 +-
+ .../zh-hans.lproj/NagramLocalizable.strings   |   4 +-
+ .../zh-hant.lproj/NagramLocalizable.strings   |   4 +-
+ README.md                                     |  12 +-
+ Telegram/BUILD                                |  23 +-
+ .../Assets/nextgram-mark.svg                  |   3 +
+ .../Telegram-iOS/NextgramBuild.icon/icon.json |  32 ++
+ .../Sources/PeerInfoSettingsItems.swift       |   4 +-
+ 12 files changed, 156 insertions(+), 503 deletions(-)
+ delete mode 100644 .github/workflows/testflight.yml
+ create mode 100644 Telegram/Telegram-iOS/NextgramBuild.icon/Assets/nextgram-mark.svg
+ create mode 100644 Telegram/Telegram-iOS/NextgramBuild.icon/icon.json
+
+diff --git a/.github/workflows/build.yml b/.github/workflows/build.yml
+index 7259ebd7e73ba92bb38ce727a3ba789523a0076a..c2f652297d0fde274265a1808872d6b693af5475 100644
+--- a/.github/workflows/build.yml
++++ b/.github/workflows/build.yml
+@@ -1,109 +1,111 @@
+-name: CI
++name: Build Nextgram IPA
+ 
+ on:
++  workflow_dispatch:
+   push:
+-    branches: [ master ]
++    branches: [main]
+ 
+-  workflow_dispatch:
++permissions:
++  contents: read
++
++concurrency:
++  group: nextgram-build-${{ github.ref }}
++  cancel-in-progress: true
+ 
+ jobs:
+   build:
+-    runs-on: macos-13
++    runs-on: macos-26
++    timeout-minutes: 180
++    env:
++      LANG: en_US.UTF-8
++      LC_ALL: en_US.UTF-8
++      BUNDLE_ID: jp.foxtea.nextgram
++      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
++      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+ 
+     steps:
+-      - uses: actions/checkout@v2
++      - name: Check out source and submodules
++        uses: actions/checkout@v4
+         with:
+-          submodules: 'recursive'
+-          fetch-depth: '0'
+-
+-      - name: Set active Xcode path
+-        run: |
+-          XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
+-          sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
++          submodules: recursive
++          fetch-depth: 0
+ 
+-      - name: Create canonical source directory
++      - name: Select Xcode 26
+         run: |
+-          set -x
+-          sudo mkdir -p /Users/Shared
+-          cp -R $GITHUB_WORKSPACE /Users/Shared/
+-          mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
++          set -euo pipefail
++          XC="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
++          test -n "$XC"
++          sudo xcode-select -s "$XC/Contents/Developer"
++          xcodebuild -version
+ 
+-      - name: Build the App
+-        run: |
+-          set -x
+-
+-          # source code paths are included in the final binary, so we need to make them stable across builds
+-          SOURCE_DIR=/Users/Shared/telegram-ios
+-
+-          # use canonical bazel root
+-          BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
++      - name: Install Metal toolchain
++        run: xcodebuild -downloadComponent MetalToolchain || true
+ 
+-          cd $SOURCE_DIR
+-
+-          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
++      - name: Cache Bazel downloads and build outputs
++        uses: actions/cache@v4
++        with:
++          path: ~/telegram-bazel-cache
++          key: nextgram-bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel.lock') }}
++          restore-keys: nextgram-bazel-${{ runner.os }}-
+ 
+-          export APP_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["app"]);')
+-          export COMMIT_COUNT=$(git rev-list --count HEAD)
+-          export COMMIT_COUNT="$(($COMMIT_COUNT+$BUILD_NUMBER_OFFSET))"
+-          export BUILD_NUMBER="$COMMIT_COUNT"
+-          echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
+-          echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
++      - name: Validate required secrets
++        run: |
++          set -euo pipefail
++          : "${TELEGRAM_API_ID:?Add TELEGRAM_API_ID to repository Actions secrets}"
++          : "${TELEGRAM_API_HASH:?Add TELEGRAM_API_HASH to repository Actions secrets}"
+ 
+-          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
+-          python3 -u build-system/Make/Make.py \
+-            --bazelUserRoot="$BAZEL_USER_ROOT" \
++      - name: Write build configuration
++        run: |
++          set -euo pipefail
++          mkdir -p build-input
++          cat > build-input/nextgram-ci.json <<JSON
++          {
++            "bundle_id": "${BUNDLE_ID}",
++            "api_id": "${TELEGRAM_API_ID}",
++            "api_hash": "${TELEGRAM_API_HASH}",
++            "team_id": "C67CF9S4VU",
++            "app_center_id": "0",
++            "is_internal_build": "true",
++            "is_appstore_build": "false",
++            "appstore_id": "0",
++            "app_specific_url_scheme": "nextgram",
++            "premium_iap_product_id": "",
++            "enable_siri": false,
++            "enable_icloud": false
++          }
++          JSON
++
++      - name: Import disposable build certificate
++        run: python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
++
++      - name: Build arm64 IPA
++        run: |
++          set -euo pipefail
++          BUILD_NUMBER="$(( $(git rev-list --count HEAD) + $(cat build_number_offset) ))"
++          python3 build-system/Make/Make.py --overrideXcodeVersion \
++            --cacheDir "$HOME/telegram-bazel-cache" \
+             build \
+-            --configurationPath="build-system/appstore-configuration.json" \
+-            --codesigningInformationPath=build-system/fake-codesigning \
+-            --configuration=release_arm64 \
+-            --buildNumber="$BUILD_NUMBER"
+-
+-          # collect ipa
+-          OUTPUT_PATH="build/artifacts"
+-          rm -rf "$OUTPUT_PATH"
+-          mkdir -p "$OUTPUT_PATH"
+-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
+-            cp "$f" $OUTPUT_PATH/
+-          done
+-
+-          # collect dsym
+-          mkdir -p build/DSYMs
+-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
+-            cp -R "$f" build/DSYMs/
+-          done
+-          zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
++            --configurationPath build-input/nextgram-ci.json \
++            --codesigningInformationPath build-system/fake-codesigning \
++            --buildNumber "$BUILD_NUMBER" \
++            --configuration release_arm64
+ 
+-      - name: Create Release
+-        id: create_release
+-        uses: actions/create-release@v1
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        with:
+-          tag_name: build-${{ env.BUILD_NUMBER }}
+-          release_name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
+-          body: |
+-            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
+-          draft: false
+-          prerelease: false
+-
+-      - name: Upload Release IPA
+-        id: upload-release-ipa 
+-        uses: actions/upload-release-asset@v1
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+-        with:
+-          upload_url: ${{ steps.create_release.outputs.upload_url }}
+-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
+-          asset_name: Telegram.ipa
+-          asset_content_type: application/zip
+-
+-      - name: Upload Release DSYM
+-        id: upload-release-dsym 
+-        uses: actions/upload-release-asset@v1
+-        env:
+-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
++      - name: Prepare artifacts
++        run: |
++          set -euo pipefail
++          mkdir -p build/artifacts build/dSYMs
++          cp bazel-bin/Telegram/Telegram.ipa build/artifacts/Nextgram.ipa
++          find bazel-bin/Telegram -maxdepth 1 -name '*.dSYM' -exec cp -R {} build/dSYMs/ \;
++          if find build/dSYMs -maxdepth 1 -name '*.dSYM' | grep -q .; then
++            ditto -c -k --sequesterRsrc --keepParent build/dSYMs build/artifacts/Nextgram.dSYMs.zip
++          fi
++
++      - name: Upload IPA and symbols
++        uses: actions/upload-artifact@v4
+         with:
+-          upload_url: ${{ steps.create_release.outputs.upload_url }}
+-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
+-          asset_name: Telegram.DSYMs.zip
+-          asset_content_type: application/zip
++          name: Nextgram-${{ github.sha }}
++          path: |
++            build/artifacts/Nextgram.ipa
++            build/artifacts/Nextgram.dSYMs.zip
++          if-no-files-found: error
++          retention-days: 14
+diff --git a/.github/workflows/testflight.yml b/.github/workflows/testflight.yml
+deleted file mode 100644
+index 98de3f304ca32fb352e895ccb4e5ecec89506668..0000000000000000000000000000000000000000
+--- a/.github/workflows/testflight.yml
++++ /dev/null
+@@ -1,381 +0,0 @@
+-name: TestFlight (Nagram)
+-
+-# Signed release_arm64 build -> upload to TestFlight via altool.
+-# Runs on GitHub-hosted macos-26 (Apple Silicon, Xcode 26.x, iOS 26 SDK).
+-#
+-# Required repository secrets:
+-#   TELEGRAM_API_ID, TELEGRAM_API_HASH  - Telegram API credentials (my.telegram.org)
+-#   APPLE_TEAM_ID                       - signing team (Kitta Ltd = 7P8CLHDH5G)
+-#   ASC_KEY_ID, ASC_ISSUER_ID           - App Store Connect API key id + issuer
+-#   ASC_KEY_P8_BASE64                   - base64 of AuthKey_<ASC_KEY_ID>.p8
+-#   DIST_CERT_P12_BASE64                - base64 of the Apple Distribution (Kitta) cert+key .p12
+-#   DIST_CERT_PASSWORD                  - password for that .p12
+-#
+-# Make the cert .p12:  security export is not enough — export from Keychain Access
+-# (Apple Distribution: Kitta Ltd, "Export... .p12"), then: base64 -i dist.p12 | pbcopy
+-
+-on:
+-  workflow_dispatch:
+-  push:
+-    branches: [ "release" ]
+-
+-concurrency:
+-  group: testflight-${{ github.ref }}
+-  cancel-in-progress: false
+-
+-jobs:
+-  build-upload:
+-    runs-on: macos-26
+-    timeout-minutes: 180
+-    env:
+-      LANG: en_US.UTF-8
+-      LC_ALL: en_US.UTF-8
+-      # --- from envvars (repository secrets) ---
+-      TELEGRAM_API_ID:   ${{ secrets.TELEGRAM_API_ID }}
+-      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+-      APPLE_TEAM_ID:     ${{ secrets.APPLE_TEAM_ID }}
+-      ASC_KEY_ID:        ${{ secrets.ASC_KEY_ID }}
+-      ASC_ISSUER_ID:     ${{ secrets.ASC_ISSUER_ID }}
+-      # --- app identity (not secret) ---
+-      BUNDLE_ID:   xyz.nextalone.nagram
+-      APPSTORE_ID: "6781000861"
+-
+-    steps:
+-      - uses: actions/checkout@v4
+-        with:
+-          submodules: recursive
+-          fetch-depth: 0
+-
+-      - name: Select Xcode 26.x
+-        run: |
+-          XC="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+-          if [ -n "$XC" ]; then sudo xcode-select -s "$XC/Contents/Developer"; fi
+-          xcodebuild -version
+-
+-      - name: Install Metal toolchain
+-        run: xcodebuild -downloadComponent MetalToolchain || true
+-
+-      - name: Cache Bazel disk cache
+-        uses: actions/cache@v4
+-        with:
+-          path: ~/telegram-bazel-cache
+-          key: bazel-disk-${{ hashFiles('versions.json', 'MODULE.bazel.lock') }}
+-          restore-keys: bazel-disk-
+-
+-      - name: Import distribution certificate
+-        env:
+-          DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
+-          DIST_CERT_PASSWORD:   ${{ secrets.DIST_CERT_PASSWORD }}
+-        run: |
+-          set -euo pipefail
+-          KEYCHAIN="$RUNNER_TEMP/build.keychain-db"
+-          KPWD="$(uuidgen)"
+-          security create-keychain -p "$KPWD" "$KEYCHAIN"
+-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+-          security unlock-keychain -p "$KPWD" "$KEYCHAIN"
+-          echo "$DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+-          security import "$RUNNER_TEMP/dist.p12" -k "$KEYCHAIN" -P "$DIST_CERT_PASSWORD" \
+-            -T /usr/bin/codesign -T /usr/bin/security -f pkcs12
+-          security set-key-partition-list -S apple-tool:,apple: -k "$KPWD" "$KEYCHAIN" >/dev/null
+-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed 's/"//g')
+-          rm -f "$RUNNER_TEMP/dist.p12"
+-          security find-identity -v -p codesigning "$KEYCHAIN"
+-
+-      - name: Set up App Store Connect API key
+-        env:
+-          ASC_KEY_P8_BASE64: ${{ secrets.ASC_KEY_P8_BASE64 }}
+-        run: |
+-          set -euo pipefail
+-          mkdir -p ~/.appstoreconnect/private_keys
+-          echo "$ASC_KEY_P8_BASE64" | base64 --decode > ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+-          chmod 600 ~/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID}.p8
+-
+-      - name: Fetch next App Store Connect build number
+-        run: |
+-          set -euo pipefail
+-          BUILD_NUMBER="$(python3 - <<'PY'
+-          import base64, json, os, sys, time, urllib.error, urllib.request
+-          from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+-          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+-          from cryptography.hazmat.primitives.hashes import SHA256
+-          from cryptography.hazmat.primitives.serialization import load_pem_private_key
+-
+-          kid = os.environ["ASC_KEY_ID"]
+-          issuer = os.environ["ASC_ISSUER_ID"]
+-          app_id = os.environ["APPSTORE_ID"]
+-          key_path = os.path.expanduser(
+-              f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8"
+-          )
+-          key = load_pem_private_key(open(key_path, "rb").read(), password=None)
+-
+-          def token():
+-              header = base64.urlsafe_b64encode(
+-                  json.dumps({"alg": "ES256", "kid": kid, "typ": "JWT"}).encode()
+-              ).rstrip(b"=")
+-              now = int(time.time())
+-              payload = base64.urlsafe_b64encode(
+-                  json.dumps({
+-                      "iss": issuer,
+-                      "iat": now,
+-                      "exp": now + 600,
+-                      "aud": "appstoreconnect-v1",
+-                  }).encode()
+-              ).rstrip(b"=")
+-              message = header + b"." + payload
+-              signature = key.sign(message, ECDSA(SHA256()))
+-              r, s = decode_dss_signature(signature)
+-              raw_signature = r.to_bytes(32, "big") + s.to_bytes(32, "big")
+-              return (
+-                  message
+-                  + b"."
+-                  + base64.urlsafe_b64encode(raw_signature).rstrip(b"=")
+-              ).decode()
+-
+-          def fetch(path):
+-              request = urllib.request.Request(
+-                  "https://api.appstoreconnect.apple.com" + path,
+-                  headers={"Authorization": f"Bearer {token()}"},
+-              )
+-              try:
+-                  with urllib.request.urlopen(request) as response:
+-                      return json.load(response)
+-              except urllib.error.HTTPError as error:
+-                  details = error.read().decode(errors="replace")
+-                  print(
+-                      f"ERROR: App Store Connect returned {error.code}: {details}",
+-                      file=sys.stderr,
+-                  )
+-                  sys.exit(1)
+-
+-          # A processing upload does not have a /v1/builds resource yet. Read
+-          # buildUploads as well so its CFBundleVersion cannot be reused.
+-          uploads = fetch(
+-              f"/v1/apps/{app_id}/buildUploads"
+-              "?fields[buildUploads]=cfBundleVersion,state,uploadedDate&limit=200"
+-          ).get("data", [])
+-          builds = fetch(
+-              "/v1/builds"
+-              f"?filter[app]={app_id}&sort=-uploadedDate&limit=200"
+-          ).get("data", [])
+-
+-          candidates = []
+-          for upload in uploads:
+-              attributes = upload.get("attributes", {})
+-              version = str(attributes.get("cfBundleVersion", ""))
+-              state = attributes.get("state", {}).get("state", "UNKNOWN")
+-              if version.isdigit():
+-                  candidates.append((int(version), f"upload {state}"))
+-          for build in builds:
+-              attributes = build.get("attributes", {})
+-              version = str(attributes.get("version", ""))
+-              if version.isdigit():
+-                  candidates.append((
+-                      int(version),
+-                      f"build {attributes.get('processingState', 'UNKNOWN')}",
+-                  ))
+-
+-          if not candidates:
+-              print(
+-                  "ERROR: App Store Connect returned no numeric build or upload versions",
+-                  file=sys.stderr,
+-              )
+-              sys.exit(1)
+-
+-          latest, state = max(candidates)
+-          print(
+-              f"Latest App Store Connect version: {latest} ({state}); "
+-              f"next build: {latest + 1}",
+-              file=sys.stderr,
+-          )
+-          print(latest + 1)
+-          PY
+-          )"
+-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+-
+-      - name: Write build configuration
+-        run: |
+-          set -euo pipefail
+-          : "${TELEGRAM_API_ID:?missing}" "${TELEGRAM_API_HASH:?missing}" "${APPLE_TEAM_ID:?missing}"
+-          mkdir -p build-input
+-          cat > build-input/local-configuration.json <<JSON
+-          {
+-              "bundle_id": "${BUNDLE_ID}",
+-              "api_id": "${TELEGRAM_API_ID}",
+-              "api_hash": "${TELEGRAM_API_HASH}",
+-              "team_id": "${APPLE_TEAM_ID}",
+-              "app_center_id": "0",
+-              "is_internal_build": "false",
+-              "is_appstore_build": "true",
+-              "appstore_id": "${APPSTORE_ID}",
+-              "app_specific_url_scheme": "tg",
+-              "premium_iap_product_id": "",
+-              "enable_siri": false,
+-              "enable_icloud": false
+-          }
+-          JSON
+-
+-      - name: Write local.bazelrc (app + extensions + Xcode 26.x deprecation demotion)
+-        run: |
+-          cat > local.bazelrc <<'RC'
+-          build --copt=-Wno-error
+-          build --cxxopt=-Wno-error
+-          build --objccopt=-Wno-error
+-          build --per_file_copt=.*\.m$@-Wno-error=deprecated-declarations
+-          build --per_file_copt=.*\.mm$@-Wno-error=deprecated-declarations
+-          build --@build_bazel_rules_swift//swift:copt=-no-warnings-as-errors
+-          RC
+-
+-      - name: Generate App Store provisioning profiles
+-        run: |
+-          set -euo pipefail
+-          python3 - <<'PY'
+-          import json, os
+-          kid = os.environ["ASC_KEY_ID"]
+-          p = os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8")
+-          json.dump({"key_id": kid, "issuer_id": os.environ["ASC_ISSUER_ID"],
+-                     "key": open(p).read(), "in_house": False}, open("/tmp/asc_key.json", "w"))
+-          PY
+-          chmod 600 /tmp/asc_key.json
+-          mkdir -p build-input/codesigning/profiles
+-
+-          while IFS=: read -r suffix filename; do
+-            identifier="${BUNDLE_ID}${suffix}"
+-            fastlane sigh --api_key_path /tmp/asc_key.json --app_identifier "$identifier" \
+-              --platform ios --force \
+-              --output_path build-input/codesigning/profiles --filename "$filename"
+-          done <<'PROFILES'
+-          :Telegram.mobileprovision
+-          .Share:Share.mobileprovision
+-          .NotificationContent:NotificationContent.mobileprovision
+-          .NotificationService:NotificationService.mobileprovision
+-          .SiriIntents:Intents.mobileprovision
+-          .Widget:Widget.mobileprovision
+-          .BroadcastUpload:BroadcastUpload.mobileprovision
+-          PROFILES
+-          rm -f /tmp/asc_key.json
+-
+-      - name: Force iOS 15 deployment target
+-        run: |
+-          sed -i '' 's/minimum_os_version = "[^"]*"/minimum_os_version = "15.0"/g' Telegram/BUILD
+-
+-      - name: Build (release_arm64, signed)
+-        run: |
+-          set -euo pipefail
+-          : "${BUILD_NUMBER:?missing}"
+-          echo "Build number: $BUILD_NUMBER"
+-          python3 build-system/Make/Make.py --overrideXcodeVersion \
+-            --cacheDir "$HOME/telegram-bazel-cache" \
+-            build \
+-            --configurationPath build-input/local-configuration.json \
+-            --codesigningInformationPath build-input/codesigning \
+-            --buildNumber="$BUILD_NUMBER" \
+-            --configuration=release_arm64
+-
+-      - name: Upload to TestFlight
+-        env:
+-          USES_NON_EXEMPT_ENCRYPTION: ${{ vars.USES_NON_EXEMPT_ENCRYPTION || 'false' }}
+-        run: |
+-          set -euo pipefail
+-          python3 - <<'PY'
+-          import json, os
+-          kid = os.environ["ASC_KEY_ID"]
+-          p = os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8")
+-          json.dump({"key_id": kid, "issuer_id": os.environ["ASC_ISSUER_ID"],
+-                     "key": open(p).read(), "in_house": False}, open("/tmp/asc_key.json", "w"))
+-          PY
+-          chmod 600 /tmp/asc_key.json
+-          # Upload only — do not distribute yet. Separating upload from distribution
+-          # avoids BETA_CONTRACT_MISSING aborting the upload when the Beta Testing
+-          # Agreement hasn't been accepted yet, or when the group is mis-configured.
+-          fastlane pilot upload \
+-            --api_key_path /tmp/asc_key.json \
+-            --ipa bazel-bin/Telegram/Telegram.ipa \
+-            --app_identifier "$BUNDLE_ID" \
+-            --skip_submission true \
+-            --skip_waiting_for_build_processing true \
+-            --uses_non_exempt_encryption "$USES_NON_EXEMPT_ENCRYPTION"
+-          rm -f /tmp/asc_key.json
+-
+-      - name: Distribute to external TestFlight group
+-        env:
+-          # Repository VARIABLES (Settings -> Secrets and variables -> Actions -> Variables):
+-          #   TESTFLIGHT_GROUPS  - optional name of the EXTERNAL group in App Store Connect
+-          TESTFLIGHT_GROUPS: ${{ vars.TESTFLIGHT_GROUPS }}
+-          APPSTORE_ID: "6781000861"
+-        run: |
+-          set -euo pipefail
+-          if [ -z "${TESTFLIGHT_GROUPS:-}" ]; then
+-            echo "TESTFLIGHT_GROUPS is not set; skipping external TestFlight group distribution."
+-            exit 0
+-          fi
+-          # Use the ASC REST API to find the processed build and add it to the external
+-          # group — avoids re-uploading the IPA and decouples distribution from upload,
+-          # so BETA_CONTRACT_MISSING or group misconfig cannot abort the upload step.
+-          python3 - <<'PY'
+-          import os, sys, time, json, base64, urllib.request, urllib.error
+-          from cryptography.hazmat.primitives.serialization import load_pem_private_key
+-          from cryptography.hazmat.primitives.asymmetric.ec import ECDSA
+-          from cryptography.hazmat.primitives.hashes import SHA256
+-          from cryptography.hazmat.primitives.asymmetric.utils import decode_dss_signature
+-
+-          kid    = os.environ["ASC_KEY_ID"]
+-          issuer = os.environ["ASC_ISSUER_ID"]
+-          app_id = os.environ["APPSTORE_ID"]
+-          group_name = os.environ["TESTFLIGHT_GROUPS"]
+-          build_number = os.environ["BUILD_NUMBER"]
+-          key = load_pem_private_key(
+-              open(os.path.expanduser(f"~/.appstoreconnect/private_keys/AuthKey_{kid}.p8")).read().encode(),
+-              password=None)
+-
+-          def tok():
+-              hdr = base64.urlsafe_b64encode(json.dumps({"alg":"ES256","kid":kid,"typ":"JWT"}).encode()).rstrip(b"=")
+-              now = int(time.time())
+-              pay = base64.urlsafe_b64encode(json.dumps({"iss":issuer,"iat":now,"exp":now+600,"aud":"appstoreconnect-v1"}).encode()).rstrip(b"=")
+-              msg = hdr + b"." + pay
+-              sig = key.sign(msg, ECDSA(SHA256()))
+-              r, s = decode_dss_signature(sig)
+-              return (msg + b"." + base64.urlsafe_b64encode(r.to_bytes(32,"big")+s.to_bytes(32,"big")).rstrip(b"=")).decode()
+-
+-          def api(method, path, body=None):
+-              req = urllib.request.Request("https://api.appstoreconnect.apple.com" + path,
+-                    method=method, headers={"Authorization": f"Bearer {tok()}", "Content-Type": "application/json"})
+-              if body: req.data = json.dumps(body).encode()
+-              try:
+-                  with urllib.request.urlopen(req) as r: return r.status, json.loads(r.read())
+-              except urllib.error.HTTPError as e: return e.code, {"_body": e.read().decode()}
+-
+-          # 1. Find the build (wait up to 30 min for processing)
+-          build_id = None
+-          for attempt in range(36):
+-              s, r = api("GET", f"/v1/builds?filter[app]={app_id}&filter[version]={build_number}"
+-                                "&filter[processingState]=VALID&sort=-uploadedDate&limit=1")
+-              data = r.get("data", [])
+-              if data:
+-                  build_id = data[0]["id"]
+-                  print(f"Build found: {build_id} (build {build_number})")
+-                  break
+-              print(f"Waiting for build {build_number} to finish processing ({attempt+1}/36)...")
+-              time.sleep(50)
+-          if not build_id:
+-              print("ERROR: build not found after 30 minutes", file=sys.stderr); sys.exit(1)
+-
+-          # 2. Find the external beta group by name
+-          s, r = api("GET", f"/v1/apps/{app_id}/betaGroups?filter[isInternalGroup]=false")
+-          groups = [g for g in r.get("data", []) if g["attributes"]["name"] == group_name]
+-          if not groups:
+-              available = ", ".join(g["attributes"]["name"] for g in r.get("data", []))
+-              print(f"WARNING: external group '{group_name}' not found; uploaded build remains in TestFlight.", file=sys.stderr)
+-              if available:
+-                  print(f"Available external groups: {available}", file=sys.stderr)
+-              sys.exit(0)
+-          group_id = groups[0]["id"]
+-          print(f"Group: {group_name} ({group_id})")
+-
+-          # 3. Add build to group (triggers Beta App Review + notifies testers)
+-          s, r = api("POST", f"/v1/betaGroups/{group_id}/relationships/builds",
+-                     {"data": [{"type": "builds", "id": build_id}]})
+-          if s in (200, 201, 204, 409):
+-              print(f"Distributed build {build_id} to group '{group_name}' (status {s})")
+-          else:
+-              print(f"ERROR distributing: {s} {r.get('_body','')}", file=sys.stderr); sys.exit(1)
+-          PY
+diff --git a/AGENTS.md b/AGENTS.md
+index e8335accd97d274c400677533e2fbadf4099c8a2..c920b5f96e66219ebded6034b4bf922f10b91614 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -2,11 +2,11 @@ You are an experienced, pragmatic software engineering AI agent. Do not over-eng
+ 
+ # AGENTS.md
+ 
+-This file guides AI agents working in this repository. It is specific to Nagram-iOS and should be kept in sync with the repo, not with generic Telegram-iOS assumptions.
++This file guides AI agents working in this repository. It is specific to Nextgram, a branded downstream of Nagram-iOS, and should be kept in sync with the repo.
+ 
+ ## Project Overview
+ 
+-Nagram-iOS is a third-party enhancement fork of [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS), targeting Chinese users and aligning selected features with Android [Nagram](https://github.com/NextAlone/Nagram). The goal is to keep the fork easy to rebase onto upstream Telegram while adding Nagram-specific settings, UI, translation, privacy, and interaction features.
++Nextgram is a third-party enhancement fork of Nagram-iOS and [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS), targeting Chinese users. Internal Nagram module names remain stable so the fork stays easy to rebase while Nextgram uses its own user-visible name, bundle identifier, and icon.
+ 
+ Technology stack:
+ 
+@@ -158,7 +158,7 @@ Prefer `build-system/Make/Make.py` for app build/test/clean. Use `build-system/g
+ - Put new Nagram-only code under `Nagram/`. Keep `Nagram/Settings` as the low-level data layer and `Nagram/SettingsUI` as the UI layer.
+ - When upstream files must change, annotate the modification site with `// MARK: NAGRAM`. This is required for upstream rebases.
+ - The Nagram settings entry appears below “我的资料” (My Profile) in `PeerInfoSettingsItems.swift`; long press opens Nagram debug settings.
+-- Main app display name is `Nagram` in `Telegram/BUILD` (`CFBundleDisplayName` / `CFBundleName`). Extension plist targets remain `Telegram` unless a task explicitly changes that behavior.
++- Main app display name is `Nextgram` in `Telegram/BUILD` (`CFBundleDisplayName` / `CFBundleName`). Internal module and marker names remain `Nagram` for upstream compatibility.
+ - App icon integration is in `Telegram/BUILD`: `alternate_icon_folders` includes `Nagram`, and Composer source icons include `Nagram`, `NagramBlock`, and `NagramColorful`.
+ - Settings defaults should preserve native Telegram behavior unless the feature explicitly requires a different default. Existing settings use `@NagramDefault` and sync through local `UserDefaults` plus iCloud KVS.
+ - Use `NagramSettingsSignal` helpers when UI must react live to setting changes. Do not add ad-hoc polling.
+diff --git a/Nagram/Strings/Strings/en.lproj/NagramLocalizable.strings b/Nagram/Strings/Strings/en.lproj/NagramLocalizable.strings
+index accbd6d7baed192219351b774a50f207ce34405e..7bbddd8ecb717e3098f2cc833cdbab18d250967d 100644
+--- a/Nagram/Strings/Strings/en.lproj/NagramLocalizable.strings
++++ b/Nagram/Strings/Strings/en.lproj/NagramLocalizable.strings
+@@ -1,4 +1,4 @@
+-"Nagram.Title" = "Nagram";
++"Nagram.Title" = "Nextgram";
+ "Nagram.DeepLink.UnsupportedPlatform" = "This setting is not available on this platform.";
+ "Nagram.Tab.General" = "General";
+ "Nagram.Tab.Chat" = "Messages";
+@@ -107,7 +107,7 @@
+ "Nagram.DisableFiltering.Footer" = "Disable Filtering changes the Telegram account setting. Auto-Show Restricted Media only skips the confirmation prompt; it does not change Telegram settings or bypass age verification.";
+ "Nagram.SkipSensitiveContentWarning" = "Auto-Show Restricted Media";
+ "Nagram.ICloudSync" = "iCloud Sync";
+-"Nagram.ICloudSync.Footer" = "When enabled, Nagram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
++"Nagram.ICloudSync.Footer" = "When enabled, Nextgram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
+ "Nagram.ForceCopy" = "Bypass Content Protection";
+ "Nagram.ForceCopy.Footer" = "Allow copying message text, saving photos or videos, and creating stickers from photos in chats with content protection enabled. Paid content remains protected.";
+ "Nagram.MessageMenu" = "Message Menu";
+diff --git a/Nagram/Strings/Strings/ja.lproj/NagramLocalizable.strings b/Nagram/Strings/Strings/ja.lproj/NagramLocalizable.strings
+index ef6435dc6e252e038236b39086eb26486c6b98e4..7d01c8f869afa23cb34682a78b689315d8a2f9f1 100644
+--- a/Nagram/Strings/Strings/ja.lproj/NagramLocalizable.strings
++++ b/Nagram/Strings/Strings/ja.lproj/NagramLocalizable.strings
+@@ -1,4 +1,4 @@
+-"Nagram.Title" = "Nagram";
++"Nagram.Title" = "Nextgram";
+ "Nagram.DeepLink.UnsupportedPlatform" = "この設定項目は現在のプラットフォームでは利用できません。";
+ "Nagram.Tab.General" = "一般";
+ "Nagram.Tab.Chat" = "メッセージ";
+@@ -107,7 +107,7 @@
+ "Nagram.DisableFiltering.Footer" = "「センシティブ内容のフィルターを無効化」は Telegram で同期されるアカウント設定を変更します。「制限付きメディアを自動表示」は表示前の確認のみを省略し、Telegram の設定を変更したり年齢確認を回避したりしません。";
+ "Nagram.SkipSensitiveContentWarning" = "制限付きメディアを自動表示";
+ "Nagram.ICloudSync" = "iCloud 同期";
+-"Nagram.ICloudSync.Footer" = "有効にすると、Nagram の設定と一部の Telegram 標準ローカル設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
++"Nagram.ICloudSync.Footer" = "有効にすると、Nextgram の設定と一部の Telegram 標準ローカル設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
+ "Nagram.ForceCopy" = "コンテンツ保護を解除";
+ "Nagram.ForceCopy.Footer" = "コンテンツ保護（コピー/転送禁止）が有効なチャットでも、メッセージ本文のコピー、写真や動画の保存、写真からのステッカー作成を許可します。有料コンテンツは引き続き保護されます。";
+ "Nagram.MessageMenu" = "メッセージメニュー管理";
+diff --git a/Nagram/Strings/Strings/zh-hans.lproj/NagramLocalizable.strings b/Nagram/Strings/Strings/zh-hans.lproj/NagramLocalizable.strings
+index 78ed2ba42988650c0cf0f563fee6c85b457aa22b..dcd459c124ca098ba0a909c7f3b9c2f9b9be9312 100644
+--- a/Nagram/Strings/Strings/zh-hans.lproj/NagramLocalizable.strings
++++ b/Nagram/Strings/Strings/zh-hans.lproj/NagramLocalizable.strings
+@@ -1,4 +1,4 @@
+-"Nagram.Title" = "Nagram";
++"Nagram.Title" = "Nextgram";
+ "Nagram.DeepLink.UnsupportedPlatform" = "该配置项不适用于当前平台。";
+ "Nagram.Tab.General" = "通用";
+ "Nagram.Tab.Chat" = "消息";
+@@ -107,7 +107,7 @@
+ "Nagram.DisableFiltering.Footer" = "“关闭敏感内容过滤”会修改 Telegram 同步的账号设置；“自动显示受限媒体”仅跳过查看前的确认提示，不会修改 Telegram 设置，也不会绕过年龄验证。";
+ "Nagram.SkipSensitiveContentWarning" = "自动显示受限媒体";
+ "Nagram.ICloudSync" = "iCloud 同步";
+-"Nagram.ICloudSync.Footer" = "开启后，Nagram 设置和部分 Telegram 原生本地设置会通过 iCloud 在同一 Apple ID 的设备间同步。关闭不会删除云端已有设置。";
++"Nagram.ICloudSync.Footer" = "开启后，Nextgram 设置和部分 Telegram 原生本地设置会通过 iCloud 在同一 Apple ID 的设备间同步。关闭不会删除云端已有设置。";
+ "Nagram.ForceCopy" = "解除内容保护";
+ "Nagram.ForceCopy.Footer" = "开启后，可在设置了内容保护（禁止复制/转发）的对话中复制消息文本、保存图片或视频，并基于图片创建贴纸。付费内容仍受保护。";
+ "Nagram.MessageMenu" = "消息菜单管理";
+diff --git a/Nagram/Strings/Strings/zh-hant.lproj/NagramLocalizable.strings b/Nagram/Strings/Strings/zh-hant.lproj/NagramLocalizable.strings
+index 693cf749fe44f6372d178239be303c2408fb8bb1..8cbd0f25619780fe7ce5aa1332fabe67a5b8ed6b 100644
+--- a/Nagram/Strings/Strings/zh-hant.lproj/NagramLocalizable.strings
++++ b/Nagram/Strings/Strings/zh-hant.lproj/NagramLocalizable.strings
+@@ -1,4 +1,4 @@
+-"Nagram.Title" = "Nagram";
++"Nagram.Title" = "Nextgram";
+ "Nagram.DeepLink.UnsupportedPlatform" = "此設定項目不適用於目前的平台。";
+ "Nagram.Tab.General" = "一般";
+ "Nagram.Tab.Chat" = "訊息";
+@@ -107,7 +107,7 @@
+ "Nagram.DisableFiltering.Footer" = "「關閉敏感內容過濾」會修改 Telegram 同步的帳號設定；「自動顯示受限媒體」只會略過檢視前的確認提示，不會修改 Telegram 設定，也不會繞過年齡驗證。";
+ "Nagram.SkipSensitiveContentWarning" = "自動顯示受限媒體";
+ "Nagram.ICloudSync" = "iCloud 同步";
+-"Nagram.ICloudSync.Footer" = "開啟後，Nagram 設定和部分 Telegram 原生本機設定會透過 iCloud 在同一 Apple ID 的裝置間同步。關閉不會刪除雲端既有設定。";
++"Nagram.ICloudSync.Footer" = "開啟後，Nextgram 設定和部分 Telegram 原生本機設定會透過 iCloud 在同一 Apple ID 的裝置間同步。關閉不會刪除雲端既有設定。";
+ "Nagram.ForceCopy" = "解除內容保護";
+ "Nagram.ForceCopy.Footer" = "開啟後，可在設定了內容保護（禁止複製/轉發）的對話中複製訊息文字、儲存圖片或影片，並使用圖片建立貼圖。付費內容仍受保護。";
+ "Nagram.MessageMenu" = "訊息選單管理";
+diff --git a/README.md b/README.md
+index 30f798927eb3bde54615bdfdd55ccda90b65f7c5..537983bd1b7cef1f05a220ab409b0d419f46e836 100644
+--- a/README.md
++++ b/README.md
+@@ -1,16 +1,16 @@
+-# Nagram-iOS
++# Nextgram for iOS
+ 
+-> 基于 [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS) 官方源码的第三方增强分支，面向中文用户做功能增强与隐私强化。
++> 基于 Nagram-iOS 与 [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS) 的非官方第三方客户端，面向中文用户做功能增强与隐私强化。
+ 
+ ## 项目说明
+ 
+-所有增强改动集中在仓库根的 `Nagram/` 目录(following upstream `SG*` naming convention),需要侵入上游的改动一律加锚注释 `// MARK: NAGRAM`,便于跟随上游同步。设置入口为「我的资料」下方的独立分组「Nagram」。
++所有增强改动仍集中在仓库根的 `Nagram/` 目录，内部模块名和 `// MARK: NAGRAM` 锚点保持不变，便于同步 Nagram-iOS 与 Telegram-iOS 上游。用户可见的产品名为 `Nextgram`。
+ 
+ ## 版权与品牌
+ 
+ - **源码版权:** Nagram-iOS 专属源码与项目素材 Copyright © NextAlone 及 Nagram-iOS 贡献者；上游及第三方组件的版权仍归各自权利人所有，并继续适用各自的许可与版权声明。
+-- **应用图标:** Nagram 专属应用图标作品 Copyright © MaitungTM. All rights reserved.
+-- **名称与商标:** Nagram 名称、Logo 和项目标识归 [@NextAlone](https://github.com/NextAlone) 所有并管理；源码许可不包含商标授权。
++- **Nextgram 品牌:** Nextgram 使用独立的名称与图标，不得暗示为 Nagram 官方版本。
++- **上游品牌:** Nagram 名称、Logo 和项目标识归 [@NextAlone](https://github.com/NextAlone) 所有并管理；源码许可不包含商标授权。
+ 
+ 源码许可与品牌资产相互独立。修改版、分支版及第三方发行版须使用不同的名称与图标，不得暗示其为 Nagram 官方版本或已获官方背书。完整政策及所涵盖的 iOS 图标资源见 [`BRANDING.md`](BRANDING.md)。
+ 
+@@ -20,7 +20,7 @@
+ |---|---|
+ | 增强设置入口 | 设置页「我的资料」下方独立分组,进入 Nagram 设置页 |
+ | 强制复制(force-copy) | 在开启内容保护(禁止复制/转发)的对话中仍可复制消息文本,默认关闭 |
+-| 自定义图标与应用名 | 默认 Icon Composer (`.icon`) 图标,应用名为 Nagram |
++| 自定义图标与应用名 | 默认 Icon Composer (`.icon`) 图标，应用名为 Nextgram |
+ | NagramSettings 基建 | 增强开关集中存储层 |
+ 
+ 后续波次方向:纯 UI 开关(显示 ID/DC、时间戳显秒、隐藏手机号、贴纸尺寸等)→ 消息交互(上下文菜单逐项开关、双击消息动作)→ 翻译与 LLM/AI 集成 → 正则消息过滤、盘古之白。
+diff --git a/Telegram/BUILD b/Telegram/BUILD
+index 7cd62d63161389ffc237fc376585c15216415c2b..74137d1bf799b5c4e35c78552d063a4469a74197 100644
+--- a/Telegram/BUILD
++++ b/Telegram/BUILD
+@@ -333,8 +333,6 @@ filegroup(
+ )
+ 
+ alternate_icon_folders = [
+-    # MARK: NAGRAM — expose the Nagram primary icon in the in-app icon picker
+-    "Nagram",
+     "BlackIcon",
+     "BlackClassicIcon",
+     "BlackFilledIcon",
+@@ -363,7 +361,7 @@ composer_source_icon_folders = [
+     "NagramCyan",
+     "NagramBlack",
+ ]
+-composer_build_icon_folders = ["NagramBuild"]
++composer_build_icon_folders = ["NextgramBuild"]
+ composer_xcode26_icon_folders = [
+     "Nagram26",
+     "NagramBlock26",
+@@ -1714,11 +1712,11 @@ plist_fragment(
+     <key>CFBundleDevelopmentRegion</key>
+     <string>en</string>
+     <key>CFBundleDisplayName</key>
+-    <string>Nagram</string>
++    <string>Nextgram</string>
+     <key>CFBundleIdentifier</key>
+     <string>{telegram_bundle_id}</string>
+     <key>CFBundleName</key>
+-    <string>Nagram</string>
++    <string>Nextgram</string>
+     <key>CFBundlePackageType</key>
+     <string>APPL</string>
+     <key>CFBundleSignature</key>
+@@ -1777,19 +1775,19 @@ plist_fragment(
+     <string>We need this so that you can take and share photos and videos.</string>
+     <!-- MARK: NAGRAM -->
+     <key>NSContactsUsageDescription</key>
+-    <string>Nagram can sync your contacts so you can find people you know across your devices.</string>
++    <string>Nextgram can sync your contacts so you can find people you know across your devices.</string>
+     <key>NSFaceIDUsageDescription</key>
+     <string>You can use Face ID to unlock the app.</string>
+     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+-    <string>When you choose to share your live location, Nagram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
++    <string>When you choose to share your live location, Nextgram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
+     <key>NSLocationAlwaysUsageDescription</key>
+-    <string>When you choose to share your live location, Nagram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
++    <string>When you choose to share your live location, Nextgram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
+     <key>NSLocationWhenInUseUsageDescription</key>
+-    <string>When you choose to send your location, Nagram needs access to show and share it on a map.</string>
++    <string>When you choose to send your location, Nextgram needs access to show and share it on a map.</string>
+     <key>NSMicrophoneUsageDescription</key>
+     <string>We need this so that you can record and share voice messages and videos with sound.</string>
+     <key>NSMotionUsageDescription</key>
+-    <string>Nagram uses motion access only when needed to improve location sharing.</string>
++    <string>Nextgram uses motion access only when needed to improve location sharing.</string>
+     <key>NSPhotoLibraryAddUsageDescription</key>
+     <string>We need this so that you can share photos and videos from your photo library.</string>
+     <key>NSPhotoLibraryUsageDescription</key>
+@@ -1926,17 +1924,16 @@ ios_application(
+         ":RequiredDeviceCapabilitiesPlist",
+         ":UrlTypesInfoPlist",
+     ],
+-    primary_app_icon = "NagramBuild",
++    primary_app_icon = "NextgramBuild",
+     app_icons = [ ":{}_icon".format(name) for name in composer_build_icon_folders ],
+     alternate_icons = [
+         ":{}".format(name) for name in alternate_icon_folders
+     ],
+     resources = [
+         ":LaunchScreen",
+-        ":NagramIconPreviews",
+         #":DefaultAppIcon",
+     ],
+-    ipa_post_processor = ":NagramFixComposerAlternateIcons",
++    ipa_post_processor = ":AddAlternateIcons",
+     frameworks = [
+         ":MtProtoKitFramework",
+         ":SwiftSignalKitFramework",
+diff --git a/Telegram/Telegram-iOS/NextgramBuild.icon/Assets/nextgram-mark.svg b/Telegram/Telegram-iOS/NextgramBuild.icon/Assets/nextgram-mark.svg
+new file mode 100644
+index 0000000000000000000000000000000000000000..b635aac35b78fc6b034545a5fd0cfed9632a9bb1
+--- /dev/null
++++ b/Telegram/Telegram-iOS/NextgramBuild.icon/Assets/nextgram-mark.svg
+@@ -0,0 +1,3 @@
++<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
++  <path d="M487 374C498 354 526 354 537 374L699 651C710 670 696 691 674 691H350C328 691 314 670 325 651L487 374Z" fill="white"/>
++</svg>
+diff --git a/Telegram/Telegram-iOS/NextgramBuild.icon/icon.json b/Telegram/Telegram-iOS/NextgramBuild.icon/icon.json
+new file mode 100644
+index 0000000000000000000000000000000000000000..d88abcc12ce6f6f0a086937cc0f70344d91bc99f
+--- /dev/null
++++ b/Telegram/Telegram-iOS/NextgramBuild.icon/icon.json
+@@ -0,0 +1,32 @@
++{
++  "supported-platforms": {
++    "squares": "shared"
++  },
++  "fill-specializations": [
++    {
++      "value": {
++        "linear-gradient": [
++          "srgb:0.91373,0.65098,0.98039,1.00000",
++          "srgb:0.47843,0.12549,1.00000,1.00000"
++        ]
++      }
++    }
++  ],
++  "groups": [
++    {
++      "name": "Nextgram mark",
++      "hidden": false,
++      "position": {
++        "scale": 1.0,
++        "translation-in-points": [0, 0]
++      },
++      "layers": [
++        {
++          "image-name": "nextgram-mark.svg",
++          "name": "Nextgram mark",
++          "hidden": false
++        }
++      ]
++    }
++  ]
++}
+diff --git a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+index 9f6f893f2e1755f8e4630cbe6881354af566b7bb..27d210a16a5b947e8bb4dcaeb56fe7c5bf268c32 100644
+--- a/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
++++ b/submodules/TelegramUI/Components/PeerInfo/PeerInfoScreen/Sources/PeerInfoSettingsItems.swift
+@@ -227,8 +227,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
+         interaction.openSettings(.chatFolders)
+     }))
+ 
+-    // MARK: NAGRAM — 增强设置入口；长按可在隐藏底栏时进入 Debug Settings。
+-    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: "Nagram", icon: PresentationResourcesSettings.settings, longPressAction: {
++    // MARK: NAGRAM — Nextgram 设置入口；内部保留 Nagram 命名以便同步上游。
++    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: "Nextgram", icon: PresentationResourcesSettings.settings, longPressAction: {
+         interaction.openSettings(.nagramDebug)
+     }, action: {
+         interaction.openSettings(.nagram)
+-- 
+2.51.1
+
