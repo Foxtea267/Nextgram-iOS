@@ -87,7 +87,7 @@ git submodule status --recursive
 
 ### Build IPA with GitHub Actions
 
-推送到 `main`，或在 GitHub 的 Actions 页面手动运行 **Build Nextgram IPA**。仓库需要配置以下 Actions secrets：
+推送到 `main`，或在 GitHub 的 Actions 页面手动运行 **Build Nextgram IPA**。默认使用仓库内随 Telegram 上游提供的公开 API 配置；如需改用自己的应用凭据，可配置以下 Actions secrets：
 
 - `TELEGRAM_API_ID`
 - `TELEGRAM_API_HASH`

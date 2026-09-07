@@ -50,15 +50,13 @@ jobs:
           key: nextgram-bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel.lock') }}
           restore-keys: nextgram-bazel-${{ runner.os }}-
 
-      - name: Validate required secrets
-        run: |
-          set -euo pipefail
-          : "${TELEGRAM_API_ID:?Add TELEGRAM_API_ID to repository Actions secrets}"
-          : "${TELEGRAM_API_HASH:?Add TELEGRAM_API_HASH to repository Actions secrets}"
-
       - name: Write build configuration
         run: |
           set -euo pipefail
+          if [[ -z "${TELEGRAM_API_ID}" || -z "${TELEGRAM_API_HASH}" ]]; then
+            TELEGRAM_API_ID="$(python3 -c 'import json; print(json.load(open("build-system/appstore-configuration.json"))["api_id"])')"
+            TELEGRAM_API_HASH="$(python3 -c 'import json; print(json.load(open("build-system/appstore-configuration.json"))["api_hash"])')"
+          fi
           mkdir -p build-input
           cat > build-input/nextgram-ci.json <<JSON
           {
