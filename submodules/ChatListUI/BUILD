@@ -135,6 +135,8 @@ swift_library(
         # MARK: NAGRAM
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/Settings:NagramSettings",
+        # MARK: NEXTGRAM
+        "//Nagram/ChatListFilters:NagramChatListFilters",
         "//Nagram/Strings:NagramStrings",
     ],
     visibility = [

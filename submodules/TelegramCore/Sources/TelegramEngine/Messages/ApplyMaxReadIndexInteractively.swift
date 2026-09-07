@@ -1,4 +1,5 @@
 import Foundation
+import NagramSettings
 import Postbox
 import TelegramApi
 import SwiftSignalKit
@@ -11,6 +12,12 @@ func _internal_applyMaxReadIndexInteractively(postbox: Postbox, stateManager: Ac
 }
     
 func _internal_applyMaxReadIndexInteractively(transaction: Transaction, stateManager: AccountStateManager, index: MessageIndex) {
+    // MARK: NAGRAM
+    // MARK: NEXTGRAM
+    guard !NagramSettings.shared.suppressReadReceipts else {
+        return
+    }
+
     let messageIds = transaction.applyInteractiveReadMaxIndex(index)
     
     if let peer = transaction.getPeer(index.id.peerId), peer.isForumOrMonoForum {
@@ -177,6 +184,12 @@ func _internal_toggleForumThreadUnreadMarkInteractively(transaction: Transaction
             if let entry = StoredMessageHistoryThreadInfo(data) {
                 transaction.setMessageHistoryThreadInfo(peerId: peerId, threadId: threadId, info: entry)
             }
+
+            // MARK: NAGRAM
+            // MARK: NEXTGRAM — Keep an explicit local unread toggle local while read receipts are disabled.
+            guard !NagramSettings.shared.suppressReadReceipts else {
+                return
+            }
             
             if peer.isForum {
                 if let inputPeer = apiInputPeer(peer) {
@@ -212,6 +225,12 @@ func _internal_markForumThreadAsReadInteractively(transaction: Transaction, netw
         
         if let entry = StoredMessageHistoryThreadInfo(data) {
             transaction.setMessageHistoryThreadInfo(peerId: peerId, threadId: threadId, info: entry)
+        }
+
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM
+        guard !NagramSettings.shared.suppressReadReceipts else {
+            return
         }
         
         if peer.isForum {
@@ -254,6 +273,12 @@ func _internal_togglePeerUnreadMarkInteractively(transaction: Transaction, netwo
                 
                 if let entry = StoredMessageHistoryThreadInfo(data) {
                     transaction.setMessageHistoryThreadInfo(peerId: peerId, threadId: item.threadId, info: entry)
+                }
+
+                // MARK: NAGRAM
+                // MARK: NEXTGRAM
+                if NagramSettings.shared.suppressReadReceipts {
+                    continue
                 }
                 
                 if peer.isForum {

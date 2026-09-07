@@ -1,4 +1,5 @@
 import Foundation
+import NagramSettings
 import Postbox
 import SwiftSignalKit
 import TelegramApi
@@ -315,6 +316,12 @@ private class ReplyThreadHistoryContextImpl {
     }
     
     func applyMaxReadIndex(messageIndex: MessageIndex) {
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM
+        guard !NagramSettings.shared.suppressReadReceipts else {
+            return
+        }
+
         let peerId = self.peerId
         let threadId = self.threadId
         

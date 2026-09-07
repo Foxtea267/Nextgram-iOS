@@ -3,8 +3,28 @@ import TelegramApi
 import Postbox
 import SwiftSignalKit
 import MtProtoKit
+import NagramSettings // MARK: NAGRAM
 
 private typealias SignalKitTimer = SwiftSignalKit.Timer
+
+// MARK: NAGRAM
+// MARK: NEXTGRAM — Keep the core presence manager reactive without importing UIKit.
+private func nagramOnlinePresenceAllowed() -> Signal<Bool, NoError> {
+    let initial = Signal<Bool, NoError>.single(!NagramSettings.shared.suppressOnlineStatus)
+    let updates = Signal<Bool, NoError> { subscriber in
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: nil
+        ) { _ in
+            subscriber.putNext(!NagramSettings.shared.suppressOnlineStatus)
+        }
+        return ActionDisposable {
+            NotificationCenter.default.removeObserver(observer)
+        }
+    }
+    return (initial |> then(updates)) |> distinctUntilChanged
+}
 
 
 private final class AccountPresenceManagerImpl {
@@ -16,13 +36,16 @@ private final class AccountPresenceManagerImpl {
     private let currentRequestDisposable = MetaDisposable()
     private var onlineTimer: SignalKitTimer?
     
-    private var wasOnline: Bool = false
+    private var wasOnline: Bool?
     
     init(queue: Queue, shouldKeepOnlinePresence: Signal<Bool, NoError>, network: Network) {
         self.queue = queue
         self.network = network
         
-        self.shouldKeepOnlinePresenceDisposable = (shouldKeepOnlinePresence
+        self.shouldKeepOnlinePresenceDisposable = (combineLatest(shouldKeepOnlinePresence, nagramOnlinePresenceAllowed())
+        |> map { isOnline, isAllowed in
+            return isOnline && isAllowed
+        }
         |> distinctUntilChanged
         |> deliverOn(self.queue)).start(next: { [weak self] value in
             guard let `self` = self else {

@@ -1,0 +1,32 @@
+{
+  "supported-platforms": {
+    "squares": "shared"
+  },
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.91373,0.65098,0.98039,1.00000",
+          "srgb:0.47843,0.12549,1.00000,1.00000"
+        ]
+      }
+    }
+  ],
+  "groups": [
+    {
+      "name": "Nextgram logo",
+      "hidden": false,
+      "position": {
+        "scale": 1.0,
+        "translation-in-points": [0, 0]
+      },
+      "layers": [
+        {
+          "image-name": "logo.png",
+          "name": "Nextgram logo",
+          "hidden": false
+        }
+      ]
+    }
+  ]
+}

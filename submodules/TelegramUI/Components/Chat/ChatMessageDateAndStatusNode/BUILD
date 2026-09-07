@@ -27,6 +27,8 @@ swift_library(
         "//submodules/TelegramUI/Components/MultiAnimationRenderer",
         # MARK: NAGRAM
         "//Nagram/Settings:NagramSettings",
+        "//Nagram/MessageHistory:NagramMessageHistory",  # MARK: NEXTGRAM
+        "//Nagram/Strings:NagramStrings",  # MARK: NEXTGRAM
     ],
     visibility = [
         "//visibility:public",

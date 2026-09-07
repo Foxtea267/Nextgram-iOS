@@ -497,7 +497,24 @@ enum ChatListNodeEntry: Comparable, Identifiable {
     }
     
     static func <(lhs: ChatListNodeEntry, rhs: ChatListNodeEntry) -> Bool {
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM — Preserve Telegram pin order, then place unread root chats before read chats.
+        if NagramSettings.shared.chatListUnreadFirst,
+           let lhsPriority = lhs.nagramUnreadPriority,
+           let rhsPriority = rhs.nagramUnreadPriority,
+           lhsPriority != rhsPriority {
+            return lhsPriority < rhsPriority
+        }
         return lhs.sortIndex < rhs.sortIndex
+    }
+
+    private var nagramUnreadPriority: Int? {
+        guard case let .PeerEntry(data) = self,
+              case let .chatList(index) = data.index,
+              index.pinningIndex == nil else {
+            return nil
+        }
+        return data.readState?.isUnread == true && !data.nagramIgnoreUnreadBadge ? 0 : 1
     }
     
     static func ==(lhs: ChatListNodeEntry, rhs: ChatListNodeEntry) -> Bool {
@@ -1106,6 +1123,10 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
                 }
             }
         }
+    }
+
+    if NagramSettings.shared.chatListUnreadFirst { // MARK: NAGRAM // MARK: NEXTGRAM
+        result.sort()
     }
 
     if result.count >= 1, case .HoleEntry = result[result.count - 1] {

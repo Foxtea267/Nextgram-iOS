@@ -1,4 +1,4 @@
-"Nagram.Title" = "Nagram";
+"Nagram.Title" = "Nextgram";
 "Nagram.DeepLink.UnsupportedPlatform" = "この設定項目は現在のプラットフォームでは利用できません。";
 "Nagram.Tab.General" = "一般";
 "Nagram.Tab.Chat" = "メッセージ";
@@ -107,7 +107,7 @@
 "Nagram.DisableFiltering.Footer" = "「センシティブ内容のフィルターを無効化」は Telegram で同期されるアカウント設定を変更します。「制限付きメディアを自動表示」は表示前の確認のみを省略し、Telegram の設定を変更したり年齢確認を回避したりしません。";
 "Nagram.SkipSensitiveContentWarning" = "制限付きメディアを自動表示";
 "Nagram.ICloudSync" = "iCloud 同期";
-"Nagram.ICloudSync.Footer" = "有効にすると、Nagram の設定と一部の Telegram 標準ローカル設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
+"Nagram.ICloudSync.Footer" = "有効にすると、Nextgram の設定と一部の Telegram 標準ローカル設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
 "Nagram.ForceCopy" = "コンテンツ保護を解除";
 "Nagram.ForceCopy.Footer" = "コンテンツ保護（コピー/転送禁止）が有効なチャットでも、メッセージ本文のコピー、写真や動画の保存、写真からのステッカー作成を許可します。有料コンテンツは引き続き保護されます。";
 "Nagram.MessageMenu" = "メッセージメニュー管理";
@@ -359,3 +359,26 @@
 "Nagram.RecentStickerLimit.120" = "120";
 "Nagram.RecentStickerLimit.150" = "150";
 "Nagram.RecentStickerLimit.200" = "200";
+
+"Nagram.ChatListQuickFilters" = "チャットのクイックフィルター";
+"Nagram.ChatListUnreadFirst" = "未読チャットを優先";
+"Nagram.ChatListQuickFilter.Contacts" = "連絡先";
+"Nagram.ChatListQuickFilter.Private" = "個人";
+"Nagram.ChatListQuickFilter.Groups" = "グループ";
+"Nagram.ChatListQuickFilter.Channels" = "チャンネル";
+"Nagram.ChatListQuickFilter.Unread" = "未読";
+"Nagram.Section.MessagePreservation" = "メッセージの保存";
+"Nagram.Section.MessagePreservation.Footer" = "保存内容はこの端末だけに残ります。メディアはローカルキャッシュに依存します。";
+"Nagram.AntiRecall" = "削除防止";
+"Nagram.PreserveBotMessages" = "Botメッセージを保存";
+"Nagram.SaveMessageEditHistory" = "編集履歴を保存";
+"Nagram.GhostMode" = "ゴーストモード";
+"Nagram.Section.GhostMode" = "ゴーストモード";
+"Nagram.GhostMode.Footer" = "ゴーストモードは下の3項目をすべて有効にします。メッセージ送信や通話参加などから活動が推測される場合があります。";
+"Nagram.DisableReadReceipts" = "既読状態を隠す";
+"Nagram.DisableTypingStatus" = "入力状態を隠す";
+"Nagram.DisableOnlineStatus" = "オンライン状態を隠す";
+"Nagram.MessageMenu.Item.viewEditHistory" = "編集履歴を表示";
+"Nagram.MessageEditHistory.Title" = "編集履歴";
+"Nagram.MessageEditHistory.Current" = "現在";
+"Nagram.MessageDeletedRetained" = "削除済み";

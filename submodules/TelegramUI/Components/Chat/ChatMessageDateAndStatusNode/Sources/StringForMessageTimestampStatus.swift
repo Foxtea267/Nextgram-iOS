@@ -6,6 +6,8 @@ import TelegramStringFormatting
 import TextFormat
 import LocalizedPeerData
 import AccountContext
+import NagramMessageHistory // MARK: NAGRAM
+import NagramStrings // MARK: NAGRAM
 
 public enum MessageTimestampStatusFormat {
     case full
@@ -248,5 +250,11 @@ public func stringForMessageTimestampStatus(
         }
     }
     
+    // MARK: NEXTGRAM — Make locally retained deletions visible without altering message content.
+    // MARK: NAGRAM
+    if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
+        let deletedText = ngI18n("Nagram.MessageDeletedRetained", strings.baseLanguageCode)
+        return "\(deletedText) · \(dateText)"
+    }
     return dateText
 }

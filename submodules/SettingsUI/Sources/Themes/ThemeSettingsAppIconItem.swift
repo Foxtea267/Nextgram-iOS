@@ -34,46 +34,18 @@ private func generateBorderImage(theme: PresentationTheme, bordered: Bool, selec
     })?.stretchableImage(withLeftCapWidth: 15, topCapHeight: 15)
 }
 
-// MARK: NAGRAM
-private func nagramAppIconTitle(_ iconName: String, strings: PresentationStrings) -> String? {
+// MARK: NAGRAM — user-visible downstream brand; internal modules remain unchanged.
+private func nextgramAppIconTitle(_ iconName: String, strings: PresentationStrings) -> String? {
     let isChinese = strings.baseLanguageCode.hasPrefix("zh")
     switch iconName {
-        case "Nagram":
-            return isChinese ? "轻盈" : "Default"
-        case "NagramBlock":
-            return isChinese ? "几何" : "Block"
-        case "NagramBlockBlack":
-            return isChinese ? "几何黑" : "Block Black"
-        case "NagramBlockBlue":
-            return isChinese ? "几何蓝" : "Block Blue"
-        case "NagramBlockNiello":
-            return isChinese ? "几何金" : "Block Niello"
-        case "NagramBlockPurple":
-            return isChinese ? "几何紫" : "Block Purple"
-        case "NagramClassic":
-            return isChinese ? "经典" : "Classic"
-        case "NagramColorful":
-            return isChinese ? "多彩" : "Colorful"
-        case "NagramCyan":
-            return isChinese ? "冬青" : "Cyan"
-        case "NagramBlack":
-            return isChinese ? "暗黑" : "Dark"
+        case "Nextgram":
+            return isChinese ? "默认" : "Default"
         default:
             return nil
     }
 }
 
 private func loadThemeSettingsAppIconImage(_ icon: PresentationAppIcon) -> UIImage? {
-    if icon.name.hasPrefix("Nagram") {
-        for suffix in ["@3x", "@2x", "Ipad@2x", "LargeIpad@2x", "Ipad"] {
-            let imageName = "\(icon.name)\(suffix)"
-            if let path = getAppBundle().path(forResource: imageName, ofType: "png"), let image = UIImage(contentsOfFile: path) {
-                return image
-            }
-        }
-        // MARK: NAGRAM — Icon Composer app-icon assets are not safe as regular UIImage previews.
-        return UIImage(named: "BlueIcon", in: getAppBundle(), compatibleWith: nil)
-    }
     return UIImage(named: icon.imageName, in: getAppBundle(), compatibleWith: nil)
 }
 
@@ -418,8 +390,8 @@ class ThemeSettingsAppIconItemNode: ListViewItemNode, ItemListItemNode {
 
                             var name = "Icon"
                             var bordered = true
-                            if let nagramTitle = nagramAppIconTitle(icon.name, strings: item.strings) {
-                                name = nagramTitle
+                            if let nextgramTitle = nextgramAppIconTitle(icon.name, strings: item.strings) {
+                                name = nextgramTitle
                             } else {
                                 switch icon.name {
                                     case "BlueIcon":

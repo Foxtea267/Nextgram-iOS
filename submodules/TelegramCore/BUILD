@@ -28,6 +28,8 @@ swift_library(
         "//submodules/MurMurHash32",
         # MARK: NAGRAM
         "//Nagram/Settings:NagramSettings",
+        # MARK: NEXTGRAM
+        "//Nagram/MessageHistory:NagramMessageHistory",
     ],
     visibility = [
         "//visibility:public",

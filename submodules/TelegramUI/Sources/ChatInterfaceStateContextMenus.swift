@@ -26,6 +26,7 @@ import ReactionListContextMenuContent
 import TelegramUIPreferences
 // MARK: NAGRAM — force-copy 增强开关模块
 import NagramSettings
+import NagramMessageHistory // MARK: NAGRAM
 import NagramStrings
 import TranslateUI
 import DebugSettingsUI
@@ -1703,6 +1704,37 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM — Expose locally retained text versions from the message menu.
+        if let editHistory = message.attributes.first(where: { $0 is NagramMessageHistoryAttribute }) as? NagramMessageHistoryAttribute, !editHistory.versions.isEmpty {
+            actions.append(.viewEditHistory, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.viewEditHistory", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
+            }, action: { controller, _ in
+                controller?.dismiss(completion: {
+                    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                    let languageCode = presentationData.strings.baseLanguageCode
+                    let formatter = DateFormatter()
+                    formatter.dateStyle = .medium
+                    formatter.timeStyle = .medium
+                    var versions = editHistory.versions.enumerated().map { index, version -> String in
+                        let date = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(version.timestamp)))
+                        let text = version.text.isEmpty ? "∅" : version.text
+                        return "\(index + 1). \(date)\n\(text)"
+                    }
+                    let currentDate = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(message.editedTime ?? message.timestamp)))
+                    let currentTitle = ngI18n("Nagram.MessageEditHistory.Current", languageCode)
+                    let currentText = message.text.isEmpty ? "∅" : message.text
+                    versions.append("\(currentTitle) · \(currentDate)\n\(currentText)")
+                    controllerInteraction.presentController(textAlertController(
+                        context: context,
+                        title: ngI18n("Nagram.MessageEditHistory.Title", languageCode),
+                        text: versions.joined(separator: "\n\n"),
+                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]
+                    ), nil)
+                })
+            })))
+        }
+
         if data.canEdit && !isPinnedMessages && !isMigrated {
             actions.append(.edit, .action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_MessageDialogEdit, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)

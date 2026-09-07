@@ -169,6 +169,34 @@ public final class NagramSettings {
     @NagramDefault("nagram.forceCopyEnabled", false)
     public var forceCopyEnabled: Bool
 
+    // MARK: NEXTGRAM — 消息保留与隐私增强。默认关闭，保持 Telegram 原生行为。
+    @NagramDefault("nagram.antiRecallEnabled", false)
+    public var antiRecallEnabled: Bool
+    @NagramDefault("nagram.preserveBotMessages", false)
+    public var preserveBotMessages: Bool
+    @NagramDefault("nagram.saveMessageEditHistory", false)
+    public var saveMessageEditHistory: Bool
+    @NagramDefault("nagram.ghostModeEnabled", false)
+    public var ghostModeEnabled: Bool
+    @NagramDefault("nagram.disableReadReceipts", false)
+    public var disableReadReceipts: Bool
+    @NagramDefault("nagram.disableTypingStatus", false)
+    public var disableTypingStatus: Bool
+    @NagramDefault("nagram.disableOnlineStatus", false)
+    public var disableOnlineStatus: Bool
+
+    public var suppressReadReceipts: Bool {
+        return self.ghostModeEnabled || self.disableReadReceipts
+    }
+
+    public var suppressTypingStatus: Bool {
+        return self.ghostModeEnabled || self.disableTypingStatus
+    }
+
+    public var suppressOnlineStatus: Bool {
+        return self.ghostModeEnabled || self.disableOnlineStatus
+    }
+
     // MARK: 敏感内容
     /// 自动显示受限媒体；仅跳过确认弹窗，不绕过年龄验证
     @NagramDefault("nagram.skipSensitiveContentWarning", false)
@@ -365,6 +393,12 @@ public final class NagramSettings {
     /// 紧凑对话列表（压缩列表行高）
     @NagramDefault("nagram.chatListCompact", false)
     public var chatListCompact: Bool
+    /// 在首页文件夹栏加入联系人、私聊、群组、频道和未读快捷筛选。
+    @NagramDefault("nagram.chatListQuickFiltersEnabled", false)
+    public var chatListQuickFiltersEnabled: Bool
+    /// 保留置顶顺序，并将其余未读会话排在已读会话之前。
+    @NagramDefault("nagram.chatListUnreadFirst", false)
+    public var chatListUnreadFirst: Bool
     /// 最近会话快捷入口
     @NagramDefault("nagram.recentChatsEnabled", false)
     public var recentChatsEnabled: Bool

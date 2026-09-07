@@ -1,109 +1,113 @@
-name: CI
+name: Build Nextgram IPA
 
 on:
-  push:
-    branches: [ master ]
-
   workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nextgram-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    runs-on: macos-13
+    runs-on: macos-26
+    timeout-minutes: 180
+    env:
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      # The checked-in disposable profiles are bound to this id. The artifact is
+      # intended for downstream re-signing; the visible app name remains Nextgram.
+      BUNDLE_ID: ph.telegra.Telegraph
+      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Check out source and submodules
+        uses: actions/checkout@v4
         with:
-          submodules: 'recursive'
-          fetch-depth: '0'
+          submodules: recursive
+          fetch-depth: 0
 
-      - name: Set active Xcode path
+      - name: Select Xcode 26
         run: |
-          XCODE_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["xcode"]);')
-          sudo xcode-select -s /Applications/Xcode_$XCODE_VERSION.app/Contents/Developer
+          set -euo pipefail
+          XC="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
+          test -n "$XC"
+          sudo xcode-select -s "$XC/Contents/Developer"
+          xcodebuild -version
 
-      - name: Create canonical source directory
+      - name: Install Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain || true
+
+      - name: Cache Bazel downloads and build outputs
+        uses: actions/cache@v4
+        with:
+          path: ~/telegram-bazel-cache
+          key: nextgram-bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel.lock') }}
+          restore-keys: nextgram-bazel-${{ runner.os }}-
+
+      - name: Validate required secrets
         run: |
-          set -x
-          sudo mkdir -p /Users/Shared
-          cp -R $GITHUB_WORKSPACE /Users/Shared/
-          mv /Users/Shared/$(basename $GITHUB_WORKSPACE) /Users/Shared/telegram-ios
+          set -euo pipefail
+          : "${TELEGRAM_API_ID:?Add TELEGRAM_API_ID to repository Actions secrets}"
+          : "${TELEGRAM_API_HASH:?Add TELEGRAM_API_HASH to repository Actions secrets}"
 
-      - name: Build the App
+      - name: Write build configuration
         run: |
-          set -x
+          set -euo pipefail
+          mkdir -p build-input
+          cat > build-input/nextgram-ci.json <<JSON
+          {
+            "bundle_id": "${BUNDLE_ID}",
+            "api_id": "${TELEGRAM_API_ID}",
+            "api_hash": "${TELEGRAM_API_HASH}",
+            "team_id": "C67CF9S4VU",
+            "app_center_id": "0",
+            "is_internal_build": "true",
+            "is_appstore_build": "false",
+            "appstore_id": "0",
+            "app_specific_url_scheme": "nextgram",
+            "premium_iap_product_id": "",
+            "enable_siri": false,
+            "enable_icloud": false
+          }
+          JSON
 
-          # source code paths are included in the final binary, so we need to make them stable across builds
-          SOURCE_DIR=/Users/Shared/telegram-ios
+      - name: Import disposable build certificate
+        run: python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
 
-          # use canonical bazel root
-          BAZEL_USER_ROOT="/private/var/tmp/_bazel_containerhost"
-
-          cd $SOURCE_DIR
-
-          BUILD_NUMBER_OFFSET="$(cat build_number_offset)"
-
-          export APP_VERSION=$(cat versions.json | python3 -c 'import json,sys;obj=json.load(sys.stdin);print(obj["app"]);')
-          export COMMIT_COUNT=$(git rev-list --count HEAD)
-          export COMMIT_COUNT="$(($COMMIT_COUNT+$BUILD_NUMBER_OFFSET))"
-          export BUILD_NUMBER="$COMMIT_COUNT"
-          echo "BUILD_NUMBER=$(echo $BUILD_NUMBER)" >> $GITHUB_ENV
-          echo "APP_VERSION=$(echo $APP_VERSION)" >> $GITHUB_ENV
-
-          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
-          python3 -u build-system/Make/Make.py \
-            --bazelUserRoot="$BAZEL_USER_ROOT" \
+      - name: Build arm64 IPA
+        run: |
+          set -euo pipefail
+          BUILD_NUMBER="$(( $(git rev-list --count HEAD) + $(cat build_number_offset) ))"
+          python3 build-system/Make/Make.py --overrideXcodeVersion \
+            --cacheDir "$HOME/telegram-bazel-cache" \
             build \
-            --configurationPath="build-system/appstore-configuration.json" \
-            --codesigningInformationPath=build-system/fake-codesigning \
-            --configuration=release_arm64 \
-            --buildNumber="$BUILD_NUMBER"
+            --configurationPath build-input/nextgram-ci.json \
+            --codesigningInformationPath build-system/fake-codesigning \
+            --buildNumber "$BUILD_NUMBER" \
+            --configuration release_arm64
 
-          # collect ipa
-          OUTPUT_PATH="build/artifacts"
-          rm -rf "$OUTPUT_PATH"
-          mkdir -p "$OUTPUT_PATH"
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/Telegram.ipa; do
-            cp "$f" $OUTPUT_PATH/
-          done
+      - name: Prepare artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p build/artifacts build/dSYMs
+          cp bazel-bin/Telegram/Telegram.ipa build/artifacts/Nextgram.ipa
+          find bazel-bin/Telegram -maxdepth 1 -name '*.dSYM' -exec cp -R {} build/dSYMs/ \;
+          if find build/dSYMs -maxdepth 1 -name '*.dSYM' | grep -q .; then
+            ditto -c -k --sequesterRsrc --keepParent build/dSYMs build/artifacts/Nextgram.dSYMs.zip
+          fi
 
-          # collect dsym
-          mkdir -p build/DSYMs
-          for f in bazel-out/applebin_ios-ios_arm*-opt-ST-*/bin/Telegram/*.dSYM; do
-            cp -R "$f" build/DSYMs/
-          done
-          zip -r "./$OUTPUT_PATH/Telegram.DSYMs.zip" build/DSYMs 1>/dev/null
-
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload IPA and symbols
+        uses: actions/upload-artifact@v4
         with:
-          tag_name: build-${{ env.BUILD_NUMBER }}
-          release_name: Telegram ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          body: |
-            An unsigned build of Telegram for iOS ${{ env.APP_VERSION }} (${{ env.BUILD_NUMBER }})
-          draft: false
-          prerelease: false
-
-      - name: Upload Release IPA
-        id: upload-release-ipa 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.ipa
-          asset_name: Telegram.ipa
-          asset_content_type: application/zip
-
-      - name: Upload Release DSYM
-        id: upload-release-dsym 
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: /Users/Shared/telegram-ios/build/artifacts/Telegram.DSYMs.zip
-          asset_name: Telegram.DSYMs.zip
-          asset_content_type: application/zip
+          name: Nextgram-${{ github.sha }}
+          path: |
+            build/artifacts/Nextgram.ipa
+            build/artifacts/Nextgram.dSYMs.zip
+          if-no-files-found: error
+          retention-days: 14

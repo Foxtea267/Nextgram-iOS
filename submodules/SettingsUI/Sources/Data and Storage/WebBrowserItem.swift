@@ -11,17 +11,7 @@ import OpenInExternalAppUI
 import AccountContext
 import AppBundle
 
-// MARK: NAGRAM
 private func loadWebBrowserAppIconImage(_ imageName: String) -> UIImage? {
-    if imageName == "Nagram" || imageName == "NagramBlock" || imageName == "NagramColorful" {
-        for suffix in ["@3x", "@2x", "Ipad@2x", "LargeIpad@2x", "Ipad"] {
-            let resourceName = "\(imageName)\(suffix)"
-            if let path = getAppBundle().path(forResource: resourceName, ofType: "png"), let image = UIImage(contentsOfFile: path) {
-                return image
-            }
-        }
-        return UIImage(named: "BlueIcon", in: getAppBundle(), compatibleWith: nil)
-    }
     return UIImage(named: imageName, in: getAppBundle(), compatibleWith: nil)
 }
 
@@ -170,7 +160,8 @@ private final class WebBrowserItemNode: ListViewItemNode {
                     } else {
                         let icons = item.context.sharedContext.applicationBindings.getAvailableAlternateIcons()
                         let current = item.context.sharedContext.applicationBindings.getAlternateIconName()
-                        let currentIcon = icons.first(where: { $0.name == current })?.imageName ?? "BlueIcon"
+                        // MARK: NAGRAM — nil means the branded primary icon is active.
+                        let currentIcon = icons.first(where: { $0.name == current })?.imageName ?? icons.first(where: { $0.isDefault })?.imageName ?? "NextgramPreview"
                         if let image = loadWebBrowserAppIconImage(currentIcon) {
                             updatedIconSignal = openInAppIcon(engine: item.context.engine, appIcon: .image(image: image))
                         }

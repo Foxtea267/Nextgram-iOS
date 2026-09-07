@@ -5,6 +5,13 @@ enum NagramSettingsSyncKeys {
 
     private static let explicitKeys: Set<String> = [
         "nagram.forceCopyEnabled",
+        "nagram.antiRecallEnabled",
+        "nagram.preserveBotMessages",
+        "nagram.saveMessageEditHistory",
+        "nagram.ghostModeEnabled",
+        "nagram.disableReadReceipts",
+        "nagram.disableTypingStatus",
+        "nagram.disableOnlineStatus",
         "nagram.skipSensitiveContentWarning",
         "nagram.hideReactions",
         "nagram.disableScrollToNextChannel",
@@ -27,6 +34,8 @@ enum NagramSettingsSyncKeys {
         "nagram.stickerTimestamp",
         "nagram.videoPIPSwipeDirection",
         "nagram.chatListSwipeAction",
+        "nagram.chatListQuickFiltersEnabled",
+        "nagram.chatListUnreadFirst",
         "nagram.openArchiveOnPull",
         "nagram.showArchiveInFolders",
         "nagram.hideSavedAndArchivedMessagesInList",

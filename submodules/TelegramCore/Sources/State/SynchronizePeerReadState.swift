@@ -1,4 +1,5 @@
 import Foundation
+import NagramSettings
 import Postbox
 import TelegramApi
 import SwiftSignalKit
@@ -227,6 +228,12 @@ private func validatePeerReadState(network: Network, postbox: Postbox, stateMana
 }
 
 private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, readState: PeerReadState) -> Signal<PeerReadState, PeerReadStateValidationError> {
+    // MARK: NAGRAM
+    // MARK: NEXTGRAM
+    if NagramSettings.shared.suppressReadReceipts {
+        return .single(readState)
+    }
+
     if peerId.namespace == Namespaces.Peer.SecretChat {
         return inputSecretChat(postbox: postbox, peerId: peerId)
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in

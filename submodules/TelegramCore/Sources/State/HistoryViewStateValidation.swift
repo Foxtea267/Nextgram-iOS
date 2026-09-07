@@ -3,6 +3,27 @@ import Postbox
 import SwiftSignalKit
 import TelegramApi
 import MtProtoKit
+import NagramMessageHistory // MARK: NAGRAM
+import NagramSettings // MARK: NAGRAM
+
+// MARK: NEXTGRAM — Keep retained messages from being removed by later history validation.
+private func nagramShouldKeepValidatedMessage(_ id: MessageId, transaction: Transaction) -> Bool {
+    guard let message = transaction.getMessage(id) else {
+        return false
+    }
+    if NagramSettings.shared.antiRecallEnabled || message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
+        return true
+    }
+    if NagramSettings.shared.preserveBotMessages {
+        if let peer = transaction.getPeer(id.peerId) as? TelegramUser, peer.botInfo != nil {
+            return true
+        }
+        if let author = message.author as? TelegramUser, author.botInfo != nil {
+            return true
+        }
+    }
+    return false
+}
 
 
 private final class HistoryStateValidationBatch {
@@ -984,8 +1005,10 @@ private func validateBatch(postbox: Postbox, network: Network, transaction: Tran
                                         return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: updatedTags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: currentMessage.media))
                                     })
                                 } else {
-                                    _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: [id])
-                                    Logger.shared.log("HistoryValidation", "deleting message \(id) in \(id.peerId)")
+                                    if !nagramShouldKeepValidatedMessage(id, transaction: transaction) { // MARK: NAGRAM // MARK: NEXTGRAM
+                                        _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: [id])
+                                        Logger.shared.log("HistoryValidation", "deleting message \(id) in \(id.peerId)")
+                                    }
                                 }
                             }
                         }
@@ -1167,8 +1190,10 @@ private func validateReplyThreadBatch(postbox: Postbox, network: Network, transa
                 
                     for id in removedMessageIds {
                         if !validMessageIds.contains(id) {
-                            _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: [id])
-                            Logger.shared.log("HistoryValidation", "deleting thread message \(id) in \(id.peerId)")
+                            if !nagramShouldKeepValidatedMessage(id, transaction: transaction) { // MARK: NAGRAM // MARK: NEXTGRAM
+                                _internal_deleteMessages(transaction: transaction, mediaBox: postbox.mediaBox, ids: [id])
+                                Logger.shared.log("HistoryValidation", "deleting thread message \(id) in \(id.peerId)")
+                            }
                         }
                     }
                 }

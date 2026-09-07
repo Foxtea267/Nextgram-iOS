@@ -12,6 +12,8 @@ import OverlayStatusController
 import AccountContext
 import NagramSettingsSignal
 import NagramSettings
+import NagramChatListFilters // MARK: NAGRAM
+import NagramStrings // MARK: NAGRAM
 import AlertUI
 import PresentationDataUtils
 import UndoUI
@@ -805,7 +807,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             nagramBottomBarSettingsSignal(),
             nagramBoolSignal("nagram.chatListFolderTabsCompact", defaultValue: false),
             nagramStringSignal("nagram.chatListFolderTabDisplayMode", defaultValue: NagramChatListFolderTabDisplayMode.text.rawValue),
-            nagramBoolSignal("nagram.hideAllChatsFolder", defaultValue: false)
+            nagramBoolSignal("nagram.hideAllChatsFolder", defaultValue: false),
+            nagramBoolSignal("nagram.chatListQuickFiltersEnabled", defaultValue: false)
         )
         |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
             guard let self else {
@@ -4084,7 +4087,17 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             let isPremium = peerView.peers[peerView.peerId]?.isPremium
             strongSelf.isPremium = isPremium ?? false
             
-            let (_, items) = countAndFilterItems
+            var items = countAndFilterItems.1
+            // MARK: NAGRAM
+            // MARK: NEXTGRAM — Virtual filters are local-only and never synchronized as Telegram folders.
+            let quickFilters: [ChatListFilter]
+            if NagramSettings.shared.chatListQuickFiltersEnabled {
+                let languageCode = strongSelf.context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode
+                quickFilters = nagramQuickChatListFilters(title: { ngI18n($0, languageCode) })
+                items.append(contentsOf: quickFilters.map { ($0, 0, false) })
+            } else {
+                quickFilters = []
+            }
             var filterItems: [ChatListFilterTabEntry] = []
             var nagramFolderTabIcons: [ChatListFilterTabEntryId: String] = [:] // MARK: NAGRAM
             // MARK: NAGRAM — Keep All Chats available when it is the only folder.
@@ -4162,7 +4175,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     selectedEntryId = resolvedItems.first?.id ?? .all // MARK: NAGRAM
                 }
             }
-            let filtersLimit = isPremium == false ? limits.maxFoldersCount : nil
+            let filtersLimit = isPremium == false ? limits.maxFoldersCount + Int32(quickFilters.count) : nil
             strongSelf.nagramFolderTabIcons = nagramFolderTabIcons // MARK: NAGRAM
             strongSelf.tabContainerData = (resolvedItems, false, filtersLimit)
             var availableFilters: [ChatListContainerNodeFilter] = []
@@ -4231,6 +4244,22 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     }
                 }
             }
+        }
+
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM — Local quick filters are absent from currentChatListFilters(), so switch them directly.
+        if case let .filter(filterId) = id,
+           NagramQuickChatFilter(rawValue: filterId) != nil,
+           let localFilter = self.chatListDisplayNode.mainContainerNode.availableFilters.first(where: { $0.id == id })?.filter {
+            if self.chatListDisplayNode.mainContainerNode.currentItemNode.chatListFilter?.id == localFilter.id {
+                self.scrollToTop?()
+            } else {
+                if self.chatListDisplayNode.inlineStackContainerNode != nil {
+                    self.setInlineChatList(location: nil)
+                }
+                self.chatListDisplayNode.mainContainerNode.switchToFilter(id: id)
+            }
+            return
         }
         
         let _ = (self.context.engine.peers.currentChatListFilters()

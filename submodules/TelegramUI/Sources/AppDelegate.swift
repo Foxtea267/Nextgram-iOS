@@ -951,36 +951,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             self.window?.rootViewController?.dismiss(animated: true, completion: nil)
         }, getAvailableAlternateIcons: {
             if #available(iOS 10.3, *) {
-                var icons = [
-                    // MARK: NAGRAM
-                    PresentationAppIcon(name: "Nagram", imageName: "Nagram", isDefault: true),
-                    PresentationAppIcon(name: "NagramBlock", imageName: "NagramBlock"),
-                    PresentationAppIcon(name: "NagramBlockBlack", imageName: "NagramBlockBlack"),
-                    PresentationAppIcon(name: "NagramBlockBlue", imageName: "NagramBlockBlue"),
-                    PresentationAppIcon(name: "NagramBlockNiello", imageName: "NagramBlockNiello"),
-                    PresentationAppIcon(name: "NagramBlockPurple", imageName: "NagramBlockPurple"),
-                    PresentationAppIcon(name: "NagramClassic", imageName: "NagramClassic"),
-                    PresentationAppIcon(name: "NagramColorful", imageName: "NagramColorful"),
-                    PresentationAppIcon(name: "NagramCyan", imageName: "NagramCyan"),
-                    PresentationAppIcon(name: "NagramBlack", imageName: "NagramBlack"),
-                    PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon"),
-                    PresentationAppIcon(name: "New2", imageName: "New2"),
-                    PresentationAppIcon(name: "New1", imageName: "New1"),
-                    PresentationAppIcon(name: "BlackIcon", imageName: "BlackIcon"),
-                    PresentationAppIcon(name: "BlueClassicIcon", imageName: "BlueClassicIcon"),
-                    PresentationAppIcon(name: "BlackClassicIcon", imageName: "BlackClassicIcon"),
-                    PresentationAppIcon(name: "BlueFilledIcon", imageName: "BlueFilledIcon"),
-                    PresentationAppIcon(name: "BlackFilledIcon", imageName: "BlackFilledIcon")
+                // MARK: NAGRAM — Nextgram ships only its independent brand icon.
+                return [
+                    PresentationAppIcon(name: "Nextgram", imageName: "NextgramPreview", isDefault: true)
                 ]
-                if buildConfig.isInternalBuild {
-                    icons.append(PresentationAppIcon(name: "WhiteFilledIcon", imageName: "WhiteFilledIcon"))
-                }
-                
-                icons.append(PresentationAppIcon(name: "Premium", imageName: "Premium", isPremium: true))
-                icons.append(PresentationAppIcon(name: "PremiumTurbo", imageName: "PremiumTurbo", isPremium: true))
-                icons.append(PresentationAppIcon(name: "PremiumBlack", imageName: "PremiumBlack", isPremium: true))
-                
-                return icons
             } else {
                 return []
             }

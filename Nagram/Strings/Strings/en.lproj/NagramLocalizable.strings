@@ -1,4 +1,4 @@
-"Nagram.Title" = "Nagram";
+"Nagram.Title" = "Nextgram";
 "Nagram.DeepLink.UnsupportedPlatform" = "This setting is not available on this platform.";
 "Nagram.Tab.General" = "General";
 "Nagram.Tab.Chat" = "Messages";
@@ -107,7 +107,7 @@
 "Nagram.DisableFiltering.Footer" = "Disable Filtering changes the Telegram account setting. Auto-Show Restricted Media only skips the confirmation prompt; it does not change Telegram settings or bypass age verification.";
 "Nagram.SkipSensitiveContentWarning" = "Auto-Show Restricted Media";
 "Nagram.ICloudSync" = "iCloud Sync";
-"Nagram.ICloudSync.Footer" = "When enabled, Nagram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
+"Nagram.ICloudSync.Footer" = "When enabled, Nextgram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
 "Nagram.ForceCopy" = "Bypass Content Protection";
 "Nagram.ForceCopy.Footer" = "Allow copying message text, saving photos or videos, and creating stickers from photos in chats with content protection enabled. Paid content remains protected.";
 "Nagram.MessageMenu" = "Message Menu";
@@ -359,3 +359,26 @@
 "Nagram.RecentStickerLimit.120" = "120";
 "Nagram.RecentStickerLimit.150" = "150";
 "Nagram.RecentStickerLimit.200" = "200";
+
+"Nagram.ChatListQuickFilters" = "Quick Chat Filters";
+"Nagram.ChatListUnreadFirst" = "Unread Chats First";
+"Nagram.ChatListQuickFilter.Contacts" = "Contacts";
+"Nagram.ChatListQuickFilter.Private" = "Private";
+"Nagram.ChatListQuickFilter.Groups" = "Groups";
+"Nagram.ChatListQuickFilter.Channels" = "Channels";
+"Nagram.ChatListQuickFilter.Unread" = "Unread";
+"Nagram.Section.MessagePreservation" = "Message Preservation";
+"Nagram.Section.MessagePreservation.Footer" = "Preserved messages remain only on this device. Media still depends on the local cache.";
+"Nagram.AntiRecall" = "Anti-Recall";
+"Nagram.PreserveBotMessages" = "Preserve Bot Messages";
+"Nagram.SaveMessageEditHistory" = "Save Message Edit History";
+"Nagram.GhostMode" = "Ghost Mode";
+"Nagram.Section.GhostMode" = "Ghost Mode";
+"Nagram.GhostMode.Footer" = "Ghost Mode enables all three controls below. Telegram may still infer activity from actions such as sending messages or joining calls.";
+"Nagram.DisableReadReceipts" = "Hide Read Status";
+"Nagram.DisableTypingStatus" = "Hide Typing Status";
+"Nagram.DisableOnlineStatus" = "Hide Online Status";
+"Nagram.MessageMenu.Item.viewEditHistory" = "View Edit History";
+"Nagram.MessageEditHistory.Title" = "Edit History";
+"Nagram.MessageEditHistory.Current" = "Current";
+"Nagram.MessageDeletedRetained" = "Deleted";

@@ -1,4 +1,5 @@
 import Foundation
+import NagramSettings
 import TelegramApi
 import Postbox
 import SwiftSignalKit
@@ -6,6 +7,12 @@ import MtProtoKit
 
 
 func _internal_markAllChatsAsRead(postbox: Postbox, network: Network, stateManager: AccountStateManager) -> Signal<Void, NoError> {
+    // MARK: NAGRAM
+    // MARK: NEXTGRAM
+    guard !NagramSettings.shared.suppressReadReceipts else {
+        return .complete()
+    }
+
     return network.request(Api.functions.messages.getDialogUnreadMarks(flags: 0, parentPeer: nil))
     |> map(Optional.init)
     |> `catch` { _ -> Signal<[Api.DialogPeer]?, NoError> in

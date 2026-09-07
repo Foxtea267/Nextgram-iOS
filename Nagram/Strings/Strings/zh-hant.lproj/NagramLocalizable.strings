@@ -1,4 +1,4 @@
-"Nagram.Title" = "Nagram";
+"Nagram.Title" = "Nextgram";
 "Nagram.DeepLink.UnsupportedPlatform" = "此設定項目不適用於目前的平台。";
 "Nagram.Tab.General" = "一般";
 "Nagram.Tab.Chat" = "訊息";
@@ -107,7 +107,7 @@
 "Nagram.DisableFiltering.Footer" = "「關閉敏感內容過濾」會修改 Telegram 同步的帳號設定；「自動顯示受限媒體」只會略過檢視前的確認提示，不會修改 Telegram 設定，也不會繞過年齡驗證。";
 "Nagram.SkipSensitiveContentWarning" = "自動顯示受限媒體";
 "Nagram.ICloudSync" = "iCloud 同步";
-"Nagram.ICloudSync.Footer" = "開啟後，Nagram 設定和部分 Telegram 原生本機設定會透過 iCloud 在同一 Apple ID 的裝置間同步。關閉不會刪除雲端既有設定。";
+"Nagram.ICloudSync.Footer" = "開啟後，Nextgram 設定和部分 Telegram 原生本機設定會透過 iCloud 在同一 Apple ID 的裝置間同步。關閉不會刪除雲端既有設定。";
 "Nagram.ForceCopy" = "解除內容保護";
 "Nagram.ForceCopy.Footer" = "開啟後，可在設定了內容保護（禁止複製/轉發）的對話中複製訊息文字、儲存圖片或影片，並使用圖片建立貼圖。付費內容仍受保護。";
 "Nagram.MessageMenu" = "訊息選單管理";
@@ -359,3 +359,26 @@
 "Nagram.RecentStickerLimit.120" = "120";
 "Nagram.RecentStickerLimit.150" = "150";
 "Nagram.RecentStickerLimit.200" = "200";
+
+"Nagram.ChatListQuickFilters" = "聊天快速篩選";
+"Nagram.ChatListUnreadFirst" = "未讀對話優先";
+"Nagram.ChatListQuickFilter.Contacts" = "聯絡人";
+"Nagram.ChatListQuickFilter.Private" = "私聊";
+"Nagram.ChatListQuickFilter.Groups" = "群組";
+"Nagram.ChatListQuickFilter.Channels" = "頻道";
+"Nagram.ChatListQuickFilter.Unread" = "未讀";
+"Nagram.Section.MessagePreservation" = "訊息保留";
+"Nagram.Section.MessagePreservation.Footer" = "保留內容只存在於本機；媒體能否繼續檢視仍取決於本機快取。";
+"Nagram.AntiRecall" = "防撤回";
+"Nagram.PreserveBotMessages" = "保留機器人訊息";
+"Nagram.SaveMessageEditHistory" = "儲存訊息編輯歷史";
+"Nagram.GhostMode" = "幽靈模式";
+"Nagram.Section.GhostMode" = "幽靈模式";
+"Nagram.GhostMode.Footer" = "幽靈模式會同時啟用下列三項控制；傳送訊息、加入通話等主動操作仍可能讓 Telegram 推斷你的活動。";
+"Nagram.DisableReadReceipts" = "隱藏已讀狀態";
+"Nagram.DisableTypingStatus" = "隱藏輸入狀態";
+"Nagram.DisableOnlineStatus" = "隱藏上線狀態";
+"Nagram.MessageMenu.Item.viewEditHistory" = "檢視編輯歷史";
+"Nagram.MessageEditHistory.Title" = "訊息編輯歷史";
+"Nagram.MessageEditHistory.Current" = "目前版本";
+"Nagram.MessageDeletedRetained" = "已撤回";

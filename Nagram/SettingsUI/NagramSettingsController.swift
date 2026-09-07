@@ -400,6 +400,8 @@ private func nagramGroups(
             .choice(titleKey: "Nagram.ChatListFolderTabDisplayMode", prefix: "Nagram.ChatListFolderTabDisplayMode", options: ["text", "icon", "both"], current: { NagramSettings.shared.chatListFolderTabDisplayModeValue.rawValue }, set: { NagramSettings.shared.chatListFolderTabDisplayMode = $0 }),
             .toggle(titleKey: "Nagram.ChatListFolderTabsCompact", get: { NagramSettings.shared.chatListFolderTabsCompact }, set: { NagramSettings.shared.chatListFolderTabsCompact = $0 }),
             .toggle(titleKey: "Nagram.HideAllChatsFolder", get: { NagramSettings.shared.hideAllChatsFolder }, set: { NagramSettings.shared.hideAllChatsFolder = $0 }),
+            .toggle(titleKey: "Nagram.ChatListQuickFilters", get: { NagramSettings.shared.chatListQuickFiltersEnabled }, set: { NagramSettings.shared.chatListQuickFiltersEnabled = $0 }),
+            .toggle(titleKey: "Nagram.ChatListUnreadFirst", get: { NagramSettings.shared.chatListUnreadFirst }, set: { NagramSettings.shared.chatListUnreadFirst = $0 }),
             .toggle(titleKey: "Nagram.ShowFoldersInShareSheet", get: { NagramSettings.shared.showFoldersInShareSheet }, set: { NagramSettings.shared.showFoldersInShareSheet = $0 }),
             .toggle(titleKey: "Nagram.HideSavedAndArchivedMessagesInList", get: { NagramSettings.shared.hideSavedAndArchivedMessagesInList }, set: { NagramSettings.shared.hideSavedAndArchivedMessagesInList = $0 }),
             .choice(titleKey: "Nagram.ChatListMessagePreviewStyle", prefix: "Nagram.ChatListMessagePreviewStyle", options: ["three", "two"], current: { NagramSettings.shared.chatListMessagePreviewStyleMode.rawValue }, set: { value in
@@ -435,6 +437,11 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.HideChannelBottomButton", get: { NagramSettings.shared.hideChannelBottomButton }, set: { NagramSettings.shared.hideChannelBottomButton = $0 }),
             .toggle(titleKey: "Nagram.HideSponsoredMessages", get: { NagramSettings.shared.hideSponsoredMessages }, set: { NagramSettings.shared.hideSponsoredMessages = $0 }),
             .toggle(titleKey: "Nagram.HidePrivateChatActivities", get: { NagramSettings.shared.hidePrivateChatActivities }, set: { NagramSettings.shared.hidePrivateChatActivities = $0 }),
+        ]),
+        NagramGroup(tab: .chat, headerKey: "Nagram.Section.MessagePreservation", footerKey: "Nagram.Section.MessagePreservation.Footer", rows: [
+            .toggle(titleKey: "Nagram.AntiRecall", get: { NagramSettings.shared.antiRecallEnabled }, set: { NagramSettings.shared.antiRecallEnabled = $0 }),
+            .toggle(titleKey: "Nagram.PreserveBotMessages", get: { NagramSettings.shared.preserveBotMessages }, set: { NagramSettings.shared.preserveBotMessages = $0 }),
+            .toggle(titleKey: "Nagram.SaveMessageEditHistory", get: { NagramSettings.shared.saveMessageEditHistory }, set: { NagramSettings.shared.saveMessageEditHistory = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.MessageList", footerKey: "Nagram.StayAtLatestMessageAfterRefresh.Footer", rows: [
             .toggle(titleKey: "Nagram.StayAtLatestMessageAfterRefresh", get: { NagramSettings.shared.stayAtLatestMessageAfterRefresh }, set: { NagramSettings.shared.stayAtLatestMessageAfterRefresh = $0 }),
@@ -514,6 +521,12 @@ private func nagramGroups(
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Privacy", footerKey: "Nagram.DisableFiltering.Footer", rows: [
             .toggleWithEnabled(titleKey: "Nagram.DisableFiltering", get: sensitiveContentEnabled, set: setSensitiveContentEnabled, enabled: sensitiveContentCanAdjust, enableInteractiveChanges: false),
             .toggle(titleKey: "Nagram.SkipSensitiveContentWarning", get: { NagramSettings.shared.skipSensitiveContentWarning }, set: { NagramSettings.shared.skipSensitiveContentWarning = $0 }),
+        ]),
+        NagramGroup(tab: .other, headerKey: "Nagram.Section.GhostMode", footerKey: "Nagram.GhostMode.Footer", rows: [
+            .toggle(titleKey: "Nagram.GhostMode", get: { NagramSettings.shared.ghostModeEnabled }, set: { NagramSettings.shared.ghostModeEnabled = $0 }),
+            .toggle(titleKey: "Nagram.DisableReadReceipts", get: { NagramSettings.shared.disableReadReceipts }, set: { NagramSettings.shared.disableReadReceipts = $0 }),
+            .toggle(titleKey: "Nagram.DisableTypingStatus", get: { NagramSettings.shared.disableTypingStatus }, set: { NagramSettings.shared.disableTypingStatus = $0 }),
+            .toggle(titleKey: "Nagram.DisableOnlineStatus", get: { NagramSettings.shared.disableOnlineStatus }, set: { NagramSettings.shared.disableOnlineStatus = $0 }),
         ]),
         NagramGroup(tab: .other, headerKey: nil, footerKey: "Nagram.ForceCopy.Footer", rows: [
             .toggle(titleKey: "Nagram.ForceCopy", get: { NagramSettings.shared.forceCopyEnabled }, set: { NagramSettings.shared.forceCopyEnabled = $0 }),

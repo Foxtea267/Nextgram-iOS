@@ -402,25 +402,25 @@
 
 // Tour
 // MARK: NAGRAM
-"Tour.Title1" = "Nagram";
+"Tour.Title1" = "Nextgram";
 "Tour.Text1" = "A fast messaging client with **more ways to customize** your daily chats.";
 
 "Tour.Title2" = "Fast";
-"Tour.Text2" = "**Nagram** keeps conversations responsive, familiar and focused.";
+"Tour.Text2" = "**Nextgram** keeps conversations responsive, familiar and focused.";
 
 "Tour.Title3" = "Powerful";
-"Tour.Text3" = "**Nagram** supports rich chats, media, files, groups and channels.";
+"Tour.Text3" = "**Nextgram** supports rich chats, media, files, groups and channels.";
 
 "Tour.Title4" = "Privacy";
-"Tour.Text4" = "**Nagram** keeps sensitive permissions tied to clear user actions.";
+"Tour.Text4" = "**Nextgram** keeps sensitive permissions tied to clear user actions.";
 
 "Tour.Title5" = "Multi-Device";
-"Tour.Text5" = "**Nagram** lets you access your chats from multiple devices.";
+"Tour.Text5" = "**Nextgram** lets you access your chats from multiple devices.";
 
 "Tour.Title6" = "Flexible";
-"Tour.Text6" = "**Nagram** adds local settings for gestures, menus and interface details.";
+"Tour.Text6" = "**Nextgram** adds local settings for gestures, menus and interface details.";
 
-"Tour.StartButton" = "Start with Nagram";
+"Tour.StartButton" = "Start with Nextgram";
 
 // Login
 "Login.PhoneAndCountryHelp" = "Please confirm your country code\nand enter your phone number.";
@@ -493,9 +493,9 @@
 "Contacts.TabTitle" = "Contacts";
 "Contacts.Title" = "Contacts";
 "Contacts.FailedToSendInvitesMessage" = "An error occurred.";
-"Contacts.AccessDeniedError" = "Nagram does not have access to your contacts";
-"Contacts.AccessDeniedHelpLandscape" = "Please go to your %@ Settings — Privacy — Contacts.\nThen select ON for Nagram.";
-"Contacts.AccessDeniedHelpPortrait" = "Please go to your %@ Settings — Privacy — Contacts. Then select ON for Nagram.";
+"Contacts.AccessDeniedError" = "Nextgram does not have access to your contacts";
+"Contacts.AccessDeniedHelpLandscape" = "Please go to your %@ Settings — Privacy — Contacts.\nThen select ON for Nextgram.";
+"Contacts.AccessDeniedHelpPortrait" = "Please go to your %@ Settings — Privacy — Contacts. Then select ON for Nextgram.";
 "Contacts.AccessDeniedHelpON" = "ON";
 "Contacts.InviteToTelegram" = "Invite to Telegram";
 "Contacts.InviteFriends" = "Invite Friends";
@@ -1237,16 +1237,16 @@
 "PasscodeSettings.EncryptData" = "Encrypt Local Database";
 "PasscodeSettings.EncryptDataHelp" = "Experimental feature, use with caution. Encrypt your local Telegram data, using a derivative of your passcode as the key.";
 
-"EnterPasscode.EnterTitle" = "Enter your Nagram Passcode";
+"EnterPasscode.EnterTitle" = "Enter your Nextgram Passcode";
 "EnterPasscode.ChangeTitle" = "Change Passcode";
-"EnterPasscode.EnterPasscode" = "Enter your Nagram Passcode";
+"EnterPasscode.EnterPasscode" = "Enter your Nextgram Passcode";
 "EnterPasscode.EnterNewPasscodeNew" = "Enter a passcode";
 "EnterPasscode.EnterNewPasscodeChange" = "Enter your new passcode";
 "EnterPasscode.RepeatNewPasscode" = "Re-enter your new passcode";
 "EnterPasscode.EnterCurrentPasscode" = "Enter your current passcode";
-"EnterPasscode.TouchId" = "Unlock Nagram";
+"EnterPasscode.TouchId" = "Unlock Nextgram";
 
-"DialogList.PasscodeLockHelp" = "Tap to lock Nagram";
+"DialogList.PasscodeLockHelp" = "Tap to lock Nextgram";
 
 "PasscodeSettings.AutoLock" = "Auto-Lock";
 "PasscodeSettings.AutoLock.Disabled" = "Disabled";
@@ -1265,32 +1265,32 @@
 
 "AccessDenied.Title" = "Please Allow Access";
 
-"AccessDenied.Contacts" = "Nagram can use your existing contact list to help you find people you know.\n\nPlease go to Settings > Privacy > Contacts and set Nagram to ON.";
+"AccessDenied.Contacts" = "Nextgram can use your existing contact list to help you find people you know.\n\nPlease go to Settings > Privacy > Contacts and set Nextgram to ON.";
 
-"AccessDenied.VoiceMicrophone" = "Nagram needs access to your microphone to send voice messages.\n\nPlease go to Settings > Privacy > Microphone and set Nagram to ON.";
+"AccessDenied.VoiceMicrophone" = "Nextgram needs access to your microphone to send voice messages.\n\nPlease go to Settings > Privacy > Microphone and set Nextgram to ON.";
 
-"AccessDenied.VideoMicrophone" = "Nagram needs access to your microphone to record sound in videos.\n\nPlease go to Settings > Privacy > Microphone and set Nagram to ON.";
+"AccessDenied.VideoMicrophone" = "Nextgram needs access to your microphone to record sound in videos.\n\nPlease go to Settings > Privacy > Microphone and set Nextgram to ON.";
 
-"AccessDenied.MicrophoneRestricted" = "Microphone access is restricted for Nagram.\n\nPlease go to Settings > General > Restrictions > Microphone and set Nagram to ON.";
+"AccessDenied.MicrophoneRestricted" = "Microphone access is restricted for Nextgram.\n\nPlease go to Settings > General > Restrictions > Microphone and set Nextgram to ON.";
 
 
-"AccessDenied.Camera" = "Nagram needs access to your camera to take photos and videos.\n\nPlease go to Settings > Privacy > Camera and set Nagram to ON.";
+"AccessDenied.Camera" = "Nextgram needs access to your camera to take photos and videos.\n\nPlease go to Settings > Privacy > Camera and set Nextgram to ON.";
 
-"AccessDenied.CameraRestricted" = "Camera access is restricted for Nagram.\n\nPlease go to Settings > General > Restrictions > Camera and set Nagram to ON.";
+"AccessDenied.CameraRestricted" = "Camera access is restricted for Nextgram.\n\nPlease go to Settings > General > Restrictions > Camera and set Nextgram to ON.";
 
 "AccessDenied.CameraDisabled" = "Camera access is globally restricted on your phone.\n\nPlease go to Settings > General > Restrictions and set Camera to ON";
 
-"AccessDenied.PhotosAndVideos" = "Nagram needs access to your photo library to send photos and videos.\n\nPlease go to Settings > Privacy > Photos and set Nagram to ON.";
+"AccessDenied.PhotosAndVideos" = "Nextgram needs access to your photo library to send photos and videos.\n\nPlease go to Settings > Privacy > Photos and set Nextgram to ON.";
 
-"AccessDenied.SaveMedia" = "Nagram needs access to your photo library to save photos and videos.\n\nPlease go to Settings > Privacy > Photos and set Nagram to ON.";
+"AccessDenied.SaveMedia" = "Nextgram needs access to your photo library to save photos and videos.\n\nPlease go to Settings > Privacy > Photos and set Nextgram to ON.";
 
-"AccessDenied.PhotosRestricted" = "Photo access is restricted for Nagram.\n\nPlease go to Settings > General > Restrictions > Photos and set Nagram to ON.";
+"AccessDenied.PhotosRestricted" = "Photo access is restricted for Nextgram.\n\nPlease go to Settings > General > Restrictions > Photos and set Nextgram to ON.";
 
-"AccessDenied.LocationDenied" = "Nagram needs access to your location so you can share it with your contacts.\n\nPlease go to Settings > Privacy > Location Services and set Nagram to ON.";
+"AccessDenied.LocationDenied" = "Nextgram needs access to your location so you can share it with your contacts.\n\nPlease go to Settings > Privacy > Location Services and set Nextgram to ON.";
 
-"AccessDenied.LocationDisabled" = "Nagram needs access to your location so you can share it with your contacts.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
+"AccessDenied.LocationDisabled" = "Nextgram needs access to your location so you can share it with your contacts.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
 
-"AccessDenied.LocationTracking" = "Nagram needs access to your location to show you on the map.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
+"AccessDenied.LocationTracking" = "Nextgram needs access to your location to show you on the map.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
 
 "AccessDenied.Settings" = "Settings";
 
@@ -1464,7 +1464,7 @@
 
 "ChangePhone.ErrorOccupied" = "The number %@ is already connected to a Telegram account. Please delete that account before migrating to the new number.";
 
-"AccessDenied.LocationTracking" = "Nagram needs access to your location to show you on the map.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
+"AccessDenied.LocationTracking" = "Nextgram needs access to your location to show you on the map.\n\nPlease go to Settings > Privacy > Location Services and set it to ON.";
 
 "PrivacySettings.AuthSessions" = "Active Sessions";
 "AuthSessions.Title" = "Active Sessions";
@@ -1822,9 +1822,9 @@
 "Watch.Stickers.StickerPacks" = "Sticker Sets";
 
 "Watch.Location.Current" = "Current Location";
-"Watch.Location.Access" = "Allow Nagram to access location on your phone";
+"Watch.Location.Access" = "Allow Nextgram to access location on your phone";
 
-"Watch.AuthRequired" = "Log in to Nagram on your phone to get started";
+"Watch.AuthRequired" = "Log in to Nextgram on your phone to get started";
 
 "Watch.NoConnection" = "No Connection";
 "Watch.ConnectionDescription" = "Your Watch needs to be connected for the app to work";
@@ -2260,9 +2260,9 @@ Unused sets are archived when you add more.";
 
 "CloudStorage.Title" = "Cloud Storage";
 
-"Widget.AuthRequired" = "Log in to Nagram";
+"Widget.AuthRequired" = "Log in to Nextgram";
 "Widget.NoUsers" = "Start messaging to see your friends here";
-"Widget.GalleryTitle" = "Nagram";
+"Widget.GalleryTitle" = "Nextgram";
 "Widget.GalleryDescription" = "Select chats";
 
 "ShareMenu.CopyShareLinkGame" = "Copy link to game";
@@ -2287,11 +2287,11 @@ Unused sets are archived when you add more.";
 "Conversation.JumpToDate" = "Jump To Date";
 "Conversation.AddToReadingList" = "Add to Reading List";
 
-"AccessDenied.CallMicrophone" = "Nagram needs access to your microphone for voice calls.\n\nPlease go to Settings > Privacy > Microphone and set Nagram to ON.";
+"AccessDenied.CallMicrophone" = "Nextgram needs access to your microphone for voice calls.\n\nPlease go to Settings > Privacy > Microphone and set Nextgram to ON.";
 
 "Call.EncryptionKey.Title" = "Encryption Key";
 
-"Application.Name" = "Nagram";
+"Application.Name" = "Nextgram";
 "DialogList.Pin" = "Pin";
 "DialogList.Unpin" = "Unpin";
 "DialogList.PinLimitError" = "Sorry, you can pin no more than %@ chats to the top.";
@@ -2610,8 +2610,8 @@ Unused sets are archived when you add more.";
 "Conversation.HoldForAudio" = "Hold to record audio. Tap to switch to video.";
 "Conversation.HoldForVideo" = "Hold to record video. Tap to switch to audio.";
 
-"UserInfo.TelegramCall" = "Nagram Call";
-"UserInfo.TelegramVideoCall" = "Nagram Video Call";
+"UserInfo.TelegramCall" = "Nextgram Call";
+"UserInfo.TelegramVideoCall" = "Nextgram Video Call";
 "UserInfo.PhoneCall" = "Phone Call";
 
 "SharedMedia.CategoryMedia" = "Media";
@@ -2619,8 +2619,8 @@ Unused sets are archived when you add more.";
 "SharedMedia.CategoryLinks" = "Links";
 "SharedMedia.CategoryOther" = "Audio";
 
-"AccessDenied.VideoMessageCamera" = "Nagram needs access to your camera to send video messages.\n\nPlease go to Settings > Privacy > Camera and set Nagram to ON.";
-"AccessDenied.VideoMessageMicrophone" = "Nagram needs access to your microphone to send video messages.\n\nPlease go to Settings > Privacy > Microphone and set Nagram to ON.";
+"AccessDenied.VideoMessageCamera" = "Nextgram needs access to your camera to send video messages.\n\nPlease go to Settings > Privacy > Camera and set Nextgram to ON.";
+"AccessDenied.VideoMessageMicrophone" = "Nextgram needs access to your microphone to send video messages.\n\nPlease go to Settings > Privacy > Microphone and set Nextgram to ON.";
 
 "ChatSettings.AutomaticVideoMessageDownload" = "AUTOMATIC VIDEO MESSAGE DOWNLOAD";
 
@@ -3159,16 +3159,16 @@ Unused sets are archived when you add more.";
 "Privacy.PaymentsClearInfoDoneHelp" = "Payment & shipping info cleared.";
 
 // MARK: NAGRAM
-"InfoPlist.NSContactsUsageDescription" = "Nagram can sync your contacts so you can find people you know across your devices.";
-"InfoPlist.NSLocationWhenInUseUsageDescription" = "When you choose to send your location, Nagram needs access to show and share it on a map.";
+"InfoPlist.NSContactsUsageDescription" = "Nextgram can sync your contacts so you can find people you know across your devices.";
+"InfoPlist.NSLocationWhenInUseUsageDescription" = "When you choose to send your location, Nextgram needs access to show and share it on a map.";
 "InfoPlist.NSCameraUsageDescription" = "We need this so that you can take and share photos and videos, as well as make video calls.";
 "InfoPlist.NSPhotoLibraryUsageDescription" = "We need this so that you can share photos and videos from your photo library.";
 "InfoPlist.NSPhotoLibraryAddUsageDescription" = "We need this so that you can save photos and videos to your photo library.";
 "InfoPlist.NSMicrophoneUsageDescription" = "We need this so that you can record and share voice messages and videos with sound.";
 "InfoPlist.NSSiriUsageDescription" = "You can use Siri to send messages.";
-"InfoPlist.NSLocationAlwaysAndWhenInUseUsageDescription" = "When you choose to share your live location, Nagram needs background location access to keep it updated.";
-"InfoPlist.NSLocationAlwaysUsageDescription" = "When you choose to share your live location, Nagram needs background location access to keep it updated. Apple Watch location sharing also requires this access.";
-"InfoPlist.NSLocationWhenInUseUsageDescription" = "When you choose to send your location, Nagram needs access to show and share it on a map.";
+"InfoPlist.NSLocationAlwaysAndWhenInUseUsageDescription" = "When you choose to share your live location, Nextgram needs background location access to keep it updated.";
+"InfoPlist.NSLocationAlwaysUsageDescription" = "When you choose to share your live location, Nextgram needs background location access to keep it updated. Apple Watch location sharing also requires this access.";
+"InfoPlist.NSLocationWhenInUseUsageDescription" = "When you choose to send your location, Nextgram needs access to show and share it on a map.";
 "InfoPlist.NSFaceIDUsageDescription" = "You can use Face ID to unlock the app.";
 
 "Privacy.Calls.P2PNever" = "Never";
@@ -3783,8 +3783,8 @@ Unused sets are archived when you add more.";
 
 "SocksProxySetup.PasteFromClipboard" = "Paste From Clipboard";
 
-"Share.AuthTitle" = "Log in to Nagram";
-"Share.AuthDescription" = "Open Nagram and log in to share.";
+"Share.AuthTitle" = "Log in to Nextgram";
+"Share.AuthDescription" = "Open Nextgram and log in to share.";
 
 "Notifications.DisplayNamesOnLockScreen" = "Names on lock-screen";
 "Notifications.DisplayNamesOnLockScreenInfoWithLink" = "Display names in notifications when the device is locked. To disable, make sure that \"Show Previews\" is also set to \"When Unlocked\" or \"Never\" in [iOS Settings]";
@@ -4135,7 +4135,7 @@ Unused sets are archived when you add more.";
 "Undo.DeletedChannel" = "Deleted channel";
 "Undo.DeletedGroup" = "Deleted group";
 
-"AccessDenied.Wallpapers" = "Nagram needs access to your photo library to set a custom chat background.\n\nPlease go to Settings > Privacy > Photos and set Nagram to ON.";
+"AccessDenied.Wallpapers" = "Nextgram needs access to your photo library to set a custom chat background.\n\nPlease go to Settings > Privacy > Photos and set Nextgram to ON.";
 
 "Conversation.ChatBackground" = "Chat Background";
 "Conversation.ViewBackground" = "VIEW BACKGROUND";
@@ -5698,7 +5698,7 @@ Sorry for the inconvenience.";
 "Call.Audio" = "audio";
 "Call.AudioRouteMute" = "Mute Yourself";
 
-"AccessDenied.VideoCallCamera" = "Nagram needs access to your camera to make video calls.\n\nPlease go to Settings > Privacy > Camera and set Nagram to ON.";
+"AccessDenied.VideoCallCamera" = "Nextgram needs access to your camera to make video calls.\n\nPlease go to Settings > Privacy > Camera and set Nextgram to ON.";
 
 "Call.AccountIsLoggedOnCurrentDevice" = "Sorry, you can't call %@ because that account is logged in to Telegram on the device you're using for the call.";
 
@@ -6196,7 +6196,7 @@ Sorry for the inconvenience.";
 "Message.ImportedDateFormat" = "%1$@, %2$@ Imported %3$@";
 
 "ChatImportActivity.Title" = "Importing Chat";
-"ChatImportActivity.OpenApp" = "Open Nagram";
+"ChatImportActivity.OpenApp" = "Open Nextgram";
 "ChatImportActivity.Retry" = "Retry";
 "ChatImportActivity.InProgress" = "Please keep this window open\nuntil the import is completed.";
 "ChatImportActivity.ErrorNotAdmin" = "You need to be an admin in the group to import messages.";
@@ -6348,7 +6348,7 @@ Sorry for the inconvenience.";
 "Widget.UpdatedAt" = "Updated {}";
 
 "Intents.ErrorLockedTitle" = "Locked";
-"Intents.ErrorLockedText" = "Open Nagram and enter passcode to edit widget.";
+"Intents.ErrorLockedText" = "Open Nextgram and enter passcode to edit widget.";
 
 "Conversation.GigagroupDescription" = "Only admins can send messages in this group.";
 
@@ -7324,8 +7324,8 @@ Sorry for the inconvenience.";
 "Contacts.QrCode.MyCode" = "My QR Code";
 "Contacts.QrCode.NoCodeFound" = "No valid QR code found in the image. Please try again.";
 
-"AccessDenied.QrCode" = "Nagram needs access to your photo library to scan QR codes.\n\nOpen your device's Settings > Privacy > Photos and set Nagram to ON.";
-"AccessDenied.QrCamera" = "Nagram needs access to your camera to scan QR codes.\n\nOpen your device's Settings > Privacy > Camera and set Nagram to ON.";
+"AccessDenied.QrCode" = "Nextgram needs access to your photo library to scan QR codes.\n\nOpen your device's Settings > Privacy > Photos and set Nextgram to ON.";
+"AccessDenied.QrCamera" = "Nextgram needs access to your camera to scan QR codes.\n\nOpen your device's Settings > Privacy > Camera and set Nextgram to ON.";
 
 "Share.ShareToInstagramStories" = "Share to Instagram Stories";
 
@@ -12674,7 +12674,7 @@ Sorry for the inconvenience.";
 
 "WebBrowser.Done" = "Done";
 
-"AccessDenied.LocationWeather" = "Nagram needs access to your location so that you can add the weather widget to your stories.\n\nPlease go to Settings > Privacy > Location Services and set Nagram to ON.";
+"AccessDenied.LocationWeather" = "Nextgram needs access to your location so that you can add the weather widget to your stories.\n\nPlease go to Settings > Privacy > Location Services and set Nextgram to ON.";
 
 "Story.Editor.TooltipWeatherLimitText" = "You can't add more than one weather sticker to a story.";
 
@@ -14726,7 +14726,7 @@ Sorry for the inconvenience.";
 
 "Chat.SensitiveContentShort" = "18+";
 
-"AccessDenied.AgeVerificationCamera" = "Nagram needs access to your camera for age verification.\n\nOpen your device's Settings > Privacy > Camera and set Nagram to ON.";
+"AccessDenied.AgeVerificationCamera" = "Nextgram needs access to your camera for age verification.\n\nOpen your device's Settings > Privacy > Camera and set Nextgram to ON.";
 
 "PeerInfo.Gifts.Collections.All" = "All Gifts";
 "PeerInfo.Gifts.Collections.Add" = "Add Collection";

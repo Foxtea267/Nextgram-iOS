@@ -332,67 +332,10 @@ filegroup(
     ]),
 )
 
-alternate_icon_folders = [
-    # MARK: NAGRAM — expose the Nagram primary icon in the in-app icon picker
-    "Nagram",
-    "BlackIcon",
-    "BlackClassicIcon",
-    "BlackFilledIcon",
-    "BlueIcon",
-    "BlueClassicIcon",
-    "BlueFilledIcon",
-    "WhiteFilledIcon",
-    "New1",
-    "New2",
-    "Premium",
-    "PremiumBlack",
-    "PremiumTurbo",
-]
+alternate_icon_folders = []
 
-# MARK: NAGRAM — the IPA post-processor selects the matching icon set from the
-# active Xcode toolchain. The Xcode 26 Composer sources are supplied separately.
-composer_source_icon_folders = [
-    "Nagram",
-    "NagramBlock",
-    "NagramBlockBlack",
-    "NagramBlockBlue",
-    "NagramBlockNiello",
-    "NagramBlockPurple",
-    "NagramClassic",
-    "NagramColorful",
-    "NagramCyan",
-    "NagramBlack",
-]
-composer_build_icon_folders = ["NagramBuild"]
-composer_xcode26_icon_folders = [
-    "Nagram26",
-    "NagramBlock26",
-    "NagramBlockBlack26",
-    "NagramBlockBlue26",
-    "NagramBlockNiello26",
-    "NagramBlockPurple26",
-    "NagramClassic26",
-    "NagramColorful26",
-    "NagramCyan26",
-    "NagramBlack26",
-]
-
-[
-    filegroup(
-        name = "{}_icon".format(name),
-        srcs = glob(
-            ["Telegram-iOS/{}.icon/**/*".format(name)],
-            allow_empty = True,
-        ),
-    ) for name in composer_xcode26_icon_folders
-]
-
-filegroup(
-    name = "NagramIconPreviews",
-    srcs = glob([
-        "Telegram-iOS/Nagram*.png",
-    ]),
-)
+# MARK: NAGRAM — Nextgram ships a single independent primary icon.
+composer_build_icon_folders = ["NextgramBuild"]
 
 [
     filegroup(
@@ -409,7 +352,7 @@ filegroup(
         srcs = glob([
             "Telegram-iOS/{}.icon/**/*".format(name),
         ]),
-    ) for name in composer_source_icon_folders + composer_build_icon_folders
+    ) for name in composer_build_icon_folders
 ]
 
 filegroup(
@@ -627,23 +570,19 @@ official_communication_notifications_fragment = """
 """
 
 # MARK: NAGRAM
-nagram_communication_notifications_bundle_ids = [
-    "xyz.nextalone.nagram",
-]
+nextgram_communication_notifications_bundle_ids = []
 
-communication_notifications_fragment = official_communication_notifications_fragment if telegram_bundle_id in official_bundle_ids or telegram_bundle_id in nagram_communication_notifications_bundle_ids else ""
+communication_notifications_fragment = official_communication_notifications_fragment if telegram_bundle_id in official_bundle_ids or telegram_bundle_id in nextgram_communication_notifications_bundle_ids else ""
 
 official_notification_filtering_fragment = """
 <key>com.apple.developer.usernotifications.filtering</key>
 <true/>
 """
 # MARK: NAGRAM
-# Only add Nagram bundle ids after Apple grants com.apple.developer.usernotifications.filtering.
-nagram_notification_filtering_bundle_ids = [
-    "xyz.nextalone.nagram",
-]
+# Only add Nextgram bundle ids after Apple grants com.apple.developer.usernotifications.filtering.
+nextgram_notification_filtering_bundle_ids = []
 
-notification_filtering_bundle_ids = ["ph.telegra.Telegraph"] + nagram_notification_filtering_bundle_ids
+notification_filtering_bundle_ids = ["ph.telegra.Telegraph"] + nextgram_notification_filtering_bundle_ids
 notification_filtering_fragment = official_notification_filtering_fragment if telegram_bundle_id in notification_filtering_bundle_ids else ""
 
 # MARK: NAGRAM
@@ -1016,56 +955,6 @@ sh_binary(
         "Telegram-iOS/AlternateIcons-iPad.plist",
     ],
     srcs = [":GenerateAddAlternateIcons"],
-)
-
-genrule(
-    name = "GenerateNagramFixComposerAlternateIcons",
-    srcs = [
-        "Telegram-iOS/NagramFixComposerAlternateIcons.sh",
-    ],
-    cmd_bash =
-"""
-    cat $(location Telegram-iOS/NagramFixComposerAlternateIcons.sh) >> $(location NagramFixComposerAlternateIcons.sh)
-""",
-    outs = [
-        "NagramFixComposerAlternateIcons.sh",
-    ],
-    executable = True,
-    visibility = [
-        "//visibility:public",
-    ]
-)
-
-sh_binary(
-    name = "NagramFixComposerAlternateIcons",
-    data = [
-        ":Icons",
-        ":Nagram26_icon",
-        ":NagramBlock26_icon",
-        ":NagramBlockBlack26_icon",
-        ":NagramBlockBlue26_icon",
-        ":NagramBlockNiello26_icon",
-        ":NagramBlockPurple26_icon",
-        ":NagramClassic26_icon",
-        ":NagramColorful26_icon",
-        ":NagramCyan26_icon",
-        ":NagramBlack26_icon",
-        ":Nagram_icon",
-        ":NagramBlock_icon",
-        ":NagramBlockBlack_icon",
-        ":NagramBlockBlue_icon",
-        ":NagramBlockNiello_icon",
-        ":NagramBlockPurple_icon",
-        ":NagramClassic_icon",
-        ":NagramColorful_icon",
-        ":NagramCyan_icon",
-        ":NagramBlack_icon",
-        "//submodules/LegacyComponents:LegacyComponentsAssets",
-        "//submodules/PasswordSetupUI:PasswordSetupUIAssets",
-        "//submodules/TelegramUI:TelegramUIAssets",
-        "//submodules/TelegramUI/Components/Calls/CallScreen:Assets",
-    ],
-    srcs = [":GenerateNagramFixComposerAlternateIcons"],
 )
 
 plist_fragment(
@@ -1714,11 +1603,11 @@ plist_fragment(
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Nagram</string>
+    <string>Nextgram</string>
     <key>CFBundleIdentifier</key>
     <string>{telegram_bundle_id}</string>
     <key>CFBundleName</key>
-    <string>Nagram</string>
+    <string>Nextgram</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleSignature</key>
@@ -1777,19 +1666,19 @@ plist_fragment(
     <string>We need this so that you can take and share photos and videos.</string>
     <!-- MARK: NAGRAM -->
     <key>NSContactsUsageDescription</key>
-    <string>Nagram can sync your contacts so you can find people you know across your devices.</string>
+    <string>Nextgram can sync your contacts so you can find people you know across your devices.</string>
     <key>NSFaceIDUsageDescription</key>
     <string>You can use Face ID to unlock the app.</string>
     <key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-    <string>When you choose to share your live location, Nagram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
+    <string>When you choose to share your live location, Nextgram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
     <key>NSLocationAlwaysUsageDescription</key>
-    <string>When you choose to share your live location, Nagram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
+    <string>When you choose to share your live location, Nextgram needs background location access to keep it updated. Apple Watch location sharing also requires this access.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
-    <string>When you choose to send your location, Nagram needs access to show and share it on a map.</string>
+    <string>When you choose to send your location, Nextgram needs access to show and share it on a map.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>We need this so that you can record and share voice messages and videos with sound.</string>
     <key>NSMotionUsageDescription</key>
-    <string>Nagram uses motion access only when needed to improve location sharing.</string>
+    <string>Nextgram uses motion access only when needed to improve location sharing.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>We need this so that you can share photos and videos from your photo library.</string>
     <key>NSPhotoLibraryUsageDescription</key>
@@ -1926,17 +1815,15 @@ ios_application(
         ":RequiredDeviceCapabilitiesPlist",
         ":UrlTypesInfoPlist",
     ],
-    primary_app_icon = "NagramBuild",
+    primary_app_icon = "NextgramBuild",
     app_icons = [ ":{}_icon".format(name) for name in composer_build_icon_folders ],
     alternate_icons = [
         ":{}".format(name) for name in alternate_icon_folders
     ],
     resources = [
         ":LaunchScreen",
-        ":NagramIconPreviews",
         #":DefaultAppIcon",
     ],
-    ipa_post_processor = ":NagramFixComposerAlternateIcons",
     frameworks = [
         ":MtProtoKitFramework",
         ":SwiftSignalKitFramework",

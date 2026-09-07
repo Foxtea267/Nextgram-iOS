@@ -13,272 +13,109 @@
   and <a href="https://github.com/NextAlone/Nagram-iOS">Nagram-iOS</a>.
 </p>
 
-<div align="center">
 <p align="center">
   <a href="https://t.me/Nextgram_Chat">
     <img src="https://img.shields.io/badge/Telegram-加入群组-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram">
   </a>
 </p>
-</div>
 
 ---
 
 ## About
 
-Nextgram-iOS 是一个基于 Telegram 官方 iOS 客户端与 Nagram-iOS 开发的第三方增强客户端。
-
-项目在尽量保持 Telegram 原有体验以及上游可同步性的基础上，加入更多消息保留、隐私增强和客户端自定义功能。
-
-Nextgram 同时计划实现一系列类似 AyuGram 的高级功能，例如反撤回、机器人消息保留、消息编辑历史与幽灵模式等。
+Nextgram-iOS 是一个基于 Telegram 官方 iOS 客户端与 Nagram-iOS 开发的第三方增强客户端。在尽量保持 Telegram 原有体验和上游可同步性的基础上，加入消息保留、隐私增强和客户端自定义功能。
 
 ## Features
 
 ### Message
 
-- 反撤回
-- 保存机器人消息
-- 保存消息编辑历史
-- 强制复制受保护消息
-- 更多消息上下文菜单操作
-- 自定义双击消息动作
-- 正则消息过滤
+- 反撤回：在服务端删除更新落库前保留本地消息，并显示“已撤回”标记。
+- 保存机器人消息：保留 Bot 私聊或 Bot 作者被远程删除的消息。
+- 消息编辑历史：最多保存 20 个文本版本，可从消息长按菜单查看。
+- 强制复制受保护消息。
+- 可配置消息上下文菜单和双击消息动作。
+- 正则消息过滤。
 
 ### Privacy
 
-- 幽灵模式
-- 已读状态控制
-- 在线状态相关隐私控制
-- 隐藏手机号
-- 更多隐私增强选项
+- 幽灵模式：统一阻止已读、输入中和在线状态上报。
+- 已读、输入状态和在线状态也可以分别控制。
+- 隐藏手机号及其他隐私增强选项。
 
 ### Interface
 
-- 独立 Nextgram 设置页面
-- 显示用户 / 群组 / 频道 ID
-- 显示 Telegram DC
-- 消息时间戳显示秒
-- 自定义贴纸尺寸
-- Nextgram 自定义应用名称与图标
+- 独立 Nextgram 设置页面。
+- 聊天快捷筛选：联系人、私聊、群组、频道和未读。
+- 未读会话优先，同时保持置顶顺序。
+- 显示用户、群组和频道 ID，以及 Telegram DC。
+- 消息时间戳显示秒、自定义贴纸尺寸等界面选项。
+- 独立 Nextgram 应用名称与图标。
 
 ### More
 
-- 翻译增强
-- LLM / AI 集成
-- 盘古之白
-- 更多功能持续开发中
+- 翻译增强与 LLM / AI 集成。
+- 盘古之白。
+- 更多功能持续开发中。
 
-> ⚠️ 部分功能仍处于开发阶段，实际功能以当前版本为准。
+> [!NOTE]
+> 消息保留和编辑历史从对应开关启用后开始生效。媒体能否继续查看取决于本地缓存。
 
 ## AyuGram-like Features
 
-Nextgram 计划为 iOS 提供部分与 AyuGram 类似的功能体验，包括：
-
-- Anti-Delete Messages
-- Bot Message Preservation
-- Message Edit History
-- Ghost Mode
-- Read Status Control
-- Online Status Privacy
-- Extended Message Actions
+Nextgram 提供部分与 AyuGram 类似的功能体验，包括 Anti-Delete Messages、Bot Message Preservation、Message Edit History、Ghost Mode、Read Status Control 和 Online Status Privacy。
 
 > [!NOTE]
 > Nextgram **不是** AyuGram 的官方 iOS 版本，与 AyuGram 项目不存在官方隶属、授权或背书关系。
 
----
-
 ## Development
 
-### 代码结构
+Nextgram 自身的增强代码应尽可能放在仓库根目录的 `Nagram/` 中。内部 `Nagram*` 模块名和设置键保持稳定，以降低同步 Nagram-iOS 与 Telegram-iOS 上游时的冲突。
 
-Nextgram 基于以下两个上游项目：
-
-- [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS)
-- [Nagram-iOS](https://github.com/NextAlone/Nagram-iOS)
-
-Nextgram 自身的增强代码应**尽可能与 Telegram 上游代码分离**，减少未来同步上游时的冲突。
-
-当必须修改 Telegram 上游代码时，请使用以下锚点标记修改位置，便于后续同步 Telegram-iOS 上游：
+必须修改 Telegram 上游代码时，在修改位置同时保留以下锚点：
 
 ```swift
-// MARK: NEXTGRAM
-// 你的增强代码放在这里
+// MARK: NAGRAM
 // MARK: NEXTGRAM
 ```
 
-### 上游同步
-
-每次 `rebase` 或 `checkout` Telegram-iOS 上游后，**先同步 Submodule**，否则可能出现 `tgcalls` 缺文件、WebRTC / FFmpeg API 不匹配等"假错误"：
+同步或切换上游代码后应先同步 Submodule，并确认输出中没有 `+`、`-` 或 `U` 前缀：
 
 ```sh
 git submodule update --init --recursive
 git submodule status --recursive
 ```
 
-> 📌 确认 `git submodule status` 输出中**没有** `+`、`-` 或 `U` 前缀。
+### Build IPA with GitHub Actions
 
----
+推送到 `main`，或在 GitHub 的 Actions 页面手动运行 **Build Nextgram IPA**。仓库需要配置以下 Actions secrets：
 
-### 构建说明
+- `TELEGRAM_API_ID`
+- `TELEGRAM_API_HASH`
 
-Nextgram-iOS 使用 Telegram-iOS 原有的 **Bazel** 构建系统，统一通过 `build-system/Make/Make.py` 调用。
-
-构建的目标（Target）为：
-
-```
-Telegram/Telegram
-```
-
-#### 选择签名模式
-
-`local.bazelrc` 是本机配置（已被 gitignore）。不同构建目标对应不同的签名配置：
-
-| 模式 | Provisioning 状态 | `local.bazelrc` 是否允许禁用扩展 |
-| --- | --- | --- |
-| 完整签名真机包 | 主 App + 6 个扩展都有 Profile | ❌ 不允许 `disableExtensions` |
-| 免费 Apple ID 自签 | 通常只有主 App Profile | ✅ 可写 `disableExtensions` |
-| 模拟器（免签） | 不需要 Profile | ✅ 可同时写 `disableExtensions` 与 `disableProvisioningProfiles` |
+构建成功后，在该工作流运行页面下载 `Nextgram-<commit>` artifact，其中包含 `Nextgram.ipa` 和可用时生成的 dSYM 压缩包。
 
 > [!WARNING]
-> - 真机构建**不要**加入 `build --//Telegram:disableProvisioningProfiles`，否则主 App 签名会走 `None` 分支。
-> - 完整签名环境下应保持 Telegram 的所有扩展启用，包括：
->   `Share`、`NotificationContent`、`NotificationService`、`Intents`、`Widget`、`BroadcastUpload`
+> GitHub Actions 产物使用仓库内的临时假签名，仅用于编译验证和后续重签，不能直接安装。请使用自己的证书或签名工具重签 IPA。
 
----
+### Local builds
 
-#### ① 真机构建（完整签名 / Full Provisioning）
-
-`local.bazelrc` 中不应包含任何 `disableExtensions` / `disableProvisioningProfiles`。
-
-构建：
-
-```sh
-source ~/.zshrc 2>/dev/null
-python3 build-system/Make/Make.py --overrideXcodeVersion \
-  --cacheDir ~/telegram-bazel-cache \
-  build \
-  --configurationPath build-input/local-configuration.json \
-  --codesigningInformationPath build-input/codesigning-development \
-  --buildNumber=1 \
-  --configuration=debug_arm64 \
-  --continueOnError
-```
-
-IPA 输出路径：
-
-```
-bazel-bin/Telegram/Telegram.ipa
-```
-
----
-
-#### ② 真机构建（免费 Apple ID 自签）
-
-免费 Apple ID 通常无法为 Telegram 的所有扩展创建 Provisioning Profile，因此可以在 `local.bazelrc` 中加入：
-
-```
-build --//Telegram:disableExtensions
-```
-
-> [!WARNING]
-> 真机构建**不要**加入 `build --//Telegram:disableProvisioningProfiles`。
-
-构建命令：
-
-```bash
-source ~/.zshrc 2>/dev/null
-python3 build-system/Make/Make.py --overrideXcodeVersion \
-  --cacheDir ~/telegram-bazel-cache \
-  build \
-  --configurationPath build-input/local-configuration.json \
-  --codesigningInformationPath build-input/codesigning-development \
-  --xcodeManagedCodesigning \
-  --buildNumber=1 \
-  --configuration=debug_arm64 \
-  --continueOnError
-```
-
----
-
-#### ③ 模拟器构建（Simulator）
-
-模拟器可以在 `local.bazelrc` 中同时使用：
-
-```sh
-build --//Telegram:disableProvisioningProfiles
-build --//Telegram:disableExtensions
-```
-
-构建命令：
-
-```bash
-python3 build-system/Make/Make.py --overrideXcodeVersion \
-  --cacheDir ~/telegram-bazel-cache \
-  build \
-  --configurationPath build-system/appstore-configuration.json \
-  --xcodeManagedCodesigning \
-  --buildNumber=1 \
-  --configuration=debug_sim_arm64 \
-  --continueOnError
-```
-
----
-
-> 📖 更多构建、签名以及 Bazel 相关问题请查看 [`docs/build.md`](docs/build.md)。
-
----
+Nextgram 使用 Telegram-iOS 的 Bazel 构建系统，统一通过 `build-system/Make/Make.py` 调用。完整签名、免费 Apple ID、模拟器构建和安装说明见 [`docs/build.md`](docs/build.md)。
 
 ## Credits
-
-Nextgram-iOS is based on the following projects:
 
 - [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS)
 - [Nagram-iOS](https://github.com/NextAlone/Nagram-iOS)
 
-Thanks to their developers and contributors.
+感谢上述项目的开发者与贡献者。
 
 ## License & Branding
 
-Telegram-iOS 及其相关代码、资源与商标归对应权利人所有，并继续适用其原有许可证及版权声明。
+Telegram-iOS 及其相关代码、资源与商标归对应权利人所有，并继续适用其原有许可证及版权声明。来自 Nagram-iOS 的代码和实现继续适用 Nagram-iOS 自身的许可证及版权声明。
 
-来自 Nagram-iOS 的代码和实现继续适用 Nagram-iOS 自身的许可证及版权声明。
-
-Nextgram 新增代码、设计和项目素材的版权归其对应作者及贡献者所有。
-
-Nextgram 名称、Logo、应用图标及其他品牌资产与源码许可相互独立。
-
-Fork、修改版或第三方发行版本不应使用可能使用户误认为其属于 Nextgram 官方发行版的名称、Logo 或其他品牌资产。
+Nextgram 新增代码、设计和项目素材的版权归其对应作者及贡献者所有。Nextgram 名称、Logo、应用图标及其他品牌资产与源码许可相互独立。Fork、修改版或第三方发行版本不应使用可能使用户误认为其属于 Nextgram 官方发行版的名称、Logo 或其他品牌资产。
 
 ## Disclaimer
 
-Nextgram is an unofficial Telegram client.
-
-Telegram is a trademark of Telegram Messenger Inc.
+Nextgram is an unofficial Telegram client. Telegram is a trademark of Telegram Messenger Inc.
 
 Nextgram is not affiliated with, endorsed by, or sponsored by Telegram Messenger Inc., Nagram, or AyuGram.
-```
-
----
-
-I've restructured the README, with the main improvements centered on the **Development** section:
-
-## Key changes made
-
-**Structure & clarity in Development section:**
-- Broke the "一坨" (single dense blob) into clear sub-sections: **代码结构 → 上游同步 → 构建说明 → 三种签名模式**
-- Turned the three messy build scenarios (Full provisioning / Free Apple ID / Simulator) into numbered, separated blocks (`① ② ③`) with their own headers
-
-**More markdown formatting:**
-- Added a **table** comparing the three signing modes (provisioning status vs whether extensions can be disabled)
-- Put all commands in proper **fenced code blocks** with `sh`/`bash` language hints
-- Used markdown **admonitions** (`> [!NOTE]`, `> [!WARNING]`, `> ⚠️`) for the important caveats that were previously just plain text, making them stand out
-- Used a bulleted list + `// MARK: NEXTGRAM` code block for the anchoring convention
-- Replaced loose plain lines with clearer lists and separators (`---`)
-
-**Minor cleanup elsewhere:**
-- Added `[!NOTE]` callout for the AyuGram non-affiliation disclaimer
-- Standardized list markers (`*` → `-`)
-- Made credit/feature lists slightly cleaner
-
-⚠️ One thing to check on your end: I noticed a possible typo in the original — `--configurationPath build-input/local-configuration.json` appeared in both the full provisioning and free Apple ID builds, but these likely differ (full provisioning typically uses a different config path). I kept them as you provided, but you may want to verify the correct `--configurationPath` for each build scenario.
-
-**Note on citations:** All the technical content above came directly from your own README and the upstream reference material, so I didn't attach external source citations — the markdown restructuring is based on the content you provided and the Standard GitHub-flavored markdown conventions.

@@ -227,8 +227,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.chatFolders)
     }))
 
-    // MARK: NAGRAM — 增强设置入口；长按可在隐藏底栏时进入 Debug Settings。
-    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: "Nagram", icon: PresentationResourcesSettings.settings, longPressAction: {
+    // MARK: NAGRAM — Nextgram 设置入口；内部保留 Nagram 命名以便同步上游。
+    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: "Nextgram", icon: PresentationResourcesSettings.settings, longPressAction: {
         interaction.openSettings(.nagramDebug)
     }, action: {
         interaction.openSettings(.nagram)

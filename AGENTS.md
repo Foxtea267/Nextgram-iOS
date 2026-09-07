@@ -2,11 +2,11 @@ You are an experienced, pragmatic software engineering AI agent. Do not over-eng
 
 # AGENTS.md
 
-This file guides AI agents working in this repository. It is specific to Nagram-iOS and should be kept in sync with the repo, not with generic Telegram-iOS assumptions.
+This file guides AI agents working in this repository. It is specific to Nextgram, a branded downstream of Nagram-iOS, and should be kept in sync with the repo.
 
 ## Project Overview
 
-Nagram-iOS is a third-party enhancement fork of [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS), targeting Chinese users and aligning selected features with Android [Nagram](https://github.com/NextAlone/Nagram). The goal is to keep the fork easy to rebase onto upstream Telegram while adding Nagram-specific settings, UI, translation, privacy, and interaction features.
+Nextgram is a third-party enhancement fork of Nagram-iOS and [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS), targeting Chinese users. Internal Nagram module names remain stable so the fork stays easy to rebase while Nextgram uses its own user-visible name, bundle identifier, and icon.
 
 Technology stack:
 
@@ -157,9 +157,9 @@ Prefer `build-system/Make/Make.py` for app build/test/clean. Use `build-system/g
 
 - Put new Nagram-only code under `Nagram/`. Keep `Nagram/Settings` as the low-level data layer and `Nagram/SettingsUI` as the UI layer.
 - When upstream files must change, annotate the modification site with `// MARK: NAGRAM`. This is required for upstream rebases.
-- The Nagram settings entry appears below “我的资料” (My Profile) in `PeerInfoSettingsItems.swift`; long press opens Nagram debug settings.
-- Main app display name is `Nagram` in `Telegram/BUILD` (`CFBundleDisplayName` / `CFBundleName`). Extension plist targets remain `Telegram` unless a task explicitly changes that behavior.
-- App icon integration is in `Telegram/BUILD`: `alternate_icon_folders` includes `Nagram`, and Composer source icons include `Nagram`, `NagramBlock`, and `NagramColorful`.
+- The Nextgram settings entry appears below “我的资料” (My Profile) in `PeerInfoSettingsItems.swift`; internal enum and controller names remain `nagram` / `Nagram*` for upstream compatibility.
+- Main app display name is `Nextgram` in `Telegram/BUILD` (`CFBundleDisplayName` / `CFBundleName`). Extension plist targets remain `Telegram` unless a task explicitly changes that behavior.
+- The primary app icon is the independent `NextgramBuild.icon`. Do not re-enable or package Nagram or Telegram brand icons in downstream builds.
 - Settings defaults should preserve native Telegram behavior unless the feature explicitly requires a different default. Existing settings use `@NagramDefault` and sync through local `UserDefaults` plus iCloud KVS.
 - Use `NagramSettingsSignal` helpers when UI must react live to setting changes. Do not add ad-hoc polling.
 

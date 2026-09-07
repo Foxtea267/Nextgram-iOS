@@ -3,6 +3,7 @@ import Postbox
 import TelegramApi
 
 import EncryptionProvider
+import NagramSettings // MARK: NAGRAM
 
 private enum MessageParsingError: Error {
     case contentParsingError
@@ -295,10 +296,14 @@ func processSecretChatIncomingDecryptedOperations(encryptionProvider: Encryption
                                                 }
                                             }
                                         }
-                                        _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: filteredMessageIds)
+                                        if !NagramSettings.shared.antiRecallEnabled { // MARK: NAGRAM // MARK: NEXTGRAM
+                                            _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: filteredMessageIds)
+                                        }
                                     }
                                 case .clearHistory:
-                                    _internal_clearHistory(transaction: transaction, mediaBox: mediaBox, peerId: peerId, threadId: nil, namespaces: .all)
+                                    if !NagramSettings.shared.antiRecallEnabled { // MARK: NAGRAM // MARK: NEXTGRAM
+                                        _internal_clearHistory(transaction: transaction, mediaBox: mediaBox, peerId: peerId, threadId: nil, namespaces: .all)
+                                    }
                                 case let .markMessagesContentAsConsumed(globallyUniqueIds):
                                     var messageIds: [MessageId] = []
                                     for id in globallyUniqueIds {

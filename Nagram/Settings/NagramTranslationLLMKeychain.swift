@@ -3,7 +3,7 @@ import Security
 
 // MARK: NAGRAM — Local-only storage for LLM translation credentials.
 enum NagramTranslationLLMKeychain {
-    private static let service = "xyz.nextalone.nagram.translation.llm"
+    private static let service = "jp.foxtea.nextgram.translation.llm"
     private static let account = "api-key"
     private static let legacyDefaultsKey = "nagram.translationLLMAPIKey"
 
