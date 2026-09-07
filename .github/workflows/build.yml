@@ -50,6 +50,12 @@ jobs:
           key: nextgram-bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel.lock') }}
           restore-keys: nextgram-bazel-${{ runner.os }}-
 
+      - name: Configure re-signable build
+        run: |
+          cat > local.bazelrc <<'EOF'
+          build --//Telegram:disableExtensions
+          EOF
+
       - name: Write build configuration
         run: |
           set -euo pipefail
