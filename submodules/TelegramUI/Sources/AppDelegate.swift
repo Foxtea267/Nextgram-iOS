@@ -642,9 +642,22 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             isICloudEnabled: buildConfig.isICloudEnabled
         )
         
-        guard let appGroupUrl = maybeAppGroupUrl else {
-            self.mainWindow?.presentNative(UIAlertController(title: nil, message: "Error 2", preferredStyle: .alert))
-            return true
+        let appGroupUrl: URL
+        if let maybeAppGroupUrl {
+            appGroupUrl = maybeAppGroupUrl
+        } else {
+            // MARK: NAGRAM
+            // Self-signed builds may not have the App Groups entitlement. Keep the
+            // main app usable by storing its data in the regular application sandbox.
+            let fallbackAppGroupUrl = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Nextgram", isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(at: fallbackAppGroupUrl, withIntermediateDirectories: true, attributes: nil)
+                appGroupUrl = fallbackAppGroupUrl
+            } catch {
+                self.mainWindow?.presentNative(UIAlertController(title: nil, message: "Unable to initialize the application data directory.", preferredStyle: .alert))
+                return true
+            }
         }
         
         var isDebugConfiguration = false
