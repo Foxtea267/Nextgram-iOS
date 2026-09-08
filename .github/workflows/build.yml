@@ -87,9 +87,12 @@ jobs:
           set -euo pipefail
           CODESIGNING_PATH="build-input/nextgram-codesigning"
           PROFILE_PLIST="${RUNNER_TEMP}/nextgram-profile.plist"
+          SIGNING_PEM="${RUNNER_TEMP}/nextgram-signing.pem"
           mkdir -p "${CODESIGNING_PATH}/certs" "${CODESIGNING_PATH}/profiles"
           cp build-system/fake-codesigning/certs/* "${CODESIGNING_PATH}/certs/"
-          security cms -D -i build-system/fake-codesigning/profiles/Telegram.mobileprovision > "${PROFILE_PLIST}"
+          openssl smime -inform der -verify -noverify \
+            -in build-system/fake-codesigning/profiles/Telegram.mobileprovision \
+            -out "${PROFILE_PLIST}"
           python3 - "${PROFILE_PLIST}" "${BUNDLE_ID}" <<'PY'
           import plistlib
           import sys
@@ -112,11 +115,13 @@ jobs:
           with open(path, "wb") as destination:
               plistlib.dump(replace(profile), destination)
           PY
-          SIGNING_IDENTITY="$(security find-identity -v -p codesigning temp.keychain | awk -F '"' 'NR == 1 { print $2 }')"
-          test -n "${SIGNING_IDENTITY}"
-          security cms -S -k temp.keychain -N "${SIGNING_IDENTITY}" \
-            -i "${PROFILE_PLIST}" \
-            -o "${CODESIGNING_PATH}/profiles/Telegram.mobileprovision"
+          openssl pkcs12 -in build-system/fake-codesigning/certs/SelfSigned.p12 \
+            -passin pass: -nodes -legacy -out "${SIGNING_PEM}"
+          openssl smime -sign -binary -nodetach -outform der \
+            -in "${PROFILE_PLIST}" \
+            -signer "${SIGNING_PEM}" \
+            -inkey "${SIGNING_PEM}" \
+            -out "${CODESIGNING_PATH}/profiles/Telegram.mobileprovision"
 
       - name: Build arm64 IPA
         run: |
