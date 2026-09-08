@@ -6,7 +6,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: nextgram-build-${{ github.ref }}
@@ -19,9 +19,10 @@ jobs:
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
-      # The checked-in disposable profiles are bound to this id. The artifact is
-      # intended for downstream re-signing; the visible app name remains Nextgram.
-      BUNDLE_ID: ph.telegra.Telegraph
+      # The checked-in disposable profiles are bound to the build id. The final
+      # re-signable IPA is repackaged with the public Nextgram bundle id.
+      BUILD_BUNDLE_ID: ph.telegra.Telegraph
+      RELEASE_BUNDLE_ID: com.foxtea.nextgram
       TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
       TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
 
@@ -66,7 +67,7 @@ jobs:
           mkdir -p build-input
           cat > build-input/nextgram-ci.json <<JSON
           {
-            "bundle_id": "${BUNDLE_ID}",
+            "bundle_id": "${BUILD_BUNDLE_ID}",
             "api_id": "${TELEGRAM_API_ID}",
             "api_hash": "${TELEGRAM_API_HASH}",
             "team_id": "C67CF9S4VU",
@@ -99,8 +100,19 @@ jobs:
       - name: Prepare artifacts
         run: |
           set -euo pipefail
-          mkdir -p build/artifacts build/dSYMs
-          cp bazel-bin/Telegram/Telegram.ipa build/artifacts/Nextgram.ipa
+          rm -rf build/package
+          mkdir -p build/artifacts build/dSYMs build/package
+          ditto -x -k bazel-bin/Telegram/Telegram.ipa build/package
+          APP_PATH="$(find build/package/Payload -maxdepth 1 -type d -name '*.app' -print -quit)"
+          test -n "${APP_PATH}"
+          plutil -replace CFBundleIdentifier -string "${RELEASE_BUNDLE_ID}" "${APP_PATH}/Info.plist"
+          find "${APP_PATH}" -type d -name _CodeSignature -prune -exec rm -rf {} +
+          find "${APP_PATH}" -name embedded.mobileprovision -delete
+          test "$(plutil -extract CFBundleIdentifier raw "${APP_PATH}/Info.plist")" = "${RELEASE_BUNDLE_ID}"
+          (
+            cd build/package
+            /usr/bin/zip -qry ../artifacts/Nextgram.ipa Payload
+          )
           find bazel-bin/Telegram -maxdepth 1 -name '*.dSYM' -exec cp -R {} build/dSYMs/ \;
           if find build/dSYMs -maxdepth 1 -name '*.dSYM' | grep -q .; then
             ditto -c -k --sequesterRsrc --keepParent build/dSYMs build/artifacts/Nextgram.dSYMs.zip
@@ -115,3 +127,19 @@ jobs:
             build/artifacts/Nextgram.dSYMs.zip
           if-no-files-found: error
           retention-days: 14
+
+      - name: Publish standalone IPA to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          RELEASE_TAG="nextgram-${GITHUB_RUN_NUMBER}"
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" build/artifacts/Nextgram.ipa --clobber --repo "${GITHUB_REPOSITORY}"
+          else
+            gh release create "${RELEASE_TAG}" build/artifacts/Nextgram.ipa \
+              --repo "${GITHUB_REPOSITORY}" \
+              --target "${GITHUB_SHA}" \
+              --title "Nextgram build ${GITHUB_RUN_NUMBER}" \
+              --notes "Standalone re-signable IPA. Bundle ID: ${RELEASE_BUNDLE_ID}. Re-sign before installation."
+          fi

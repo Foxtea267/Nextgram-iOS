@@ -92,10 +92,12 @@ git submodule status --recursive
 - `TELEGRAM_API_ID`
 - `TELEGRAM_API_HASH`
 
-构建成功后，在该工作流运行页面下载 `Nextgram-<commit>` artifact，其中包含 `Nextgram.ipa` 和可用时生成的 dSYM 压缩包。
+构建成功后可直接在仓库的 **Releases** 页面下载单独的 `Nextgram.ipa`。工作流运行页面仍会保留 `Nextgram-<commit>` artifact，其中包含 IPA 和可用时生成的 dSYM 压缩包。
+
+发布 IPA 的 Bundle ID 为 `com.foxtea.nextgram`。
 
 > [!WARNING]
-> GitHub Actions 产物只包含主应用并使用仓库内的临时假签名，仅用于编译验证和后续重签，不能直接安装。请使用自己的证书或签名工具重签 IPA。
+> GitHub Actions 产物只包含主应用；打包时会移除临时签名与 provisioning profile，仅用于后续重签，不能直接安装。请使用自己的证书或签名工具重签 IPA。
 
 ### Local builds
 
