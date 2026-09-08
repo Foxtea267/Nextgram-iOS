@@ -94,7 +94,7 @@ git submodule status --recursive
 
 构建成功后可直接在仓库的 **Releases** 页面下载单独的 `Nextgram.ipa`。工作流运行页面仍会保留 `Nextgram-<commit>` artifact，其中包含 IPA 和可用时生成的 dSYM 压缩包。
 
-发布 IPA 的 Bundle ID 为 `com.foxtea.nextgram`。
+发布 IPA 从编译阶段起使用 Bundle ID `jp.foxtea.nextgram`。Release 版本号使用 `YYYYMMDDNNN` 格式，例如 `20260907001`。
 
 > [!WARNING]
 > GitHub Actions 产物只包含主应用；打包时会移除临时签名与 provisioning profile，仅用于后续重签，不能直接安装。请使用自己的证书或签名工具重签 IPA。

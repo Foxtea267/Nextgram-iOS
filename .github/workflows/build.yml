@@ -19,10 +19,7 @@ jobs:
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
-      # The checked-in disposable profiles are bound to the build id. The final
-      # re-signable IPA is repackaged with the public Nextgram bundle id.
-      BUILD_BUNDLE_ID: ph.telegra.Telegraph
-      RELEASE_BUNDLE_ID: com.foxtea.nextgram
+      BUNDLE_ID: jp.foxtea.nextgram
       TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
       TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
 
@@ -67,7 +64,7 @@ jobs:
           mkdir -p build-input
           cat > build-input/nextgram-ci.json <<JSON
           {
-            "bundle_id": "${BUILD_BUNDLE_ID}",
+            "bundle_id": "${BUNDLE_ID}",
             "api_id": "${TELEGRAM_API_ID}",
             "api_hash": "${TELEGRAM_API_HASH}",
             "team_id": "C67CF9S4VU",
@@ -85,6 +82,42 @@ jobs:
       - name: Import disposable build certificate
         run: python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
 
+      - name: Generate matching disposable provisioning profile
+        run: |
+          set -euo pipefail
+          CODESIGNING_PATH="build-input/nextgram-codesigning"
+          PROFILE_PLIST="${RUNNER_TEMP}/nextgram-profile.plist"
+          mkdir -p "${CODESIGNING_PATH}/certs" "${CODESIGNING_PATH}/profiles"
+          cp build-system/fake-codesigning/certs/* "${CODESIGNING_PATH}/certs/"
+          security cms -D -i build-system/fake-codesigning/profiles/Telegram.mobileprovision > "${PROFILE_PLIST}"
+          python3 - "${PROFILE_PLIST}" "${BUNDLE_ID}" <<'PY'
+          import plistlib
+          import sys
+
+          path, bundle_id = sys.argv[1:]
+          old_bundle_id = "ph.telegra.Telegraph"
+
+          def replace(value):
+              if isinstance(value, str):
+                  return value.replace(old_bundle_id, bundle_id)
+              if isinstance(value, list):
+                  return [replace(item) for item in value]
+              if isinstance(value, dict):
+                  return {key: replace(item) for key, item in value.items()}
+              return value
+
+          with open(path, "rb") as source:
+              profile = plistlib.load(source)
+          profile.pop("DER-Encoded-Profile", None)
+          with open(path, "wb") as destination:
+              plistlib.dump(replace(profile), destination)
+          PY
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning temp.keychain | awk -F '"' 'NR == 1 { print $2 }')"
+          test -n "${SIGNING_IDENTITY}"
+          security cms -S -k temp.keychain -N "${SIGNING_IDENTITY}" \
+            -i "${PROFILE_PLIST}" \
+            -o "${CODESIGNING_PATH}/profiles/Telegram.mobileprovision"
+
       - name: Build arm64 IPA
         run: |
           set -euo pipefail
@@ -93,7 +126,7 @@ jobs:
             --cacheDir "$HOME/telegram-bazel-cache" \
             build \
             --configurationPath build-input/nextgram-ci.json \
-            --codesigningInformationPath build-system/fake-codesigning \
+            --codesigningInformationPath build-input/nextgram-codesigning \
             --buildNumber "$BUILD_NUMBER" \
             --configuration release_arm64
 
@@ -105,10 +138,9 @@ jobs:
           ditto -x -k bazel-bin/Telegram/Telegram.ipa build/package
           APP_PATH="$(find build/package/Payload -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "${APP_PATH}"
-          plutil -replace CFBundleIdentifier -string "${RELEASE_BUNDLE_ID}" "${APP_PATH}/Info.plist"
+          test "$(plutil -extract CFBundleIdentifier raw "${APP_PATH}/Info.plist")" = "${BUNDLE_ID}"
           find "${APP_PATH}" -type d -name _CodeSignature -prune -exec rm -rf {} +
           find "${APP_PATH}" -name embedded.mobileprovision -delete
-          test "$(plutil -extract CFBundleIdentifier raw "${APP_PATH}/Info.plist")" = "${RELEASE_BUNDLE_ID}"
           (
             cd build/package
             /usr/bin/zip -qry ../artifacts/Nextgram.ipa Payload
@@ -133,13 +165,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          RELEASE_TAG="nextgram-${GITHUB_RUN_NUMBER}"
-          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release upload "${RELEASE_TAG}" build/artifacts/Nextgram.ipa --clobber --repo "${GITHUB_REPOSITORY}"
+          VERSION="$(TZ=Asia/Hong_Kong date +%Y%m%d)$(printf '%03d' "${GITHUB_RUN_NUMBER}")"
+          if gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${VERSION}" build/artifacts/Nextgram.ipa --clobber --repo "${GITHUB_REPOSITORY}"
           else
-            gh release create "${RELEASE_TAG}" build/artifacts/Nextgram.ipa \
+            gh release create "${VERSION}" build/artifacts/Nextgram.ipa \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
-              --title "Nextgram build ${GITHUB_RUN_NUMBER}" \
-              --notes "Standalone re-signable IPA. Bundle ID: ${RELEASE_BUNDLE_ID}. Re-sign before installation."
+              --title "${VERSION}" \
+              --notes "Standalone re-signable IPA. Bundle ID: ${BUNDLE_ID}. Re-sign before installation."
           fi
