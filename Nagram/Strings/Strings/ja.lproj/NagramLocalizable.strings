@@ -7,12 +7,12 @@
 "Nagram.MediaMetadata" = "メディア metadata を表示";
 "Nagram.MediaMetadata.Footer" = "画像・動画ビューアのメニューに解像度、サイズ、再生時間、フレームレート、ビットレート、コーデックなどを表示します。";
 "Nagram.FixLinkPreviews" = "リンクプレビューを修正";
-"Nagram.FixLinkPreviews.Footer" = "クエリとフラグメントを除去したリンクを、検証済みの Nagram metadata ルールが選ぶ外部プレビューサービスへ送信します。メッセージには元のリンクを使用します。";
+"Nagram.FixLinkPreviews.Footer" = "クエリとフラグメントを除去したリンクを、検証済みの Nextgram metadata ルールが選ぶ外部プレビューサービスへ送信します。メッセージには元のリンクを使用します。";
 "Nagram.Section.AutoInlineBot" = "リンクを Inline Bot で自動検索";
 "Nagram.AutoInlineBot.Enabled" = "有効";
 "Nagram.AutoInlineBot.Footer" = "実験的機能です。対応リンクの入力時に Inline Bot の検索結果を自動表示します。";
 "Nagram.InlineBotRules" = "Inline Bot ルール";
-"Nagram.InlineBotRules.Footer" = "ルールは Nagram metadata から取得し、入力欄の元リンクは保持されます。";
+"Nagram.InlineBotRules.Footer" = "ルールは Nextgram metadata から取得し、入力欄の元リンクは保持されます。";
 
 "Nagram.Section.Camera" = "カメラ";
 "Nagram.Section.Camera.Footer" = "添付メニュー内のカメラ入口とライブプレビュー。";
@@ -219,8 +219,8 @@
 "Nagram.AccountInfo.CopyRegDate" = "登録日をコピー";
 "Nagram.ProfileBadge.Developer" = "開発者";
 "Nagram.ProfileBadge.Sponsor" = "スポンサー";
-"Nagram.ProfileBadge.Developer.Info" = "Nagram のコア開発者です。アプリの開発と保守に参加しています。";
-"Nagram.ProfileBadge.Sponsor.Info" = "Nagram のスポンサーです。継続的な保守を支えてくれています。";
+"Nagram.ProfileBadge.Developer.Info" = "Nextgram のコア開発者です。アプリの開発と保守に参加しています。";
+"Nagram.ProfileBadge.Sponsor.Info" = "Nextgram のスポンサーです。継続的な保守を支えてくれています。";
 "Nagram.RegDate.Loading" = "読み込み中";
 "Nagram.RegDate.LoadFailed" = "読み込みに失敗しました。後でもう一度お試しください";
 "Nagram.RegDate.LoadFailedWithFallback" = "%@（正確な日付を読み込めませんでした）";

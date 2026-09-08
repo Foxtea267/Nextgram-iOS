@@ -647,6 +647,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             appGroupUrl = maybeAppGroupUrl
         } else {
             // MARK: NAGRAM
+            // MARK: NEXTGRAM
             // Self-signed builds may not have the App Groups entitlement. Keep the
             // main app usable by storing its data in the regular application sandbox.
             let fallbackAppGroupUrl = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

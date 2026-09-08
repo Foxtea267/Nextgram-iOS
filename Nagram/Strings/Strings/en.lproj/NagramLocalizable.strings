@@ -7,12 +7,12 @@
 "Nagram.MediaMetadata" = "Show Media Metadata";
 "Nagram.MediaMetadata.Footer" = "Shows resolution, size, duration, frame rate, bitrate, codec, and related details in image and video viewer menus.";
 "Nagram.FixLinkPreviews" = "Fix Link Previews";
-"Nagram.FixLinkPreviews.Footer" = "Sends sanitized links without query parameters or fragments to third-party preview services selected by validated Nagram metadata rules. Messages continue to use the original link.";
+"Nagram.FixLinkPreviews.Footer" = "Sends sanitized links without query parameters or fragments to third-party preview services selected by validated Nextgram metadata rules. Messages continue to use the original link.";
 "Nagram.Section.AutoInlineBot" = "Automatic Inline Bot Link Queries";
 "Nagram.AutoInlineBot.Enabled" = "Enabled";
 "Nagram.AutoInlineBot.Footer" = "Experimental. Automatically shows results from the matching inline bot when a recognized link is entered.";
 "Nagram.InlineBotRules" = "Inline Bot Rules";
-"Nagram.InlineBotRules.Footer" = "Rules are supplied by Nagram metadata. The original link remains in the compose field.";
+"Nagram.InlineBotRules.Footer" = "Rules are supplied by Nextgram metadata. The original link remains in the compose field.";
 
 "Nagram.Section.Camera" = "Camera";
 "Nagram.Section.Camera.Footer" = "Camera entry and live preview in the attachment menu.";
@@ -219,8 +219,8 @@
 "Nagram.AccountInfo.CopyRegDate" = "Copy Registration Date";
 "Nagram.ProfileBadge.Developer" = "Developer";
 "Nagram.ProfileBadge.Sponsor" = "Sponsor";
-"Nagram.ProfileBadge.Developer.Info" = "A core Nagram developer who builds and maintains the app.";
-"Nagram.ProfileBadge.Sponsor.Info" = "A Nagram sponsor whose support helps keep the project going.";
+"Nagram.ProfileBadge.Developer.Info" = "A core Nextgram developer who builds and maintains the app.";
+"Nagram.ProfileBadge.Sponsor.Info" = "A Nextgram sponsor whose support helps keep the project going.";
 "Nagram.RegDate.Loading" = "Loading";
 "Nagram.RegDate.LoadFailed" = "Failed to load, try again later";
 "Nagram.RegDate.LoadFailedWithFallback" = "%@ (exact date failed to load)";

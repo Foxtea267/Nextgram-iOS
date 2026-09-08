@@ -58,8 +58,12 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "${TELEGRAM_API_ID}" || -z "${TELEGRAM_API_HASH}" ]]; then
-            TELEGRAM_API_ID="$(python3 -c 'import json; print(json.load(open("build-system/appstore-configuration.json"))["api_id"])')"
-            TELEGRAM_API_HASH="$(python3 -c 'import json; print(json.load(open("build-system/appstore-configuration.json"))["api_hash"])')"
+            echo "::error::Set TELEGRAM_API_ID and TELEGRAM_API_HASH repository secrets before building Nextgram."
+            exit 1
+          fi
+          if [[ ! "${TELEGRAM_API_ID}" =~ ^[0-9]+$ ]]; then
+            echo "::error::TELEGRAM_API_ID must be numeric."
+            exit 1
           fi
           mkdir -p build-input
           cat > build-input/nextgram-ci.json <<JSON

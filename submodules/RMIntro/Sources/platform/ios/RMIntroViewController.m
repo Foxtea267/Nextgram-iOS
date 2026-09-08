@@ -312,8 +312,10 @@ static bool RMIntroUseStaticLogoFallback() {
     shadowView.layer.shadowRadius = 16.0;
     shadowView.layer.shadowOffset = CGSizeMake(0.0, 8.0);
     
+    // MARK: NAGRAM
+    // MARK: NEXTGRAM
     UIImage *logoImage = nil;
-    for (NSString *fileName in @[@"Nagram@3x", @"Nagram@2x", @"Nagram60x60@2x"]) {
+    for (NSString *fileName in @[@"NextgramBuild76x76@2x~ipad", @"NextgramBuild60x60@2x"]) {
         NSString *path = [[NSBundle mainBundle] pathForResource:fileName ofType:@"png"];
         if (path != nil) {
             logoImage = [UIImage imageWithContentsOfFile:path];
