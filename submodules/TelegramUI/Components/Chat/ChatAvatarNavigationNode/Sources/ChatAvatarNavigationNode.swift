@@ -111,7 +111,6 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
             button.addTarget(self, action: #selector(self.autoremoveBadgePressed), for: .touchUpInside)
             button.layer.borderWidth = 1.0
             button.titleLabel?.font = Font.semibold(9.0)
-            button.contentEdgeInsets = UIEdgeInsets(top: 0.0, left: 3.0, bottom: 0.0, right: 3.0)
             self.autoremoveBadgeButton = button
             self.containerNode.view.addSubview(button)
         }
