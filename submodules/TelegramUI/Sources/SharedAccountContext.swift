@@ -78,6 +78,7 @@ import GiftOptionsScreen
 import GiftViewScreen
 import StarsIntroScreen
 import ContentReportScreen
+
 import AffiliateProgramSetupScreen
 import GalleryUI
 import ShareController
@@ -112,6 +113,46 @@ import TextProcessingScreen
 import CreateBotScreen
 import EmojiStatusSelectionComponent
 import EntityKeyboard
+
+// MARK: NAGRAM — Re-signable builds must register the APNs token for the environment
+// in the installed provisioning profile, not the optimization mode used by Actions.
+private func nagramNotificationSandboxEnvironment() -> Bool {
+    let fallback: Bool
+    #if DEBUG
+    fallback = true
+    #else
+    fallback = false
+    #endif
+
+    guard let profileUrl = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+          let profileData = try? Data(contentsOf: profileUrl),
+          let profileText = String(data: profileData, encoding: .isoLatin1),
+          let keyRange = profileText.range(of: "<key>aps-environment</key>", options: .caseInsensitive) else {
+        return fallback
+    }
+
+    let valueStart = keyRange.upperBound
+    let valueEnd = profileText.index(valueStart, offsetBy: 256, limitedBy: profileText.endIndex) ?? profileText.endIndex
+    let valueText = profileText[valueStart ..< valueEnd]
+    if valueText.range(of: "<string>development</string>", options: .caseInsensitive) != nil {
+        return true
+    } else if valueText.range(of: "<string>production</string>", options: .caseInsensitive) != nil {
+        return false
+    }
+    return fallback
+}
+
+// MARK: NAGRAM — Without the service extension Telegram must send a visible,
+// unencrypted APNs payload instead of a payload only the extension can decrypt.
+private func nagramHasNotificationServiceExtension() -> Bool {
+    guard let pluginsUrl = Bundle.main.builtInPlugInsURL,
+          let pluginUrls = try? FileManager.default.contentsOfDirectory(at: pluginsUrl, includingPropertiesForKeys: nil) else {
+        return false
+    }
+    return pluginUrls.contains(where: { url in
+        return Bundle(url: url)?.bundleIdentifier?.hasSuffix(".NotificationService") == true
+    })
+}
 
 private final class AccountUserInterfaceInUseContext {
     let subscribers = Bag<(Bool) -> Void>()
@@ -333,12 +374,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             guard let data else {
                 return nil
             }
-            let sandbox: Bool
-            #if DEBUG
-            sandbox = true
-            #else
-            sandbox = false
-            #endif
+            let sandbox = nagramNotificationSandboxEnvironment()
             return AuthorizationCodePushNotificationConfiguration(
                 token: hexString(data),
                 isSandbox: sandbox
@@ -1626,12 +1662,8 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     public func updateNotificationTokensRegistration() {
-        let sandbox: Bool
-        #if DEBUG
-        sandbox = true
-        #else
-        sandbox = false
-        #endif
+        let sandbox = nagramNotificationSandboxEnvironment()
+        let encryptApsPayload = nagramHasNotificationServiceExtension()
         
         let settings = self.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.inAppNotificationSettings])
         |> map { sharedData -> (allAccounts: Bool, includeMuted: Bool) in
@@ -1704,7 +1736,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                     }
                 } else {
                     if let apsNotificationToken {
-                        appliedAps = account.engine.accountData.registerNotificationToken(token: apsNotificationToken, type: .aps(encrypt: true), sandbox: sandbox, otherAccountUserIds: (account.account.testingEnvironment ? activeTestingUserIds : activeProductionUserIds).filter({ $0 != account.account.peerId.id }), excludeMutedChats: !settings.includeMuted)
+                        appliedAps = account.engine.accountData.registerNotificationToken(token: apsNotificationToken, type: .aps(encrypt: encryptApsPayload), sandbox: sandbox, otherAccountUserIds: (account.account.testingEnvironment ? activeTestingUserIds : activeProductionUserIds).filter({ $0 != account.account.peerId.id }), excludeMutedChats: !settings.includeMuted)
                     } else {
                         appliedAps = .single(true)
                     }

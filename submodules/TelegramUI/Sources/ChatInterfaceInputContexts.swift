@@ -165,7 +165,7 @@ func inputTextPanelStateForChatPresentationInterfaceState(_ chatPresentationInte
     if canSetupAutoremoveTimeout {
         if case .scheduledMessages = chatPresentationInterfaceState.subject {
         } else if chatPresentationInterfaceState.renderedPeer?.peerId != context.account.peerId {
-            if currentAutoremoveTimeout != nil || chatPresentationInterfaceState.renderedPeer?.peer is TelegramSecretChat {
+            if !NagramSettings.shared.chatAutoremoveBadgeEnabled && (currentAutoremoveTimeout != nil || chatPresentationInterfaceState.renderedPeer?.peer is TelegramSecretChat) { // MARK: NAGRAM // MARK: NEXTGRAM
                 accessoryItems.append(.messageAutoremoveTimeout(currentAutoremoveTimeout))
             }
         }
@@ -200,10 +200,12 @@ func inputTextPanelStateForChatPresentationInterfaceState(_ chatPresentationInte
                 if !extendedSearchLayout {
                     if case .scheduledMessages = chatPresentationInterfaceState.subject {
                     } else if chatPresentationInterfaceState.renderedPeer?.peerId != context.account.peerId {
-                        if let peer = chatPresentationInterfaceState.renderedPeer?.peer as? TelegramSecretChat, chatPresentationInterfaceState.interfaceState.composeInputState.isEmpty {
-                            accessoryItems.append(.messageAutoremoveTimeout(peer.messageAutoremoveTimeout))
-                        } else if currentAutoremoveTimeout != nil && chatPresentationInterfaceState.interfaceState.composeInputState.isEmpty {
-                            accessoryItems.append(.messageAutoremoveTimeout(currentAutoremoveTimeout))
+                        if !NagramSettings.shared.chatAutoremoveBadgeEnabled { // MARK: NAGRAM // MARK: NEXTGRAM
+                            if let peer = chatPresentationInterfaceState.renderedPeer?.peer as? TelegramSecretChat, chatPresentationInterfaceState.interfaceState.composeInputState.isEmpty {
+                                accessoryItems.append(.messageAutoremoveTimeout(peer.messageAutoremoveTimeout))
+                            } else if currentAutoremoveTimeout != nil && chatPresentationInterfaceState.interfaceState.composeInputState.isEmpty {
+                                accessoryItems.append(.messageAutoremoveTimeout(currentAutoremoveTimeout))
+                            }
                         }
                     }
                 }

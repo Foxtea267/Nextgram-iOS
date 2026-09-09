@@ -332,10 +332,27 @@ filegroup(
     ]),
 )
 
-alternate_icon_folders = []
+# MARK: NAGRAM
+# MARK: NEXTGRAM — Keep Nextgram primary while preserving every official Telegram icon.
+alternate_icon_folders = [
+    "BlackIcon",
+    "BlackClassicIcon",
+    "BlackFilledIcon",
+    "BlueIcon",
+    "BlueClassicIcon",
+    "BlueFilledIcon",
+    "WhiteFilledIcon",
+    "New1",
+    "New2",
+    "Premium",
+    "PremiumBlack",
+    "PremiumTurbo",
+]
 
-# MARK: NAGRAM — Nextgram ships a single independent primary icon.
-composer_build_icon_folders = ["NextgramBuild"]
+composer_build_icon_folders = [
+    "NextgramBuild",
+    "Telegram",
+]
 
 [
     filegroup(

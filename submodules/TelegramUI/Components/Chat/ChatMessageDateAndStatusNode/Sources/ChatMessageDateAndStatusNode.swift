@@ -540,6 +540,13 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             }
             
             var updatedDateText = arguments.dateText
+            var nagramDeletedMarkerText: String?
+            if updatedDateText.hasPrefix(nagramDeletedMessageMarkerPrefix) {
+                updatedDateText.removeFirst(nagramDeletedMessageMarkerPrefix.count)
+                if let separatorRange = updatedDateText.range(of: " · ") {
+                    nagramDeletedMarkerText = String(updatedDateText[..<separatorRange.lowerBound])
+                }
+            }
             if arguments.edited {
                 if let useEditedTimestamp = arguments.context.getAppConfigValue("message_primary_edited_date") as? Bool, useEditedTimestamp {
                 } else {
@@ -551,7 +558,18 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             }
             
             let dateFont = Font.regular(floor(arguments.presentationData.fontSize.baseDisplaySize * 11.0 / 17.0))
-            let (date, dateApply) = dateLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: updatedDateText, font: dateFont, textColor: dateColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .middle, constrainedSize: arguments.constrainedSize, alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+            let attributedDateText = NSMutableAttributedString(string: updatedDateText, font: dateFont, textColor: dateColor)
+            if let markerText = nagramDeletedMarkerText {
+                let configuredColor = NagramSettings.shared.deletedMessageIndicatorColor.trimmingCharacters(in: .whitespacesAndNewlines)
+                let colorDigits = configuredColor.hasPrefix("#") ? String(configuredColor.dropFirst()) : configuredColor
+                if (colorDigits.count == 6 || colorDigits.count == 8), let markerColor = UIColor(hexString: configuredColor) {
+                    let markerRange = (updatedDateText as NSString).range(of: markerText)
+                    if markerRange.location != NSNotFound {
+                        attributedDateText.addAttribute(.foregroundColor, value: markerColor, range: markerRange)
+                    }
+                }
+            }
+            let (date, dateApply) = dateLayout(TextNodeLayoutArguments(attributedString: attributedDateText, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .middle, constrainedSize: arguments.constrainedSize, alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             
             let checkOffset = floor(arguments.presentationData.fontSize.baseDisplaySize * 6.0 / 17.0)
             

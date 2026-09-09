@@ -13,8 +13,9 @@ func _internal_applyMaxReadIndexInteractively(postbox: Postbox, stateManager: Ac
     
 func _internal_applyMaxReadIndexInteractively(transaction: Transaction, stateManager: AccountStateManager, index: MessageIndex) {
     // MARK: NAGRAM
-    // MARK: NEXTGRAM
-    guard !NagramSettings.shared.suppressReadReceipts else {
+    // MARK: NEXTGRAM — Ghost mode must still clear local unread state and save the reading position.
+    let suppressReadReceipts = NagramSettings.shared.suppressReadReceipts
+    if suppressReadReceipts && index.id.peerId.namespace == Namespaces.Peer.SecretChat {
         return
     }
 
@@ -70,7 +71,7 @@ func _internal_applyMaxReadIndexInteractively(transaction: Transaction, stateMan
                 }
             }
         }
-    } else if index.id.peerId.namespace == Namespaces.Peer.CloudUser || index.id.peerId.namespace == Namespaces.Peer.CloudGroup || index.id.peerId.namespace == Namespaces.Peer.CloudChannel {
+    } else if !suppressReadReceipts && (index.id.peerId.namespace == Namespaces.Peer.CloudUser || index.id.peerId.namespace == Namespaces.Peer.CloudGroup || index.id.peerId.namespace == Namespaces.Peer.CloudChannel) {
         stateManager.notifyAppliedIncomingReadMessages([index.id])
     }
 }

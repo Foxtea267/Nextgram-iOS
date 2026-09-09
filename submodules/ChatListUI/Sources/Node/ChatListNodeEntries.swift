@@ -4,6 +4,7 @@ import TelegramCore
 import TelegramPresentationData
 import MergeLists
 import AccountContext
+import NagramChatListFilters // MARK: NAGRAM // MARK: NEXTGRAM
 import NagramSettings
 import NagramStrings // MARK: NAGRAM
 
@@ -505,7 +506,20 @@ enum ChatListNodeEntry: Comparable, Identifiable {
            lhsPriority != rhsPriority {
             return lhsPriority < rhsPriority
         }
+        if NagramSettings.shared.chatListOldestFirst,
+           lhs.nagramIsUnpinnedPeer,
+           rhs.nagramIsUnpinnedPeer {
+            return rhs.sortIndex < lhs.sortIndex
+        }
         return lhs.sortIndex < rhs.sortIndex
+    }
+
+    private var nagramIsUnpinnedPeer: Bool {
+        guard case let .PeerEntry(data) = self,
+              case let .chatList(index) = data.index else {
+            return false
+        }
+        return index.pinningIndex == nil
     }
 
     private var nagramUnreadPriority: Int? {
@@ -514,7 +528,9 @@ enum ChatListNodeEntry: Comparable, Identifiable {
               index.pinningIndex == nil else {
             return nil
         }
-        return data.readState?.isUnread == true && !data.nagramIgnoreUnreadBadge ? 0 : 1
+        // The transition layer reverses this ascending array before display, so
+        // unread entries need the larger priority to appear at the top.
+        return data.readState?.isUnread == true && !data.nagramIgnoreUnreadBadge ? 1 : 0
     }
     
     static func ==(lhs: ChatListNodeEntry, rhs: ChatListNodeEntry) -> Bool {
@@ -710,7 +726,7 @@ private func nagramShouldIgnoreRegexFilteredUnreadBadge(messages: [EngineMessage
     return hiddenUnreadCount > 0 && hiddenUnreadCount >= readState.count
 }
 
-func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, savedMessagesPeer: EnginePeer?, foundPeers: [(EnginePeer, EnginePeer?)], hideArchivedFolderByDefault: Bool, displayArchiveIntro: Bool, archiveGroupItem: EngineChatList.GroupItem?, mode: ChatListNodeMode, chatListLocation: ChatListControllerLocation, contacts: [ChatListContactPeer], accountPeerId: EnginePeer.Id, isMainTab: Bool, showArchiveInFolders: Bool) -> (entries: [ChatListNodeEntry], loading: Bool) {
+func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, savedMessagesPeer: EnginePeer?, foundPeers: [(EnginePeer, EnginePeer?)], hideArchivedFolderByDefault: Bool, displayArchiveIntro: Bool, archiveGroupItem: EngineChatList.GroupItem?, mode: ChatListNodeMode, chatListLocation: ChatListControllerLocation, chatListFilter: ChatListFilter?, contacts: [ChatListContactPeer], accountPeerId: EnginePeer.Id, isMainTab: Bool, showArchiveInFolders: Bool) -> (entries: [ChatListNodeEntry], loading: Bool) {
     var groupItems = view.groupItems
     let hasArchiveGroup = { () -> Bool in
         return groupItems.contains(where: { $0.id == .archive })
@@ -814,6 +830,14 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
             nagramMessagePeerId = peerId
         }
         let nagramIgnoreUnreadBadge = nagramShouldIgnoreRegexFilteredUnreadBadge(messages: updatedMessages, readState: updatedCombinedReadState, peerId: nagramMessagePeerId, accountPeerId: accountPeerId) // MARK: NAGRAM — 聚合会话按来源会话应用过滤规则
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM — Telegram has no native read-only folder predicate, so apply it to the local virtual filter here.
+        if case let .filter(filterId, _, _, _) = chatListFilter,
+           filterId == NagramQuickChatFilter.read.rawValue,
+           updatedCombinedReadState?.isUnread == true,
+           !nagramIgnoreUnreadBadge {
+            continue loop
+        }
         // MARK: NAGRAM — hide 规则把预览消息全部过滤掉时，条目会退化成"空会话"，
         // ChatListItem.selected 会走 peerSelected（该路径恒 activateInput=true）导致进入聊天时误弹键盘。
         var nagramSuppressActivateInput = false
@@ -1125,7 +1149,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
         }
     }
 
-    if NagramSettings.shared.chatListUnreadFirst { // MARK: NAGRAM // MARK: NEXTGRAM
+    if NagramSettings.shared.chatListUnreadFirst || NagramSettings.shared.chatListOldestFirst { // MARK: NAGRAM // MARK: NEXTGRAM
         result.sort()
     }
 

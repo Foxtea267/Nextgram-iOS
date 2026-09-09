@@ -3,6 +3,8 @@ import Display
 import FaceScanScreen
 import Foundation
 import ItemListUI
+import LegacyMediaPickerUI
+import NagramMessageHistory
 import NagramSettings
 import NagramStrings
 import PresentationDataUtils
@@ -14,8 +16,8 @@ import UIKit
 import UndoUI
 
 // MARK: NAGRAM — 增强设置页 UI。
-// 顶部 3 段(通用/消息/其他)用 ItemListControllerTitle.sectionControl;段内用 section header 分层。
-// 数据驱动:nagramGroups() 描述「tab → 段内分组(header/footer/行)」,加开关只改这张表。
+// 首页提供全局搜索和板块入口；进入板块后再按 section header 分层，避免顶部导航随功能增长而拥挤。
+// 数据驱动:nagramGroups() 描述「板块 → 分组(header/footer/行)」,加开关只改这张表。
 // 行类型 NagramRow:toggle(开关)/ choice(disclosure + ActionSheet 弹选,下载加速)/ slider(行内百分比滑杆,贴纸尺寸)。
 // 刷新机制:本地 updatePromise + bump()。toggle/choice 改值后调 bump() 触发列表重建(在 setter 返回之后,
 // 不在 UserDefaults.didChange 同步回调内,故无 Swift 独占访问重入崩溃);slider 拖动时本节点自显示,不 bump。
@@ -376,6 +378,9 @@ private func nagramGroups(
     sensitiveContentConfiguration: @escaping () -> ContentSettingsConfiguration?,
     setSensitiveContentEnabled: @escaping (Bool) -> Void,
     bottomBarLayoutAction: @escaping () -> Void,
+    antiRecallRulesAction: @escaping () -> Void,
+    exportDeletedMessagesAction: @escaping () -> Void,
+    importDeletedMessagesAction: @escaping () -> Void,
     messageMenuAction: @escaping () -> Void,
     regexFiltersAction: @escaping () -> Void,
     inlineBotRulesAction: @escaping () -> Void,
@@ -401,7 +406,22 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.ChatListFolderTabsCompact", get: { NagramSettings.shared.chatListFolderTabsCompact }, set: { NagramSettings.shared.chatListFolderTabsCompact = $0 }),
             .toggle(titleKey: "Nagram.HideAllChatsFolder", get: { NagramSettings.shared.hideAllChatsFolder }, set: { NagramSettings.shared.hideAllChatsFolder = $0 }),
             .toggle(titleKey: "Nagram.ChatListQuickFilters", get: { NagramSettings.shared.chatListQuickFiltersEnabled }, set: { NagramSettings.shared.chatListQuickFiltersEnabled = $0 }),
-            .toggle(titleKey: "Nagram.ChatListUnreadFirst", get: { NagramSettings.shared.chatListUnreadFirst }, set: { NagramSettings.shared.chatListUnreadFirst = $0 }),
+            .toggle(titleKey: "Nagram.ChatSearchHideDuplicateRecents", get: { NagramSettings.shared.chatSearchHideRecentListWhenTopPeersVisible }, set: { NagramSettings.shared.chatSearchHideRecentListWhenTopPeersVisible = $0 }),
+            .toggle(titleKey: "Nagram.ChatListUnreadFirst", get: { NagramSettings.shared.chatListUnreadFirst }, set: { value in
+                NagramSettings.shared.chatListUnreadFirst = value
+                if value {
+                    NagramSettings.shared.chatListOldestFirst = false
+                }
+            }),
+            .toggle(titleKey: "Nagram.ChatListOldestFirst", get: { NagramSettings.shared.chatListOldestFirst }, set: { value in
+                NagramSettings.shared.chatListOldestFirst = value
+                if value {
+                    NagramSettings.shared.chatListUnreadFirst = false
+                }
+            }),
+            .toggle(titleKey: "Nagram.MusicPlaylistShowFileSize", get: { NagramSettings.shared.musicPlaylistShowFileSize }, set: { NagramSettings.shared.musicPlaylistShowFileSize = $0 }),
+            .toggle(titleKey: "Nagram.MusicPlaylistShowDownloadStatus", get: { NagramSettings.shared.musicPlaylistShowDownloadStatus }, set: { NagramSettings.shared.musicPlaylistShowDownloadStatus = $0 }),
+            .toggle(titleKey: "Nagram.ChatAutoremoveBadge", get: { NagramSettings.shared.chatAutoremoveBadgeEnabled }, set: { NagramSettings.shared.chatAutoremoveBadgeEnabled = $0 }),
             .toggle(titleKey: "Nagram.ShowFoldersInShareSheet", get: { NagramSettings.shared.showFoldersInShareSheet }, set: { NagramSettings.shared.showFoldersInShareSheet = $0 }),
             .toggle(titleKey: "Nagram.HideSavedAndArchivedMessagesInList", get: { NagramSettings.shared.hideSavedAndArchivedMessagesInList }, set: { NagramSettings.shared.hideSavedAndArchivedMessagesInList = $0 }),
             .choice(titleKey: "Nagram.ChatListMessagePreviewStyle", prefix: "Nagram.ChatListMessagePreviewStyle", options: ["three", "two"], current: { NagramSettings.shared.chatListMessagePreviewStyleMode.rawValue }, set: { value in
@@ -440,8 +460,13 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.MessagePreservation", footerKey: "Nagram.Section.MessagePreservation.Footer", rows: [
             .toggle(titleKey: "Nagram.AntiRecall", get: { NagramSettings.shared.antiRecallEnabled }, set: { NagramSettings.shared.antiRecallEnabled = $0 }),
+            .navigation(titleKey: "Nagram.AntiRecallRules", action: antiRecallRulesAction),
+            .choice(titleKey: "Nagram.DeletedMessageIndicatorStyle", prefix: "Nagram.DeletedMessageIndicatorStyle", options: ["text", "trash", "both"], current: { NagramSettings.shared.deletedMessageIndicatorStyleValue.rawValue }, set: { NagramSettings.shared.deletedMessageIndicatorStyle = $0 }),
+            .input(titleKey: "Nagram.DeletedMessageIndicatorColor", placeholderKey: "Nagram.DeletedMessageIndicatorColor.Placeholder", get: { NagramSettings.shared.deletedMessageIndicatorColor }, set: { NagramSettings.shared.deletedMessageIndicatorColor = $0 }, isSecret: false, isVisible: { true }),
             .toggle(titleKey: "Nagram.PreserveBotMessages", get: { NagramSettings.shared.preserveBotMessages }, set: { NagramSettings.shared.preserveBotMessages = $0 }),
             .toggle(titleKey: "Nagram.SaveMessageEditHistory", get: { NagramSettings.shared.saveMessageEditHistory }, set: { NagramSettings.shared.saveMessageEditHistory = $0 }),
+            .navigation(titleKey: "Nagram.DeletedMessages.Export", action: exportDeletedMessagesAction),
+            .navigation(titleKey: "Nagram.DeletedMessages.Import", action: importDeletedMessagesAction),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.MessageList", footerKey: "Nagram.StayAtLatestMessageAfterRefresh.Footer", rows: [
             .toggle(titleKey: "Nagram.StayAtLatestMessageAfterRefresh", get: { NagramSettings.shared.stayAtLatestMessageAfterRefresh }, set: { NagramSettings.shared.stayAtLatestMessageAfterRefresh = $0 }),
@@ -669,9 +694,66 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
     |> map(Optional.init)))
 
     let updateSensitiveContentDisposable = MetaDisposable()
+    let deletedMessagesArchiveDisposable = MetaDisposable()
     var presentControllerImpl: ((ViewController, ViewControllerPresentationArguments?) -> Void)?
     var presentAgeVerificationImpl: ((@escaping () -> Void) -> Void)?
     var pushControllerImpl: ((ViewController) -> Void)?
+    let presentArchiveAlert: (String, String) -> Void = { title, text in
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        presentControllerImpl?(textAlertController(context: context, title: title, text: text, actions: [
+            TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})
+        ]), nil)
+    }
+    let exportDeletedMessages: () -> Void = {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        let lang = presentationData.strings.baseLanguageCode
+        deletedMessagesArchiveDisposable.set((nagramExportDeletedMessages(postbox: context.account.postbox, accountPeerId: context.account.peerId)
+        |> deliverOnMainQueue).start(next: { result in
+            guard let result else {
+                presentArchiveAlert(ngI18n("Nagram.DeletedMessages.Export", lang), ngI18n("Nagram.DeletedMessages.Export.Failed", lang))
+                return
+            }
+            let filename = "Nextgram-DeletedMessages-\(Int64(Date().timeIntervalSince1970))-\(result.messageCount).json"
+            let url = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true).appendingPathComponent(filename)
+            do {
+                try result.data.write(to: url, options: .atomic)
+                presentControllerImpl?(legacyICloudFilePicker(theme: presentationData.theme, mode: .export, url: url, documentTypes: [], completion: { _ in }), nil)
+            } catch {
+                presentArchiveAlert(ngI18n("Nagram.DeletedMessages.Export", lang), ngI18n("Nagram.DeletedMessages.Export.Failed", lang))
+            }
+        }))
+    }
+    let importDeletedMessages: () -> Void = {
+        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+        let lang = presentationData.strings.baseLanguageCode
+        let picker = legacyICloudFilePicker(theme: presentationData.theme, mode: .import, documentTypes: ["public.json", "public.data"], completion: { urls in
+            guard let url = urls.first else {
+                return
+            }
+            let didAccess = url.startAccessingSecurityScopedResource()
+            let data = try? Data(contentsOf: url)
+            if didAccess {
+                url.stopAccessingSecurityScopedResource()
+            }
+            guard let data else {
+                presentArchiveAlert(ngI18n("Nagram.DeletedMessages.Import", lang), ngI18n("Nagram.DeletedMessages.Import.Invalid", lang))
+                return
+            }
+            deletedMessagesArchiveDisposable.set((nagramImportDeletedMessages(postbox: context.account.postbox, accountPeerId: context.account.peerId, data: data)
+            |> deliverOnMainQueue).start(next: { result in
+                switch result {
+                case let .success(importedCount, skippedCount):
+                    let message = String(format: ngI18n("Nagram.DeletedMessages.Import.Success", lang), importedCount, skippedCount)
+                    presentArchiveAlert(ngI18n("Nagram.DeletedMessages.Import", lang), message)
+                case .invalidArchive:
+                    presentArchiveAlert(ngI18n("Nagram.DeletedMessages.Import", lang), ngI18n("Nagram.DeletedMessages.Import.Invalid", lang))
+                case .wrongAccount:
+                    presentArchiveAlert(ngI18n("Nagram.DeletedMessages.Import", lang), ngI18n("Nagram.DeletedMessages.Import.WrongAccount", lang))
+                }
+            }))
+        })
+        presentControllerImpl?(picker, nil)
+    }
     let groups = nagramGroups(hideCalls: {
         return !currentShowCallsTab
     }, setHideCalls: { hidden in
@@ -714,6 +796,12 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         }
     }, bottomBarLayoutAction: {
         pushControllerImpl?(nagramBottomBarSettingsController(context: context))
+    }, antiRecallRulesAction: {
+        pushControllerImpl?(nagramAntiRecallRulesController(context: context))
+    }, exportDeletedMessagesAction: {
+        exportDeletedMessages()
+    }, importDeletedMessagesAction: {
+        importDeletedMessages()
     }, messageMenuAction: {
         pushControllerImpl?(nagramMessageMenuSettingsController(context: context))
     }, regexFiltersAction: {
@@ -730,6 +818,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         group.rows.map { nagramSettingsDeepLink(tab: group.tab, row: $0) }
     }
     let deepLinkTarget = nagramDeepLinkTarget(deepLinkPath: deepLinkPath, groups: groups)
+    let isRoot = deepLinkPath == nil
     let autoOpenNavigationAction: (() -> Void)? = deepLinkTarget.rowIndex.flatMap { rowIndex -> (() -> Void)? in
         guard flatRows.indices.contains(rowIndex), case let .navigation(_, action) = flatRows[rowIndex] else {
             return nil
@@ -738,6 +827,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
     }
 
     let tabPromise = ValuePromise<Int32>(deepLinkTarget.tab.rawValue, ignoreRepeated: true)
+    let searchPromise = ValuePromise<String>("", ignoreRepeated: true)
 
     // 本地刷新计数:toggle/choice 改值后 bump() 触发重建。slider 不 bump(节点自显示)。
     let updatePromise = ValuePromise<Int32>(0, ignoreRepeated: false)
@@ -756,6 +846,16 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
             break
         }
     }, disclosureAction: { index in
+        if index <= -100 {
+            let rawValue = Int32(-100 - index)
+            if let tab = NagramTab(rawValue: rawValue) {
+                pushControllerImpl?(nagramSettingsController(context: context, deepLinkPath: tab.deepLinkSection))
+            }
+            return
+        }
+        guard flatRows.indices.contains(index) else {
+            return
+        }
         let row = flatRows[index]
         if case let .choice(titleKey, prefix, options, _, set) = row {
             // 参照 InstalledStickerPacksController.openSuggestOptions:disclosure 点击弹 ActionSheet 选档。
@@ -834,6 +934,13 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
             action()
         }
     }, inputUpdated: { index, value in
+        if index == -1 {
+            searchPromise.set(value)
+            return
+        }
+        guard flatRows.indices.contains(index) else {
+            return
+        }
         if case let .input(_, _, _, set, _, _) = flatRows[index] {
             set(value)
         }
@@ -856,7 +963,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
 
     let signal = combineLatest(queue: .mainQueue(),
         context.sharedContext.presentationData,
-        tabPromise.get(),
+        combineLatest(tabPromise.get(), searchPromise.get()),
         updatePromise.get(),
         contentSettingsConfigurationPromise.get(),
         context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.callListSettings])
@@ -865,24 +972,60 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         }
     )
     |> deliverOnMainQueue
-    |> map { presentationData, selectedTab, _, contentSettingsConfiguration, showCallsTab -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, selection, _, contentSettingsConfiguration, showCallsTab -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let selectedTab = selection.0
+        let searchQuery = selection.1.trimmingCharacters(in: .whitespacesAndNewlines)
         currentShowCallsTab = showCallsTab
         currentContentSettingsConfiguration = contentSettingsConfiguration
         let lang = presentationData.strings.baseLanguageCode
 
-        // stableId 必须全局唯一且稳定:遍历所有 group 全局递增分配,当前 tab 只取子集。
-        // 否则切 tab 时同 stableId 指向不同类型 entry,ItemList diff 会用错 item 类型 update node 而崩溃。
         var entries: [NagramSettingsEntry] = []
         var initialScrollToItem: ListViewScrollToItem?
         var stableId: Int32 = 0
         var globalRowIndex = 0
-        for (groupIndex, group) in groups.enumerated() {
-            let isCurrent = group.tab.rawValue == selectedTab
-            let sectionId = Int32(groupIndex)
+        let appendRow: (NagramRow, Int, Int32, Int32) -> Void = { row, rowIndex, rowStableId, sectionId in
+            switch row {
+            case let .toggle(titleKey, get, _):
+                entries.append(.toggle(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), value: get(), enabled: true, enableInteractiveChanges: true, index: rowIndex))
+            case let .toggleWithEnabled(titleKey, get, _, enabled, enableInteractiveChanges):
+                entries.append(.toggle(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), value: get(), enabled: enabled(), enableInteractiveChanges: enableInteractiveChanges, index: rowIndex))
+            case let .choice(titleKey, prefix, _, current, _):
+                let currentValue = titleKey == "Nagram.ChatListMessagePreviewStyle" && NagramSettings.shared.chatListCompact ? NagramChatListMessagePreviewStyle.two.rawValue : current()
+                entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: ngI18n("\(prefix).\(currentValue)", lang), index: rowIndex))
+            case let .input(titleKey, placeholderKey, get, _, isSecret, isVisible):
+                if isVisible() {
+                    entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, index: rowIndex))
+                }
+            case let .startupFolder(titleKey):
+                entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: nagramChatListStartupFolderLabel(accountPeerId: context.account.peerId.toInt64(), strings: presentationData.strings, lang: lang), index: rowIndex))
+            case let .slider(titleKey, minValue, maxValue, get, _, isVisible):
+                if isVisible() {
+                    entries.append(.slider(stableId: rowStableId, section: sectionId, title: titleKey.map { ngI18n($0, lang) }, minValue: minValue, maxValue: maxValue, value: get(), index: rowIndex))
+                }
+            case let .navigation(titleKey, _):
+                entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: "", index: rowIndex))
+            }
+        }
 
+        if isRoot {
+            entries.append(.input(stableId: -10, section: 0, title: "", text: selection.1, placeholder: ngI18n("Nagram.Settings.Search", lang), isSecret: false, index: -1))
+            if searchQuery.isEmpty {
+                entries.append(.header(stableId: -9, section: 1, text: ngI18n("Nagram.Settings.Sections", lang)))
+                for tab in NagramTab.allCases {
+                    entries.append(.disclosure(stableId: -8 + tab.rawValue, section: 1, title: ngI18n(tab.titleKey, lang), label: "", index: -100 - Int(tab.rawValue)))
+                }
+            }
+        }
+
+        let normalizedSearchQuery = normalizedNagramDeepLinkToken(searchQuery)
+        for (groupIndex, group) in groups.enumerated() {
+            let sectionId = Int32(groupIndex + (isRoot ? 2 : 0))
             let headerStableId = stableId
             stableId += 1
-            if isCurrent, let headerKey = group.headerKey {
+            let groupTitle = group.headerKey.map { ngI18n($0, lang) } ?? ngI18n(group.tab.titleKey, lang)
+            let groupMatchesSearch = isRoot && !searchQuery.isEmpty && groupTitle.localizedCaseInsensitiveContains(searchQuery)
+            var didAppendSearchHeader = false
+            if !isRoot && group.tab.rawValue == selectedTab, let headerKey = group.headerKey {
                 entries.append(.header(stableId: headerStableId, section: sectionId, text: ngI18n(headerKey, lang)))
             }
 
@@ -891,49 +1034,43 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 stableId += 1
                 let rowIndex = globalRowIndex
                 globalRowIndex += 1
-                if isCurrent {
-                    if deepLinkTarget.rowIndex == rowIndex {
+                let title = ngI18n(nagramRowTitleKey(row), lang)
+                let rowMatchesSearch = groupMatchesSearch || title.localizedCaseInsensitiveContains(searchQuery) || nagramRowDeepLinkTokens(row).contains(where: { $0.contains(normalizedSearchQuery) })
+                let shouldAppend = (!isRoot && group.tab.rawValue == selectedTab) || (isRoot && !searchQuery.isEmpty && rowMatchesSearch)
+                if shouldAppend {
+                    if isRoot && !didAppendSearchHeader {
+                        let searchHeader = group.headerKey == nil ? ngI18n(group.tab.titleKey, lang) : "\(ngI18n(group.tab.titleKey, lang)) · \(groupTitle)"
+                        entries.append(.header(stableId: headerStableId, section: sectionId, text: searchHeader))
+                        didAppendSearchHeader = true
+                    }
+                    if !isRoot && deepLinkTarget.rowIndex == rowIndex {
                         initialScrollToItem = ListViewScrollToItem(index: entries.count, position: .visible, animated: false, curve: .Default(duration: nil), directionHint: .Down)
                     }
-                    switch row {
-                    case let .toggle(titleKey, get, _):
-                        entries.append(.toggle(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), value: get(), enabled: true, enableInteractiveChanges: true, index: rowIndex))
-                    case let .toggleWithEnabled(titleKey, get, _, enabled, enableInteractiveChanges):
-                        entries.append(.toggle(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), value: get(), enabled: enabled(), enableInteractiveChanges: enableInteractiveChanges, index: rowIndex))
-                    case let .choice(titleKey, prefix, _, current, _):
-                        let currentValue = titleKey == "Nagram.ChatListMessagePreviewStyle" && NagramSettings.shared.chatListCompact ? NagramChatListMessagePreviewStyle.two.rawValue : current()
-                        entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: ngI18n("\(prefix).\(currentValue)", lang), index: rowIndex))
-                    case let .input(titleKey, placeholderKey, get, _, isSecret, isVisible):
-                        if isVisible() {
-                            entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, index: rowIndex))
-                        }
-                    case let .startupFolder(titleKey):
-                        entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: nagramChatListStartupFolderLabel(accountPeerId: context.account.peerId.toInt64(), strings: presentationData.strings, lang: lang), index: rowIndex))
-                    case let .slider(titleKey, minValue, maxValue, get, _, isVisible):
-                        if isVisible() {
-                            entries.append(.slider(stableId: rowStableId, section: sectionId, title: titleKey.map { ngI18n($0, lang) }, minValue: minValue, maxValue: maxValue, value: get(), index: rowIndex))
-                        }
-                    case let .navigation(titleKey, _):
-                        entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: "", index: rowIndex))
-                    }
+                    appendRow(row, rowIndex, rowStableId, sectionId)
                 }
             }
 
             let footerStableId = stableId
             stableId += 1
-            if isCurrent, let footerKey = group.footerKey {
+            if !isRoot && group.tab.rawValue == selectedTab, let footerKey = group.footerKey {
                 entries.append(.footer(stableId: footerStableId, section: sectionId, text: ngI18n(footerKey, lang)))
             }
         }
 
-        let tabTitles = NagramTab.allCases.map { ngI18n($0.titleKey, lang) }
-        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .sectionControl(tabTitles, Int(selectedTab)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: deepLinkTarget.rowIndex.map { NagramSettingsRowTag(index: $0) }, initialScrollToItem: initialScrollToItem, animateChanges: false)
+        if isRoot && !searchQuery.isEmpty && entries.count == 1 {
+            entries.append(.footer(stableId: Int32.max, section: 1, text: ngI18n("Nagram.Settings.Search.Empty", lang)))
+        }
+
+        let title = isRoot ? "Nextgram" : ngI18n(deepLinkTarget.tab.titleKey, lang)
+        let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(title), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
+        let ensureVisibleItemTag = isRoot ? nil : deepLinkTarget.rowIndex.map { NagramSettingsRowTag(index: $0) }
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: ensureVisibleItemTag, initialScrollToItem: initialScrollToItem, animateChanges: false)
 
         return (controllerState, (listState, arguments))
     }
     |> afterDisposed {
         updateSensitiveContentDisposable.dispose()
+        deletedMessagesArchiveDisposable.dispose()
     }
 
     let controller = ItemListController(context: context, state: signal)
@@ -966,9 +1103,6 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 })
             }
         }
-    }
-    controller.titleControlValueChanged = { index in
-        tabPromise.set(Int32(index))
     }
     presentControllerImpl = { [weak controller] c, presentationArguments in
         controller?.present(c, in: .window(.root), with: presentationArguments)

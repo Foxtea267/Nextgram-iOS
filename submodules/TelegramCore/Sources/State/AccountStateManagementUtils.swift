@@ -7,6 +7,7 @@ import EncryptionProvider
 import NagramMessageHistory // MARK: NAGRAM
 import NagramSettings // MARK: NAGRAM
 
+// MARK: NAGRAM
 // MARK: NEXTGRAM — Remote message preservation helpers.
 private func nagramMessageWasSentByBot(_ message: Message, transaction: Transaction) -> Bool {
     if let peer = transaction.getPeer(message.id.peerId) as? TelegramUser, peer.botInfo != nil {
@@ -16,6 +17,48 @@ private func nagramMessageWasSentByBot(_ message: Message, transaction: Transact
         return true
     }
     return false
+}
+
+private func nagramAntiRecallEntity(_ peer: Peer) -> NagramAntiRecallEntity? {
+    if let user = peer as? TelegramUser {
+        var usernames = user.usernames.map(\.username)
+        if let username = user.username, !username.isEmpty {
+            usernames.append(username)
+        }
+        return NagramAntiRecallEntity(id: user.id.id._internalGetInt64Value(), usernames: usernames, kind: user.botInfo == nil ? .user : .bot)
+    } else if let group = peer as? TelegramGroup {
+        return NagramAntiRecallEntity(id: group.id.id._internalGetInt64Value(), usernames: [], kind: .group)
+    } else if let channel = peer as? TelegramChannel {
+        var usernames = channel.usernames.map(\.username)
+        if let username = channel.username, !username.isEmpty {
+            usernames.append(username)
+        }
+        let kind: NagramAntiRecallEntityKind
+        switch channel.info {
+        case .group:
+            kind = .group
+        case .broadcast:
+            kind = .channel
+        }
+        return NagramAntiRecallEntity(id: channel.id.id._internalGetInt64Value(), usernames: usernames, kind: kind)
+    }
+    return nil
+}
+
+private func nagramShouldPreserveDeletedMessage(_ message: Message, transaction: Transaction) -> (preserve: Bool, preservedBotMessage: Bool) {
+    let settings = NagramSettings.shared
+    var entities: [NagramAntiRecallEntity] = []
+    if let peer = transaction.getPeer(message.id.peerId), let entity = nagramAntiRecallEntity(peer) {
+        entities.append(entity)
+    }
+    if let author = message.author, author.id != message.id.peerId, let entity = nagramAntiRecallEntity(author) {
+        entities.append(entity)
+    }
+    guard settings.antiRecallFilters.shouldPreserve(entities: entities, text: message.text) else {
+        return (false, false)
+    }
+    let preserveBotMessage = settings.preserveBotMessages && nagramMessageWasSentByBot(message, transaction: transaction)
+    return (settings.antiRecallEnabled || preserveBotMessage, preserveBotMessage)
 }
 
 private func nagramMarkMessageAsDeleted(_ message: Message, transaction: Transaction, preservedBotMessage: Bool) {
@@ -4490,10 +4533,10 @@ func replayFinalState(
                     guard let currentMessage = transaction.getMessage(messageId) else {
                         continue
                     }
-                    let preserveBotMessage = NagramSettings.shared.preserveBotMessages && nagramMessageWasSentByBot(currentMessage, transaction: transaction)
-                    if NagramSettings.shared.antiRecallEnabled || preserveBotMessage {
+                    let preservation = nagramShouldPreserveDeletedMessage(currentMessage, transaction: transaction)
+                    if preservation.preserve {
                         retainedGlobalIds.insert(messageId.id)
-                        nagramMarkMessageAsDeleted(currentMessage, transaction: transaction, preservedBotMessage: preserveBotMessage)
+                        nagramMarkMessageAsDeleted(currentMessage, transaction: transaction, preservedBotMessage: preservation.preservedBotMessage)
                     }
                 }
                 let deletedGlobalIds = ids.filter { !retainedGlobalIds.contains($0) }
@@ -4513,10 +4556,10 @@ func replayFinalState(
                     guard let currentMessage = transaction.getMessage(id) else {
                         continue
                     }
-                    let preserveBotMessage = NagramSettings.shared.preserveBotMessages && nagramMessageWasSentByBot(currentMessage, transaction: transaction)
-                    if NagramSettings.shared.antiRecallEnabled || preserveBotMessage {
+                    let preservation = nagramShouldPreserveDeletedMessage(currentMessage, transaction: transaction)
+                    if preservation.preserve {
                         retainedIds.insert(id)
-                        nagramMarkMessageAsDeleted(currentMessage, transaction: transaction, preservedBotMessage: preserveBotMessage)
+                        nagramMarkMessageAsDeleted(currentMessage, transaction: transaction, preservedBotMessage: preservation.preservedBotMessage)
                     }
                 }
                 let deletedIds = ids.filter { !retainedIds.contains($0) }
@@ -4527,9 +4570,33 @@ func replayFinalState(
             case let .UpdateMinAvailableMessage(id):
                 // MARK: NAGRAM
                 // MARK: NEXTGRAM — A remote history clear is also a recall event.
-                let preserveBotHistory = NagramSettings.shared.preserveBotMessages && (transaction.getPeer(id.peerId) as? TelegramUser)?.botInfo != nil
-                if NagramSettings.shared.antiRecallEnabled || preserveBotHistory {
-                    continue
+                if NagramSettings.shared.antiRecallEnabled || NagramSettings.shared.preserveBotMessages {
+                    var messages: [Message] = []
+                    transaction.withAllMessages(peerId: id.peerId, namespace: id.namespace, { message in
+                        if message.id.id <= id.id {
+                            messages.append(message)
+                        }
+                        return true
+                    })
+                    var deletedIds: [MessageId] = []
+                    var didPreserveMessage = false
+                    for message in messages {
+                        let preservation = nagramShouldPreserveDeletedMessage(message, transaction: transaction)
+                        if preservation.preserve {
+                            didPreserveMessage = true
+                            nagramMarkMessageAsDeleted(message, transaction: transaction, preservedBotMessage: preservation.preservedBotMessage)
+                        } else {
+                            deletedIds.append(message.id)
+                        }
+                    }
+                    if didPreserveMessage && !deletedIds.isEmpty {
+                        _internal_deleteMessages(transaction: transaction, mediaBox: mediaBox, ids: deletedIds, manualAddMessageThreadStatsDifference: { messageId, add, remove in
+                            addMessageThreadStatsDifference(threadKey: messageId, remove: remove, addedMessagePeer: nil, addedMessageId: nil, isOutgoing: false)
+                        })
+                    }
+                    if didPreserveMessage {
+                        continue
+                    }
                 }
                 if let message = transaction.getMessage(id) {
                     updatePeerChatInclusionWithMinTimestamp(transaction: transaction, id: id.peerId, minTimestamp: message.timestamp, forceRootGroupIfNotExists: false)

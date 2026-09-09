@@ -794,6 +794,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         controllerInteraction: ChatControllerInteraction,
         selectedMessages: Signal<Set<MessageId>?, NoError>,
         mode: ChatHistoryListMode = .bubbles,
+        musicPlaylistSearchQuery: Signal<String, NoError>? = nil,
         rotated: Bool = false,
         isChatPreview: Bool,
         messageTransitionNode: @escaping () -> ChatMessageTransitionNodeImpl?
@@ -1914,8 +1915,12 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 return historyViewUpdateValue
             }
         }
-        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal()) // MARK: NAGRAM — 规则变化时重算聊天条目。
-        |> map { update, _ in
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM — A playlist query reuses the normal history diff pipeline for both chat and saved-music queues.
+        let currentMusicPlaylistSearchQuery = Atomic<String>(value: "")
+        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), musicPlaylistSearchQuery ?? .single(""))
+        |> map { update, _, query in
+            let _ = currentMusicPlaylistSearchQuery.swap(query)
             return update
         }
                 
@@ -2253,6 +2258,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                     adMessage: allAdMessages.fixed,
                     dynamicAdMessages: allAdMessages.opportunistic,
                     isMusicPlaylist: isMusicPlaylist,
+                    musicPlaylistSearchQuery: currentMusicPlaylistSearchQuery.with({ $0 }),
                     pinToTopStableId: pinToTopStableId
                 )
                 let lastHeaderId = filteredEntries.last.flatMap { listMessageDateHeaderId(timestamp: $0.index.timestamp) } ?? 0
@@ -2567,7 +2573,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
             if apply {
                 switch strongSelf.chatLocation {
                 case .peer, .replyThread:
-                    if !strongSelf.context.sharedContext.immediateExperimentalUISettings.skipReadHistory && !NagramSettings.shared.suppressReadReceipts && !strongSelf.context.account.isSupportUser { // MARK: NAGRAM // MARK: NEXTGRAM
+                    if !strongSelf.context.sharedContext.immediateExperimentalUISettings.skipReadHistory && !strongSelf.context.account.isSupportUser { // MARK: NAGRAM // MARK: NEXTGRAM — Core keeps this local in ghost mode.
                         strongSelf.context.applyMaxReadIndex(for: strongSelf.chatLocation, contextHolder: strongSelf.chatLocationContextHolder, messageIndex: messageIndex)
                     }
                 case .customChatContents:

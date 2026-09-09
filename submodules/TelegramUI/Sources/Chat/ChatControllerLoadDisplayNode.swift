@@ -3201,7 +3201,22 @@ extension ChatControllerImpl {
                 
                 if canSetupAutoremoveTimeout {
                     strongSelf.presentAutoremoveSetup()
-                } else if let currentAutoremoveTimeout = currentAutoremoveTimeout, let rect = strongSelf.chatDisplayNode.frameForInputPanelAccessoryButton(.messageAutoremoveTimeout(currentAutoremoveTimeout)) {
+                } else if let currentAutoremoveTimeout = currentAutoremoveTimeout {
+                    // MARK: NAGRAM
+                    // MARK: NEXTGRAM — Anchor the no-permission explanation to the avatar badge when that UI is enabled.
+                    let tooltipSource: (ASDisplayNode, CGRect)?
+                    if NagramSettings.shared.chatAutoremoveBadgeEnabled,
+                       let avatarNode = strongSelf.avatarNode,
+                       let rect = avatarNode.autoremoveBadgeRect {
+                        tooltipSource = (avatarNode, rect)
+                    } else if let rect = strongSelf.chatDisplayNode.frameForInputPanelAccessoryButton(.messageAutoremoveTimeout(currentAutoremoveTimeout)) {
+                        tooltipSource = (strongSelf.chatDisplayNode, rect)
+                    } else {
+                        tooltipSource = nil
+                    }
+                    guard let tooltipSource else {
+                        return
+                    }
                     
                     let intervalText = timeIntervalString(strings: strongSelf.presentationData.strings, value: currentAutoremoveTimeout)
                     let text: String = strongSelf.presentationData.strings.Conversation_AutoremoveTimerSetToastText(intervalText).string
@@ -3219,10 +3234,7 @@ extension ChatControllerImpl {
                             }
                         }
                         strongSelf.present(tooltipController, in: .window(.root), with: TooltipControllerPresentationArguments(sourceNodeAndRect: {
-                            if let strongSelf = self {
-                                return (strongSelf.chatDisplayNode, rect)
-                            }
-                            return nil
+                            return tooltipSource
                         }))
                     }
                 }

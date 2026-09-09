@@ -2,10 +2,13 @@ import TelegramCore
 
 public enum NagramQuickChatFilter: Int32, CaseIterable {
     case contacts = -101
+    case nonContacts = -106
     case privateChats = -102
     case groups = -103
     case channels = -104
+    case groupsAndChannels = -107
     case unread = -105
+    case read = -108
 
     public var titleKey: String {
         switch self {
@@ -19,6 +22,12 @@ public enum NagramQuickChatFilter: Int32, CaseIterable {
             return "Nagram.ChatListQuickFilter.Channels"
         case .unread:
             return "Nagram.ChatListQuickFilter.Unread"
+        case .nonContacts:
+            return "Nagram.ChatListQuickFilter.NonContacts"
+        case .groupsAndChannels:
+            return "Nagram.ChatListQuickFilter.GroupsAndChannels"
+        case .read:
+            return "Nagram.ChatListQuickFilter.Read"
         }
     }
 
@@ -34,6 +43,12 @@ public enum NagramQuickChatFilter: Int32, CaseIterable {
             return "📣"
         case .unread:
             return "🔵"
+        case .nonContacts:
+            return "👤"
+        case .groupsAndChannels:
+            return "📢"
+        case .read:
+            return "✅"
         }
     }
 }
@@ -47,7 +62,7 @@ public func nagramQuickChatListFilters(title: (String) -> String) -> [ChatListFi
             categories = [.contacts]
             excludeRead = false
         case .privateChats:
-            categories = [.contacts, .nonContacts]
+            categories = [.contacts, .nonContacts, .bots]
             excludeRead = false
         case .groups:
             categories = [.groups]
@@ -58,6 +73,17 @@ public func nagramQuickChatListFilters(title: (String) -> String) -> [ChatListFi
         case .unread:
             categories = .all
             excludeRead = true
+        case .nonContacts:
+            categories = [.nonContacts]
+            excludeRead = false
+        case .groupsAndChannels:
+            categories = [.groups, .channels]
+            excludeRead = false
+        case .read:
+            // Telegram folders only support excluding read chats. The read-only
+            // half of this local filter is applied by ChatListNodeEntries.
+            categories = .all
+            excludeRead = false
         }
         return .filter(
             id: kind.rawValue,

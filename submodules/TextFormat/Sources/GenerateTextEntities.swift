@@ -16,6 +16,50 @@ private let dataDetector = try? NSDataDetector(types: NSTextCheckingResult.Check
 private let dataAndPhoneNumberDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType([.link, .phoneNumber]).rawValue)
 private let phoneNumberDetector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType([.phoneNumber]).rawValue)
 
+// MARK: NAGRAM — NSDataDetector misses some Telegram links, especially beside CJK punctuation.
+private let telegramLinkDetector = try? NSRegularExpression(pattern: #"(?i)(?<![A-Za-z0-9])https?://(?:www\.)?t\.me(?:/[A-Za-z0-9\-._~:/?#\[\]@!$&()*+,;=%]*)?"#)
+private let telegramLinkTrailingDelimiters = CharacterSet(charactersIn: ".,!;:)]}>，。！；：）】》」』”’")
+
+private func addTelegramLinkEntities(_ text: String, entities: inout [MessageTextEntity]) {
+    guard let telegramLinkDetector else {
+        return
+    }
+
+    let nsText = text as NSString
+    telegramLinkDetector.enumerateMatches(in: text, options: [], range: NSRange(location: 0, length: nsText.length)) { match, _, _ in
+        guard let match else {
+            return
+        }
+
+        var range = match.range
+        while range.length > 0 {
+            let trailingRange = NSRange(location: range.location + range.length - 1, length: 1)
+            let trailing = nsText.substring(with: trailingRange)
+            if trailing.rangeOfCharacter(from: telegramLinkTrailingDelimiters) == nil {
+                break
+            }
+            range.length -= 1
+        }
+        guard range.length > 0 else {
+            return
+        }
+
+        let entityRange = range.location ..< (range.location + range.length)
+        for index in entities.indices where entities[index].range.overlaps(entityRange) {
+            switch entities[index].type {
+            case .Url:
+                entities[index].range = min(entities[index].range.lowerBound, entityRange.lowerBound) ..< max(entities[index].range.upperBound, entityRange.upperBound)
+                return
+            case .TextUrl, .Code, .Pre:
+                return
+            default:
+                break
+            }
+        }
+        entities.append(MessageTextEntity(range: entityRange, type: .Url))
+    }
+}
+
 private let validHashtagSet: CharacterSet = {
     var set = CharacterSet.alphanumerics
     set.insert("_")
@@ -305,6 +349,11 @@ public func generateTextEntities(_ text: String, enabledTypes: EnabledEntityType
             }
         })
     }
+
+    // MARK: NAGRAM — Supplement links that Foundation did not classify.
+    if enabledTypes.contains(.allUrl) || enabledTypes.contains(.internalUrl) {
+        addTelegramLinkEntities(text, entities: &entities)
+    }
     
     var index = utf16.startIndex
     var currentEntity: (CurrentEntityType, Range<String.UTF16View.Index>)?
@@ -386,6 +435,11 @@ public func generateTextEntities(_ text: String, enabledTypes: EnabledEntityType
 
 public func addLocallyGeneratedEntities(_ text: String, enabledTypes: EnabledEntityTypes, entities: [MessageTextEntity], mediaDuration: Double? = nil) -> [MessageTextEntity]? {
     var resultEntities = entities
+
+    // MARK: NAGRAM — Server entity lists can omit otherwise valid t.me URLs.
+    if enabledTypes.contains(.allUrl) || enabledTypes.contains(.internalUrl) {
+        addTelegramLinkEntities(text, entities: &resultEntities)
+    }
     
     var hasDigits = false
     var hasColons = false

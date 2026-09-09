@@ -317,10 +317,8 @@ private class ReplyThreadHistoryContextImpl {
     
     func applyMaxReadIndex(messageIndex: MessageIndex) {
         // MARK: NAGRAM
-        // MARK: NEXTGRAM
-        guard !NagramSettings.shared.suppressReadReceipts else {
-            return
-        }
+        // MARK: NEXTGRAM — Update the local topic state in ghost mode, but skip the API receipt below.
+        let suppressReadReceipts = NagramSettings.shared.suppressReadReceipts
 
         let peerId = self.peerId
         let threadId = self.threadId
@@ -481,6 +479,10 @@ private class ReplyThreadHistoryContextImpl {
                         revalidate = true
                     }
                 }
+            }
+
+            guard !suppressReadReceipts else {
+                return
             }
 
             if let subPeerId {

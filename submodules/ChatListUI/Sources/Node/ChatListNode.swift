@@ -1998,8 +1998,8 @@ public final class ChatListNode: ListViewImpl {
                 return (update, listLocation.filter)
             }
         }
-        chatListViewUpdate = combineLatest(queue: .mainQueue(), chatListViewUpdate, nagramRegexFiltersSignal(), nagramBoolSignal("nagram.hideSavedAndArchivedMessagesInList", defaultValue: false), nagramBoolSignal("nagram.chatListUnreadFirst", defaultValue: false)) // MARK: NAGRAM — 预览与排序设置变化时重算对话列表。 // MARK: NEXTGRAM
-        |> map { update, _, _, _ in
+        chatListViewUpdate = combineLatest(queue: .mainQueue(), chatListViewUpdate, nagramRegexFiltersSignal(), nagramBoolSignal("nagram.hideSavedAndArchivedMessagesInList", defaultValue: false), nagramBoolSignal("nagram.chatListUnreadFirst", defaultValue: false), nagramBoolSignal("nagram.chatListOldestFirst", defaultValue: false)) // MARK: NAGRAM — 预览与排序设置变化时重算对话列表。 // MARK: NEXTGRAM
+        |> map { update, _, _, _, _ in
             return update
         }
         
@@ -2278,7 +2278,7 @@ public final class ChatListNode: ListViewImpl {
             
             let innerIsMainTab = location == .chatList(groupId: .root) && chatListFilter == nil
             
-            let (rawEntries, isLoading) = chatListNodeEntriesForView(view: update.list, state: state, savedMessagesPeer: savedMessagesPeer, foundPeers: state.foundPeers, hideArchivedFolderByDefault: hideArchivedFolderByDefault, displayArchiveIntro: displayArchiveIntro, archiveGroupItem: archiveGroupItem, mode: mode, chatListLocation: location, contacts: contacts, accountPeerId: accountPeerId, isMainTab: innerIsMainTab, showArchiveInFolders: showArchiveInFolders)
+            let (rawEntries, isLoading) = chatListNodeEntriesForView(view: update.list, state: state, savedMessagesPeer: savedMessagesPeer, foundPeers: state.foundPeers, hideArchivedFolderByDefault: hideArchivedFolderByDefault, displayArchiveIntro: displayArchiveIntro, archiveGroupItem: archiveGroupItem, mode: mode, chatListLocation: location, chatListFilter: filter, contacts: contacts, accountPeerId: accountPeerId, isMainTab: innerIsMainTab, showArchiveInFolders: showArchiveInFolders) // MARK: NAGRAM // MARK: NEXTGRAM
             var isEmpty = true
             var entries = rawEntries.filter { entry in
                 switch entry {

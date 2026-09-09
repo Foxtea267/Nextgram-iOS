@@ -194,6 +194,11 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     public var currentItemFilter: ChatListFilterTabEntryId {
         return self.currentItemNode.chatListFilter.flatMap { .filter($0.id) } ?? .all
     }
+
+    // MARK: NAGRAM — Keep an asynchronously loading quick filter selected in the tab UI.
+    var requestedItemFilter: ChatListFilterTabEntryId {
+        return self.pendingItemNode?.0 ?? self.currentItemFilter
+    }
     
     private var didSetupContentOffset = false
     private var isSettingUpContentOffset = false
@@ -1618,7 +1623,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 }
 
                 let selectedTab: HorizontalTabsComponent.Tab.Id
-                switch self.mainContainerNode.currentItemFilter { // MARK: NAGRAM — inline 话题列表不应覆盖主列表分组选中态。
+                switch self.mainContainerNode.requestedItemFilter { // MARK: NAGRAM — inline 话题列表不应覆盖主列表分组选中态。
                 case .all:
                     selectedTab = AnyHashable(Int32.min)
                 case let .filter(id):

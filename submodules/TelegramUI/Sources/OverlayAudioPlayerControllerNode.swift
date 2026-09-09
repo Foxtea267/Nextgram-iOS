@@ -17,8 +17,9 @@ import ChatHistoryEntry
 import MultilineTextComponent
 import GlassControls
 import PhotoResources
+import NagramStrings // MARK: NAGRAM // MARK: NEXTGRAM
 
-final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestureRecognizerDelegate {
+final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestureRecognizerDelegate, UISearchBarDelegate {
     let ready = Promise<Bool>()
     
     private let context: AccountContext
@@ -33,6 +34,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     private let requestAdd: () -> Void
     private let playlistLocation: SharedMediaPlaylistLocation?
     private let isGlobalSearch: Bool
+    private let supportsPlaylistSearch: Bool // MARK: NAGRAM // MARK: NEXTGRAM
+    private let playlistSearchQuery: ValuePromise<String>
+    private let playlistSearchBar = UISearchBar(frame: .zero)
+    private var playlistSearchQueryValue: String = ""
     
     private let controllerInteraction: ChatControllerInteraction
     
@@ -104,6 +109,9 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.requestAdd = requestAdd
         self.playlistLocation = playlistLocation
         self.getParentController = getParentController
+
+        let playlistSearchQuery = ValuePromise<String>("", ignoreRepeated: true)
+        self.playlistSearchQuery = playlistSearchQuery
         
         if let playlistLocation = playlistLocation as? PeerMessagesPlaylistLocation, case let .custom(messages, canReorder, at, loadMore, _) = playlistLocation.effectiveLocation(context: context) {
             self.source = .custom(messages: messages, messageId: at, quote: nil, isSavedMusic: true, canReorder: canReorder, loadMore: loadMore)
@@ -111,6 +119,11 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         } else {
             self.source = .default
             self.isGlobalSearch = false
+        }
+        if case .music = type {
+            self.supportsPlaylistSearch = true
+        } else {
+            self.supportsPlaylistSearch = false
         }
         
         if case .regular = initialOrder {
@@ -329,6 +342,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             controllerInteraction: self.controllerInteraction,
             selectedMessages: .single(nil),
             mode: .list(reversed: self.currentIsReversed, reverseGroups: !self.currentIsReversed, displayHeaders: .none, hintLinks: false, isGlobalSearch: self.isGlobalSearch, isMusicPlaylist: true),
+            musicPlaylistSearchQuery: self.playlistSearchQuery.get(), // MARK: NAGRAM // MARK: NEXTGRAM
             isChatPreview: false,
             messageTransitionNode: { return nil
             }
@@ -344,6 +358,17 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.albumArtNode.isUserInteractionEnabled = false
         
         super.init()
+
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM — Every music queue exposes an inline playlist search field.
+        self.playlistSearchBar.delegate = self
+        self.playlistSearchBar.searchBarStyle = .minimal
+        self.playlistSearchBar.placeholder = ngI18n("Nagram.MusicPlaylistSearch", self.presentationData.strings.baseLanguageCode)
+        self.playlistSearchBar.autocapitalizationType = .none
+        self.playlistSearchBar.autocorrectionType = .no
+        self.playlistSearchBar.returnKeyType = .done
+        self.playlistSearchBar.isHidden = !self.supportsPlaylistSearch
+        self.historyFrameNode.view.addSubview(self.playlistSearchBar)
         
         self.backgroundColor = nil
         self.isOpaque = false
@@ -608,7 +633,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 return
             }
 
-            self.historyNode.reorderItem = { fromIndex, toIndex, transactionOpaqueState -> Signal<Bool, NoError> in
+            self.historyNode.reorderItem = { [weak self] fromIndex, toIndex, transactionOpaqueState -> Signal<Bool, NoError> in
+                guard let self, self.playlistSearchQueryValue.isEmpty else {
+                    return .single(false)
+                }
                 guard let filteredEntries = (transactionOpaqueState as? ChatHistoryTransactionOpaqueState)?.historyView.filteredEntries, !filteredEntries.isEmpty else {
                     return .single(false)
                 }
@@ -852,9 +880,20 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     private var effectiveHeaderHeight: CGFloat {
         var headerHeight: CGFloat = 38.0
         if let playlistLocation = self.playlistLocation as? PeerMessagesPlaylistLocation, case .savedMusic = playlistLocation {
-            headerHeight = 78.0
+            headerHeight = self.supportsPlaylistSearch ? 124.0 : 78.0
+        } else if self.supportsPlaylistSearch {
+            headerHeight = 86.0
         }
         return headerHeight
+    }
+
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        self.playlistSearchQueryValue = searchText
+        self.playlistSearchQuery.set(searchText)
+    }
+
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        searchBar.resignFirstResponder()
     }
     
     func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
@@ -983,6 +1022,9 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 }
                 titleView.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - titleSize.width) / 2.0), y: 29.0), size: titleSize)
             }
+            self.playlistSearchBar.frame = CGRect(x: 12.0, y: 66.0, width: layout.size.width - 24.0, height: 48.0)
+        } else if self.supportsPlaylistSearch {
+            self.playlistSearchBar.frame = CGRect(x: 12.0, y: 28.0, width: layout.size.width - 24.0, height: 48.0)
         }
         
         transition.updateFrame(node: self.collapseNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -7.0), size: CGSize(width: layout.size.width, height: 30.0)))
@@ -1219,6 +1261,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             controllerInteraction: self.controllerInteraction,
             selectedMessages: .single(nil),
             mode: .list(reversed: self.currentIsReversed, reverseGroups: !self.currentIsReversed, displayHeaders: .none, hintLinks: false, isGlobalSearch: self.isGlobalSearch, isMusicPlaylist: true),
+            musicPlaylistSearchQuery: self.playlistSearchQuery.get(), // MARK: NAGRAM // MARK: NEXTGRAM
             isChatPreview: false,
             messageTransitionNode: { return nil
             }

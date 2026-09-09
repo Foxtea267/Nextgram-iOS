@@ -35,6 +35,7 @@ import AnimatedCountLabelNode
 import AudioWaveform
 import DeviceProximity
 import ShimmeringLinkNode
+import NagramSettings // MARK: NAGRAM // MARK: NEXTGRAM
 
 private struct FetchControls {
     let fetch: (Bool) -> Void
@@ -703,7 +704,24 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                         } else {
                             candidateTitleString = NSAttributedString(string: title ?? (arguments.file.fileName ?? "Unknown Track"), font: titleFont, textColor: arguments.customTintColor ?? messageTheme.fileTitleColor)
                             let descriptionText: String
-                            if let performer = performer {
+                            if arguments.attributes.isMusicPlaylist {
+                                // MARK: NAGRAM
+                                // MARK: NEXTGRAM — Playlist metadata can optionally include the total file size.
+                                var components: [String] = []
+                                if let performer {
+                                    let performer = performer.trimmingTrailingSpaces()
+                                    if !performer.isEmpty {
+                                        components.append(performer)
+                                    }
+                                }
+                                if NagramSettings.shared.musicPlaylistShowFileSize,
+                                   let size = arguments.file.size,
+                                   size > 0,
+                                   size != .max {
+                                    components.append(dataSizeString(size, formatting: DataSizeStringFormatting(chatPresentationData: arguments.presentationData)))
+                                }
+                                descriptionText = components.joined(separator: " · ")
+                            } else if let performer = performer {
                                 descriptionText = performer.trimmingTrailingSpaces()
                             } else if let size = arguments.file.size, size > 0 && size != .max {
                                 descriptionText = dataSizeString(size, formatting: DataSizeStringFormatting(chatPresentationData: arguments.presentationData))
@@ -1754,6 +1772,8 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
         
         if isViewOnceMessage, let viewOnceIconImage = self.viewOnceIconImage, state == .play {
             streamingState = .customIcon(viewOnceIconImage)
+        } else if arguments.attributes.isMusicPlaylist && !NagramSettings.shared.musicPlaylistShowDownloadStatus {
+            streamingState = .none // MARK: NAGRAM // MARK: NEXTGRAM
         } else {
             if isAudio && !isVoice && !isSending && state != .pause {
                 switch resourceStatus.fetchStatus {

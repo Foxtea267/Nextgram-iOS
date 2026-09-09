@@ -79,6 +79,12 @@ public enum NagramChatListMessagePreviewStyle: String {
     case two
 }
 
+public enum NagramDeletedMessageIndicatorStyle: String {
+    case text
+    case trash
+    case trashAndText = "both"
+}
+
 public enum NagramGlassTransparencyMode: String {
     case system
     case custom
@@ -172,6 +178,16 @@ public final class NagramSettings {
     // MARK: NEXTGRAM — 消息保留与隐私增强。默认关闭，保持 Telegram 原生行为。
     @NagramDefault("nagram.antiRecallEnabled", false)
     public var antiRecallEnabled: Bool
+    @NagramDefault("nagram.antiRecallWhitelist", "")
+    public var antiRecallWhitelist: String
+    @NagramDefault("nagram.antiRecallBlacklist", "")
+    public var antiRecallBlacklist: String
+    @NagramDefault("nagram.antiRecallExcludedKeywords", "")
+    public var antiRecallExcludedKeywords: String
+    @NagramDefault("nagram.deletedMessageIndicatorStyle", NagramDeletedMessageIndicatorStyle.text.rawValue)
+    public var deletedMessageIndicatorStyle: String
+    @NagramDefault("nagram.deletedMessageIndicatorColor", "")
+    public var deletedMessageIndicatorColor: String
     @NagramDefault("nagram.preserveBotMessages", false)
     public var preserveBotMessages: Bool
     @NagramDefault("nagram.saveMessageEditHistory", false)
@@ -195,6 +211,14 @@ public final class NagramSettings {
 
     public var suppressOnlineStatus: Bool {
         return self.ghostModeEnabled || self.disableOnlineStatus
+    }
+
+    public var antiRecallFilters: NagramAntiRecallFilters {
+        return NagramAntiRecallFilters(
+            whitelist: self.antiRecallWhitelist,
+            blacklist: self.antiRecallBlacklist,
+            excludedKeywords: self.antiRecallExcludedKeywords
+        )
     }
 
     // MARK: 敏感内容
@@ -393,12 +417,27 @@ public final class NagramSettings {
     /// 紧凑对话列表（压缩列表行高）
     @NagramDefault("nagram.chatListCompact", false)
     public var chatListCompact: Bool
-    /// 在首页文件夹栏加入联系人、私聊、群组、频道和未读快捷筛选。
-    @NagramDefault("nagram.chatListQuickFiltersEnabled", false)
+    /// 在首页文件夹栏加入联系人、陌生人、私聊、群组、频道、已读和未读等快捷筛选。
+    @NagramDefault("nagram.chatListQuickFiltersEnabled", true)
     public var chatListQuickFiltersEnabled: Bool
     /// 保留置顶顺序，并将其余未读会话排在已读会话之前。
     @NagramDefault("nagram.chatListUnreadFirst", false)
     public var chatListUnreadFirst: Bool
+    /// 保留置顶顺序，并将其余会话按最后消息时间从旧到新排列。
+    @NagramDefault("nagram.chatListOldestFirst", false)
+    public var chatListOldestFirst: Bool
+    /// 搜索页显示顶部最近联系人时，隐藏下方重复的最近搜索列表。
+    @NagramDefault("nagram.chatSearchHideRecentListWhenTopPeersVisible", false)
+    public var chatSearchHideRecentListWhenTopPeersVisible: Bool
+    /// 音乐播放列表副标题中显示文件大小。
+    @NagramDefault("nagram.musicPlaylistShowFileSize", false)
+    public var musicPlaylistShowFileSize: Bool
+    /// 音乐封面右下角显示未下载 / 下载中的状态。
+    @NagramDefault("nagram.musicPlaylistShowDownloadStatus", true)
+    public var musicPlaylistShowDownloadStatus: Bool
+    /// 将已启用的自动删除时长显示在聊天头像右下角，不占用输入框。
+    @NagramDefault("nagram.chatAutoremoveBadgeEnabled", true)
+    public var chatAutoremoveBadgeEnabled: Bool
     /// 最近会话快捷入口
     @NagramDefault("nagram.recentChatsEnabled", false)
     public var recentChatsEnabled: Bool
@@ -597,6 +636,10 @@ public extension NagramSettings {
             return legacyMode
         }
         return NagramChatListMessagePreviewStyle(rawValue: self.chatListMessagePreviewStyle) ?? .three
+    }
+
+    var deletedMessageIndicatorStyleValue: NagramDeletedMessageIndicatorStyle {
+        return NagramDeletedMessageIndicatorStyle(rawValue: self.deletedMessageIndicatorStyle) ?? .text
     }
 
     var glassTransparencyModeValue: NagramGlassTransparencyMode {

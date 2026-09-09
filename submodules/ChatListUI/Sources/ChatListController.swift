@@ -808,7 +808,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             nagramBoolSignal("nagram.chatListFolderTabsCompact", defaultValue: false),
             nagramStringSignal("nagram.chatListFolderTabDisplayMode", defaultValue: NagramChatListFolderTabDisplayMode.text.rawValue),
             nagramBoolSignal("nagram.hideAllChatsFolder", defaultValue: false),
-            nagramBoolSignal("nagram.chatListQuickFiltersEnabled", defaultValue: false)
+            nagramBoolSignal("nagram.chatListQuickFiltersEnabled", defaultValue: true)
         )
         |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
             guard let self else {
@@ -4154,7 +4154,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 }
             }
             
-            var selectedEntryId = !strongSelf.initializedFilters ? firstItemEntryId : strongSelf.chatListDisplayNode.mainContainerNode.currentItemFilter
+            // MARK: NAGRAM — Do not reset a quick-filter tap to All while its list node is loading.
+            var selectedEntryId = !strongSelf.initializedFilters ? firstItemEntryId : strongSelf.chatListDisplayNode.mainContainerNode.requestedItemFilter
             if !resolvedItems.contains(where: { $0.id == selectedEntryId }) {
                 if let tabContainerData = strongSelf.tabContainerData {
                     var found = false

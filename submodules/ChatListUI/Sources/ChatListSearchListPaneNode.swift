@@ -39,6 +39,7 @@ import ButtonComponent
 import BundleIconComponent
 import AnimatedTextComponent
 import TextFormat
+import NagramSettings // MARK: NAGRAM
 
 private func isIncludedCommunityContainer(_ peer: EnginePeer?, filter: ChatListNodePeersFilter) -> Bool {
     if filter.contains(.includeCommunities), case .community = peer {
@@ -4160,25 +4161,28 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
             }
 
             var entries: [ChatListRecentEntry] = []
-            if !peersFilter.contains(.onlyGroups) {
-                if hasRecentPeers {
-                    entries.append(.topPeers([], presentationData.theme, presentationData.strings))
-                }
+            let hasVisibleTopPeers = hasRecentPeers && !peersFilter.contains(.onlyGroups)
+            if hasVisibleTopPeers {
+                entries.append(.topPeers([], presentationData.theme, presentationData.strings))
             }
-            var peerIds = Set<EnginePeer.Id>()
-            var index = 0
-            loop: for searchedPeer in peers {
-                if let peer = searchedPeer.peer.peers[searchedPeer.peer.peerId] {
-                    if peerIds.contains(peer.id) {
-                        continue loop
-                    }
-                    if !doesPeerMatchFilter(peer: EnginePeer(peer), filter: peersFilter) {
-                        continue
-                    }
-                    peerIds.insert(peer.id)
+            // MARK: NAGRAM — The horizontal top-peers strip already represents recents;
+            // optionally suppress the duplicated vertical recent-search list below it.
+            if !(NagramSettings.shared.chatSearchHideRecentListWhenTopPeersVisible && hasVisibleTopPeers) {
+                var peerIds = Set<EnginePeer.Id>()
+                var index = 0
+                loop: for searchedPeer in peers {
+                    if let peer = searchedPeer.peer.peers[searchedPeer.peer.peerId] {
+                        if peerIds.contains(peer.id) {
+                            continue loop
+                        }
+                        if !doesPeerMatchFilter(peer: EnginePeer(peer), filter: peersFilter) {
+                            continue
+                        }
+                        peerIds.insert(peer.id)
 
-                    entries.append(.peer(index: index, peer: searchedPeer, .local, presentationData.theme, presentationData.strings, presentationData.dateTimeFormat, presentationData.nameSortOrder, presentationData.nameDisplayOrder, globalNotificationSettings, peerStoryStats[peer.id], requiresPremiumForMessaging[peer.id] ?? false))
-                    index += 1
+                        entries.append(.peer(index: index, peer: searchedPeer, .local, presentationData.theme, presentationData.strings, presentationData.dateTimeFormat, presentationData.nameSortOrder, presentationData.nameDisplayOrder, globalNotificationSettings, peerStoryStats[peer.id], requiresPremiumForMessaging[peer.id] ?? false))
+                        index += 1
+                    }
                 }
             }
 

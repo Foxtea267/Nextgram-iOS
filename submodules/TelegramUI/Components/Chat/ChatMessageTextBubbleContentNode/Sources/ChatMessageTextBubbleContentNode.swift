@@ -556,7 +556,8 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                 } else {
                     entities = messageEntities
                     
-                    if entities == nil && (mediaDuration != nil || isSeekableWebMedia) {
+                    // MARK: NAGRAM — Seed local detection when the server omitted a t.me entity list.
+                    if entities == nil && (mediaDuration != nil || isSeekableWebMedia || rawText.range(of: "t.me", options: .caseInsensitive) != nil) {
                         entities = []
                     }
                     

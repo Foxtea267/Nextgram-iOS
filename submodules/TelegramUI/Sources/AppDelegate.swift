@@ -965,10 +965,26 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             self.window?.rootViewController?.dismiss(animated: true, completion: nil)
         }, getAvailableAlternateIcons: {
             if #available(iOS 10.3, *) {
-                // MARK: NAGRAM — Nextgram ships only its independent brand icon.
-                return [
-                    PresentationAppIcon(name: "Nextgram", imageName: "NextgramPreview", isDefault: true)
+                // MARK: NAGRAM
+                // MARK: NEXTGRAM — Nextgram stays default while all official Telegram icons remain available.
+                var icons = [
+                    PresentationAppIcon(name: "Nextgram", imageName: "NextgramPreview", isDefault: true),
+                    PresentationAppIcon(name: "Telegram", imageName: "BlueIcon"),
+                    PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon"),
+                    PresentationAppIcon(name: "New2", imageName: "New2"),
+                    PresentationAppIcon(name: "New1", imageName: "New1"),
+                    PresentationAppIcon(name: "BlackIcon", imageName: "BlackIcon"),
+                    PresentationAppIcon(name: "BlueClassicIcon", imageName: "BlueClassicIcon"),
+                    PresentationAppIcon(name: "BlackClassicIcon", imageName: "BlackClassicIcon"),
+                    PresentationAppIcon(name: "BlueFilledIcon", imageName: "BlueFilledIcon"),
+                    PresentationAppIcon(name: "BlackFilledIcon", imageName: "BlackFilledIcon"),
+                    PresentationAppIcon(name: "WhiteFilledIcon", imageName: "WhiteFilledIcon")
                 ]
+
+                icons.append(PresentationAppIcon(name: "Premium", imageName: "Premium", isPremium: true))
+                icons.append(PresentationAppIcon(name: "PremiumTurbo", imageName: "PremiumTurbo", isPremium: true))
+                icons.append(PresentationAppIcon(name: "PremiumBlack", imageName: "PremiumBlack", isPremium: true))
+                return icons
             } else {
                 return []
             }

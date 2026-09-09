@@ -38,6 +38,8 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
     private weak var communityAvatarBadgeReferenceView: UIView?
     private var communityAvatarBadgeBackgroundView: GlassBackgroundView?
     private var communityAvatarBadgeIconView: GlassBackgroundView.ContentImageView?
+    private var autoremoveBadgeButton: UIButton? // MARK: NAGRAM // MARK: NEXTGRAM
+    private var autoremoveBadgeAction: (() -> Void)?
     
     private var cachedDataDisposable = MetaDisposable()
     private var hierarchyTrackingLayer: HierarchyTrackingLayer?
@@ -90,6 +92,51 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
     override public func didLoad() {
         super.didLoad()
         self.view.isOpaque = false
+    }
+
+    // MARK: NAGRAM
+    // MARK: NEXTGRAM — Keep the active auto-delete timer next to the avatar instead of consuming input-field space.
+    public func setAutoremoveBadge(text: String?, theme: PresentationTheme, action: (() -> Void)?) {
+        self.autoremoveBadgeAction = action
+        guard let text, !text.isEmpty else {
+            self.autoremoveBadgeButton?.isHidden = true
+            return
+        }
+
+        let button: UIButton
+        if let current = self.autoremoveBadgeButton {
+            button = current
+        } else {
+            button = UIButton(type: .custom)
+            button.addTarget(self, action: #selector(self.autoremoveBadgePressed), for: .touchUpInside)
+            button.layer.borderWidth = 1.0
+            button.titleLabel?.font = Font.semibold(9.0)
+            button.contentEdgeInsets = UIEdgeInsets(top: 0.0, left: 3.0, bottom: 0.0, right: 3.0)
+            self.autoremoveBadgeButton = button
+            self.containerNode.view.addSubview(button)
+        }
+
+        button.isHidden = false
+        button.setTitle(text, for: .normal)
+        button.setTitleColor(.white, for: .normal)
+        button.backgroundColor = theme.rootController.navigationBar.accentTextColor
+        button.layer.borderColor = theme.rootController.navigationBar.opaqueBackgroundColor.cgColor
+        let width = max(18.0, min(30.0, ceil((text as NSString).size(withAttributes: [.font: Font.semibold(9.0)]).width) + 7.0))
+        button.frame = CGRect(x: self.containerNode.bounds.width - width, y: self.containerNode.bounds.height - 16.0, width: width, height: 16.0)
+        button.layer.cornerRadius = 8.0
+        button.accessibilityLabel = text
+        self.containerNode.view.bringSubviewToFront(button)
+    }
+
+    public var autoremoveBadgeRect: CGRect? {
+        guard let button = self.autoremoveBadgeButton, !button.isHidden else {
+            return nil
+        }
+        return button.frame
+    }
+
+    @objc private func autoremoveBadgePressed() {
+        self.autoremoveBadgeAction?()
     }
     
     public func setStatus(context: AccountContext, content: EmojiStatusComponent.Content) {
@@ -222,6 +269,9 @@ public final class ChatAvatarNavigationNode: ASDisplayNode {
         }
         if let communityAvatarBadgeBackgroundView = self.communityAvatarBadgeBackgroundView, !communityAvatarBadgeBackgroundView.isHidden {
             self.containerNode.view.bringSubviewToFront(communityAvatarBadgeBackgroundView)
+        }
+        if let autoremoveBadgeButton = self.autoremoveBadgeButton, !autoremoveBadgeButton.isHidden {
+            self.containerNode.view.bringSubviewToFront(autoremoveBadgeButton)
         }
         
         if let peer = peer, peer.isPremium {

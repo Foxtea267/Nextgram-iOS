@@ -17,6 +17,7 @@ import ChatMessageTransitionNode
 import AnimatedStickerNode
 import TelegramAnimatedStickerNode
 import LottieMetal
+import NagramMessageHistory // MARK: NAGRAM // MARK: NEXTGRAM
 
 public func chatMessageItemLayoutConstants(_ constants: (ChatMessageItemLayoutConstants, ChatMessageItemLayoutConstants), params: ListViewItemLayoutParams, presentationData: ChatPresentationData) -> ChatMessageItemLayoutConstants {
     var result: ChatMessageItemLayoutConstants
@@ -689,6 +690,17 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
     
     open func setupItem(_ item: ChatMessageItem, synchronousLoad: Bool) {
         self.item = item
+
+        // MARK: NAGRAM
+        // MARK: NEXTGRAM — Distinguish locally retained deletions from regular messages.
+        var isRetainedDeletion = false
+        for (message, _) in item.content {
+            if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
+                isRetainedDeletion = true
+                break
+            }
+        }
+        self.alpha = isRetainedDeletion ? 0.5 : 1.0
     }
     
     open func updateAccessibilityData(_ accessibilityData: ChatMessageAccessibilityData) {

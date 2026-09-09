@@ -7,7 +7,10 @@ import TextFormat
 import LocalizedPeerData
 import AccountContext
 import NagramMessageHistory // MARK: NAGRAM
+import NagramSettings // MARK: NAGRAM
 import NagramStrings // MARK: NAGRAM
+
+let nagramDeletedMessageMarkerPrefix = "\u{2063}"
 
 public enum MessageTimestampStatusFormat {
     case full
@@ -254,7 +257,16 @@ public func stringForMessageTimestampStatus(
     // MARK: NAGRAM
     if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
         let deletedText = ngI18n("Nagram.MessageDeletedRetained", strings.baseLanguageCode)
-        return "\(deletedText) · \(dateText)"
+        let marker: String
+        switch NagramSettings.shared.deletedMessageIndicatorStyleValue {
+        case .text:
+            marker = deletedText
+        case .trash:
+            marker = "🗑"
+        case .trashAndText:
+            marker = "🗑 \(deletedText)"
+        }
+        return "\(nagramDeletedMessageMarkerPrefix)\(marker) · \(dateText)"
     }
     return dateText
 }

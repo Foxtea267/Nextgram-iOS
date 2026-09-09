@@ -62,6 +62,7 @@ func chatHistoryEntriesForView(
     adMessage: Message?,
     dynamicAdMessages: [Message],
     isMusicPlaylist: Bool,
+    musicPlaylistSearchQuery: String,
     pinToTopStableId: EngineMessage.StableId?
 ) -> ([ChatHistoryEntry], ChatHistoryEntriesForViewState) {
     var currentState = currentState
@@ -886,6 +887,63 @@ func chatHistoryEntriesForView(
         }
     }
     
+    // MARK: NAGRAM
+    // MARK: NEXTGRAM — Search music queues locally and opt matching rows into playlist-only metadata and download indicators.
+    if isMusicPlaylist {
+        let searchQuery = musicPlaylistSearchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        func matchesPlaylistSearch(_ message: EngineRawMessage) -> Bool {
+            if searchQuery.isEmpty {
+                return true
+            }
+            var values: [String] = [message.text]
+            for media in message.media {
+                guard let file = media as? TelegramMediaFile else {
+                    continue
+                }
+                if let fileName = file.fileName {
+                    values.append(fileName)
+                }
+                for attribute in file.attributes {
+                    if case let .Audio(_, _, title, performer, _) = attribute {
+                        if let title {
+                            values.append(title)
+                        }
+                        if let performer {
+                            values.append(performer)
+                        }
+                    }
+                }
+            }
+            return values.contains(where: { $0.localizedCaseInsensitiveContains(searchQuery) })
+        }
+        entries = entries.compactMap { entry in
+            switch entry {
+            case let .MessageEntry(message, presentationData, read, location, selection, attributes):
+                guard matchesPlaylistSearch(message) else {
+                    return nil
+                }
+                var attributes = attributes
+                attributes.isMusicPlaylist = true
+                return .MessageEntry(message, presentationData, read, location, selection, attributes)
+            case let .MessageGroupEntry(groupInfo, messages, presentationData):
+                let updatedMessages = messages.compactMap { message, read, selection, attributes, location -> (EngineRawMessage, Bool, ChatHistoryMessageSelection, ChatMessageEntryAttributes, EngineMessageHistoryEntryLocation?)? in
+                    guard matchesPlaylistSearch(message) else {
+                        return nil
+                    }
+                    var attributes = attributes
+                    attributes.isMusicPlaylist = true
+                    return (message, read, selection, attributes, location)
+                }
+                guard !updatedMessages.isEmpty else {
+                    return nil
+                }
+                return .MessageGroupEntry(groupInfo, updatedMessages, presentationData)
+            default:
+                return entry
+            }
+        }
+    }
+
     if isMusicPlaylist && entries.count == 1 {
         return ([], currentState)
     }
