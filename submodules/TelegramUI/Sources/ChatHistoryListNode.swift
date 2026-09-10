@@ -489,6 +489,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
     private let selectedMessages: Signal<Set<MessageId>?, NoError>
     var messageTransitionNode: () -> ChatMessageTransitionNodeImpl?
     private let mode: ChatHistoryListMode
+    private let musicPlaylistSearchQuery: Signal<String, NoError>? // MARK: NAGRAM
     
     var enableUnreadAlignment: Bool = true
     var areContentAnimationsEnabled: Bool = false
@@ -817,6 +818,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         self.selectedMessages = selectedMessages
         self.messageTransitionNode = messageTransitionNode
         self.mode = mode
+        self.musicPlaylistSearchQuery = musicPlaylistSearchQuery // MARK: NAGRAM
         
         if let data = context.currentAppConfiguration.with({ $0 }).data {
             if let _ = data["ios_killswitch_disable_unread_alignment"] {
@@ -1918,7 +1920,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         // MARK: NAGRAM
         // MARK: NEXTGRAM — A playlist query reuses the normal history diff pipeline for both chat and saved-music queues.
         let currentMusicPlaylistSearchQuery = Atomic<String>(value: "")
-        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), musicPlaylistSearchQuery ?? .single(""))
+        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), self.musicPlaylistSearchQuery ?? .single(""))
         |> map { update, _, query in
             let _ = currentMusicPlaylistSearchQuery.swap(query)
             return update
