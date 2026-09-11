@@ -192,12 +192,30 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${NEXTGRAM_RELEASE_VERSION}"
+          PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${GITHUB_SHA}^" 2>/dev/null || true)"
+          mkdir -p build
+          {
+            echo "## 本次更新 / What's Changed"
+            echo
+            if [[ -n "${PREVIOUS_TAG}" ]]; then
+              git log --no-merges --pretty=format:'- %s (`%h`)' "${PREVIOUS_TAG}..${GITHUB_SHA}"
+            else
+              git log --no-merges -n 20 --pretty=format:'- %s (`%h`)'
+            fi
+            echo
+            echo
+            echo "App version: ${NEXTGRAM_APP_VERSION}"
+            echo "Bundle ID: ${BUNDLE_ID}"
+            echo
+            echo "Standalone re-signable IPA. Re-sign before installation."
+          } > build/release-notes.md
           if gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release edit "${VERSION}" --notes-file build/release-notes.md --repo "${GITHUB_REPOSITORY}"
             gh release upload "${VERSION}" build/artifacts/Nextgram.ipa --clobber --repo "${GITHUB_REPOSITORY}"
           else
             gh release create "${VERSION}" build/artifacts/Nextgram.ipa \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "${VERSION}" \
-              --notes "Standalone re-signable IPA. App version: ${NEXTGRAM_APP_VERSION}. Bundle ID: ${BUNDLE_ID}. Re-sign before installation."
+              --notes-file build/release-notes.md
           fi
