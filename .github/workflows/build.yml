@@ -130,6 +130,22 @@ jobs:
       - name: Build arm64 IPA
         run: |
           set -euo pipefail
+          APP_VERSION="$(TZ=Asia/Hong_Kong date +%Y.%m%d).${GITHUB_RUN_NUMBER}"
+          RELEASE_VERSION="$(TZ=Asia/Hong_Kong date +%Y%m%d)$(printf '%03d' "${GITHUB_RUN_NUMBER}")"
+          echo "NEXTGRAM_APP_VERSION=${APP_VERSION}" >> "${GITHUB_ENV}"
+          echo "NEXTGRAM_RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
+          python3 - "${APP_VERSION}" <<'PY'
+          import json
+          import sys
+
+          path = "versions.json"
+          with open(path, "r", encoding="utf-8") as source:
+              versions = json.load(source)
+          versions["app"] = sys.argv[1]
+          with open(path, "w", encoding="utf-8") as destination:
+              json.dump(versions, destination, indent=4)
+              destination.write("\n")
+          PY
           BUILD_NUMBER="$(( $(git rev-list --count HEAD) + $(cat build_number_offset) ))"
           python3 build-system/Make/Make.py --overrideXcodeVersion \
             --cacheDir "$HOME/telegram-bazel-cache" \
@@ -148,6 +164,7 @@ jobs:
           APP_PATH="$(find build/package/Payload -maxdepth 1 -type d -name '*.app' -print -quit)"
           test -n "${APP_PATH}"
           test "$(plutil -extract CFBundleIdentifier raw "${APP_PATH}/Info.plist")" = "${BUNDLE_ID}"
+          test "$(plutil -extract CFBundleShortVersionString raw "${APP_PATH}/Info.plist")" = "${NEXTGRAM_APP_VERSION}"
           find "${APP_PATH}" -type d -name _CodeSignature -prune -exec rm -rf {} +
           find "${APP_PATH}" -name embedded.mobileprovision -delete
           (
@@ -174,7 +191,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          VERSION="$(TZ=Asia/Hong_Kong date +%Y%m%d)$(printf '%03d' "${GITHUB_RUN_NUMBER}")"
+          VERSION="${NEXTGRAM_RELEASE_VERSION}"
           if gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release upload "${VERSION}" build/artifacts/Nextgram.ipa --clobber --repo "${GITHUB_REPOSITORY}"
           else
@@ -182,5 +199,5 @@ jobs:
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "${VERSION}" \
-              --notes "Standalone re-signable IPA. Bundle ID: ${BUNDLE_ID}. Re-sign before installation."
+              --notes "Standalone re-signable IPA. App version: ${NEXTGRAM_APP_VERSION}. Bundle ID: ${BUNDLE_ID}. Re-sign before installation."
           fi

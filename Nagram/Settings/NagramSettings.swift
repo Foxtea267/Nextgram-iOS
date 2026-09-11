@@ -200,6 +200,12 @@ public final class NagramSettings {
     public var disableTypingStatus: Bool
     @NagramDefault("nagram.disableOnlineStatus", false)
     public var disableOnlineStatus: Bool
+    /// 新增联系人时，默认不把自己的手机号加入对方可见的隐私例外。
+    @NagramDefault("nagram.disableContactPhoneSharingByDefault", false)
+    public var disableContactPhoneSharingByDefault: Bool
+    /// 新增联系人时，默认不同时写入 iOS 通讯录。
+    @NagramDefault("nagram.disableContactSyncToPhoneByDefault", false)
+    public var disableContactSyncToPhoneByDefault: Bool
 
     public var suppressReadReceipts: Bool {
         return self.ghostModeEnabled || self.disableReadReceipts

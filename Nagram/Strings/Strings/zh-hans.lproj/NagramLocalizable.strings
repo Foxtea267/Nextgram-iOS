@@ -253,6 +253,10 @@
 "Nagram.GroupProfileSettings.Item.deleteGroup" = "删除群组";
 "Nagram.GroupProfileSettings.Item.other" = "其他设置";
 "Nagram.HidePhoneInSettings" = "隐藏设置页手机号";
+"Nagram.Section.ContactPrivacy" = "联系人隐私";
+"Nagram.DisableContactPhoneSharingByDefault" = "添加联系人时默认关闭分享手机号";
+"Nagram.DisableContactSyncToPhoneByDefault" = "添加联系人时默认关闭同步到手机";
+"Nagram.ContactDefaults.Footer" = "只改变新增联系人页面的初始选择；添加时仍可单独开启。";
 "Nagram.Section.Calls" = "通话";
 "Nagram.ConfirmCalls" = "通话前确认";
 "Nagram.Section.Interface" = "界面";

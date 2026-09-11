@@ -253,6 +253,10 @@
 "Nagram.GroupProfileSettings.Item.deleteGroup" = "Delete Group";
 "Nagram.GroupProfileSettings.Item.other" = "Other Settings";
 "Nagram.HidePhoneInSettings" = "Hide Phone Number in Settings";
+"Nagram.Section.ContactPrivacy" = "Contact Privacy";
+"Nagram.DisableContactPhoneSharingByDefault" = "Disable Phone Sharing by Default";
+"Nagram.DisableContactSyncToPhoneByDefault" = "Disable Sync to Phone by Default";
+"Nagram.ContactDefaults.Footer" = "These only change the initial choices when adding a contact. You can still enable either option each time.";
 "Nagram.Section.Calls" = "Calls";
 "Nagram.ConfirmCalls" = "Confirm Before Calling";
 "Nagram.Section.Interface" = "Interface";

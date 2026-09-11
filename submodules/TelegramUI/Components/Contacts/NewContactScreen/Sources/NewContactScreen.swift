@@ -27,6 +27,8 @@ import PhoneNumberFormat
 import QrCodeUI
 import MessageUI
 import AvatarNode
+// MARK: NEXTGRAM
+import NagramSettings
 
 final class NewContactScreenComponent: Component {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
@@ -258,12 +260,14 @@ final class NewContactScreenComponent: Component {
             var initialPhoneNumberWithoutCountryCode: String?
             var updateFocusTag: Any?
             if self.component == nil {
+                // MARK: NEXTGRAM — Respect Nextgram's per-contact privacy defaults.
+                self.syncContactToPhone = !NagramSettings.shared.disableContactSyncToPhoneByDefault
                 if let peer = component.initialData.peer {
                     self.resolvedPeer = .peer(peer: peer, isContact: false)
                 }
                 
                 if component.initialData.shareViaException {
-                    self.addToPrivacyExceptions = true
+                    self.addToPrivacyExceptions = !NagramSettings.shared.disableContactPhoneSharingByDefault
                 }
                 
                 let countryCode: Int32

@@ -156,7 +156,7 @@ Prefer `build-system/Make/Make.py` for app build/test/clean. Use `build-system/g
 ## Nagram Fork Patterns
 
 - Put new Nagram-only code under `Nagram/`. Keep `Nagram/Settings` as the low-level data layer and `Nagram/SettingsUI` as the UI layer.
-- When upstream files must change, annotate the modification site with `// MARK: NAGRAM`. This is required for upstream rebases.
+- When upstream files must change, annotate each new modification site with `// MARK: NEXTGRAM`. Legacy `// MARK: NAGRAM` markers may remain until their code is otherwise touched.
 - The Nextgram settings entry appears below “我的资料” (My Profile) in `PeerInfoSettingsItems.swift`; internal enum and controller names remain `nagram` / `Nagram*` for upstream compatibility.
 - Main app display name is `Nextgram` in `Telegram/BUILD` (`CFBundleDisplayName` / `CFBundleName`). Extension plist targets remain `Telegram` unless a task explicitly changes that behavior.
 - The primary app icon is the independent `NextgramBuild.icon`. Do not re-enable or package Nagram or Telegram brand icons in downstream builds.
@@ -195,7 +195,7 @@ FetchResourceError  → EngineFetchResourceError
 ## Anti-Patterns
 
 - Do not put Nagram-only feature code into upstream `submodules/` when it can live in `Nagram/`.
-- Do not edit upstream files without a nearby `// MARK: NAGRAM` marker.
+- Do not edit upstream files without a nearby `// MARK: NEXTGRAM` marker for the new modification.
 - Do not pass `--disableExtensions` or `--disableProvisioningProfiles` to `Make.py build`; those are Bazel flags for `local.bazelrc`, not Make.py build arguments.
 - Do not use `disableProvisioningProfiles` for device builds.
 - Do not disable extensions when full/formal provisioning profiles are present.
@@ -241,6 +241,6 @@ Pull request descriptions should include:
 - Validation commands and whether they passed, failed, or were skipped with a reason.
 - Screenshots or screen recordings for UI changes.
 - Signing/build mode used for validation (`debug_sim_arm64`, `debug_arm64`, full profiles, free Apple ID, etc.).
-- Rebase or upstream-touch notes for every modified upstream file with `// MARK: NAGRAM`.
+- Rebase or upstream-touch notes for every modified upstream file with `// MARK: NEXTGRAM`.
 
 Do not create or open a PR unless the user explicitly asks for it.
