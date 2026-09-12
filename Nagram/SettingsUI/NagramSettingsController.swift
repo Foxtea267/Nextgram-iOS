@@ -16,7 +16,7 @@ import UIKit
 import UndoUI
 
 // MARK: NEXTGRAM — 增强设置页 UI。
-// 首页直接展示全部分组并提供全局搜索；深链接仍可打开并定位到具体分组。
+// 首页提供全局搜索和板块入口；进入板块后再按 section header 分层，避免顶部导航随功能增长而拥挤。
 // 数据驱动:nagramGroups() 描述「板块 → 分组(header/footer/行)」,加开关只改这张表。
 // 行类型 NagramRow:toggle(开关)/ choice(disclosure + ActionSheet 弹选,下载加速)/ slider(行内百分比滑杆,贴纸尺寸)。
 // 刷新机制:本地 updatePromise + bump()。toggle/choice 改值后调 bump() 触发列表重建(在 setter 返回之后,
@@ -56,6 +56,33 @@ private final class NagramSettingsRowTag: ItemListItemTag {
             return self.index == other.index
         }
         return false
+    }
+}
+
+// MARK: NEXTGRAM — Hide the parent Settings title while keeping the back arrow.
+private final class NagramSettingsItemListController: ItemListController {
+    private weak var backButtonSourceItem: UINavigationItem?
+    private var previousBackBarButtonItem: UIBarButtonItem?
+
+    deinit {
+        if let backButtonSourceItem = self.backButtonSourceItem {
+            backButtonSourceItem.backBarButtonItem = self.previousBackBarButtonItem
+        }
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+
+        guard self.backButtonSourceItem == nil,
+              let navigationController = self.navigationController,
+              let index = navigationController.viewControllers.firstIndex(where: { $0 === self }),
+              index > 0 else {
+            return
+        }
+        let backButtonSourceItem = navigationController.viewControllers[index - 1].navigationItem
+        self.backButtonSourceItem = backButtonSourceItem
+        self.previousBackBarButtonItem = backButtonSourceItem.backBarButtonItem
+        backButtonSourceItem.backBarButtonItem = UIBarButtonItem(title: "", style: .plain, target: nil, action: nil)
     }
 }
 
@@ -464,6 +491,7 @@ private func nagramGroups(
             .navigation(titleKey: "Nagram.AntiRecallRules", action: antiRecallRulesAction),
             .choice(titleKey: "Nagram.DeletedMessageIndicatorStyle", prefix: "Nagram.DeletedMessageIndicatorStyle", options: ["text", "trash", "both"], current: { NagramSettings.shared.deletedMessageIndicatorStyleValue.rawValue }, set: { NagramSettings.shared.deletedMessageIndicatorStyle = $0 }),
             .input(titleKey: "Nagram.DeletedMessageIndicatorColor", placeholderKey: "Nagram.DeletedMessageIndicatorColor.Placeholder", get: { NagramSettings.shared.deletedMessageIndicatorColor }, set: { NagramSettings.shared.deletedMessageIndicatorColor = $0 }, isSecret: false, isVisible: { true }),
+            .toggle(titleKey: "Nagram.DeletedMessageSemiTransparent", get: { NagramSettings.shared.deletedMessageSemiTransparent }, set: { NagramSettings.shared.deletedMessageSemiTransparent = $0 }),
             .toggle(titleKey: "Nagram.PreserveBotMessages", get: { NagramSettings.shared.preserveBotMessages }, set: { NagramSettings.shared.preserveBotMessages = $0 }),
             .toggle(titleKey: "Nagram.SaveMessageEditHistory", get: { NagramSettings.shared.saveMessageEditHistory }, set: { NagramSettings.shared.saveMessageEditHistory = $0 }),
             .navigation(titleKey: "Nagram.DeletedMessages.Export", action: exportDeletedMessagesAction),
@@ -528,6 +556,7 @@ private func nagramGroups(
         NagramGroup(tab: .other, headerKey: "Nagram.Tab.Other", footerKey: "Nagram.Other.Footer", rows: [
             .toggle(titleKey: "Nagram.LocalPremium", get: { NagramSettings.shared.localPremiumEnabled }, set: { NagramSettings.shared.localPremiumEnabled = $0 }),
             .toggle(titleKey: "Nagram.UnlimitedAccounts", get: { NagramSettings.shared.unlimitedAccountsEnabled }, set: { NagramSettings.shared.unlimitedAccountsEnabled = $0 }),
+            .choice(titleKey: "Nagram.LocationIndicator", prefix: "Nagram.LocationIndicator", options: ["always", "all", "home", "chat"], current: { NagramSettings.shared.locationIndicatorModeValue.rawValue }, set: { NagramSettings.shared.locationIndicatorMode = $0 }),
             .navigation(titleKey: "Nagram.About", action: aboutAction),
         ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Experimental", footerKey: "Nagram.MediaMetadata.Footer", rows: [
@@ -1021,16 +1050,22 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
 
         if isRoot {
             entries.append(.input(stableId: -10, section: 0, title: "", text: selection.1, placeholder: ngI18n("Nagram.Settings.Search", lang), isSecret: false, rightAligned: false, index: -1))
+            if searchQuery.isEmpty {
+                entries.append(.header(stableId: -9, section: 1, text: ngI18n("Nagram.Settings.Sections", lang)))
+                for tab in NagramTab.allCases {
+                    entries.append(.disclosure(stableId: -8 + tab.rawValue, section: 1, title: ngI18n(tab.titleKey, lang), label: "", index: -100 - Int(tab.rawValue)))
+                }
+            }
         }
 
         let normalizedSearchQuery = normalizedNagramDeepLinkToken(searchQuery)
         for (groupIndex, group) in groups.enumerated() {
-            let sectionId = Int32(groupIndex + (isRoot ? 1 : 0))
+            let sectionId = Int32(groupIndex + (isRoot ? 2 : 0))
             let headerStableId = stableId
             stableId += 1
             let groupTitle = group.headerKey.map { ngI18n($0, lang) } ?? ngI18n(group.tab.titleKey, lang)
             let groupMatchesSearch = isRoot && !searchQuery.isEmpty && groupTitle.localizedCaseInsensitiveContains(searchQuery)
-            var didAppendGroupHeader = false
+            var didAppendSearchHeader = false
             if !isRoot && group.tab.rawValue == selectedTab, let headerKey = group.headerKey {
                 entries.append(.header(stableId: headerStableId, section: sectionId, text: ngI18n(headerKey, lang)))
             }
@@ -1042,11 +1077,12 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 globalRowIndex += 1
                 let title = ngI18n(nagramRowTitleKey(row), lang)
                 let rowMatchesSearch = groupMatchesSearch || title.localizedCaseInsensitiveContains(searchQuery) || nagramRowDeepLinkTokens(row).contains(where: { $0.contains(normalizedSearchQuery) })
-                let shouldAppend = (!isRoot && group.tab.rawValue == selectedTab) || (isRoot && (searchQuery.isEmpty || rowMatchesSearch))
+                let shouldAppend = (!isRoot && group.tab.rawValue == selectedTab) || (isRoot && !searchQuery.isEmpty && rowMatchesSearch)
                 if shouldAppend {
-                    if isRoot && !didAppendGroupHeader {
-                        entries.append(.header(stableId: headerStableId, section: sectionId, text: groupTitle))
-                        didAppendGroupHeader = true
+                    if isRoot && !didAppendSearchHeader {
+                        let searchHeader = group.headerKey == nil ? ngI18n(group.tab.titleKey, lang) : "\(ngI18n(group.tab.titleKey, lang)) · \(groupTitle)"
+                        entries.append(.header(stableId: headerStableId, section: sectionId, text: searchHeader))
+                        didAppendSearchHeader = true
                     }
                     if !isRoot && deepLinkTarget.rowIndex == rowIndex {
                         initialScrollToItem = ListViewScrollToItem(index: entries.count, position: .visible, animated: false, curve: .Default(duration: nil), directionHint: .Down)
@@ -1057,7 +1093,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
 
             let footerStableId = stableId
             stableId += 1
-            if ((!isRoot && group.tab.rawValue == selectedTab) || (isRoot && searchQuery.isEmpty && didAppendGroupHeader)), let footerKey = group.footerKey {
+            if !isRoot && group.tab.rawValue == selectedTab, let footerKey = group.footerKey {
                 entries.append(.footer(stableId: footerStableId, section: sectionId, text: ngI18n(footerKey, lang)))
             }
         }
@@ -1078,7 +1114,12 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         deletedMessagesArchiveDisposable.dispose()
     }
 
-    let controller = ItemListController(context: context, state: signal)
+    let controller: ItemListController
+    if isRoot {
+        controller = NagramSettingsItemListController(context: context, state: signal)
+    } else {
+        controller = ItemListController(context: context, state: signal)
+    }
     controller.navigationPresentation = .default
     if let autoOpenNavigationAction {
         var didAutoOpenNavigation = false

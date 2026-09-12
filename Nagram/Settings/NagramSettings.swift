@@ -90,6 +90,13 @@ public enum NagramGlassTransparencyMode: String {
     case custom
 }
 
+public enum NagramLocationIndicatorMode: String {
+    case always
+    case hideAll = "all"
+    case hideHome = "home"
+    case hideChat = "chat"
+}
+
 public enum NagramGroupProfileSettingItem: String, CaseIterable, Hashable {
     case groupType
     case inviteLinks
@@ -183,6 +190,8 @@ public final class NagramSettings {
     public var localPremiumEnabled: Bool
     @NagramDefault("nagram.unlimitedAccountsEnabled", false)
     public var unlimitedAccountsEnabled: Bool
+    @NagramDefault("nagram.locationIndicatorMode", NagramLocationIndicatorMode.always.rawValue)
+    public var locationIndicatorMode: String
     @NagramDefault("nagram.usageAgreementAcceptedVersion", Int32(0))
     public var usageAgreementAcceptedVersion: Int32
     @NagramDefault("nagram.antiRecallWhitelist", "")
@@ -195,6 +204,8 @@ public final class NagramSettings {
     public var deletedMessageIndicatorStyle: String
     @NagramDefault("nagram.deletedMessageIndicatorColor", "")
     public var deletedMessageIndicatorColor: String
+    @NagramDefault("nagram.deletedMessageSemiTransparent", false)
+    public var deletedMessageSemiTransparent: Bool
     @NagramDefault("nagram.preserveBotMessages", false)
     public var preserveBotMessages: Bool
     @NagramDefault("nagram.saveMessageEditHistory", false)
@@ -663,6 +674,10 @@ public extension NagramSettings {
 
     var glassTransparencyModeValue: NagramGlassTransparencyMode {
         return NagramGlassTransparencyMode(rawValue: self.glassTransparencyMode) ?? .system
+    }
+
+    var locationIndicatorModeValue: NagramLocationIndicatorMode {
+        return NagramLocationIndicatorMode(rawValue: self.locationIndicatorMode) ?? .always
     }
 
     var glassTransparencyPercentValue: Int32 {

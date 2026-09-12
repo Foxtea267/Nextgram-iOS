@@ -19,12 +19,9 @@ import NagramSettings
 private func nextgramDeletedMessageTrashIcon(color: UIColor) -> UIImage? {
     return generateImage(CGSize(width: 10.0, height: 10.0), opaque: false, scale: 0.0, rotatedContext: { size, context in
         context.clear(CGRect(origin: .zero, size: size))
-        context.setStrokeColor(color.cgColor)
-        context.setLineWidth(1.5)
-        context.setLineCap(.round)
-        context.setLineJoin(.round)
+        context.setFillColor(color.cgColor)
         context.scaleBy(x: size.width / 24.0, y: size.height / 24.0)
-        let _ = try? drawSvgPath(context, path: "M4,6 L20,6 S M9,6 L9,4 L15,4 L15,6 S M7,9 L8,20 L16,20 L17,9 S M10,10 L10,17 S M14,10 L14,17 S ")
+        let _ = try? drawSvgPath(context, path: "M3,5 L8,5 L9,3 L15,3 L16,5 L21,5 L21,8 L3,8 Z M6,9 L18,9 L17,21 L7,21 Z ")
     })
 }
 

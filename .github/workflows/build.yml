@@ -165,6 +165,8 @@ jobs:
           test -n "${APP_PATH}"
           test "$(plutil -extract CFBundleIdentifier raw "${APP_PATH}/Info.plist")" = "${BUNDLE_ID}"
           test "$(plutil -extract CFBundleShortVersionString raw "${APP_PATH}/Info.plist")" = "${NEXTGRAM_APP_VERSION}"
+          test "$(plutil -extract CFBundleDisplayName raw "${APP_PATH}/Info.plist")" = "Nextgram"
+          test "$(plutil -extract CFBundleName raw "${APP_PATH}/Info.plist")" = "Nextgram"
           find "${APP_PATH}" -type d -name _CodeSignature -prune -exec rm -rf {} +
           find "${APP_PATH}" -name embedded.mobileprovision -delete
           (

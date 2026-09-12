@@ -368,8 +368,13 @@
 "Nagram.Section.LocalPremium" = "Local Premium";
 "Nagram.LocalPremium" = "Enable Local Premium";
 "Nagram.LocalPremium.Footer" = "Unlocks client-side Premium UI and local limit checks only. Server limits, paid features, and the account’s real Premium status are still verified by Telegram, so some features may not work.";
-"Nagram.Other.Footer" = "Local Premium affects only client-side UI and local limits. When Unlimited Accounts is off, Nagram’s default limit of 10 accounts applies.";
+"Nagram.Other.Footer" = "Local Premium affects only client-side UI and local limits. When Unlimited Accounts is off, Nagram’s default limit of 10 accounts applies. The background location capsule option controls only the system indicator and does not stop live-location sharing.";
 "Nagram.UnlimitedAccounts" = "Unlimited Signed-in Accounts";
+"Nagram.LocationIndicator" = "Background Location Capsule";
+"Nagram.LocationIndicator.always" = "Show Everywhere";
+"Nagram.LocationIndicator.all" = "Hide Everywhere";
+"Nagram.LocationIndicator.home" = "Hide on Home Only";
+"Nagram.LocationIndicator.chat" = "Hide in Chats Only";
 "Nagram.About" = "About Nextgram";
 "Nagram.About.Description" = "Nextgram is a third-party enhanced client based on Telegram-iOS and Nagram-iOS. It focuses on message preservation, privacy tools, and interface customization for Chinese-speaking users.";
 "Nagram.About.GitHub" = "GitHub Repository";
@@ -440,3 +445,4 @@
 "Nagram.DeletedMessageIndicatorStyle.both" = "Trash Icon and Text";
 "Nagram.DeletedMessageIndicatorColor" = "Marker Color";
 "Nagram.DeletedMessageIndicatorColor.Placeholder" = "#RRGGBB (empty uses theme color)";
+"Nagram.DeletedMessageSemiTransparent" = "Make Deleted Messages Semi-Transparent";

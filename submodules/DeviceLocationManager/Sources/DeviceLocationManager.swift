@@ -7,6 +7,13 @@ public enum DeviceLocationMode: Int32 {
     case preciseAlways = 1
 }
 
+// MARK: NEXTGRAM — Page-aware control for the iOS background-location capsule.
+public enum DeviceLocationIndicatorContext {
+    case other
+    case chatList
+    case chat
+}
+
 private final class DeviceLocationSubscriber {
     let id: Int32
     let mode: DeviceLocationMode
@@ -42,6 +49,10 @@ public final class DeviceLocationManager: NSObject {
     
     private var currentLocation: CLLocation?
     private var currentHeading: CLHeading?
+
+    // MARK: NEXTGRAM
+    private var locationIndicatorContext: DeviceLocationIndicatorContext = .other
+    private var locationIndicatorSettingsObserver: NSObjectProtocol?
     
     public init(queue: Queue, log: ((String) -> Void)? = nil) {
         assert(queue.isCurrent())
@@ -60,6 +71,45 @@ public final class DeviceLocationManager: NSObject {
         self.manager.headingFilter = 2.0
         if #available(iOS 11.0, *) {
             self.manager.showsBackgroundLocationIndicator = true
+        }
+
+        // MARK: NEXTGRAM
+        self.locationIndicatorSettingsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: UserDefaults.standard,
+            queue: .main,
+            using: { [weak self] _ in
+                self?.updateLocationIndicatorVisibility()
+            }
+        )
+        self.updateLocationIndicatorVisibility()
+    }
+
+    deinit {
+        if let locationIndicatorSettingsObserver = self.locationIndicatorSettingsObserver {
+            NotificationCenter.default.removeObserver(locationIndicatorSettingsObserver)
+        }
+    }
+
+    // MARK: NEXTGRAM
+    public func setLocationIndicatorContext(_ context: DeviceLocationIndicatorContext) {
+        assert(self.queue.isCurrent())
+        self.locationIndicatorContext = context
+        self.updateLocationIndicatorVisibility()
+    }
+
+    // MARK: NEXTGRAM
+    private func updateLocationIndicatorVisibility() {
+        let mode = UserDefaults.standard.string(forKey: "nagram.locationIndicatorMode") ?? "always"
+        let isVisible: Bool
+        switch (mode, self.locationIndicatorContext) {
+        case ("all", _), ("home", .chatList), ("chat", .chat):
+            isVisible = false
+        default:
+            isVisible = true
+        }
+        if #available(iOS 11.0, *) {
+            self.manager.showsBackgroundLocationIndicator = isVisible
         }
     }
     

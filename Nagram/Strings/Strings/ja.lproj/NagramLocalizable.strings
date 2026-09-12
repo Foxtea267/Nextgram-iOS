@@ -368,8 +368,13 @@
 "Nagram.Section.LocalPremium" = "ローカル Premium";
 "Nagram.LocalPremium" = "ローカル Premium を有効にする";
 "Nagram.LocalPremium.Footer" = "クライアント側の Premium UI とローカル上限判定のみを有効にします。サーバー上限、有料機能、実際の Premium 状態は Telegram が引き続き検証するため、一部の機能は利用できない場合があります。";
-"Nagram.Other.Footer" = "ローカル Premium はクライアント UI とローカル上限にのみ影響します。アカウント数無制限をオフにすると、Nagram の既定上限である 10 アカウントが適用されます。";
+"Nagram.Other.Footer" = "ローカル Premium はクライアント UI とローカル上限にのみ影響します。アカウント数無制限をオフにすると、Nagram の既定上限である 10 アカウントが適用されます。バックグラウンド位置情報カプセルの設定はシステム表示のみを制御し、ライブ位置情報の共有は停止しません。";
 "Nagram.UnlimitedAccounts" = "ログインアカウント数を無制限にする";
+"Nagram.LocationIndicator" = "バックグラウンド位置情報カプセル";
+"Nagram.LocationIndicator.always" = "すべての画面で表示";
+"Nagram.LocationIndicator.all" = "すべての画面で非表示";
+"Nagram.LocationIndicator.home" = "ホームのみ非表示";
+"Nagram.LocationIndicator.chat" = "チャットのみ非表示";
 "Nagram.About" = "Nextgram について";
 "Nagram.About.Description" = "Nextgram は Telegram-iOS と Nagram-iOS を基にした非公式の拡張クライアントです。中国語圏のユーザー向けに、メッセージ保存、プライバシー機能、UI カスタマイズを提供します。";
 "Nagram.About.GitHub" = "GitHub リポジトリ";
@@ -440,3 +445,4 @@
 "Nagram.DeletedMessageIndicatorStyle.both" = "ごみ箱とテキスト";
 "Nagram.DeletedMessageIndicatorColor" = "印の色";
 "Nagram.DeletedMessageIndicatorColor.Placeholder" = "#RRGGBB（空欄はテーマ色）";
+"Nagram.DeletedMessageSemiTransparent" = "削除済みメッセージを半透明にする";

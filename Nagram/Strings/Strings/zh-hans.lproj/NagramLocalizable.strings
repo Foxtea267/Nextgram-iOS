@@ -368,8 +368,13 @@
 "Nagram.Section.LocalPremium" = "本地大会员";
 "Nagram.LocalPremium" = "启用本地大会员";
 "Nagram.LocalPremium.Footer" = "仅解锁客户端界面和本地额度判断。服务器额度、付费功能及账号真实会员状态仍由 Telegram 校验，部分功能可能无法使用。";
-"Nagram.Other.Footer" = "本地大会员仅影响客户端界面和本地额度；关闭账号数量无上限时，沿用 Nagram 默认的 10 个账号上限。";
+"Nagram.Other.Footer" = "本地大会员仅影响客户端界面和本地额度；关闭账号数量无上限时，沿用 Nagram 默认的 10 个账号上限。后台定位胶囊设置只控制系统提示的显示范围，不会停止实时位置共享。";
 "Nagram.UnlimitedAccounts" = "账号登录数量无上限";
+"Nagram.LocationIndicator" = "后台定位胶囊";
+"Nagram.LocationIndicator.always" = "所有场景显示";
+"Nagram.LocationIndicator.all" = "所有场景关闭";
+"Nagram.LocationIndicator.home" = "仅主页关闭";
+"Nagram.LocationIndicator.chat" = "仅聊天页面关闭";
 "Nagram.About" = "关于 Nextgram";
 "Nagram.About.Description" = "Nextgram 是基于 Telegram-iOS 和 Nagram-iOS 开发的第三方增强客户端，面向中文用户，专注于消息保留、隐私增强和界面自定义。";
 "Nagram.About.GitHub" = "GitHub 仓库";
@@ -440,3 +445,4 @@
 "Nagram.DeletedMessageIndicatorStyle.both" = "小垃圾桶和文字";
 "Nagram.DeletedMessageIndicatorColor" = "标识颜色";
 "Nagram.DeletedMessageIndicatorColor.Placeholder" = "#RRGGBB（留空跟随主题）";
+"Nagram.DeletedMessageSemiTransparent" = "已删除消息半透明";

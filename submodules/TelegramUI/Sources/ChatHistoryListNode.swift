@@ -38,6 +38,7 @@ import TextFormat
 import ChatNewThreadInfoItem
 import PhoneNumberFormat
 import Postbox
+import NagramMessageHistory // MARK: NEXTGRAM
 import NagramSettings // MARK: NAGRAM
 import NagramSettingsSignal // MARK: NAGRAM
 
@@ -1920,8 +1921,8 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         // MARK: NAGRAM
         // MARK: NEXTGRAM — A playlist query reuses the normal history diff pipeline for both chat and saved-music queues.
         let currentMusicPlaylistSearchQuery = Atomic<String>(value: "")
-        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), self.musicPlaylistSearchQuery ?? .single(""))
-        |> map { update, _, query in
+        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), self.musicPlaylistSearchQuery ?? .single(""), nagramBoolSignal("nagram.deletedMessageSemiTransparent", defaultValue: false))
+        |> map { update, _, query, _ in
             let _ = currentMusicPlaylistSearchQuery.swap(query)
             return update
         }
@@ -3922,6 +3923,39 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         let transition = self.enqueuedHistoryViewTransitions.removeFirst()
         
         var expiredMessageStableIds = Set<UInt32>()
+        var retainedDeletionStableIds = Set<UInt32>()
+        if let previousHistoryView = self.historyView {
+            // MARK: NEXTGRAM — Retained deletions stay in the history, so detect the new marker explicitly.
+            var previousDeletionState: [UInt32: Bool] = [:]
+            for entry in previousHistoryView.filteredEntries {
+                switch entry {
+                case let .MessageEntry(message, _, _, _, _, _):
+                    previousDeletionState[message.stableId] = message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute })
+                case let .MessageGroupEntry(_, messages, _):
+                    for message in messages {
+                        previousDeletionState[message.0.stableId] = message.0.attributes.contains(where: { $0 is NagramDeletedMessageAttribute })
+                    }
+                default:
+                    break
+                }
+            }
+            for entry in transition.historyView.filteredEntries {
+                switch entry {
+                case let .MessageEntry(message, _, _, _, _, _):
+                    if previousDeletionState[message.stableId] == false && message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
+                        retainedDeletionStableIds.insert(message.stableId)
+                    }
+                case let .MessageGroupEntry(_, messages, _):
+                    for message in messages {
+                        if previousDeletionState[message.0.stableId] == false && message.0.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
+                            retainedDeletionStableIds.insert(message.0.stableId)
+                        }
+                    }
+                default:
+                    break
+                }
+            }
+        }
         if let previousHistoryView = self.historyView, transition.options.contains(.AnimateInsertion) {
             var existingStableIds = Set<UInt32>()
             for entry in transition.historyView.filteredEntries {
@@ -4000,6 +4034,7 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 }
             }
         }
+        self.currentDeleteAnimationCorrelationIds.formUnion(retainedDeletionStableIds)
         self.currentDeleteAnimationCorrelationIds.formUnion(expiredMessageStableIds)
         
         var appliedDeleteAnimationCorrelationIds = Set<UInt32>()
@@ -4048,7 +4083,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                         }
                         let itemFrame = itemNode.layer.convert(subFrame, to: dustEffectLayer)
                         dustEffectLayer.addItem(frame: itemFrame, image: image)
-                        itemNode.isHidden = true
+                        let isRetainedDeletion = itemNode.item?.content.contains(where: { retainedDeletionStableIds.contains($0.0.stableId) }) ?? false
+                        if !isRetainedDeletion {
+                            itemNode.isHidden = true
+                        }
                     }
                 }
             } else {

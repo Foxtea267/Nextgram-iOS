@@ -7612,6 +7612,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     
     override public func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+
+        // MARK: NEXTGRAM — Apply the configured system location-capsule scope to chat screens.
+        self.context.sharedContext.locationManager?.setLocationIndicatorContext(.chat)
                 
         if self.willAppear {
             self.chatDisplayNode.historyNode.refreshPollActionsForVisibleMessages()
@@ -8209,6 +8212,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     
     override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+
+        // MARK: NEXTGRAM
+        self.context.sharedContext.locationManager?.setLocationIndicatorContext(.other)
         
         if #available(iOS 18.0, *) {
         } else {

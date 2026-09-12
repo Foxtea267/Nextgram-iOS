@@ -4,6 +4,7 @@ import Postbox
 import SwiftSignalKit
 import AsyncDisplayKit
 import Display
+import DeviceLocationManager // MARK: NEXTGRAM
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
@@ -2406,6 +2407,17 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     }
     
     public static var sharedPreviousPowerSavingEnabled: Bool?
+
+    // MARK: NEXTGRAM — Apply the configured system location-capsule scope to the home chat list.
+    override public func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+
+        if case .chatList(.root) = self.location {
+            self.context.sharedContext.locationManager?.setLocationIndicatorContext(.chatList)
+        } else {
+            self.context.sharedContext.locationManager?.setLocationIndicatorContext(.other)
+        }
+    }
     
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
@@ -2890,6 +2902,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+
+        // MARK: NEXTGRAM
+        self.context.sharedContext.locationManager?.setLocationIndicatorContext(.other)
         
         self.chatListDisplayNode.mainContainerNode.updateEnableAdjacentFilterLoading(false)
         
@@ -4082,6 +4097,25 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         let checkedTitle: (Bool, String) -> String = { isChecked, title in
             return "\(isChecked ? "✓" : "　") \(title)"
         }
+        var pendingSelection: (NagramChatListReadFilter, NagramChatListPeerTypes)?
+        actionSheet.dismissed = { [weak self] _ in
+            guard let self, let (readFilter, peerTypes) = pendingSelection else {
+                return
+            }
+            pendingSelection = nil
+            Queue.mainQueue().async {
+                self.reloadFilters(firstUpdate: { [weak self] in
+                    guard let self else {
+                        return
+                    }
+                    if let filter = nagramCombinedChatListFilter(title: ngI18n("Nagram.ChatListFilter.Title", languageCode), readFilter: readFilter, peerTypes: peerTypes) {
+                        self.selectTab(id: .filter(filter.id), switchToChatsIfNeeded: false)
+                    } else {
+                        self.selectTab(id: .all, switchToChatsIfNeeded: false)
+                    }
+                })
+            }
+        }
         var updateItems: (() -> Void)?
         updateItems = { [weak actionSheet] in
             guard let actionSheet else {
@@ -4129,24 +4163,12 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     typeItem(.channels, "Nagram.ChatListQuickFilter.Channels")
                 ]),
                 ActionSheetItemGroup(items: [
-                    ActionSheetButtonItem(title: presentationData.strings.Common_Done, font: .bold, action: { [weak self, weak actionSheet] in
-                        guard let self else {
-                            return
-                        }
+                    ActionSheetButtonItem(title: presentationData.strings.Common_Done, font: .bold, action: { [weak actionSheet] in
                         NagramSettings.shared.chatListQuickFilterReadMode = selectedReadFilter.rawValue
                         NagramSettings.shared.chatListQuickFilterPeerTypes = selectedPeerTypes.rawValue
+                        pendingSelection = (selectedReadFilter, selectedPeerTypes)
                         updateItems = nil
                         actionSheet?.dismissAnimated()
-                        self.reloadFilters(firstUpdate: { [weak self] in
-                            guard let self else {
-                                return
-                            }
-                            if let filter = nagramCombinedChatListFilter(title: ngI18n("Nagram.ChatListFilter.Title", languageCode), readFilter: selectedReadFilter, peerTypes: selectedPeerTypes) {
-                                self.selectTab(id: .filter(filter.id), switchToChatsIfNeeded: false)
-                            } else {
-                                self.selectTab(id: .all, switchToChatsIfNeeded: false)
-                            }
-                        })
                     })
                 ]),
                 ActionSheetItemGroup(items: [

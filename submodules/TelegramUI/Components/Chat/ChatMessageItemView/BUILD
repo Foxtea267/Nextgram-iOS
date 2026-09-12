@@ -25,8 +25,8 @@ swift_library(
         "//submodules/TelegramUI/Components/Chat/ChatMessageItem",
         "//submodules/TelegramUI/Components/Chat/ChatMessageTransitionNode",
         "//submodules/TelegramAnimatedStickerNode",
-        # MARK: NAGRAM
         "//Nagram/MessageHistory:NagramMessageHistory",  # MARK: NEXTGRAM
+        "//Nagram/Settings:NagramSettings",  # MARK: NEXTGRAM
     ],
     visibility = [
         "//visibility:public",
