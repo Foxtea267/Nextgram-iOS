@@ -5,6 +5,8 @@ enum NagramSettingsSyncKeys {
 
     private static let explicitKeys: Set<String> = [
         "nagram.forceCopyEnabled",
+        "nagram.localPremiumEnabled",
+        "nagram.unlimitedAccountsEnabled",
         "nagram.antiRecallEnabled",
         "nagram.antiRecallWhitelist",
         "nagram.antiRecallBlacklist",
@@ -40,6 +42,8 @@ enum NagramSettingsSyncKeys {
         "nagram.videoPIPSwipeDirection",
         "nagram.chatListSwipeAction",
         "nagram.chatListQuickFiltersEnabled",
+        "nagram.chatListQuickFilterReadMode",
+        "nagram.chatListQuickFilterPeerTypes",
         "nagram.chatListUnreadFirst",
         "nagram.chatListOldestFirst",
         "nagram.chatSearchHideRecentListWhenTopPeersVisible",

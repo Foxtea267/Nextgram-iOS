@@ -62,6 +62,12 @@ public final class ChatListTitleView: UIView, NavigationBarTitleView, Navigation
     
     public var requestUpdate: ((ContainedViewLayoutTransition) -> Void)?
     public var openStatusSetup: ((UIView) -> Void)?
+    // MARK: NEXTGRAM — Allow the root chat title to open the local filter picker.
+    public var titlePressed: (() -> Void)? = nil {
+        didSet {
+            self.buttonView.isHidden = !self.title.isPasscodeSet && self.titlePressed == nil
+        }
+    }
     
     private var validLayout: CGSize?
     
@@ -110,7 +116,7 @@ public final class ChatListTitleView: UIView, NavigationBarTitleView, Navigation
             }
             self.proxyNode.isHidden = !self.title.hasProxy
             
-            self.buttonView.isHidden = !self.title.isPasscodeSet
+            self.buttonView.isHidden = !self.title.isPasscodeSet && self.titlePressed == nil
             if self.title.isPasscodeSet && !self.title.activity {
                 if self.lockView.isHidden && animated {
                     self.lockView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.15)
@@ -459,7 +465,11 @@ public final class ChatListTitleView: UIView, NavigationBarTitleView, Navigation
     }
     
     @objc private func buttonPressed() {
-        self.toggleIsLocked?()
+        if let titlePressed = self.titlePressed {
+            titlePressed()
+        } else {
+            self.toggleIsLocked?()
+        }
     }
     
     @objc private func proxyButtonPressed() {

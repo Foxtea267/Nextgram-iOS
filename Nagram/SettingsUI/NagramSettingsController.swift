@@ -15,8 +15,8 @@ import TelegramUIPreferences
 import UIKit
 import UndoUI
 
-// MARK: NAGRAM — 增强设置页 UI。
-// 首页提供全局搜索和板块入口；进入板块后再按 section header 分层，避免顶部导航随功能增长而拥挤。
+// MARK: NEXTGRAM — 增强设置页 UI。
+// 首页直接展示全部分组并提供全局搜索；深链接仍可打开并定位到具体分组。
 // 数据驱动:nagramGroups() 描述「板块 → 分组(header/footer/行)」,加开关只改这张表。
 // 行类型 NagramRow:toggle(开关)/ choice(disclosure + ActionSheet 弹选,下载加速)/ slider(行内百分比滑杆,贴纸尺寸)。
 // 刷新机制:本地 updatePromise + bump()。toggle/choice 改值后调 bump() 触发列表重建(在 setter 返回之后,
@@ -385,7 +385,8 @@ private func nagramGroups(
     regexFiltersAction: @escaping () -> Void,
     inlineBotRulesAction: @escaping () -> Void,
     llmTranslationSettingsAction: @escaping () -> Void,
-    groupProfileSettingsAction: @escaping () -> Void
+    groupProfileSettingsAction: @escaping () -> Void,
+    aboutAction: @escaping () -> Void
 ) -> [NagramGroup] {
     let sensitiveContentEnabled: () -> Bool = {
         return sensitiveContentConfiguration()?.sensitiveContentEnabled ?? false
@@ -524,6 +525,11 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.VideoPIPSwipeUp", get: { NagramSettings.shared.videoPIPSwipeDirection == "up" }, set: { NagramSettings.shared.videoPIPSwipeDirection = $0 ? "up" : "none" }),
         ]),
         // 其他
+        NagramGroup(tab: .other, headerKey: "Nagram.Tab.Other", footerKey: "Nagram.Other.Footer", rows: [
+            .toggle(titleKey: "Nagram.LocalPremium", get: { NagramSettings.shared.localPremiumEnabled }, set: { NagramSettings.shared.localPremiumEnabled = $0 }),
+            .toggle(titleKey: "Nagram.UnlimitedAccounts", get: { NagramSettings.shared.unlimitedAccountsEnabled }, set: { NagramSettings.shared.unlimitedAccountsEnabled = $0 }),
+            .navigation(titleKey: "Nagram.About", action: aboutAction),
+        ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Experimental", footerKey: "Nagram.MediaMetadata.Footer", rows: [
             .toggle(titleKey: "Nagram.MediaMetadata", get: { NagramSettings.shared.mediaMetadataEnabled }, set: { NagramSettings.shared.mediaMetadataEnabled = $0 }),
         ]),
@@ -587,7 +593,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
     case header(stableId: Int32, section: Int32, text: String)
     case toggle(stableId: Int32, section: Int32, title: String, value: Bool, enabled: Bool, enableInteractiveChanges: Bool, index: Int)
     case disclosure(stableId: Int32, section: Int32, title: String, label: String, index: Int)
-    case input(stableId: Int32, section: Int32, title: String, text: String, placeholder: String, isSecret: Bool, index: Int)
+    case input(stableId: Int32, section: Int32, title: String, text: String, placeholder: String, isSecret: Bool, rightAligned: Bool, index: Int)
     case slider(stableId: Int32, section: Int32, title: String?, minValue: Int32, maxValue: Int32, value: Int32, index: Int)
     case footer(stableId: Int32, section: Int32, text: String)
 
@@ -596,7 +602,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .header(_, section, _): return section
         case let .toggle(_, section, _, _, _, _, _): return section
         case let .disclosure(_, section, _, _, _): return section
-        case let .input(_, section, _, _, _, _, _): return section
+        case let .input(_, section, _, _, _, _, _, _): return section
         case let .slider(_, section, _, _, _, _, _): return section
         case let .footer(_, section, _): return section
         }
@@ -607,7 +613,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .header(stableId, _, _): return stableId
         case let .toggle(stableId, _, _, _, _, _, _): return stableId
         case let .disclosure(stableId, _, _, _, _): return stableId
-        case let .input(stableId, _, _, _, _, _, _): return stableId
+        case let .input(stableId, _, _, _, _, _, _, _): return stableId
         case let .slider(stableId, _, _, _, _, _, _): return stableId
         case let .footer(stableId, _, _): return stableId
         }
@@ -624,8 +630,8 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .disclosure(lId, lSec, lTitle, lLabel, lIndex):
             if case let .disclosure(rId, rSec, rTitle, rLabel, rIndex) = rhs { return lId == rId && lSec == rSec && lTitle == rTitle && lLabel == rLabel && lIndex == rIndex }
             return false
-        case let .input(lId, lSec, lTitle, lText, lPlaceholder, lIsSecret, lIndex):
-            if case let .input(rId, rSec, rTitle, rText, rPlaceholder, rIsSecret, rIndex) = rhs { return lId == rId && lSec == rSec && lTitle == rTitle && lText == rText && lPlaceholder == rPlaceholder && lIsSecret == rIsSecret && lIndex == rIndex }
+        case let .input(lId, lSec, lTitle, lText, lPlaceholder, lIsSecret, lRightAligned, lIndex):
+            if case let .input(rId, rSec, rTitle, rText, rPlaceholder, rIsSecret, rRightAligned, rIndex) = rhs { return lId == rId && lSec == rSec && lTitle == rTitle && lText == rText && lPlaceholder == rPlaceholder && lIsSecret == rIsSecret && lRightAligned == rRightAligned && lIndex == rIndex }
             return false
         case let .slider(lId, lSec, lTitle, lMin, lMax, lValue, lIndex):
             if case let .slider(rId, rSec, rTitle, rMin, rMax, rValue, rIndex) = rhs { return lId == rId && lSec == rSec && lTitle == rTitle && lMin == rMin && lMax == rMax && lValue == rValue && lIndex == rIndex }
@@ -646,7 +652,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
             return NagramSettingsRowTag(index: index)
         case let .disclosure(_, _, _, _, index):
             return NagramSettingsRowTag(index: index)
-        case let .input(_, _, _, _, _, _, index):
+        case let .input(_, _, _, _, _, _, _, index):
             return NagramSettingsRowTag(index: index)
         case let .slider(_, _, _, _, _, _, index):
             return NagramSettingsRowTag(index: index)
@@ -672,8 +678,8 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
             }, longTapAction: {
                 arguments.copyDeepLink(index)
             }, tag: self.tag)
-        case let .input(_, section, title, text, placeholder, isSecret, index):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { updatedText in
+        case let .input(_, section, title, text, placeholder, isSecret, rightAligned, index):
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), alignment: rightAligned ? .right : .default, clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { updatedText in
                 arguments.inputUpdated(index, updatedText)
             }, action: {
             })
@@ -816,6 +822,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nagramLLMTranslationSettingsController(context: context))
     }, groupProfileSettingsAction: {
         pushControllerImpl?(nagramGroupProfileSettingsController(context: context))
+    }, aboutAction: {
+        pushControllerImpl?(nagramAboutController(context: context))
     })
     let flatRows: [NagramRow] = groups.flatMap { $0.rows }
     let flatRowDeepLinks: [String] = groups.flatMap { group in
@@ -998,7 +1006,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: ngI18n("\(prefix).\(currentValue)", lang), index: rowIndex))
             case let .input(titleKey, placeholderKey, get, _, isSecret, isVisible):
                 if isVisible() {
-                    entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, index: rowIndex))
+                    entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, rightAligned: titleKey == "Nagram.DeletedMessageIndicatorColor", index: rowIndex))
                 }
             case let .startupFolder(titleKey):
                 entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: nagramChatListStartupFolderLabel(accountPeerId: context.account.peerId.toInt64(), strings: presentationData.strings, lang: lang), index: rowIndex))
@@ -1012,23 +1020,17 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         }
 
         if isRoot {
-            entries.append(.input(stableId: -10, section: 0, title: "", text: selection.1, placeholder: ngI18n("Nagram.Settings.Search", lang), isSecret: false, index: -1))
-            if searchQuery.isEmpty {
-                entries.append(.header(stableId: -9, section: 1, text: ngI18n("Nagram.Settings.Sections", lang)))
-                for tab in NagramTab.allCases {
-                    entries.append(.disclosure(stableId: -8 + tab.rawValue, section: 1, title: ngI18n(tab.titleKey, lang), label: "", index: -100 - Int(tab.rawValue)))
-                }
-            }
+            entries.append(.input(stableId: -10, section: 0, title: "", text: selection.1, placeholder: ngI18n("Nagram.Settings.Search", lang), isSecret: false, rightAligned: false, index: -1))
         }
 
         let normalizedSearchQuery = normalizedNagramDeepLinkToken(searchQuery)
         for (groupIndex, group) in groups.enumerated() {
-            let sectionId = Int32(groupIndex + (isRoot ? 2 : 0))
+            let sectionId = Int32(groupIndex + (isRoot ? 1 : 0))
             let headerStableId = stableId
             stableId += 1
             let groupTitle = group.headerKey.map { ngI18n($0, lang) } ?? ngI18n(group.tab.titleKey, lang)
             let groupMatchesSearch = isRoot && !searchQuery.isEmpty && groupTitle.localizedCaseInsensitiveContains(searchQuery)
-            var didAppendSearchHeader = false
+            var didAppendGroupHeader = false
             if !isRoot && group.tab.rawValue == selectedTab, let headerKey = group.headerKey {
                 entries.append(.header(stableId: headerStableId, section: sectionId, text: ngI18n(headerKey, lang)))
             }
@@ -1040,12 +1042,11 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 globalRowIndex += 1
                 let title = ngI18n(nagramRowTitleKey(row), lang)
                 let rowMatchesSearch = groupMatchesSearch || title.localizedCaseInsensitiveContains(searchQuery) || nagramRowDeepLinkTokens(row).contains(where: { $0.contains(normalizedSearchQuery) })
-                let shouldAppend = (!isRoot && group.tab.rawValue == selectedTab) || (isRoot && !searchQuery.isEmpty && rowMatchesSearch)
+                let shouldAppend = (!isRoot && group.tab.rawValue == selectedTab) || (isRoot && (searchQuery.isEmpty || rowMatchesSearch))
                 if shouldAppend {
-                    if isRoot && !didAppendSearchHeader {
-                        let searchHeader = group.headerKey == nil ? ngI18n(group.tab.titleKey, lang) : "\(ngI18n(group.tab.titleKey, lang)) · \(groupTitle)"
-                        entries.append(.header(stableId: headerStableId, section: sectionId, text: searchHeader))
-                        didAppendSearchHeader = true
+                    if isRoot && !didAppendGroupHeader {
+                        entries.append(.header(stableId: headerStableId, section: sectionId, text: groupTitle))
+                        didAppendGroupHeader = true
                     }
                     if !isRoot && deepLinkTarget.rowIndex == rowIndex {
                         initialScrollToItem = ListViewScrollToItem(index: entries.count, position: .visible, animated: false, curve: .Default(duration: nil), directionHint: .Down)
@@ -1056,7 +1057,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
 
             let footerStableId = stableId
             stableId += 1
-            if !isRoot && group.tab.rawValue == selectedTab, let footerKey = group.footerKey {
+            if ((!isRoot && group.tab.rawValue == selectedTab) || (isRoot && searchQuery.isEmpty && didAppendGroupHeader)), let footerKey = group.footerKey {
                 entries.append(.footer(stableId: footerStableId, section: sectionId, text: ngI18n(footerKey, lang)))
             }
         }

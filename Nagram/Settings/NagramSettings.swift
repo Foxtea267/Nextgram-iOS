@@ -178,6 +178,13 @@ public final class NagramSettings {
     // MARK: NEXTGRAM — 消息保留与隐私增强。默认关闭，保持 Telegram 原生行为。
     @NagramDefault("nagram.antiRecallEnabled", false)
     public var antiRecallEnabled: Bool
+    /// 仅放宽客户端 Premium 界面和本地额度判断；服务端权益仍取决于真实订阅。
+    @NagramDefault("nagram.localPremiumEnabled", false)
+    public var localPremiumEnabled: Bool
+    @NagramDefault("nagram.unlimitedAccountsEnabled", false)
+    public var unlimitedAccountsEnabled: Bool
+    @NagramDefault("nagram.usageAgreementAcceptedVersion", Int32(0))
+    public var usageAgreementAcceptedVersion: Int32
     @NagramDefault("nagram.antiRecallWhitelist", "")
     public var antiRecallWhitelist: String
     @NagramDefault("nagram.antiRecallBlacklist", "")
@@ -423,9 +430,15 @@ public final class NagramSettings {
     /// 紧凑对话列表（压缩列表行高）
     @NagramDefault("nagram.chatListCompact", false)
     public var chatListCompact: Bool
-    /// 在首页文件夹栏加入联系人、陌生人、私聊、群组、频道、已读和未读等快捷筛选。
+    /// 点击首页“聊天”标题打开组合筛选面板。
     @NagramDefault("nagram.chatListQuickFiltersEnabled", true)
     public var chatListQuickFiltersEnabled: Bool
+    /// 组合筛选的已读状态（"all" / "unread" / "read"）。
+    @NagramDefault("nagram.chatListQuickFilterReadMode", "all")
+    public var chatListQuickFilterReadMode: String
+    /// 组合筛选的会话类型位掩码（联系人、陌生人、机器人、群组、频道）。
+    @NagramDefault("nagram.chatListQuickFilterPeerTypes", Int32(31))
+    public var chatListQuickFilterPeerTypes: Int32
     /// 保留置顶顺序，并将其余未读会话排在已读会话之前。
     @NagramDefault("nagram.chatListUnreadFirst", false)
     public var chatListUnreadFirst: Bool

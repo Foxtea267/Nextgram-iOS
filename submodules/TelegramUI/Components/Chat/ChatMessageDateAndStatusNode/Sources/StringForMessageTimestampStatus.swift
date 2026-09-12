@@ -11,6 +11,7 @@ import NagramSettings // MARK: NAGRAM
 import NagramStrings // MARK: NAGRAM
 
 let nagramDeletedMessageMarkerPrefix = "\u{2063}"
+let nagramDeletedMessageIconPlaceholder = "\u{fffc}"
 
 public enum MessageTimestampStatusFormat {
     case full
@@ -262,9 +263,9 @@ public func stringForMessageTimestampStatus(
         case .text:
             marker = deletedText
         case .trash:
-            marker = "🗑"
+            marker = nagramDeletedMessageIconPlaceholder
         case .trashAndText:
-            marker = "🗑 \(deletedText)"
+            marker = "\(nagramDeletedMessageIconPlaceholder) \(deletedText)"
         }
         return "\(nagramDeletedMessageMarkerPrefix)\(marker) · \(dateText)"
     }

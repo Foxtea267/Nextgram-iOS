@@ -19,6 +19,7 @@ import PresentationDataUtils
 import FetchManagerImpl
 import InAppPurchaseManager
 import NagramSettings
+import NagramSettingsSignal // MARK: NEXTGRAM
 import NagramStrings
 import AnimationCache
 import MultiAnimationRenderer
@@ -439,9 +440,19 @@ public final class AccountContextImpl: AccountContext {
             strongSelf.animatedEmojiStickersPromise.set(.single(stickers))
         })
         
-        self.userLimitsConfigurationDisposable = (self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: account.peerId))
-        |> mapToSignal { peer -> Signal<(Bool, EngineConfiguration.UserLimits), NoError> in
-            let isPremium = peer?.isPremium ?? false
+        // MARK: NEXTGRAM — Local Premium affects client-side gates and limits only; server authorization is unchanged.
+        self.userLimitsConfigurationDisposable = (combineLatest(
+            self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: account.peerId))
+            |> map { peer in
+                return peer?.isPremium ?? false
+            },
+            nagramBoolSignal("nagram.localPremiumEnabled", defaultValue: false)
+        )
+        |> map { isPremium, localPremiumEnabled in
+            return isPremium || localPremiumEnabled
+        }
+        |> distinctUntilChanged
+        |> mapToSignal { isPremium -> Signal<(Bool, EngineConfiguration.UserLimits), NoError> in
             return self.engine.data.subscribe(TelegramEngine.EngineData.Item.Configuration.UserLimits(isPremium: isPremium))
             |> map { userLimits in
                 return (isPremium, userLimits)

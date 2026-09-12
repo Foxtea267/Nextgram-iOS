@@ -1,4 +1,5 @@
 import Foundation
+import NagramSettings
 import SwiftSignalKit
 import TelegramCore
 import TelegramUIPreferences
@@ -7,6 +8,15 @@ import AccountContext
 // MARK: NAGRAM — Allow up to ten production accounts regardless of Premium status.
 public let maximumNumberOfAccounts = 10
 public let maximumPremiumNumberOfAccounts = 10
+
+// MARK: NEXTGRAM — Preserve Nagram's default while allowing an explicit local opt-out.
+public var nextgramMaximumNumberOfAccounts: Int {
+    return NagramSettings.shared.unlimitedAccountsEnabled ? Int.max : maximumNumberOfAccounts
+}
+
+public var nextgramMaximumPremiumNumberOfAccounts: Int {
+    return NagramSettings.shared.unlimitedAccountsEnabled ? Int.max : maximumPremiumNumberOfAccounts
+}
 
 public func activeAccountsAndPeers(context: AccountContext, includePrimary: Bool = false) -> Signal<((AccountContext, EnginePeer)?, [(AccountContext, EnginePeer, Int32)]), NoError> {
     let sharedContext = context.sharedContext

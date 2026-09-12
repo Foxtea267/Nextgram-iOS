@@ -4,7 +4,7 @@ import TelegramCore
 import TelegramPresentationData
 import MergeLists
 import AccountContext
-import NagramChatListFilters // MARK: NAGRAM // MARK: NEXTGRAM
+import NagramChatListFilters // MARK: NEXTGRAM
 import NagramSettings
 import NagramStrings // MARK: NAGRAM
 
@@ -833,7 +833,7 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
         // MARK: NAGRAM
         // MARK: NEXTGRAM — Telegram has no native read-only folder predicate, so apply it to the local virtual filter here.
         if case let .filter(filterId, _, _, _) = chatListFilter,
-           filterId == NagramQuickChatFilter.read.rawValue,
+           nagramCombinedChatListFilterReadMode(id: filterId) == .read,
            updatedCombinedReadState?.isUnread == true,
            !nagramIgnoreUnreadBadge {
             continue loop

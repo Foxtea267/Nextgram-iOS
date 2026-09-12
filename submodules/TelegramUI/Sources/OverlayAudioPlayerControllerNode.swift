@@ -368,6 +368,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.playlistSearchBar.autocorrectionType = .no
         self.playlistSearchBar.returnKeyType = .done
         self.playlistSearchBar.isHidden = !self.supportsPlaylistSearch
+        self.updatePlaylistSearchAppearance()
         self.historyFrameNode.view.addSubview(self.playlistSearchBar)
         
         self.backgroundColor = nil
@@ -680,6 +681,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     
     func updatePresentationData(_ presentationData: PresentationData) {
         self.presentationData = presentationData
+        self.updatePlaylistSearchAppearance() // MARK: NEXTGRAM
         
         self.historyBackgroundContentNode.backgroundColor = self.hasAnyHistoryMessages == true ? self.presentationData.theme.list.itemModalBlocksBackgroundColor : self.presentationData.theme.list.modalPlainBackgroundColor
         self.historyFrameLeftOverlayNode.backgroundColor = self.hasAnyHistoryMessages == true ? self.presentationData.theme.list.modalBlocksBackgroundColor : self.presentationData.theme.list.modalPlainBackgroundColor
@@ -690,6 +692,27 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.collapseNode.setImage(generateCollapseIcon(theme: self.presentationData.theme), for: [])
         
         self.controlsNode.updatePresentationData(self.presentationData)
+    }
+
+    // MARK: NEXTGRAM — Use an opaque Telegram-style field so playlist artwork cannot bleed through the search control.
+    private func updatePlaylistSearchAppearance() {
+        self.playlistSearchBar.backgroundImage = UIImage()
+        self.playlistSearchBar.barTintColor = .clear
+        self.playlistSearchBar.tintColor = self.presentationData.theme.list.itemAccentColor
+        self.playlistSearchBar.placeholder = ngI18n("Nagram.MusicPlaylistSearch", self.presentationData.strings.baseLanguageCode)
+        if #available(iOS 13.0, *) {
+            let textField = self.playlistSearchBar.searchTextField
+            textField.backgroundColor = self.presentationData.theme.list.itemModalBlocksBackgroundColor
+            textField.textColor = self.presentationData.theme.list.itemPrimaryTextColor
+            textField.tintColor = self.presentationData.theme.list.itemAccentColor
+            textField.leftView?.tintColor = self.presentationData.theme.list.itemSecondaryTextColor
+            textField.layer.cornerRadius = 10.0
+            textField.layer.masksToBounds = true
+            textField.attributedPlaceholder = NSAttributedString(
+                string: ngI18n("Nagram.MusicPlaylistSearch", self.presentationData.strings.baseLanguageCode),
+                attributes: [.foregroundColor: self.presentationData.theme.list.itemSecondaryTextColor]
+            )
+        }
     }
     
     private func dismissAllTooltips() {

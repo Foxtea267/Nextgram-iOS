@@ -142,6 +142,8 @@ public final class ChatListHeaderComponent: Component {
     
     public let openStatusSetup: (UIView) -> Void
     public let toggleIsLocked: () -> Void
+    // MARK: NEXTGRAM — Optional action for tapping the chat-list title.
+    public let titlePressed: (() -> Void)?
     
     public init(
         sideInset: CGFloat,
@@ -158,7 +160,8 @@ public final class ChatListHeaderComponent: Component {
         theme: PresentationTheme,
         strings: PresentationStrings,
         openStatusSetup: @escaping (UIView) -> Void,
-        toggleIsLocked: @escaping () -> Void
+        toggleIsLocked: @escaping () -> Void,
+        titlePressed: (() -> Void)? = nil
     ) {
         self.sideInset = sideInset
         self.primaryContent = primaryContent
@@ -175,6 +178,7 @@ public final class ChatListHeaderComponent: Component {
         self.strings = strings
         self.openStatusSetup = openStatusSetup
         self.toggleIsLocked = toggleIsLocked
+        self.titlePressed = titlePressed
     }
     
     public static func ==(lhs: ChatListHeaderComponent, rhs: ChatListHeaderComponent) -> Bool {
@@ -215,6 +219,9 @@ public final class ChatListHeaderComponent: Component {
             return false
         }
         if lhs.strings !== rhs.strings {
+            return false
+        }
+        if (lhs.titlePressed == nil) != (rhs.titlePressed == nil) {
             return false
         }
         return true
@@ -295,6 +302,7 @@ public final class ChatListHeaderComponent: Component {
         let backPressed: () -> Void
         let openStatusSetup: (UIView) -> Void
         let toggleIsLocked: () -> Void
+        var titlePressed: (() -> Void)? = nil
         
         let leftButtonsContainer: UIView
         var leftButtonViews: [AnyHashable: ComponentView<NavigationButtonComponentEnvironment>] = [:]
@@ -673,6 +681,7 @@ public final class ChatListHeaderComponent: Component {
                 let chatListTitleContentSize = size
                 chatListTitleView.theme = theme
                 chatListTitleView.strings = strings
+                chatListTitleView.titlePressed = self.titlePressed
                 chatListTitleView.setTitle(chatListTitle, animated: false)
                 let titleContentRect = chatListTitleView.updateLayoutInternal(size: chatListTitleContentSize, transition: transition.containedViewLayoutTransition)
                 centerContentWidth = floor((chatListTitleContentSize.width * 0.5 - titleContentRect.minX) * 2.0)
@@ -880,6 +889,7 @@ public final class ChatListHeaderComponent: Component {
                     )
                 }
                 
+                primaryContentView.titlePressed = component.titlePressed
                 primaryContentView.update(context: component.context, theme: component.theme, strings: component.strings, content: primaryContent, displayBackButton: primaryContent.backPressed != nil, sideInset: component.sideInset, sideContentWidth: sideContentWidth, sideContentFraction: (1.0 - component.storiesFraction), size: availableSize, transition: primaryContentTransition)
                 primaryContentTransition.setFrame(view: primaryContentView, frame: CGRect(origin: CGPoint(), size: availableSize))
                 
@@ -972,7 +982,8 @@ public final class ChatListHeaderComponent: Component {
                                 return
                             }
                             self.storyComposeAction?(offset)
-                        }
+                        },
+                        titlePressed: component.titlePressed
                     )),
                     environment: {},
                     containerSize: CGSize(width: availableSize.width, height: ChatListNavigationBar.storiesScrollHeight)
@@ -1018,6 +1029,7 @@ public final class ChatListHeaderComponent: Component {
                     self.leftButtonsContainer.addSubview(secondaryContentView.leftButtonsContainer)
                     self.rightButtonsContainer.addSubview(secondaryContentView.rightButtonsContainer)
                 }
+                secondaryContentView.titlePressed = nil
                 secondaryContentView.update(context: component.context, theme: component.theme, strings: component.strings, content: secondaryContent, displayBackButton: true, sideInset: component.sideInset, sideContentWidth: 0.0, sideContentFraction: 0.0, size: availableSize, transition: secondaryContentTransition)
                 secondaryContentTransition.setFrame(view: secondaryContentView, frame: CGRect(origin: CGPoint(), size: availableSize))
                 

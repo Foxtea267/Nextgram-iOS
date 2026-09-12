@@ -140,22 +140,22 @@ public func logoutOptionsController(context: AccountContext, navigationControlle
         |> deliverOnMainQueue
         ).start(next: { accountAndPeer, accountsAndPeers in
             // MARK: NAGRAM
-            var maximumAvailableAccounts = maximumNumberOfAccounts
+            var maximumAvailableAccounts = nextgramMaximumNumberOfAccounts // MARK: NEXTGRAM
             if accountAndPeer?.1.isPremium == true && !context.account.testingEnvironment {
-                maximumAvailableAccounts = maximumPremiumNumberOfAccounts
+                maximumAvailableAccounts = nextgramMaximumPremiumNumberOfAccounts // MARK: NEXTGRAM
             }
             var count: Int = 1
             for (accountContext, peer, _) in accountsAndPeers {
                 if !accountContext.account.testingEnvironment {
                     if peer.isPremium {
-                        maximumAvailableAccounts = maximumPremiumNumberOfAccounts
+                        maximumAvailableAccounts = nextgramMaximumPremiumNumberOfAccounts // MARK: NEXTGRAM
                     }
                     count += 1
                 }
             }
             
             if count >= maximumAvailableAccounts {
-                // MARK: NAGRAM — Both account limits are 10, so Premium cannot raise this limit.
+                // MARK: NEXTGRAM — This branch is bypassed when unlimited accounts are enabled.
                 let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                 presentControllerImpl?(textAlertController(context: context, title: nil, text: presentationData.strings.Premium_MaxAccountsFinalText("\(maximumAvailableAccounts)").string, actions: [
                     TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})

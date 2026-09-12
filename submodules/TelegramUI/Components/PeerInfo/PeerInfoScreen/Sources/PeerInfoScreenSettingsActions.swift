@@ -232,22 +232,22 @@ extension PeerInfoScreenNode {
                     return
                 }
                 // MARK: NAGRAM
-                var maximumAvailableAccounts = maximumNumberOfAccounts
+                var maximumAvailableAccounts = nextgramMaximumNumberOfAccounts // MARK: NEXTGRAM
                 if accountAndPeer?.1.isPremium == true && !strongSelf.context.account.testingEnvironment {
-                    maximumAvailableAccounts = maximumPremiumNumberOfAccounts
+                    maximumAvailableAccounts = nextgramMaximumPremiumNumberOfAccounts // MARK: NEXTGRAM
                 }
                 var count: Int = 1
                 for (accountContext, peer, _) in accountsAndPeers {
                     if !accountContext.account.testingEnvironment {
                         if peer.isPremium {
-                            maximumAvailableAccounts = maximumPremiumNumberOfAccounts
+                            maximumAvailableAccounts = nextgramMaximumPremiumNumberOfAccounts // MARK: NEXTGRAM
                         }
                         count += 1
                     }
                 }
                 
                 if count >= maximumAvailableAccounts {
-                    // MARK: NAGRAM — Both account limits are 10, so Premium cannot raise this limit.
+                    // MARK: NEXTGRAM — This branch is bypassed when unlimited accounts are enabled.
                     strongSelf.controller?.present(textAlertController(context: strongSelf.context, updatedPresentationData: strongSelf.controller?.updatedPresentationData, title: nil, text: strongSelf.presentationData.strings.Premium_MaxAccountsFinalText("\(maximumAvailableAccounts)").string, actions: [
                         TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_OK, action: {})
                     ], parseMarkdown: true), in: .window(.root))

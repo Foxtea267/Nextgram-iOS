@@ -30,6 +30,7 @@ import ChatListHeaderNoticeComponent
 import ChatListFilterTabContainerNode
 import GlassControls
 import NagramSettings
+import NagramChatListFilters // MARK: NEXTGRAM
 
 // MARK: NAGRAM — 首页文件夹标签支持仅文字、仅图标和图标加文字。
 private func nagramFolderTabTitle(
@@ -1627,7 +1628,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 case .all:
                     selectedTab = AnyHashable(Int32.min)
                 case let .filter(id):
-                    selectedTab = AnyHashable(id)
+                    selectedTab = nagramIsCombinedChatListFilterId(id) ? AnyHashable(Int32.min) : AnyHashable(id) // MARK: NEXTGRAM
                 }
                 
                 let isEditing = self.isReorderingFilters || (self.mainContainerNode.currentItemNode.currentState.editing && !self.didBeginSelectingChatsWhileEditing)
@@ -1776,6 +1777,16 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         } else {
             shouldHideHomeSearchBar = false
         }
+
+        // MARK: NEXTGRAM — The filter picker is attached only to the root “Chats” title.
+        let nagramTitlePressed: (() -> Void)?
+        if case .chatList(groupId: .root) = self.location, NagramSettings.shared.chatListQuickFiltersEnabled {
+            nagramTitlePressed = { [weak self] in
+                self?.controller?.openNagramChatListFilterPicker()
+            }
+        } else {
+            nagramTitlePressed = nil
+        }
         
         let navigationBarSize = self.navigationBarView.update(
             transition: transition,
@@ -1829,7 +1840,8 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                         return
                     }
                     controller.allowAutomaticOrder()
-                }
+                },
+                titlePressed: nagramTitlePressed
             )),
             environment: {},
             containerSize: layout.size

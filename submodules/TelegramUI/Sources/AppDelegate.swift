@@ -41,6 +41,8 @@ import MediaEditor
 import TelegramUIDeclareEncodables
 import ContextMenuScreen
 import MetalEngine
+import NagramSettings // MARK: NEXTGRAM
+import NagramStrings // MARK: NEXTGRAM
 import RecaptchaEnterprise
 import NavigationBarImpl
 import ContextUI
@@ -243,6 +245,11 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     private var authContextValue: UnauthorizedApplicationContext?
     private let authContext = Promise<UnauthorizedApplicationContext?>()
     private let authContextDisposable = MetaDisposable()
+
+    // MARK: NEXTGRAM — Show the current usage agreement once on both authorized and authorization roots.
+    private let nextgramUsageAgreementVersion: Int32 = 1
+    private var canPresentNextgramUsageAgreement = false
+    private var isPresentingNextgramUsageAgreement = false
     
     private let logoutDisposable = MetaDisposable()
     
@@ -1382,6 +1389,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     self.registerForNotifications(context: context.context, authorize: authorizeNotifications)
                     
                     self.resetIntentsIfNeeded(context: context.context)
+
+                    // MARK: NEXTGRAM
+                    self.canPresentNextgramUsageAgreement = true
+                    self.presentNextgramUsageAgreementIfNeeded(sharedContext: context.sharedApplicationContext.sharedContext)
                 }))
             } else {
                 self.mainWindow.viewController = nil
@@ -1446,6 +1457,9 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 |> deliverOnMainQueue).start(next: { _ in
                     progressDisposable.dispose()
                     self.mainWindow.present(context.rootController, on: .root)
+                    // MARK: NEXTGRAM
+                    self.canPresentNextgramUsageAgreement = true
+                    self.presentNextgramUsageAgreementIfNeeded(sharedContext: context.sharedContext)
                 }))
             } else {
                 authContextReadyDisposable.set(nil)
@@ -2020,6 +2034,47 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         })
     }
 
+    // MARK: NEXTGRAM — The acknowledgement is local and versioned so a materially revised agreement can be shown again.
+    private func presentNextgramUsageAgreementIfNeeded(sharedContext: SharedAccountContextImpl) {
+        guard self.canPresentNextgramUsageAgreement,
+              !self.isPresentingNextgramUsageAgreement,
+              NagramSettings.shared.usageAgreementAcceptedVersion < self.nextgramUsageAgreementVersion else {
+            return
+        }
+        self.isPresentingNextgramUsageAgreement = true
+
+        Queue.mainQueue().after(0.35, { [weak self] in
+            guard let self else {
+                return
+            }
+            guard NagramSettings.shared.usageAgreementAcceptedVersion < self.nextgramUsageAgreementVersion else {
+                self.isPresentingNextgramUsageAgreement = false
+                return
+            }
+            let presentationData = sharedContext.currentPresentationData.with { $0 }
+            let lang = presentationData.strings.baseLanguageCode
+            let alertController = textAlertController(
+                sharedContext: sharedContext,
+                title: ngI18n("Nagram.UsageAgreement.AlertTitle", lang),
+                text: ngI18n("Nagram.UsageAgreement.AlertText", lang),
+                actions: [
+                    TextAlertAction(type: .genericAction, title: ngI18n("Nagram.UsageAgreement.Read", lang), action: { [weak self] in
+                        self?.isPresentingNextgramUsageAgreement = false
+                        if let url = URL(string: "https://github.com/Foxtea267/Nextgram-iOS/blob/main/USAGE_AGREEMENT.md") {
+                            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+                        }
+                    }),
+                    TextAlertAction(type: .defaultAction, title: ngI18n("Nagram.UsageAgreement.Accepted", lang), action: { [weak self] in
+                        NagramSettings.shared.usageAgreementAcceptedVersion = self?.nextgramUsageAgreementVersion ?? 1
+                        self?.isPresentingNextgramUsageAgreement = false
+                    })
+                ],
+                dismissOnOutsideTap: false
+            )
+            self.mainWindow.present(alertController, on: .root, blockInteraction: false, completion: {})
+        })
+    }
+
     func applicationDidBecomeActive(_ application: UIApplication) {
         self.isInForegroundValue = true
         self.isInForegroundPromise.set(true)
@@ -2029,6 +2084,13 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         self.resetBadge()
         
         self.maybeCheckForUpdates()
+
+        // MARK: NEXTGRAM — Returning from the agreement page shows the prompt again until the user acknowledges it.
+        let _ = (self.sharedContextPromise.get()
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self] sharedApplicationContext in
+            self?.presentNextgramUsageAgreementIfNeeded(sharedContext: sharedApplicationContext.sharedContext)
+        })
         
         SharedDisplayLinkDriver.shared.updateForegroundState(self.isActiveValue)
         

@@ -7466,7 +7466,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
         let productionAccountCount = other.reduce(1, { count, account in
             return account.0.account.testingEnvironment ? count : count + 1
         })
-        if addAccount == nil || productionAccountCount < maximumNumberOfAccounts {
+        if addAccount == nil || productionAccountCount < nextgramMaximumNumberOfAccounts { // MARK: NEXTGRAM
             items.append(.action(ContextMenuActionItem(text: strings.Settings_AddAccount, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Add"), color: theme.contextMenu.primaryColor)
             }, action: { [weak self] _, f in

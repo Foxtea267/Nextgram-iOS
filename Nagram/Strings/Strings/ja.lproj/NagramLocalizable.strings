@@ -364,7 +364,28 @@
 "Nagram.RecentStickerLimit.150" = "150";
 "Nagram.RecentStickerLimit.200" = "200";
 
-"Nagram.ChatListQuickFilters" = "チャットのクイックフィルター";
+"Nagram.ChatListQuickFilters" = "「チャット」をタップして複合フィルター";
+"Nagram.Section.LocalPremium" = "ローカル Premium";
+"Nagram.LocalPremium" = "ローカル Premium を有効にする";
+"Nagram.LocalPremium.Footer" = "クライアント側の Premium UI とローカル上限判定のみを有効にします。サーバー上限、有料機能、実際の Premium 状態は Telegram が引き続き検証するため、一部の機能は利用できない場合があります。";
+"Nagram.Other.Footer" = "ローカル Premium はクライアント UI とローカル上限にのみ影響します。アカウント数無制限をオフにすると、Nagram の既定上限である 10 アカウントが適用されます。";
+"Nagram.UnlimitedAccounts" = "ログインアカウント数を無制限にする";
+"Nagram.About" = "Nextgram について";
+"Nagram.About.Description" = "Nextgram は Telegram-iOS と Nagram-iOS を基にした非公式の拡張クライアントです。中国語圏のユーザー向けに、メッセージ保存、プライバシー機能、UI カスタマイズを提供します。";
+"Nagram.About.GitHub" = "GitHub リポジトリ";
+"Nagram.About.Group" = "公式グループ @Nextgram_Chat";
+"Nagram.About.Channel" = "公式チャンネル @Nextgram_iOS";
+"Nagram.About.Agreement" = "Nextgram 利用規約";
+"Nagram.About.Disclaimer" = "Nextgram は Telegram の公式クライアントではありません。Nextgram の使用によりアカウント制限や凍結が発生する可能性があります。本ソフトウェアの使用によるアカウント、データ、その他の損失について、Nextgram の開発者は責任を負いません。";
+"Nagram.UsageAgreement.AlertTitle" = "利用規約をお読みください";
+"Nagram.UsageAgreement.AlertText" = "Nextgram は非公式の第三者クライアントです。使用によりアカウントが制限または凍結される可能性があり、そのリスクは利用者が負います。続行前に Nextgram 利用規約をお読みください。";
+"Nagram.UsageAgreement.Read" = "規約を読む";
+"Nagram.UsageAgreement.Accepted" = "確認しました";
+"Nagram.ChatListFilter.Title" = "チャットを絞り込む";
+"Nagram.ChatListFilter.ReadStatus" = "既読状態";
+"Nagram.ChatListFilter.ChatTypes" = "チャットの種類（複数選択）";
+"Nagram.ChatListFilter.All" = "すべて";
+"Nagram.ChatListFilter.AllTypes" = "すべてのチャット種類";
 "Nagram.ChatListUnreadFirst" = "未読チャットを優先";
 "Nagram.ChatListQuickFilter.Contacts" = "連絡先";
 "Nagram.ChatListQuickFilter.Private" = "個人";
@@ -381,7 +402,7 @@
 "Nagram.ChatAutoremoveBadge" = "アバターに自動削除時間を表示";
 "Nagram.Section.MessagePreservation" = "メッセージの保存";
 "Nagram.Section.MessagePreservation.Footer" = "保存内容はこの端末だけに残ります。メディアはローカルキャッシュに依存します。";
-"Nagram.AntiRecall" = "削除防止";
+"Nagram.AntiRecall" = "削除メッセージの保持";
 "Nagram.PreserveBotMessages" = "Botメッセージを保存";
 "Nagram.SaveMessageEditHistory" = "編集履歴を保存";
 "Nagram.GhostMode" = "ゴーストモード";
@@ -397,7 +418,7 @@
 "Nagram.Settings.Search" = "Nextgram設定を検索";
 "Nagram.Settings.Sections" = "設定セクション";
 "Nagram.Settings.Search.Empty" = "一致する設定はありません。";
-"Nagram.AntiRecallRules" = "削除防止ルール";
+"Nagram.AntiRecallRules" = "削除メッセージの保持ルール";
 "Nagram.AntiRecallRules.Whitelist" = "許可リスト";
 "Nagram.AntiRecallRules.Blacklist" = "拒否リスト";
 "Nagram.AntiRecallRules.Keywords" = "除外キーワード";

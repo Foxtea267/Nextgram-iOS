@@ -5969,6 +5969,48 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 guard let strongSelf = self, let peer = strongSelf.presentationInterfaceState.renderedPeer?.chatMainPeer else {
                     return
                 }
+
+                // MARK: NEXTGRAM
+                let appendAutoremoveItem: (inout [ContextMenuItem]) -> Void = { items in
+                    guard peer.canSetupAutoremoveTimeout(accountPeerId: strongSelf.context.account.peerId) else {
+                        return
+                    }
+
+                    let currentAutoremoveTimeout = strongSelf.presentationInterfaceState.autoremoveTimeout
+                    let strings = strongSelf.presentationData.strings
+                    items.append(.action(ContextMenuActionItem(
+                        text: currentAutoremoveTimeout == nil ? strings.PeerInfo_EnableAutoDelete : strings.PeerInfo_AdjustAutoDelete,
+                        icon: { theme in
+                            if let currentAutoremoveTimeout {
+                                let text = NSAttributedString(
+                                    string: shortTimeIntervalString(strings: strings, value: currentAutoremoveTimeout),
+                                    font: Font.regular(14.0),
+                                    textColor: theme.contextMenu.primaryColor
+                                )
+                                let bounds = text.boundingRect(
+                                    with: CGSize(width: 100.0, height: 100.0),
+                                    options: .usesLineFragmentOrigin,
+                                    context: nil
+                                )
+                                return generateImage(bounds.size.integralFloor, rotatedContext: { size, context in
+                                    context.clear(CGRect(origin: CGPoint(), size: size))
+                                    UIGraphicsPushContext(context)
+                                    text.draw(in: bounds)
+                                    UIGraphicsPopContext()
+                                })
+                            } else {
+                                return generateTintedImage(
+                                    image: UIImage(bundleImageName: "Chat/Context Menu/Timer"),
+                                    color: theme.contextMenu.primaryColor
+                                )
+                            }
+                        },
+                        action: { [weak self] _, f in
+                            f(.dismissWithoutContent)
+                            self?.presentAutoremoveSetup()
+                        }
+                    )))
+                }
                 
                 let items: Signal<[ContextMenuItem], NoError>
                 switch chatLocation {
@@ -6006,6 +6048,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                                 strongSelf.push(statsController)
                             })))
                         }
+                        appendAutoremoveItem(&items)
                         items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_Search, icon: { theme in
                             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
                         }, action: { _, f in
@@ -6256,6 +6299,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                             })))
                         }
                         
+                        appendAutoremoveItem(&items)
                         items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_Search, icon: { theme in
                             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
                         }, action: { _, f in

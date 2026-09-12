@@ -15,6 +15,19 @@ import TelegramStringFormatting
 // MARK: NAGRAM
 import NagramSettings
 
+// MARK: NEXTGRAM — A compact monochrome trash glyph rendered from an SVG path, not an emoji.
+private func nextgramDeletedMessageTrashIcon(color: UIColor) -> UIImage? {
+    return generateImage(CGSize(width: 10.0, height: 10.0), opaque: false, scale: 0.0, rotatedContext: { size, context in
+        context.clear(CGRect(origin: .zero, size: size))
+        context.setStrokeColor(color.cgColor)
+        context.setLineWidth(1.5)
+        context.setLineCap(.round)
+        context.setLineJoin(.round)
+        context.scaleBy(x: size.width / 24.0, y: size.height / 24.0)
+        let _ = try? drawSvgPath(context, path: "M4,6 L20,6 S M9,6 L9,4 L15,4 L15,6 S M7,9 L8,20 L16,20 L17,9 S M10,10 L10,17 S M14,10 L14,17 S ")
+    })
+}
+
 private func maybeAddRotationAnimation(_ layer: CALayer, duration: Double) {
     if let _ = layer.animation(forKey: "clockFrameAnimation") {
         return
@@ -562,11 +575,20 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             if let markerText = nagramDeletedMarkerText {
                 let configuredColor = NagramSettings.shared.deletedMessageIndicatorColor.trimmingCharacters(in: .whitespacesAndNewlines)
                 let colorDigits = configuredColor.hasPrefix("#") ? String(configuredColor.dropFirst()) : configuredColor
-                if (colorDigits.count == 6 || colorDigits.count == 8), let markerColor = UIColor(hexString: configuredColor) {
-                    let markerRange = (updatedDateText as NSString).range(of: markerText)
-                    if markerRange.location != NSNotFound {
-                        attributedDateText.addAttribute(.foregroundColor, value: markerColor, range: markerRange)
-                    }
+                let markerColor: UIColor
+                if (colorDigits.count == 6 || colorDigits.count == 8), let configuredMarkerColor = UIColor(hexString: configuredColor) {
+                    markerColor = configuredMarkerColor
+                } else {
+                    markerColor = dateColor
+                }
+                let markerRange = (updatedDateText as NSString).range(of: markerText)
+                if markerRange.location != NSNotFound {
+                    // Only the deleted-message marker is colored; the bubble and timestamp keep their theme colors.
+                    attributedDateText.addAttribute(.foregroundColor, value: markerColor, range: markerRange)
+                }
+                let iconRange = (updatedDateText as NSString).range(of: nagramDeletedMessageIconPlaceholder)
+                if iconRange.location != NSNotFound, let icon = nextgramDeletedMessageTrashIcon(color: markerColor) {
+                    attributedDateText.addAttribute(.attachment, value: icon, range: iconRange)
                 }
             }
             let (date, dateApply) = dateLayout(TextNodeLayoutArguments(attributedString: attributedDateText, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .middle, constrainedSize: arguments.constrainedSize, alignment: .natural, cutout: nil, insets: UIEdgeInsets()))

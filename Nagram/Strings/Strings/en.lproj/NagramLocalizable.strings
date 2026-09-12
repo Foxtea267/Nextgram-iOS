@@ -364,7 +364,28 @@
 "Nagram.RecentStickerLimit.150" = "150";
 "Nagram.RecentStickerLimit.200" = "200";
 
-"Nagram.ChatListQuickFilters" = "Quick Chat Filters";
+"Nagram.ChatListQuickFilters" = "Tap “Chats” for Combined Filters";
+"Nagram.Section.LocalPremium" = "Local Premium";
+"Nagram.LocalPremium" = "Enable Local Premium";
+"Nagram.LocalPremium.Footer" = "Unlocks client-side Premium UI and local limit checks only. Server limits, paid features, and the account’s real Premium status are still verified by Telegram, so some features may not work.";
+"Nagram.Other.Footer" = "Local Premium affects only client-side UI and local limits. When Unlimited Accounts is off, Nagram’s default limit of 10 accounts applies.";
+"Nagram.UnlimitedAccounts" = "Unlimited Signed-in Accounts";
+"Nagram.About" = "About Nextgram";
+"Nagram.About.Description" = "Nextgram is a third-party enhanced client based on Telegram-iOS and Nagram-iOS. It focuses on message preservation, privacy tools, and interface customization for Chinese-speaking users.";
+"Nagram.About.GitHub" = "GitHub Repository";
+"Nagram.About.Group" = "Official Group @Nextgram_Chat";
+"Nagram.About.Channel" = "Official Channel @Nextgram_iOS";
+"Nagram.About.Agreement" = "Nextgram Usage Agreement";
+"Nagram.About.Disclaimer" = "Nextgram is not an official Telegram client. Using Nextgram may result in account restrictions or bans. The Nextgram developers are not responsible for account, data, or other losses caused by using this software.";
+"Nagram.UsageAgreement.AlertTitle" = "Please Read the Usage Agreement";
+"Nagram.UsageAgreement.AlertText" = "Nextgram is an unofficial third-party client. Its use may result in account restrictions or bans, and you accept those risks. Please read the Nextgram Usage Agreement before continuing.";
+"Nagram.UsageAgreement.Read" = "Read Agreement";
+"Nagram.UsageAgreement.Accepted" = "I Have Read It";
+"Nagram.ChatListFilter.Title" = "Filter Chats";
+"Nagram.ChatListFilter.ReadStatus" = "Read Status";
+"Nagram.ChatListFilter.ChatTypes" = "Chat Types (Multiple)";
+"Nagram.ChatListFilter.All" = "All";
+"Nagram.ChatListFilter.AllTypes" = "All Chat Types";
 "Nagram.ChatListUnreadFirst" = "Unread Chats First";
 "Nagram.ChatListQuickFilter.Contacts" = "Contacts";
 "Nagram.ChatListQuickFilter.Private" = "Private";
@@ -381,7 +402,7 @@
 "Nagram.ChatAutoremoveBadge" = "Show Auto-Delete Time on Avatar";
 "Nagram.Section.MessagePreservation" = "Message Preservation";
 "Nagram.Section.MessagePreservation.Footer" = "Preserved messages remain only on this device. Media still depends on the local cache.";
-"Nagram.AntiRecall" = "Anti-Recall";
+"Nagram.AntiRecall" = "Deleted Message Interception";
 "Nagram.PreserveBotMessages" = "Preserve Bot Messages";
 "Nagram.SaveMessageEditHistory" = "Save Message Edit History";
 "Nagram.GhostMode" = "Ghost Mode";
@@ -397,7 +418,7 @@
 "Nagram.Settings.Search" = "Search Nextgram Settings";
 "Nagram.Settings.Sections" = "Settings Sections";
 "Nagram.Settings.Search.Empty" = "No matching settings found.";
-"Nagram.AntiRecallRules" = "Anti-Recall Rules";
+"Nagram.AntiRecallRules" = "Deleted Message Interception Rules";
 "Nagram.AntiRecallRules.Whitelist" = "Whitelist";
 "Nagram.AntiRecallRules.Blacklist" = "Blacklist";
 "Nagram.AntiRecallRules.Keywords" = "Excluded Keywords";
