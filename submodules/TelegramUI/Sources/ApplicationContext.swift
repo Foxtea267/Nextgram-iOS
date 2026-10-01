@@ -1,6 +1,7 @@
 import Foundation
 import UIKit
 import Intents
+import UserNotifications
 import TelegramPresentationData
 import TelegramUIPreferences
 import SwiftSignalKit
@@ -35,6 +36,101 @@ import MinimizedContainer
 import BrowserUI
 import NagramSettings
 import NagramSettingsSignal
+
+// MARK: NEXTGRAM — Schedule a local notification when APNs is unavailable but MTProto remains online.
+private func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [Message], notify: Bool) {
+    guard NagramSettings.shared.localNotificationFallbackEnabled, notify, let firstMessage = messages.first else {
+        return
+    }
+    guard firstMessage.flags.contains(.Incoming) else {
+        return
+    }
+    if firstMessage.attributes.contains(where: { attribute in
+        return (attribute as? NotificationInfoMessageAttribute)?.flags.contains(.muted) == true
+    }) {
+        return
+    }
+    if let forwardInfo = firstMessage.forwardInfo, forwardInfo.flags.contains(.isImported) {
+        return
+    }
+    for media in firstMessage.media {
+        if let action = media as? TelegramMediaAction {
+            switch action.action {
+            case .messageAutoremoveTimeoutUpdated, .conferenceCall:
+                return
+            default:
+                break
+            }
+        }
+    }
+    guard firstMessage.restrictionReason(platform: "ios", contentSettings: context.currentContentSettings.with({ $0 })) == nil,
+          let rawChatPeer = firstMessage.peers[firstMessage.id.peerId] else {
+        return
+    }
+    let chatPeer = EnginePeer(rawChatPeer)
+    guard chatPeer.restrictionText(platform: "ios", contentSettings: context.currentContentSettings.with({ $0 })) == nil else {
+        return
+    }
+
+    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+    let settings = context.sharedContext.currentInAppNotificationSettings.with { $0 }
+    let engineMessages = messages.map { EngineMessage($0) }
+    let (_, _, messageText, _, _, _, _) = chatListItemStrings(
+        strings: presentationData.strings,
+        nameDisplayOrder: presentationData.nameDisplayOrder,
+        dateTimeFormat: presentationData.dateTimeFormat,
+        contentSettings: context.currentContentSettings.with { $0 },
+        messages: engineMessages,
+        chatPeer: EngineRenderedPeer(peer: chatPeer),
+        accountPeerId: context.account.peerId
+    )
+
+    let schedule: (Bool) -> Void = { isLocked in
+        let content = UNMutableNotificationContent()
+        if isLocked || !settings.displayNameOnLockscreen {
+            content.title = "Nextgram"
+        } else {
+            content.title = chatPeer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
+        }
+        if isLocked || !settings.displayPreviews {
+            content.body = presentationData.strings.Watch_MessageView_Title
+        } else {
+            content.body = messageText
+        }
+        content.sound = .default
+        content.threadIdentifier = "nextgram-local-\(context.account.id.int64)-\(firstMessage.id.peerId.toInt64())"
+        content.userInfo["accountId"] = "\(context.account.id.int64)"
+        content.userInfo["peerId"] = "\(firstMessage.id.peerId.toInt64())"
+        content.userInfo["messageId.namespace"] = firstMessage.id.namespace
+        content.userInfo["messageId.id"] = firstMessage.id.id
+        if let threadId = firstMessage.threadId {
+            content.userInfo["threadId"] = threadId
+        }
+        switch chatPeer {
+        case let .channel(channel):
+            if case .broadcast = channel.info {
+                content.categoryIdentifier = "c"
+            } else {
+                content.categoryIdentifier = "gr"
+            }
+        case .legacyGroup, .community:
+            content.categoryIdentifier = "gr"
+        default:
+            content.categoryIdentifier = "r"
+        }
+
+        let identifier = "nextgram-local-\(context.account.id.int64)-\(firstMessage.id.peerId.toInt64())-\(firstMessage.id.namespace)-\(firstMessage.id.id)"
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
+    }
+
+    if let appLockContext = context.sharedContext.appLockContext as? AppLockContextImpl {
+        let _ = (appLockContext.isCurrentlyLocked
+        |> take(1)
+        |> deliverOnMainQueue).start(next: schedule)
+    } else {
+        schedule(false)
+    }
+}
 
 // MARK: NAGRAM — 从桌面角标中扣除被消息屏蔽规则隐藏的未读消息。
 private func nagramFilteredUnreadBadgeAdjustment(transaction: Transaction, accountPeerId: PeerId, seedConfiguration: SeedConfiguration, inAppSettings: InAppNotificationSettings) -> Int32 {
@@ -594,6 +690,11 @@ final class AuthorizedApplicationContext {
                                 }))
                             }
                         })
+                    }
+                } else {
+                    // MARK: NEXTGRAM — The account update stream is the source of truth for APNs-free fallback alerts.
+                    for (messages, _, notify, _) in messageList {
+                        nagramScheduleLocalMessageNotification(context: strongSelf.context, messages: messages, notify: notify)
                     }
                 }
             }

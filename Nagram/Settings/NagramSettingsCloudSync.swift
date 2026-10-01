@@ -22,6 +22,7 @@ enum NagramSettingsSyncKeys {
         "nagram.disableTypingStatus",
         "nagram.disableOnlineStatus",
         "nagram.skipSensitiveContentWarning",
+        "nagram.ignoreContentRestrictions",
         "nagram.hideReactions",
         "nagram.disableScrollToNextChannel",
         "nagram.disableScrollToNextTopic",

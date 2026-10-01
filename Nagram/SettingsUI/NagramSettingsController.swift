@@ -582,7 +582,11 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.DisableContactPhoneSharingByDefault", get: { NagramSettings.shared.disableContactPhoneSharingByDefault }, set: { NagramSettings.shared.disableContactPhoneSharingByDefault = $0 }),
             .toggle(titleKey: "Nagram.DisableContactSyncToPhoneByDefault", get: { NagramSettings.shared.disableContactSyncToPhoneByDefault }, set: { NagramSettings.shared.disableContactSyncToPhoneByDefault = $0 }),
         ]),
+        NagramGroup(tab: .other, headerKey: "Nagram.Section.Notifications", footerKey: "Nagram.LocalNotificationFallback.Footer", rows: [
+            .toggle(titleKey: "Nagram.LocalNotificationFallback", get: { NagramSettings.shared.localNotificationFallbackEnabled }, set: { NagramSettings.shared.localNotificationFallbackEnabled = $0 }),
+        ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Privacy", footerKey: "Nagram.DisableFiltering.Footer", rows: [
+            .toggle(titleKey: "Nagram.IgnoreContentRestrictions", get: { NagramSettings.shared.ignoreContentRestrictions }, set: { NagramSettings.shared.ignoreContentRestrictions = $0 }),
             .toggleWithEnabled(titleKey: "Nagram.DisableFiltering", get: sensitiveContentEnabled, set: setSensitiveContentEnabled, enabled: sensitiveContentCanAdjust, enableInteractiveChanges: false),
             .toggle(titleKey: "Nagram.SkipSensitiveContentWarning", get: { NagramSettings.shared.skipSensitiveContentWarning }, set: { NagramSettings.shared.skipSensitiveContentWarning = $0 }),
         ]),

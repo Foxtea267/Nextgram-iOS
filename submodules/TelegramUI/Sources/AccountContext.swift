@@ -346,9 +346,27 @@ public final class AccountContextImpl: AccountContext {
             let _ = currentLimitsConfiguration.swap(value)
         })
         
-        let updatedContentSettings = getContentSettings(postbox: account.postbox)
-        self.currentContentSettings = Atomic(value: contentSettings)
-        self._contentSettings.set(.single(contentSettings) |> then(updatedContentSettings))
+        // MARK: NEXTGRAM — Apply the optional local iOS restriction bypass to every content-settings consumer.
+        let adjustContentSettings: (ContentSettings, Bool) -> ContentSettings = { contentSettings, ignoreContentRestrictions in
+            var contentSettings = contentSettings
+            if ignoreContentRestrictions {
+                contentSettings.ignoreContentRestrictionReasons.insert("*")
+            } else {
+                contentSettings.ignoreContentRestrictionReasons.remove("*")
+            }
+            return contentSettings
+        }
+        let initialContentSettings = adjustContentSettings(contentSettings, NagramSettings.shared.ignoreContentRestrictions)
+        let updatedContentSettings = combineLatest(
+            getContentSettings(postbox: account.postbox),
+            nagramBoolSignal("nagram.ignoreContentRestrictions", defaultValue: false)
+        )
+        |> map { contentSettings, ignoreContentRestrictions in
+            return adjustContentSettings(contentSettings, ignoreContentRestrictions)
+        }
+        |> distinctUntilChanged
+        self.currentContentSettings = Atomic(value: initialContentSettings)
+        self._contentSettings.set(.single(initialContentSettings) |> then(updatedContentSettings))
         
         let currentContentSettings = self.currentContentSettings
         self.contentSettingsDisposable = (self._contentSettings.get()

@@ -250,6 +250,14 @@ public final class NagramSettings {
     @NagramDefault("nagram.skipSensitiveContentWarning", false)
     public var skipSensitiveContentWarning: Bool
 
+    /// Ignore client-side iOS channel and message restriction markers.
+    @NagramDefault("nagram.ignoreContentRestrictions", false)
+    public var ignoreContentRestrictions: Bool
+
+    // MARK: NEXTGRAM — APNs-free best-effort notification fallback for re-signed builds.
+    @NagramDefault("nagram.localNotificationFallbackEnabled", false)
+    public var localNotificationFallbackEnabled: Bool
+
     // MARK: 波次 3 批 A — 纯 UI 单点开关
     /// 隐藏消息反应
     @NagramDefault("nagram.hideReactions", false)

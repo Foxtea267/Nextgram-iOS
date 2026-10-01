@@ -55,6 +55,7 @@
 "Nagram.Section.Gesture" = "Gestures";
 "Nagram.Section.Gesture.Footer" = "Configure chat list horizontal swipes and whether swiping up at the bottom of a channel/topic jumps to the next chat.";
 "Nagram.Section.Privacy" = "Privacy";
+"Nagram.Section.Notifications" = "Notifications";
 "Nagram.Section.Sync" = "Sync";
 
 "Nagram.SecondsInMessages" = "Show Seconds in Timestamps";
@@ -104,8 +105,11 @@
 "Nagram.DisableGalleryCamera" = "Disable In-Gallery Camera";
 "Nagram.DisableGalleryCameraPreview" = "Disable Camera Preview";
 "Nagram.DisableFiltering" = "Disable Filtering";
-"Nagram.DisableFiltering.Footer" = "Disable Filtering changes the Telegram account setting. Auto-Show Restricted Media only skips the confirmation prompt; it does not change Telegram settings or bypass age verification.";
+"Nagram.IgnoreContentRestrictions" = "Remove iOS Content Restrictions";
+"Nagram.DisableFiltering.Footer" = "Remove iOS Content Restrictions ignores client-side display restrictions in Nextgram. It cannot restore content withheld by Telegram, region-blocked, or removed. Disable Filtering changes the Telegram account setting. Auto-Show Restricted Media only skips the confirmation prompt and does not bypass age verification.";
 "Nagram.SkipSensitiveContentWarning" = "Auto-Show Restricted Media";
+"Nagram.LocalNotificationFallback" = "Local Notification Fallback";
+"Nagram.LocalNotificationFallback.Footer" = "Keeps Nextgram online with background location and creates local message notifications without APNs. Allow Always Location access. This uses more battery, may show the location indicator, and cannot work after you force quit Nextgram or iOS suspends it.";
 "Nagram.ICloudSync" = "iCloud Sync";
 "Nagram.ICloudSync.Footer" = "When enabled, Nextgram settings and selected native Telegram local settings sync through iCloud across devices using the same Apple ID. Turning this off does not delete existing cloud settings.";
 "Nagram.ForceCopy" = "Bypass Content Protection";
@@ -391,6 +395,11 @@
 "Nagram.ChatListFilter.ChatTypes" = "Chat Types (Multiple)";
 "Nagram.ChatListFilter.All" = "All";
 "Nagram.ChatListFilter.AllTypes" = "All Chat Types";
+"Nagram.ChatListFilter.Hint" = "Choose a read status and one or more chat types. Both selections apply together. Changes take effect when you tap Done.";
+"Nagram.ChatListFilter.Presets" = "Quick Combinations";
+"Nagram.ChatListFilter.Sort" = "Sort Chats";
+"Nagram.ChatListFilter.NewestFirst" = "Newest First";
+"Nagram.ChatListFilter.Reset" = "Reset to All Chats";
 "Nagram.ChatListUnreadFirst" = "Unread Chats First";
 "Nagram.ChatListQuickFilter.Contacts" = "Contacts";
 "Nagram.ChatListQuickFilter.Private" = "Private";
@@ -399,6 +408,7 @@
 "Nagram.ChatListQuickFilter.Unread" = "Unread";
 "Nagram.ChatListQuickFilter.Read" = "Read";
 "Nagram.ChatListQuickFilter.NonContacts" = "Strangers";
+"Nagram.ChatListQuickFilter.Bots" = "Bots";
 "Nagram.ChatListQuickFilter.GroupsAndChannels" = "Groups & Channels";
 "Nagram.ChatListOldestFirst" = "Oldest Chats First";
 "Nagram.MusicPlaylistShowFileSize" = "Show Music File Size in Playlists";

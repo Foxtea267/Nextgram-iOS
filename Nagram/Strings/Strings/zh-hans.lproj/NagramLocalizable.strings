@@ -55,6 +55,7 @@
 "Nagram.Section.Gesture" = "手势";
 "Nagram.Section.Gesture.Footer" = "配置对话列表横滑，以及频道/主题底部上滑时是否跳转到下一个会话。";
 "Nagram.Section.Privacy" = "隐私";
+"Nagram.Section.Notifications" = "通知";
 "Nagram.Section.Sync" = "同步";
 
 "Nagram.SecondsInMessages" = "时间戳显示秒";
@@ -104,8 +105,11 @@
 "Nagram.DisableGalleryCamera" = "禁用图库内相机";
 "Nagram.DisableGalleryCameraPreview" = "禁用图库相机预览";
 "Nagram.DisableFiltering" = "关闭敏感内容过滤";
-"Nagram.DisableFiltering.Footer" = "“关闭敏感内容过滤”会修改 Telegram 同步的账号设置；“自动显示受限媒体”仅跳过查看前的确认提示，不会修改 Telegram 设置，也不会绕过年龄验证。";
+"Nagram.IgnoreContentRestrictions" = "解除 iOS 内容限制";
+"Nagram.DisableFiltering.Footer" = "“解除 iOS 内容限制”会在 Nextgram 本地忽略客户端显示限制，但无法恢复 Telegram 未下发、地区封禁或已移除的内容；“关闭敏感内容过滤”会修改 Telegram 同步的账号设置；“自动显示受限媒体”仅跳过确认提示，不会绕过年龄验证。";
 "Nagram.SkipSensitiveContentWarning" = "自动显示受限媒体";
+"Nagram.LocalNotificationFallback" = "本地通知兜底";
+"Nagram.LocalNotificationFallback.Footer" = "通过后台定位让 Nextgram 尽量保持在线，并在收到消息时直接创建本地通知，无需 APNs。请允许“始终”访问位置；该功能会增加耗电，可能显示定位指示，强制结束 Nextgram 或被 iOS 挂起后无法工作。";
 "Nagram.ICloudSync" = "iCloud 同步";
 "Nagram.ICloudSync.Footer" = "开启后，Nextgram 设置和部分 Telegram 原生本地设置会通过 iCloud 在同一 Apple ID 的设备间同步。关闭不会删除云端已有设置。";
 "Nagram.ForceCopy" = "解除内容保护";
@@ -391,6 +395,11 @@
 "Nagram.ChatListFilter.ChatTypes" = "会话类型（可多选）";
 "Nagram.ChatListFilter.All" = "全部";
 "Nagram.ChatListFilter.AllTypes" = "全部会话类型";
+"Nagram.ChatListFilter.Hint" = "选择已读状态，再勾选一种或多种会话类型；两项条件会同时生效。点击“完成”后才应用。";
+"Nagram.ChatListFilter.Presets" = "快捷组合";
+"Nagram.ChatListFilter.Sort" = "聊天排序";
+"Nagram.ChatListFilter.NewestFirst" = "最新优先";
+"Nagram.ChatListFilter.Reset" = "重置为全部聊天";
 "Nagram.ChatListUnreadFirst" = "未读会话优先";
 "Nagram.ChatListQuickFilter.Contacts" = "联系人";
 "Nagram.ChatListQuickFilter.Private" = "私聊";
@@ -399,6 +408,7 @@
 "Nagram.ChatListQuickFilter.Unread" = "未读";
 "Nagram.ChatListQuickFilter.Read" = "已读";
 "Nagram.ChatListQuickFilter.NonContacts" = "陌生人";
+"Nagram.ChatListQuickFilter.Bots" = "机器人";
 "Nagram.ChatListQuickFilter.GroupsAndChannels" = "群组和频道";
 "Nagram.ChatListOldestFirst" = "最旧会话优先";
 "Nagram.MusicPlaylistShowFileSize" = "播放列表显示音乐文件大小";

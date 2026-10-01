@@ -55,6 +55,7 @@
 "Nagram.Section.Gesture" = "ジェスチャ";
 "Nagram.Section.Gesture.Footer" = "チャットリストの横スワイプと、チャンネル/トピック最下部で上にスワイプした際に次のチャットへ移動するかを設定します。";
 "Nagram.Section.Privacy" = "プライバシー";
+"Nagram.Section.Notifications" = "通知";
 "Nagram.Section.Sync" = "同期";
 
 "Nagram.SecondsInMessages" = "タイムスタンプに秒を表示";
@@ -104,8 +105,11 @@
 "Nagram.DisableGalleryCamera" = "ギャラリー内カメラを無効化";
 "Nagram.DisableGalleryCameraPreview" = "カメラプレビューを無効化";
 "Nagram.DisableFiltering" = "センシティブ内容のフィルターを無効化";
-"Nagram.DisableFiltering.Footer" = "「センシティブ内容のフィルターを無効化」は Telegram で同期されるアカウント設定を変更します。「制限付きメディアを自動表示」は表示前の確認のみを省略し、Telegram の設定を変更したり年齢確認を回避したりしません。";
+"Nagram.IgnoreContentRestrictions" = "iOS コンテンツ制限を解除";
+"Nagram.DisableFiltering.Footer" = "「iOS コンテンツ制限を解除」は Nextgram 内のクライアント側表示制限を無視します。Telegram が配信しない内容、地域制限または削除済みの内容は復元できません。「センシティブ内容のフィルターを無効化」は Telegram のアカウント設定を変更します。「制限付きメディアを自動表示」は確認のみを省略し、年齢確認は回避しません。";
 "Nagram.SkipSensitiveContentWarning" = "制限付きメディアを自動表示";
+"Nagram.LocalNotificationFallback" = "ローカル通知フォールバック";
+"Nagram.LocalNotificationFallback.Footer" = "バックグラウンド位置情報で Nextgram をオンラインに保ち、APNs を使わずにローカル通知を作成します。位置情報を「常に許可」にしてください。電池消費が増え、位置情報インジケータが表示される場合があります。Nextgram を強制終了した場合や iOS に停止された場合は動作しません。";
 "Nagram.ICloudSync" = "iCloud 同期";
 "Nagram.ICloudSync.Footer" = "有効にすると、Nextgram の設定と一部の Telegram 標準ローカル設定は同じ Apple ID の端末間で iCloud 経由で同期されます。オフにしても既存のクラウド設定は削除されません。";
 "Nagram.ForceCopy" = "コンテンツ保護を解除";
@@ -391,6 +395,11 @@
 "Nagram.ChatListFilter.ChatTypes" = "チャットの種類（複数選択）";
 "Nagram.ChatListFilter.All" = "すべて";
 "Nagram.ChatListFilter.AllTypes" = "すべてのチャット種類";
+"Nagram.ChatListFilter.Hint" = "既読状態とチャットの種類を選択します。両方の条件が適用され、完了を押すまで変更されません。";
+"Nagram.ChatListFilter.Presets" = "クイック選択";
+"Nagram.ChatListFilter.Sort" = "チャットの並び順";
+"Nagram.ChatListFilter.NewestFirst" = "新しい順";
+"Nagram.ChatListFilter.Reset" = "すべてのチャットに戻す";
 "Nagram.ChatListUnreadFirst" = "未読チャットを優先";
 "Nagram.ChatListQuickFilter.Contacts" = "連絡先";
 "Nagram.ChatListQuickFilter.Private" = "個人";
@@ -399,6 +408,7 @@
 "Nagram.ChatListQuickFilter.Unread" = "未読";
 "Nagram.ChatListQuickFilter.Read" = "既読";
 "Nagram.ChatListQuickFilter.NonContacts" = "連絡先以外";
+"Nagram.ChatListQuickFilter.Bots" = "ボット";
 "Nagram.ChatListQuickFilter.GroupsAndChannels" = "グループとチャンネル";
 "Nagram.ChatListOldestFirst" = "古いチャットを優先";
 "Nagram.MusicPlaylistShowFileSize" = "プレイリストに音楽ファイルサイズを表示";

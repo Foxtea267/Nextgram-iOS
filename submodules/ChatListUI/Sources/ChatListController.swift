@@ -4079,108 +4079,31 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         })
     }
     
-    // MARK: NEXTGRAM — Compose read-state and peer-type selections from the title picker.
+    // MARK: NEXTGRAM — Apply the glass picker's committed selection to the visible chat list.
     func openNagramChatListFilterPicker() {
         guard case .chatList(.root) = self.location, NagramSettings.shared.chatListQuickFiltersEnabled else {
             return
         }
 
-        let presentationData = self.presentationData
-        let languageCode = presentationData.strings.baseLanguageCode
-        let actionSheet = ActionSheetController(presentationData: presentationData)
-        var selectedReadFilter = NagramChatListReadFilter(rawValue: NagramSettings.shared.chatListQuickFilterReadMode) ?? .all
-        var selectedPeerTypes = NagramChatListPeerTypes(rawValue: NagramSettings.shared.chatListQuickFilterPeerTypes).intersection(.all)
-        if selectedPeerTypes.isEmpty {
-            selectedPeerTypes = .all
-        }
-
-        let checkedTitle: (Bool, String) -> String = { isChecked, title in
-            return "\(isChecked ? "✓" : "　") \(title)"
-        }
-        var pendingSelection: (NagramChatListReadFilter, NagramChatListPeerTypes)?
-        actionSheet.dismissed = { [weak self] _ in
-            guard let self, let (readFilter, peerTypes) = pendingSelection else {
+        let readFilter = NagramChatListReadFilter(rawValue: NagramSettings.shared.chatListQuickFilterReadMode) ?? .all
+        let peerTypes = NagramChatListPeerTypes(rawValue: NagramSettings.shared.chatListQuickFilterPeerTypes)
+        let sortMode: NagramChatListSortMode = NagramSettings.shared.chatListUnreadFirst ? .unreadFirst : (NagramSettings.shared.chatListOldestFirst ? .oldestFirst : .newestFirst)
+        let picker = nagramChatListFilterPicker(context: self.context, readFilter: readFilter, peerTypes: peerTypes, sortMode: sortMode, apply: { [weak self] readFilter, peerTypes, sortMode in
+            guard let self else {
                 return
             }
-            pendingSelection = nil
-            Queue.mainQueue().async {
-                self.reloadFilters(firstUpdate: { [weak self] in
-                    guard let self else {
-                        return
-                    }
-                    if let filter = nagramCombinedChatListFilter(title: ngI18n("Nagram.ChatListFilter.Title", languageCode), readFilter: readFilter, peerTypes: peerTypes) {
-                        self.selectTab(id: .filter(filter.id), switchToChatsIfNeeded: false)
-                    } else {
-                        self.selectTab(id: .all, switchToChatsIfNeeded: false)
-                    }
-                })
+            NagramSettings.shared.chatListQuickFilterReadMode = readFilter.rawValue
+            NagramSettings.shared.chatListQuickFilterPeerTypes = peerTypes.rawValue
+            NagramSettings.shared.chatListUnreadFirst = sortMode == .unreadFirst
+            NagramSettings.shared.chatListOldestFirst = sortMode == .oldestFirst
+            if self.chatListDisplayNode.inlineStackContainerNode != nil {
+                self.setInlineChatList(location: nil)
             }
-        }
-        var updateItems: (() -> Void)?
-        updateItems = { [weak actionSheet] in
-            guard let actionSheet else {
-                return
-            }
-
-            let readItem: (NagramChatListReadFilter, String) -> ActionSheetItem = { value, titleKey in
-                return ActionSheetButtonItem(title: checkedTitle(selectedReadFilter == value, ngI18n(titleKey, languageCode)), action: {
-                    selectedReadFilter = value
-                    updateItems?()
-                })
-            }
-            let typeItem: (NagramChatListPeerTypes, String) -> ActionSheetItem = { value, titleKey in
-                return ActionSheetButtonItem(title: checkedTitle(selectedPeerTypes.contains(value), ngI18n(titleKey, languageCode)), action: {
-                    var updatedPeerTypes = selectedPeerTypes
-                    if updatedPeerTypes.contains(value) {
-                        updatedPeerTypes.subtract(value)
-                    } else {
-                        updatedPeerTypes.formUnion(value)
-                    }
-                    if !updatedPeerTypes.isEmpty {
-                        selectedPeerTypes = updatedPeerTypes.intersection(.all)
-                    }
-                    updateItems?()
-                })
-            }
-
-            actionSheet.setItemGroups([
-                ActionSheetItemGroup(items: [
-                    ActionSheetTextItem(title: ngI18n("Nagram.ChatListFilter.ReadStatus", languageCode)),
-                    readItem(.all, "Nagram.ChatListFilter.All"),
-                    readItem(.unread, "Nagram.ChatListQuickFilter.Unread"),
-                    readItem(.read, "Nagram.ChatListQuickFilter.Read")
-                ]),
-                ActionSheetItemGroup(items: [
-                    ActionSheetTextItem(title: ngI18n("Nagram.ChatListFilter.ChatTypes", languageCode)),
-                    ActionSheetButtonItem(title: checkedTitle(selectedPeerTypes == .all, ngI18n("Nagram.ChatListFilter.AllTypes", languageCode)), action: {
-                        selectedPeerTypes = .all
-                        updateItems?()
-                    }),
-                    typeItem(.privateChats, "Nagram.ChatListQuickFilter.Private"),
-                    typeItem(.contacts, "Nagram.ChatListQuickFilter.Contacts"),
-                    typeItem(.strangers, "Nagram.ChatListQuickFilter.NonContacts"),
-                    typeItem(.groups, "Nagram.ChatListQuickFilter.Groups"),
-                    typeItem(.channels, "Nagram.ChatListQuickFilter.Channels")
-                ]),
-                ActionSheetItemGroup(items: [
-                    ActionSheetButtonItem(title: presentationData.strings.Common_Done, font: .bold, action: { [weak actionSheet] in
-                        NagramSettings.shared.chatListQuickFilterReadMode = selectedReadFilter.rawValue
-                        NagramSettings.shared.chatListQuickFilterPeerTypes = selectedPeerTypes.rawValue
-                        pendingSelection = (selectedReadFilter, selectedPeerTypes)
-                        updateItems = nil
-                        actionSheet?.dismissAnimated()
-                    })
-                ]),
-                ActionSheetItemGroup(items: [
-                    ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, action: { [weak actionSheet] in
-                        updateItems = nil
-                        actionSheet?.dismissAnimated()
-                    })
-                ])
-            ])
-        }
-        updateItems?()
-        self.present(actionSheet, in: .window(.root))
+            let languageCode = self.presentationData.strings.baseLanguageCode
+            let filter = nagramCombinedChatListFilter(title: ngI18n("Nagram.ChatListFilter.Title", languageCode), readFilter: readFilter, peerTypes: peerTypes)
+            self.chatListDisplayNode.mainContainerNode.applyNagramQuickFilter(filter)
+        })
+        self.present(picker, in: .window(.root), with: ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
     }
 
     private var initializedFilters = false

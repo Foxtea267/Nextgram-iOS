@@ -9,6 +9,8 @@ import TelegramPresentationData
 import TelegramCallsUI
 import TelegramUIPreferences
 import NagramTelegramSettingsCloudSync
+import NagramSettings // MARK: NEXTGRAM
+import NagramSettingsSignal // MARK: NEXTGRAM
 import TelegramStringFormatting
 import AccountContext
 import DeviceLocationManager
@@ -232,6 +234,9 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     }
     
     private let registeredNotificationTokensDisposable = MetaDisposable()
+    // MARK: NEXTGRAM — Keeps the MTProto connection eligible for background execution without APNs.
+    private let nagramLocalNotificationFallbackSettingsDisposable = MetaDisposable()
+    private let nagramLocalNotificationFallbackLocationDisposable = MetaDisposable()
     
     public let mediaManager: MediaManager
     public let contactDataManager: DeviceContactDataManager?
@@ -390,7 +395,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             self.locationManager = nil
             self.contactDataManager = nil
         }
-        
+
         self._currentPresentationData = Atomic(value: initialPresentationDataAndSettings.presentationData)
         self.currentAutomaticMediaDownloadSettings = initialPresentationDataAndSettings.automaticMediaDownloadSettings
         self.currentAutodownloadSettings = Atomic(value: initialPresentationDataAndSettings.autodownloadSettings)
@@ -421,6 +426,22 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         ))
         
         self.mediaManager = MediaManagerImpl(accountManager: accountManager, inForeground: applicationBindings.applicationInForeground, presentationData: presentationData)
+
+        // MARK: NEXTGRAM — Background location is an explicit, opt-in fallback for re-signed builds.
+        if let locationManager = self.locationManager {
+            self.nagramLocalNotificationFallbackSettingsDisposable.set((nagramBoolSignal("nagram.localNotificationFallbackEnabled", defaultValue: false)
+            |> deliverOnMainQueue).startStrict(next: { [weak self, weak locationManager] enabled in
+                guard let self, let locationManager else {
+                    return
+                }
+                if enabled {
+                    self.nagramLocalNotificationFallbackLocationDisposable.set(locationManager.push(mode: .preciseAlways, updated: { _, _ in
+                    }))
+                } else {
+                    self.nagramLocalNotificationFallbackLocationDisposable.set(nil)
+                }
+            }))
+        }
         
         self.mediaManager.overlayMediaManager.updatePossibleEmbeddingItem = { [weak self] item in
             guard let strongSelf = self else {
@@ -1141,6 +1162,8 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     deinit {
         assertionFailure("SharedAccountContextImpl is not supposed to be deallocated")
         self.registeredNotificationTokensDisposable.dispose()
+        self.nagramLocalNotificationFallbackSettingsDisposable.dispose()
+        self.nagramLocalNotificationFallbackLocationDisposable.dispose()
         self.presentationDataDisposable.dispose()
         self.automaticMediaDownloadSettingsDisposable.dispose()
         self.currentAutodownloadSettingsDisposable.dispose()

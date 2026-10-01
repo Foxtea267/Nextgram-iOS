@@ -940,6 +940,30 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             }
         }
     }
+
+    // MARK: NEXTGRAM — Replace and select the hidden compound filter without waiting for folder reloading.
+    func applyNagramQuickFilter(_ filter: ChatListFilter?) {
+        var updatedFilters = self.availableFilters.filter { filter in
+            if case let .filter(id) = filter.id {
+                return !nagramIsCombinedChatListFilterId(id)
+            }
+            return true
+        }
+        let targetId: ChatListFilterTabEntryId
+        if let filter {
+            let containerFilter = ChatListContainerNodeFilter.filter(filter)
+            updatedFilters.append(containerFilter)
+            targetId = containerFilter.id
+        } else {
+            if !updatedFilters.contains(where: { $0.id == .all }) {
+                updatedFilters.insert(.all, at: 0)
+            }
+            targetId = .all
+        }
+
+        self.updateAvailableFilters(updatedFilters, limit: self.filtersLimit, fallbackId: targetId)
+        self.switchToFilter(id: targetId, animated: false)
+    }
     
     public func updateEnableAdjacentFilterLoading(_ value: Bool) {
         if value != self.enableAdjacentFilterLoading {

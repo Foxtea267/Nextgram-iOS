@@ -14,6 +14,7 @@ import ActionPanelComponent
 import ChatFolderLinkPreviewScreen
 import EdgeEffect
 import ComponentDisplayAdapters
+import NagramChatListFilters // MARK: NEXTGRAM
 
 final class ChatListContainerItemNode: ASDisplayNode {
     private final class TopPanelItem {
@@ -123,6 +124,9 @@ final class ChatListContainerItemNode: ASDisplayNode {
                     let subject: ChatListEmptyNode.Subject
                     if let filter = filter {
                         var showEdit = true
+                        if nagramIsCombinedChatListFilterId(filter.id) {
+                            showEdit = false // MARK: NEXTGRAM — The local filter is edited from the Chats title.
+                        }
                         if case let .filter(_, _, _, data) = filter {
                             if data.excludeRead && data.includePeers.peers.isEmpty && data.includePeers.pinnedPeers.isEmpty {
                                 showEdit = false
