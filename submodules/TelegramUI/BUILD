@@ -71,6 +71,8 @@ swift_library(
         "//Nagram/Settings:NagramSettings",
         # MARK: NEXTGRAM
         "//Nagram/MessageHistory:NagramMessageHistory",
+        # MARK: NEXTGRAM — Default formatting for newly composed messages and captions.
+        "//Nagram/MessageFormatting:NagramMessageFormatting",
         "//Nagram/LinkMetadata:NagramLinkMetadata",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/TelegramSettingsCloudSync:NagramTelegramSettingsCloudSync",

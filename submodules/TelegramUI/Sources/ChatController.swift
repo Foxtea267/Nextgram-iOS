@@ -15,6 +15,7 @@ import DeviceAccess
 import TextFormat
 import TelegramBaseController
 import AccountContext
+import NagramMessageFormatting // MARK: NEXTGRAM
 import NagramSettings // MARK: NAGRAM
 import TelegramStringFormatting
 import OverlayStatusController
@@ -8939,7 +8940,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
         
         return messages.map { message in
-            var message = message
+            // MARK: NEXTGRAM — Preserve manual formatting and forwarded messages.
+            var message = nagramApplyDefaultMessageFormat(message)
             
             if let defaultReplyMessageSubject = defaultReplyMessageSubject {
                 switch message {

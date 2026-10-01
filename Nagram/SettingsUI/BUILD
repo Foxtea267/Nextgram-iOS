@@ -19,6 +19,7 @@ swift_library(
         "//submodules/LegacyMediaPickerUI:LegacyMediaPickerUI",
         "//submodules/PresentationDataUtils:PresentationDataUtils",
         "//submodules/AccountContext:AccountContext",
+        "//submodules/TelegramApi:TelegramApi",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/UndoUI:UndoUI",

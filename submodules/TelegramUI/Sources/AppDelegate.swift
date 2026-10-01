@@ -3060,7 +3060,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             Logger.shared.log("App \(self.episodeId)", "register for notifications: received settings: \(settings.authorizationStatus)")
             
             switch (settings.authorizationStatus, authorize) {
-                case (.authorized, _), (.notDetermined, true):
+                // MARK: NEXTGRAM — Provisional permission also supports notification delivery.
+                case (.authorized, _), (.provisional, _), (.notDetermined, true):
                     var authorizationOptions: UNAuthorizationOptions = [.badge, .sound, .alert, .carPlay]
                     if #available(iOS 12.0, *) {
                         authorizationOptions.insert(.providesAppNotificationSettings)
@@ -3119,21 +3120,28 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                         }
                     })
                 default:
-                    break
+                    completion(false) // MARK: NEXTGRAM — Always finish permission requests, including denied access.
             }
         })
     }
     
     @available(iOS 10.0, *)
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // MARK: NEXTGRAM — Test alerts must be visible even while the current account is open.
+        if notification.request.identifier.hasPrefix("nextgram-test-") {
+            completionHandler([.banner, .list, .sound])
+            return
+        }
         let _ = (accountIdFromNotification(notification, sharedContext: self.sharedContextPromise.get())
+        |> take(1) // MARK: NEXTGRAM — Complete foreground presentation exactly once.
         |> deliverOnMainQueue).start(next: { accountId in
             if let context = self.contextValue {
                 if let accountId = accountId, context.context.account.id != accountId || notification.request.content.userInfo["url"] != nil {
-                    // MARK: NAGRAM
-                    completionHandler([.banner, .list])
+                    completionHandler([.banner, .list, .sound]) // MARK: NEXTGRAM
+                    return
                 }
             }
+            completionHandler([]) // MARK: NEXTGRAM — The system completion must also run when using the in-app banner.
         })
     }
     

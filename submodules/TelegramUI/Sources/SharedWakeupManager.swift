@@ -9,6 +9,7 @@ import AccountContext
 import UniversalMediaPlayer
 import TelegramAudio
 import TelegramPresentationData
+import NagramSettingsSignal // MARK: NEXTGRAM
 
 private struct AccountTasks {
     let stateSynchronization: Bool
@@ -243,9 +244,10 @@ public final class SharedWakeupManager {
                 }
                 |> distinctUntilChanged
                 
-                let hasActiveLiveLocationPolling = liveLocationPolling
-                |> map { id in
-                    return id == account.id
+                // MARK: NEXTGRAM — Local alerts need account updates and Postbox transactions while background location is running.
+                let hasActiveLiveLocationPolling = combineLatest(liveLocationPolling, nagramBoolSignal("nagram.localNotificationFallbackEnabled", defaultValue: false))
+                |> map { id, localNotificationsEnabled in
+                    return id == account.id || localNotificationsEnabled
                 }
                 |> distinctUntilChanged
                 

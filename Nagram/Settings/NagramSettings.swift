@@ -85,6 +85,16 @@ public enum NagramDeletedMessageIndicatorStyle: String {
     case trashAndText = "both"
 }
 
+public enum NagramDefaultMessageFormat: String, CaseIterable {
+    case plain
+    case bold
+    case italic
+    case monospace
+    case underline
+    case strikethrough
+    case spoiler
+}
+
 public enum NagramGlassTransparencyMode: String {
     case system
     case custom
@@ -545,6 +555,13 @@ public final class NagramSettings {
     /// 回车键发送消息
     @NagramDefault("nagram.sendWithReturnKey", false)
     public var sendWithReturnKey: Bool
+    /// NEXTGRAM — Apply a default style only to newly composed, otherwise unformatted messages.
+    @NagramDefault("nagram.defaultMessageFormat", "plain")
+    public var defaultMessageFormat: String
+
+    public var defaultMessageFormatValue: NagramDefaultMessageFormat {
+        return NagramDefaultMessageFormat(rawValue: self.defaultMessageFormat) ?? .plain
+    }
     /// 选中文本时显示文字样式工具栏
     @NagramDefault("nagram.showTextStyleToolbar", true)
     public var showTextStyleToolbar: Bool

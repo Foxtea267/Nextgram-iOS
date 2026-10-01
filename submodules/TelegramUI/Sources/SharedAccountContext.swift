@@ -237,6 +237,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     // MARK: NEXTGRAM — Keeps the MTProto connection eligible for background execution without APNs.
     private let nagramLocalNotificationFallbackSettingsDisposable = MetaDisposable()
     private let nagramLocalNotificationFallbackLocationDisposable = MetaDisposable()
+    private let nagramLocalNotificationMessagesDisposable = MetaDisposable() // MARK: NEXTGRAM
     
     public let mediaManager: MediaManager
     public let contactDataManager: DeviceContactDataManager?
@@ -428,7 +429,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         self.mediaManager = MediaManagerImpl(accountManager: accountManager, inForeground: applicationBindings.applicationInForeground, presentationData: presentationData)
 
         // MARK: NEXTGRAM — Background location is an explicit, opt-in fallback for re-signed builds.
-        if let locationManager = self.locationManager {
+        if applicationBindings.isMainApp, let locationManager = self.locationManager {
             self.nagramLocalNotificationFallbackSettingsDisposable.set((nagramBoolSignal("nagram.localNotificationFallbackEnabled", defaultValue: false)
             |> deliverOnMainQueue).startStrict(next: { [weak self, weak locationManager] enabled in
                 guard let self, let locationManager else {
@@ -889,6 +890,32 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             }
         })
         
+        // MARK: NEXTGRAM — Listen to every signed-in account, independently of the currently displayed account.
+        if applicationBindings.isMainApp {
+            self.nagramLocalNotificationMessagesDisposable.set((combineLatest(self.activeAccountContexts, nagramBoolSignal("nagram.localNotificationFallbackEnabled", defaultValue: false))
+            |> mapToSignal { activeAccounts, enabled -> Signal<Never, NoError> in
+                guard enabled else {
+                    return .complete()
+                }
+                return Signal { _ in
+                    let disposables = DisposableSet()
+                    for (_, context, _) in activeAccounts.accounts {
+                        disposables.add((context.account.stateManager.notificationMessages
+                        |> deliverOnMainQueue).start(next: { messageList in
+                            // MARK: NEXTGRAM — In the foreground, other accounts still need a system banner.
+                            guard UIApplication.shared.applicationState != .active || context.account.id != activeAccounts.primary?.account.id else {
+                                return
+                            }
+                            for (messages, _, notify, _) in messageList {
+                                nagramScheduleLocalMessageNotification(context: context, messages: messages, notify: notify)
+                            }
+                        }))
+                    }
+                    return disposables
+                }
+            }).start())
+        }
+
         if let mainWindow = mainWindow, applicationBindings.isMainApp {
             let callManager = PresentationCallManagerImpl(accountManager: self.accountManager, getDeviceAccessData: {
                 return (self.currentPresentationData.with { $0 }, { [weak self] c, a in
@@ -1164,6 +1191,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         self.registeredNotificationTokensDisposable.dispose()
         self.nagramLocalNotificationFallbackSettingsDisposable.dispose()
         self.nagramLocalNotificationFallbackLocationDisposable.dispose()
+        self.nagramLocalNotificationMessagesDisposable.dispose() // MARK: NEXTGRAM
         self.presentationDataDisposable.dispose()
         self.automaticMediaDownloadSettingsDisposable.dispose()
         self.currentAutodownloadSettingsDisposable.dispose()

@@ -38,16 +38,11 @@ import NagramSettings
 import NagramSettingsSignal
 
 // MARK: NEXTGRAM — Schedule a local notification when APNs is unavailable but MTProto remains online.
-private func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [Message], notify: Bool) {
+func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [Message], notify: Bool) {
     guard NagramSettings.shared.localNotificationFallbackEnabled, notify, let firstMessage = messages.first else {
         return
     }
-    guard firstMessage.flags.contains(.Incoming) else {
-        return
-    }
-    if firstMessage.attributes.contains(where: { attribute in
-        return (attribute as? NotificationInfoMessageAttribute)?.flags.contains(.muted) == true
-    }) {
+    guard firstMessage.flags.contains(.Incoming) || firstMessage.flags.contains(.WasScheduled) else {
         return
     }
     if let forwardInfo = firstMessage.forwardInfo, forwardInfo.flags.contains(.isImported) {
@@ -85,19 +80,21 @@ private func nagramScheduleLocalMessageNotification(context: AccountContext, mes
         accountPeerId: context.account.peerId
     )
 
-    let schedule: (Bool) -> Void = { isLocked in
+    let schedule: (Bool, Bool, Bool) -> Void = { isLocked, displayContents, playSound in
         let content = UNMutableNotificationContent()
         if isLocked || !settings.displayNameOnLockscreen {
             content.title = "Nextgram"
         } else {
             content.title = chatPeer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder)
         }
-        if isLocked || !settings.displayPreviews {
+        if isLocked || !settings.displayPreviews || !displayContents {
             content.body = presentationData.strings.Watch_MessageView_Title
         } else {
             content.body = messageText
         }
-        content.sound = .default
+        if playSound {
+            content.sound = .default
+        }
         content.threadIdentifier = "nextgram-local-\(context.account.id.int64)-\(firstMessage.id.peerId.toInt64())"
         content.userInfo["accountId"] = "\(context.account.id.int64)"
         content.userInfo["peerId"] = "\(firstMessage.id.peerId.toInt64())"
@@ -123,13 +120,25 @@ private func nagramScheduleLocalMessageNotification(context: AccountContext, mes
         UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: identifier, content: content, trigger: nil))
     }
 
-    if let appLockContext = context.sharedContext.appLockContext as? AppLockContextImpl {
-        let _ = (appLockContext.isCurrentlyLocked
-        |> take(1)
-        |> deliverOnMainQueue).start(next: schedule)
-    } else {
-        schedule(false)
+    // MARK: NEXTGRAM — Recheck unread/mute settings and honor per-chat preview privacy and silent messages.
+    let _ = (context.account.postbox.transaction { transaction -> (Bool, Bool, Bool) in
+        let resolved = messagesForNotification(transaction: transaction, id: firstMessage.id, alwaysReturnMessage: false)
+        return (resolved.notify, resolved.displayContents, resolved.sound != .none)
     }
+    |> deliverOnMainQueue).start(next: { shouldNotify, displayContents, playSound in
+        guard shouldNotify else {
+            return
+        }
+        if let appLockContext = context.sharedContext.appLockContext as? AppLockContextImpl {
+            let _ = (appLockContext.isCurrentlyLocked
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { locked in
+                schedule(locked, displayContents, playSound)
+            })
+        } else {
+            schedule(false, displayContents, playSound)
+        }
+    })
 }
 
 // MARK: NAGRAM — 从桌面角标中扣除被消息屏蔽规则隐藏的未读消息。
@@ -690,11 +699,6 @@ final class AuthorizedApplicationContext {
                                 }))
                             }
                         })
-                    }
-                } else {
-                    // MARK: NEXTGRAM — The account update stream is the source of truth for APNs-free fallback alerts.
-                    for (messages, _, notify, _) in messageList {
-                        nagramScheduleLocalMessageNotification(context: strongSelf.context, messages: messages, notify: notify)
                     }
                 }
             }

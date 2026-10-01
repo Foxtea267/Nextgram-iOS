@@ -80,6 +80,7 @@ enum NagramSettingsSyncKeys {
         "nagram.translationLLMUseContext",
         "nagram.translationLLMTemperatureTenths",
         "nagram.sendWithReturnKey",
+        "nagram.defaultMessageFormat",
         "nagram.showTextStyleToolbar",
         "nagram.enablePanguOnSending",
         "nagram.enablePanguOnEditing",
