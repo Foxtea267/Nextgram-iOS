@@ -13,17 +13,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.configuration.outputs.matrix }}
+      app_version: ${{ steps.configuration.outputs.app_version }}
+      release_version: ${{ steps.configuration.outputs.release_version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Define variants and shared version
+        id: configuration
+        run: |
+          set -euo pipefail
+          python3 - <<'PY' >> "${GITHUB_OUTPUT}"
+          import json
+          import os
+          import re
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
+              variants = json.load(source)
+          assert variants, "No Nextgram variants configured"
+          for field in ("variant", "bundle_id", "api_id", "api_hash_secret"):
+              assert len({entry[field] for entry in variants}) == len(variants), f"Duplicate {field}"
+          for entry in variants:
+              assert re.fullmatch(r"[A-Za-z][A-Za-z0-9]*", entry["variant"]), "Invalid variant name"
+              assert re.fullmatch(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+", entry["bundle_id"]), "Invalid bundle ID"
+              assert entry["api_id"].isdigit() and int(entry["api_id"]) > 0, "Invalid API ID"
+              assert re.fullmatch(r"[A-Z][A-Z0-9_]*", entry["api_hash_secret"]), "Invalid Secret name"
+          today = datetime.now(ZoneInfo("Asia/Hong_Kong"))
+          run_number = int(os.environ["GITHUB_RUN_NUMBER"])
+          print("matrix=" + json.dumps({"include": variants}, separators=(",", ":")))
+          print(f"app_version={today:%Y.%m%d}.{run_number}")
+          print(f"release_version={today:%Y%m%d}{run_number:03d}")
+          PY
+
   build:
+    name: Build ${{ matrix.variant }} compatibility IPA
+    needs: prepare
     runs-on: macos-26
     timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     env:
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
-      BUNDLE_ID: jp.foxtea.nextgram
-      TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
-      TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
+      VARIANT: ${{ matrix.variant }}
+      BUNDLE_ID: ${{ matrix.bundle_id }}
+      TELEGRAM_API_ID: ${{ matrix.api_id }}
+      TELEGRAM_API_HASH: ${{ secrets[matrix.api_hash_secret] }}
+      API_HASH_SECRET_NAME: ${{ matrix.api_hash_secret }}
+      NEXTGRAM_APP_VERSION: ${{ needs.prepare.outputs.app_version }}
 
     steps:
+      - name: Validate variant credentials
+        run: |
+          set -euo pipefail
+          if [[ ! "${TELEGRAM_API_HASH}" =~ ^[0-9a-fA-F]{32}$ ]]; then
+            echo "::error::Set ${API_HASH_SECRET_NAME} to the matching ${VARIANT} API hash before building."
+            exit 1
+          fi
+
       - name: Check out source and submodules
         uses: actions/checkout@v4
         with:
@@ -45,8 +98,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/telegram-bazel-cache
-          key: nextgram-bazel-${{ runner.os }}-${{ hashFiles('versions.json', 'MODULE.bazel.lock') }}
-          restore-keys: nextgram-bazel-${{ runner.os }}-
+          key: nextgram-bazel-${{ runner.os }}-${{ matrix.variant }}-${{ hashFiles('versions.json', 'MODULE.bazel.lock') }}
+          restore-keys: |
+            nextgram-bazel-${{ runner.os }}-${{ matrix.variant }}-
+            nextgram-bazel-${{ runner.os }}-
 
       - name: Configure re-signable build
         run: |
@@ -57,14 +112,6 @@ jobs:
       - name: Write build configuration
         run: |
           set -euo pipefail
-          if [[ -z "${TELEGRAM_API_ID}" || -z "${TELEGRAM_API_HASH}" ]]; then
-            echo "::error::Set TELEGRAM_API_ID and TELEGRAM_API_HASH repository secrets before building Nextgram."
-            exit 1
-          fi
-          if [[ ! "${TELEGRAM_API_ID}" =~ ^[0-9]+$ ]]; then
-            echo "::error::TELEGRAM_API_ID must be numeric."
-            exit 1
-          fi
           mkdir -p build-input
           cat > build-input/nextgram-ci.json <<JSON
           {
@@ -130,11 +177,7 @@ jobs:
       - name: Build arm64 IPA
         run: |
           set -euo pipefail
-          APP_VERSION="$(TZ=Asia/Hong_Kong date +%Y.%m%d).${GITHUB_RUN_NUMBER}"
-          RELEASE_VERSION="$(TZ=Asia/Hong_Kong date +%Y%m%d)$(printf '%03d' "${GITHUB_RUN_NUMBER}")"
-          echo "NEXTGRAM_APP_VERSION=${APP_VERSION}" >> "${GITHUB_ENV}"
-          echo "NEXTGRAM_RELEASE_VERSION=${RELEASE_VERSION}" >> "${GITHUB_ENV}"
-          python3 - "${APP_VERSION}" <<'PY'
+          python3 - "${NEXTGRAM_APP_VERSION}" <<'PY'
           import json
           import sys
 
@@ -171,24 +214,67 @@ jobs:
           find "${APP_PATH}" -name embedded.mobileprovision -delete
           (
             cd build/package
-            /usr/bin/zip -qry ../artifacts/Nextgram.ipa Payload
+            /usr/bin/zip -qry "../artifacts/Nextgram-${VARIANT}.ipa" Payload
           )
           find bazel-bin/Telegram -maxdepth 1 -name '*.dSYM' -exec cp -R {} build/dSYMs/ \;
           if find build/dSYMs -maxdepth 1 -name '*.dSYM' | grep -q .; then
-            ditto -c -k --sequesterRsrc --keepParent build/dSYMs build/artifacts/Nextgram.dSYMs.zip
+            ditto -c -k --sequesterRsrc --keepParent build/dSYMs "build/artifacts/Nextgram-${VARIANT}.dSYMs.zip"
           fi
 
       - name: Upload IPA and symbols
         uses: actions/upload-artifact@v4
         with:
-          name: Nextgram-${{ github.sha }}
+          name: Nextgram-${{ matrix.variant }}-${{ github.sha }}
           path: |
-            build/artifacts/Nextgram.ipa
-            build/artifacts/Nextgram.dSYMs.zip
+            build/artifacts/Nextgram-${{ matrix.variant }}.ipa
+            build/artifacts/Nextgram-${{ matrix.variant }}.dSYMs.zip
           if-no-files-found: error
           retention-days: 14
 
-      - name: Publish standalone IPA to Releases
+  publish:
+    name: Publish all compatibility IPAs
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXTGRAM_APP_VERSION: ${{ needs.prepare.outputs.app_version }}
+      NEXTGRAM_RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Nextgram-*-${{ github.sha }}
+          path: build/artifacts
+          merge-multiple: true
+      - name: Verify all IPA identities
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import plistlib
+          import zipfile
+          from pathlib import Path
+
+          with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
+              variants = json.load(source)
+          expected_files = {f"Nextgram-{entry['variant']}.ipa" for entry in variants}
+          actual_files = {path.name for path in Path("build/artifacts").glob("*.ipa")}
+          assert actual_files == expected_files, "Missing or unexpected compatibility IPA"
+          for entry in variants:
+              filename = f"Nextgram-{entry['variant']}.ipa"
+              with zipfile.ZipFile(Path("build/artifacts") / filename) as archive:
+                  info_paths = [name for name in archive.namelist() if name.startswith("Payload/") and name.endswith(".app/Info.plist") and name.count("/") == 2]
+                  assert len(info_paths) == 1, f"Invalid app layout in {filename}"
+                  info = plistlib.loads(archive.read(info_paths[0]))
+                  assert info["CFBundleIdentifier"] == entry["bundle_id"], f"Wrong bundle ID in {filename}"
+                  assert info["CFBundleShortVersionString"] == os.environ["NEXTGRAM_APP_VERSION"], f"Wrong version in {filename}"
+                  assert info["CFBundleDisplayName"] == "Nextgram", f"Wrong display name in {filename}"
+              print(f"Verified {filename}: {entry['bundle_id']}")
+          PY
+      - name: Publish standalone IPAs to one Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -207,15 +293,29 @@ jobs:
             echo
             echo
             echo "App version: ${NEXTGRAM_APP_VERSION}"
-            echo "Bundle ID: ${BUNDLE_ID}"
+            echo
+            echo "## 选择安装包 / Choose a compatibility IPA"
+            echo
+            python3 - <<'PY'
+          import json
+          with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
+              variants = json.load(source)
+          print("| IPA | Bundle ID | 避免同时安装的原版 |")
+          print("| --- | --- | --- |")
+          for entry in variants:
+              print(f"| Nextgram-{entry['variant']}.ipa | `{entry['bundle_id']}` | {entry['variant']} |")
+          PY
             echo
             echo "Standalone re-signable IPA. Re-sign before installation."
+            echo "四种包的功能、Nextgram 名称和图标相同；请选择手机未安装对应原版的兼容包。"
+            echo "这些兼容包不是 jp.foxtea.nextgram 的原位更新，不会自动迁移其账号和本地缓存。"
+            echo "推送兼容性仍需在企业重签后实测，不保证通知恢复。"
           } > build/release-notes.md
           if gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "${VERSION}" --notes-file build/release-notes.md --repo "${GITHUB_REPOSITORY}"
-            gh release upload "${VERSION}" build/artifacts/Nextgram.ipa --clobber --repo "${GITHUB_REPOSITORY}"
+            gh release upload "${VERSION}" build/artifacts/Nextgram-*.ipa --clobber --repo "${GITHUB_REPOSITORY}"
           else
-            gh release create "${VERSION}" build/artifacts/Nextgram.ipa \
+            gh release create "${VERSION}" build/artifacts/Nextgram-*.ipa \
               --repo "${GITHUB_REPOSITORY}" \
               --target "${GITHUB_SHA}" \
               --title "${VERSION}" \

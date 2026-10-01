@@ -1,0 +1,26 @@
+[
+    {
+        "variant": "Nagram",
+        "bundle_id": "xyz.nextalone.nagram",
+        "api_id": "37425841",
+        "api_hash_secret": "NAGRAM_API_HASH"
+    },
+    {
+        "variant": "Nicegram",
+        "bundle_id": "app.nicegram",
+        "api_id": "23697447",
+        "api_hash_secret": "NICEGRAM_API_HASH"
+    },
+    {
+        "variant": "OLAI",
+        "bundle_id": "com.olcorporation.olai",
+        "api_id": "2033156",
+        "api_hash_secret": "OLAI_API_HASH"
+    },
+    {
+        "variant": "Turrit",
+        "bundle_id": "com.seastar.turrit",
+        "api_id": "27626847",
+        "api_hash_secret": "TURRIT_API_HASH"
+    }
+]
