@@ -1,5 +1,6 @@
 import AccountContext
 import Display
+import Foundation
 import ItemListUI
 import NagramStrings
 import SwiftSignalKit
@@ -114,8 +115,11 @@ public func nagramAboutController(context: AccountContext) -> ViewController {
     let state = context.sharedContext.presentationData
     |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let lang = presentationData.strings.baseLanguageCode
+        let version = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "—"
         let entries: [NagramAboutEntry] = [
-            .description(ngI18n("Nagram.About.Description", lang)),
+            .description(ngI18n("Nagram.About.Description", lang) + "\n\nNextgram " + version),
             .github(ngI18n("Nagram.About.GitHub", lang)),
             .group(ngI18n("Nagram.About.Group", lang)),
             .channel(ngI18n("Nagram.About.Channel", lang)),

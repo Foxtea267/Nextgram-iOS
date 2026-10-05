@@ -119,7 +119,11 @@ API ID 已在变体配置中指定，不再读取旧的 `TELEGRAM_API_ID` / `TEL
 
 四种包的功能、名称、图标和 URL Scheme 均为 Nextgram，仅兼容身份不同；App Group 由各 Bundle ID 生成 `group.<bundle_id>`。请选择手机未安装对应原版的包，例如已安装 Nagram 时选择其他三种。安装同包名应用可能覆盖原版或发生冲突，请先备份重要数据。这些包不是旧包名 `jp.foxtea.nextgram` 的原位更新，账号与本地缓存不会自动迁移；不同兼容包也不共享账号和缓存。
 
-兼容身份来自维护者指定的配置，不代表相关客户端的授权或背书。企业重签后的通知效果仍需真机验证，不保证通知恢复；详见[通知排查](docs/notifications.md)。Release 版本号使用 `YYYYMMDDNNN` 格式，例如 `20260907001`；IPA 内的应用版本使用对应的 `YYYY.MMDD.N` 格式。四种包共用同一版本号，并随每次 Actions 构建更新。Release 说明会列出上一个发布版本以来的提交、版本信息与安装包选择表。
+兼容身份来自维护者指定的配置，不代表相关客户端的授权或背书。企业重签后的通知效果仍需真机验证，不保证通知恢复；详见[通知排查](docs/notifications.md)。
+
+Release 和“关于 Nextgram”使用 **Nagram 基础版本 + Nextgram 修订号**，例如基础版本为 `12.1.0` 时，第 2 个 Nextgram 版本为 `12.1.0.2`。当前代码基础版本为 `12.9.3`，新格式从 `12.9.3.1` 开始。Actions 根据同一基础版本已发布的 Release 自动递增末段；失败构建不占用修订号，四种兼容包共用同一版本号。基础版本变更后，修订号重新从 1 开始。`versions.json` 的 `app` 保存基础版本，`nextgram_revision` 保存修订号的起始值或最低值。
+
+按 [Apple 的版本字段要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)，IPA 的 `CFBundleShortVersionString` 保留三段基础版本，完整四段版本保存为 `NextgramVersion`，系统构建号 `CFBundleVersion` 继续递增。Release 说明会列出上一个发布版本以来的提交、基础版本、Nextgram 版本与安装包选择表。
 
 > [!WARNING]
 > GitHub Actions 产物只包含主应用；打包时会移除临时签名与 provisioning profile，仅用于后续重签，不能直接安装。请使用自己的证书或签名工具重签 IPA。
