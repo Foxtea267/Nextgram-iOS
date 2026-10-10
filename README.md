@@ -150,3 +150,6 @@ Nextgram 新增代码、设计和项目素材的版权归其对应作者及贡�
 Nextgram is an unofficial Telegram client. Telegram is a trademark of Telegram Messenger Inc.
 
 Nextgram is not affiliated with, endorsed by, or sponsored by Telegram Messenger Inc., Nagram, or AyuGram.
+# 上游同步
+
+当前同步至 Nagram / Telegram 13.0，Nextgram 版本从 `13.0.0.1` 开始。同步范围及构建说明见 [上游同步记录](docs/upstream-sync.md)。

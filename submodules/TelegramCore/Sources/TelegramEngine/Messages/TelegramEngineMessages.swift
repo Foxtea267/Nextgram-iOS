@@ -87,7 +87,9 @@ public struct TelegramMessageReadMetric {
 
 public extension TelegramEngine {
     final class Messages {
-        private let account: Account
+        // Module-internal rather than private: the MediaPreupload facade lives in its own file and
+        // needs the account's network/postbox/preupload manager.
+        let account: Account
 
         init(account: Account) {
             self.account = account
@@ -97,8 +99,21 @@ public extension TelegramEngine {
         	return _internal_clearCloudDraftsInteractively(postbox: self.account.postbox, network: self.account.network, accountPeerId: self.account.peerId)
         }
 
+        public func stopIncomingTypingDraft(peerId: EnginePeer.Id, threadId: Int64?) -> Signal<Never, NoError> {
+            return _internal_stopIncomingTypingDraft(postbox: self.account.postbox, network: self.account.network, peerId: peerId, threadId: threadId)
+        }
+
         public func applyMaxReadIndexInteractively(index: MessageIndex) -> Signal<Void, NoError> {
             return _internal_applyMaxReadIndexInteractively(postbox: self.account.postbox, stateManager: self.account.stateManager, index: index)
+        }
+
+        /// For callers holding only a message id, such as a notification action or a Siri
+        /// intent. Prefer `applyMaxReadIndexInteractively(index:)` wherever a real
+        /// `MessageIndex` is at hand: a made-up index is wrong for an index-based read
+        /// state, which is what a secret chat has. Reports whether a read was applied; it
+        /// is not for a secret chat, where reading is destructive and irreversible.
+        public func applyMaxReadMessageIdInteractively(messageId: MessageId) -> Signal<Bool, NoError> {
+            return _internal_applyMaxReadMessageIdInteractively(postbox: self.account.postbox, stateManager: self.account.stateManager, messageId: messageId)
         }
 
         public func sendScheduledMessageNowInteractively(messageId: MessageId) -> Signal<Never, NoError> {
@@ -225,6 +240,18 @@ public extension TelegramEngine {
 
         public func retryEphemeralOutgoingMessage(messageId: MessageId) -> Signal<MessageId?, NoError> {
             return _internal_retryEphemeralOutgoingMessage(account: self.account, messageId: messageId)
+        }
+
+        public func revertAnchoredEphemeralMessage(messageId: MessageId) -> Signal<Never, NoError> {
+            return _internal_revertAnchoredEphemeralMessage(account: self.account, messageId: messageId)
+        }
+
+        public func refreshWelcomeMessages(peerId: PeerId) -> Signal<Void, NoError> {
+            return _internal_refreshWelcomeMessages(account: self.account, peerId: peerId)
+        }
+
+        public func deleteAllWelcomeMessages(peerId: PeerId) -> Signal<Void, NoError> {
+            return _internal_deleteAllWelcomeMessages(account: self.account, peerId: peerId)
         }
 
         public func requestUpdatePinnedMessage(peerId: PeerId, update: PinnedMessageUpdate) -> Signal<Void, UpdatePinnedMessageError> {
@@ -746,18 +773,80 @@ public extension TelegramEngine {
             return _internal_transcribeAudio(postbox: self.account.postbox, network: self.account.network, messageId: messageId)
         }
                 
-        public func storeLocallyTranscribedAudio(messageId: MessageId, text: String, isFinal: Bool, error: AudioTranscriptionMessageAttribute.TranscriptionError?) -> Signal<Never, NoError> {
+        // MARK: NAGRAM
+        public func storeLocallyTranscribedAudio(messageId: MessageId, text: String, isFinal: Bool, error: AudioTranscriptionMessageAttribute.TranscriptionError?, requestId: Int64? = nil) -> Signal<Never, NoError> {
+            if let requestId {
+                return self.storeLocalAudioTranscription(messageId: messageId, requestId: requestId, text: text, isFinal: isFinal, error: error)
+                |> ignoreValues
+            }
             return self.account.postbox.transaction { transaction -> Void in
                 transaction.updateMessage(messageId, update: { currentMessage in
+                    // MARK: NAGRAM — An Apple task must not overwrite an external transcription.
+                    let previous = currentMessage.attributes.first(where: { $0 is AudioTranscriptionMessageAttribute }) as? AudioTranscriptionMessageAttribute
+                    if let previous, previous.source == .external || (previous.source == .local && previous.requestId != nil) {
+                        return .skip
+                    }
                     let storeForwardInfo = currentMessage.forwardInfo.flatMap(StoreMessageForwardInfo.init)
-                    var attributes = currentMessage.attributes.filter { !($0 is AudioTranscriptionMessageAttribute) }
+                    // MARK: NAGRAM — The previous translation belongs to the previous transcript.
+                    var attributes = currentMessage.attributes.filter { !($0 is AudioTranscriptionMessageAttribute) && !($0 is TranslationMessageAttribute) }
                     
-                    attributes.append(AudioTranscriptionMessageAttribute(id: 0, text: text, isPending: !isFinal, didRate: false, error: error))
+                    attributes.append(AudioTranscriptionMessageAttribute(id: 0, text: text, isPending: !isFinal, didRate: false, error: error, source: .local, requestId: requestId))
                     
                     return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: currentMessage.tags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: currentMessage.media))
                 })
             }
             |> ignoreValues
+        }
+
+        // MARK: NAGRAM — Register an external request before downloading or uploading its audio.
+        public func beginExternalAudioTranscription(messageId: EngineMessage.Id, requestId: Int64) -> Signal<Bool, NoError> {
+            return self.beginClientAudioTranscription(messageId: messageId, requestId: requestId, source: .external)
+        }
+
+        // MARK: NAGRAM — Apple recognition uses the same request ownership without an external source.
+        public func beginLocalAudioTranscription(messageId: EngineMessage.Id, requestId: Int64) -> Signal<Bool, NoError> {
+            return self.beginClientAudioTranscription(messageId: messageId, requestId: requestId, source: .local)
+        }
+
+        private func beginClientAudioTranscription(messageId: EngineMessage.Id, requestId: Int64, source: AudioTranscriptionMessageAttribute.Source) -> Signal<Bool, NoError> {
+            return self.account.postbox.transaction { transaction -> Bool in
+                var didUpdate = false
+                transaction.updateMessage(messageId, update: { currentMessage in
+                    let storeForwardInfo = currentMessage.forwardInfo.flatMap(StoreMessageForwardInfo.init)
+                    var attributes = currentMessage.attributes.filter { !($0 is AudioTranscriptionMessageAttribute) && !($0 is TranslationMessageAttribute) }
+                    attributes.append(AudioTranscriptionMessageAttribute(id: 0, text: "", isPending: true, didRate: false, error: nil, source: source, requestId: requestId))
+                    didUpdate = true
+                    return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: currentMessage.tags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: currentMessage.media))
+                })
+                return didUpdate
+            }
+        }
+
+        // MARK: NAGRAM — A canceled or superseded request cannot replace the current transcript.
+        public func storeExternalAudioTranscription(messageId: EngineMessage.Id, requestId: Int64, text: String, error: AudioTranscriptionMessageAttribute.TranscriptionError?) -> Signal<Bool, NoError> {
+            return self.storeClientAudioTranscription(messageId: messageId, requestId: requestId, text: text, isFinal: true, error: error, source: .external)
+        }
+
+        // MARK: NAGRAM — Let the Apple service distinguish a stored result from a superseded request.
+        public func storeLocalAudioTranscription(messageId: EngineMessage.Id, requestId: Int64, text: String, isFinal: Bool, error: AudioTranscriptionMessageAttribute.TranscriptionError?) -> Signal<Bool, NoError> {
+            return self.storeClientAudioTranscription(messageId: messageId, requestId: requestId, text: text, isFinal: isFinal, error: error, source: .local)
+        }
+
+        private func storeClientAudioTranscription(messageId: EngineMessage.Id, requestId: Int64, text: String, isFinal: Bool, error: AudioTranscriptionMessageAttribute.TranscriptionError?, source: AudioTranscriptionMessageAttribute.Source) -> Signal<Bool, NoError> {
+            return self.account.postbox.transaction { transaction -> Bool in
+                var didUpdate = false
+                transaction.updateMessage(messageId, update: { currentMessage in
+                    guard let previous = currentMessage.attributes.first(where: { $0 is AudioTranscriptionMessageAttribute }) as? AudioTranscriptionMessageAttribute, previous.source == source, previous.requestId == requestId, previous.isPending else {
+                        return .skip
+                    }
+                    let storeForwardInfo = currentMessage.forwardInfo.flatMap(StoreMessageForwardInfo.init)
+                    var attributes = currentMessage.attributes.filter { !($0 is AudioTranscriptionMessageAttribute) && !($0 is TranslationMessageAttribute) }
+                    attributes.append(AudioTranscriptionMessageAttribute(id: 0, text: text, isPending: !isFinal, didRate: false, error: error, source: source, requestId: requestId))
+                    didUpdate = true
+                    return .update(StoreMessage(id: currentMessage.id, customStableId: nil, globallyUniqueId: currentMessage.globallyUniqueId, groupingKey: currentMessage.groupingKey, threadId: currentMessage.threadId, timestamp: currentMessage.timestamp, flags: StoreMessageFlags(currentMessage.flags), tags: currentMessage.tags, globalTags: currentMessage.globalTags, localTags: currentMessage.localTags, forwardInfo: storeForwardInfo, authorId: currentMessage.author?.id, text: currentMessage.text, attributes: attributes, media: currentMessage.media))
+                })
+                return didUpdate
+            }
         }
         
         public func storeLocallyDerivedData(messageId: MessageId, data: [String: CodableEntry]) -> Signal<Never, NoError> {
@@ -860,6 +949,10 @@ public extension TelegramEngine {
         
         public func attachMenuBots() -> Signal<[AttachMenuBot], NoError> {
             return _internal_attachMenuBots(postbox: self.account.postbox)
+        }
+        
+        public func attachMenuBotsUpdates() -> Signal<[AttachMenuBot], NoError> {
+            return _internal_attachMenuBotsUpdates(postbox: self.account.postbox)
         }
         
         public func getBotApp(botId: PeerId, shortName: String, cached: Bool = false) -> Signal<BotApp, GetBotAppError> {

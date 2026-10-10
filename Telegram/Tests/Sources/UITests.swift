@@ -30,6 +30,39 @@ class UITests: XCTestCase {
         XCTAssert(app.wait(for: .runningForeground, timeout: 10.0))
     }
 
+    // MARK: NAGRAM — scene lifecycle and keyboard regression.
+    func testSceneForegroundRoundTrip() throws {
+        app.launch()
+        let startButton = app.buttons["Auth.Welcome.StartButton"]
+        XCTAssert(startButton.waitForExistence(timeout: 10.0))
+        startButton.tap()
+
+        let phoneNumberField = app.textFields["Auth.PhoneEntry.PhoneNumberField"]
+        XCTAssert(phoneNumberField.waitForExistence(timeout: 10.0))
+        phoneNumberField.tap()
+        phoneNumberField.typeText("12345")
+        let value = phoneNumberField.value as? String
+
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        XCTAssert(app.wait(for: .runningForeground, timeout: 10.0))
+        XCTAssert(phoneNumberField.waitForExistence(timeout: 5.0))
+        XCTAssertEqual(phoneNumberField.value as? String, value)
+        phoneNumberField.tap()
+        XCTAssert(app.keyboards.firstMatch.waitForExistence(timeout: 5.0))
+    }
+
+    // MARK: NAGRAM — connectionOptions must deliver a URL on cold scene launch.
+    func testSceneColdURL() throws {
+        guard #available(iOS 16.4, *) else {
+            throw XCTSkip("Opening an app with a URL requires iOS 16.4")
+        }
+        app.terminate()
+        app.open(URL(string: "tg://socks?server=127.0.0.1&port=9")!)
+        XCTAssert(app.wait(for: .runningForeground, timeout: 10.0))
+        XCTAssert(app.otherElements["ProxyServerPreview"].waitForExistence(timeout: 10.0))
+    }
+
     func testSignUp() throws {
         deleteTestAccount(phone: "9996625296")
         app.launch()

@@ -35,6 +35,7 @@ import ComponentFlow
 import ComponentDisplayAdapters
 // MARK: NAGRAM
 import NagramMediaMetadata
+import NagramStrings // MARK: NAGRAM
 import NagramSettings
 import ToastComponent
 import MultilineTextComponent
@@ -820,6 +821,13 @@ private final class NativePictureInPictureContentImpl: NSObject, AVPictureInPict
     }
 
     deinit {
+        // MARK: NAGRAM — Detach AVKit observers while the playback delegate and layer are alive.
+        self.pictureInPicturePossibleObservation?.invalidate()
+        self.pictureInPictureController?.canStartPictureInPictureAutomaticallyFromInline = false
+        self.pictureInPictureController?.delegate = nil
+        self.pictureInPictureController?.contentSource = nil
+        self.contentDelegate?.pictureInPictureController = nil
+        self.pictureInPictureController = nil
         self.messageRemovedDisposable?.dispose()
         self.isNativePictureInPictureActiveDisposable?.dispose()
         self.pictureInPictureTimer?.invalidate()
@@ -1548,6 +1556,11 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
             videoNode.ownsContentNodeUpdated = { [weak self] value in
                 if let strongSelf = self {
                     strongSelf.updateDisplayPlaceholder(!value)
+
+                    // MARK: NAGRAM — A transferred video layer must not keep its previous PiP controller.
+                    if !value {
+                        strongSelf.nativePictureInPictureContent = nil
+                    }
                     
                     // MARK: NAGRAM — Wait for MediaPlayerNode to attach its asynchronously-created video layer.
                     if value && strongSelf.nativePictureInPictureContent == nil {
@@ -3076,7 +3089,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                         
                         baseNavigationController?.view.endEditing(true)
                         
-                        (baseNavigationController?.topViewController as? ViewController)?.present(gallery, in: .window(.root), with: GalleryControllerPresentationArguments(transitionArguments: { [weak overlayNode] id, media in
+                        (baseNavigationController?.topViewController as? ViewController)?.present(gallery, in: .window(.root), with: GalleryControllerPresentationArguments(transitionArguments: { [weak overlayNode, context] id, media in
                             if let overlayNode = overlayNode, let overlaySupernode = overlayNode.supernode {
                                 return GalleryTransitionArguments(transitionNode: (overlayNode, overlayNode.bounds, { [weak overlayNode] in
                                     return (overlayNode?.view.snapshotContentTree(), nil)
@@ -3098,7 +3111,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                         }))
                     case let .webPage(_, _, expandFromPip):
                         if let expandFromPip = expandFromPip, let baseNavigationController = baseNavigationController {
-                            expandFromPip({ [weak overlayNode] in
+                            expandFromPip({ [weak overlayNode, context] in
                                 if let overlayNode = overlayNode, let overlaySupernode = overlayNode.supernode {
                                     return GalleryTransitionArguments(transitionNode: (overlayNode, overlayNode.bounds, { [weak overlayNode] in
                                         return (overlayNode?.view.snapshotContentTree(), nil)
@@ -3130,7 +3143,8 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     private func setupNativePictureInPicture() {
-        guard let item = self.item, let videoNode = self.videoNode else {
+        // MARK: NAGRAM — Only the current video owner may attach a PiP content source.
+        guard self.nativePictureInPictureContent == nil, let item = self.item, let videoNode = self.videoNode, videoNode.ownsContentNode else {
             return
         }
         
@@ -3763,7 +3777,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                                     c?.popItems()
                                 })))
                                 
-                                let addItem: (Int?, FileMediaReference) -> Void = { quality, qualityFile in
+                                let addItem: (Int?, FileMediaReference) -> Void = { [self] quality, qualityFile in
                                     guard let qualityFileSize = qualityFile.media.size else {
                                         return
                                     }
@@ -3968,7 +3982,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                 if NagramSettings.shared.mediaMetadataEnabled, let nativeContent = item.content as? NativeVideoContent {
                     let mediaReference = nativeContent.fileReference.abstract
                     let context = strongSelf.context
-                    items.append(.action(ContextMenuActionItem(text: "查看信息", icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.actionSheet.primaryTextColor) }, action: { [weak self] _, f in
+                    items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.MediaMetadata.ViewInfo", strongSelf.presentationData.strings.baseLanguageCode), icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.actionSheet.primaryTextColor) }, action: { [weak self] _, f in
                         f(.default)
                         guard let self, let controller = self.galleryController() else {
                             return

@@ -206,11 +206,15 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     
     private func syncItemNodeNavigationOffset(_ itemNode: ChatListContainerItemNode) { // MARK: NAGRAM
         let scrollOffset: CGFloat
-        if let currentItemNodeValue = self.currentItemNodeValue, currentItemNodeValue.listNode.isNavigationHidden {
+        if let currentItemNodeValue = self.currentItemNodeValue,
+           case let .known(value) = currentItemNodeValue.listNode.visibleContentOffset(), value < 0.0 {
+            scrollOffset = max(-self.tempTopInset, value)
+        } else if let currentItemNodeValue = self.currentItemNodeValue, currentItemNodeValue.listNode.isNavigationHidden {
             scrollOffset = self.currentSearchScrollHeight()
         } else {
             scrollOffset = 0.0
         }
+        itemNode.listNode.startedScrollingAtUpperBound = self.currentItemNodeValue?.listNode.startedScrollingAtUpperBound ?? false
         let _ = itemNode.listNode.scrollToOffsetFromTop(scrollOffset, animated: false)
     }
     
@@ -603,7 +607,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         }, openArchiveSettings: { [weak self] in
             self?.openArchiveSettings()
         }, autoSetReady: true, isMainTab: nil)
-        itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset()
+        itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset() // MARK: NAGRAM
         itemNode.listNode.navigationScrollHeightTopInset = self.currentNavigationScrollHeight()
         self.itemNodes[.all] = itemNode
         self.addSubnode(itemNode)
@@ -636,18 +640,29 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             if !self.currentItemNode.isNavigationInAFinalState {
                 return []
             }
+            if self.currentItemNode.isDragging || self.currentItemNode.isDeceleratingAfterTracking {
+                if self.availableFilters.count <= 1 {
+                    return []
+                } else if self.availableFilters.first?.id == self.selectedId {
+                    return [.leftCenter]
+                }
+            }
             if self.availableFilters.count > 1 {
+                // MARK: NAGRAM — Folder-only swipes also start at the screen edges.
+                if !NagramSettings.shared.chatListSwipeActionMode.allowsQuickActions {
+                    return [.left, .right]
+                }
                 return [.leftCenter, .rightCenter]
             } else {
                 return [.rightEdge]
             }
-        }, edgeWidth: .widthMultiplier(factor: 1.0 / 6.0, min: 22.0, max: 80.0))
+        }, edgeWidth: .widthMultiplier(factor: 1.0 / 6.0, min: 22.0, max: 80.0), requiresClearHorizontalIntent: true) // MARK: NAGRAM
         panRecognizer.delegate = self.wrappedGestureRecognizerDelegate
         panRecognizer.delaysTouchesBegan = false
         panRecognizer.cancelsTouchesInView = true
         self.panRecognizer = panRecognizer
         self.view.addGestureRecognizer(panRecognizer)
-        
+
         self.view.layer.addSublayer(self.leftSeparatorLayer)
     }
     
@@ -669,9 +684,16 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         return false
     }
     
-    @objc private func panGesture(_ recognizer: UIPanGestureRecognizer) {
+    @objc private func panGesture(_ recognizer: InteractiveTransitionGestureRecognizer) {
         let filtersLimit = self.filtersLimit.flatMap({ $0 + 1 }) ?? Int32(self.availableFilters.count)
         let maxFilterIndex = min(Int(filtersLimit), self.availableFilters.count) - 1
+
+        let canOpenStoryCamera = self.validLayout?.0.metrics.widthClass == .compact
+            && self.availableFilters.first?.id == self.selectedId
+            && !recognizer.currentAllowedDirections.intersection(.right).isEmpty
+            && self.controller?.isStoryPostingAvailable == true
+            && !(self.context.sharedContext.callManager?.hasActiveCall ?? false)
+        let hasLiveStream = canOpenStoryCamera && self.controller?.chatListHeaderView()?.storyPeerListView()?.isLiveStreaming == true
         
         switch recognizer.state {
         case .began:
@@ -679,11 +701,21 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             
             self.transitionFractionOffset = 0.0
             if let (layout, navigationBarHeight, visualNavigationHeight, originalNavigationHeight, cleanNavigationBarHeight, insets, isReorderingFilters, isEditing, inlineNavigationLocation, inlineNavigationTransitionFraction, storiesInset) = self.validLayout, let itemNode = self.itemNodes[self.selectedId] {
+                if canOpenStoryCamera, !hasLiveStream, self.transitionFraction.isZero,
+                    (itemNode.layer.presentation()?.frame.minX ?? itemNode.frame.minX).isZero {
+                    let translation = recognizer.translation(in: self.view)
+                    if translation.x > 0.0 || (translation.x.isZero && recognizer.velocity(in: self.view).x > 0.0) {
+                        self.controller?.storyCameraPanGestureChanged(transitionFraction: translation.x / layout.size.width)
+                        if self.controller?.hasStoryCameraTransition == true {
+                            return
+                        }
+                    }
+                }
                 for (id, itemNode) in self.itemNodes {
                     if id != selectedId {
                         itemNode.emptyNode?.restartAnimation()
                         
-                        self.syncItemNodeNavigationOffset(itemNode)
+                        self.syncItemNodeNavigationOffset(itemNode) // MARK: NAGRAM
                     }
                 }
                 
@@ -715,12 +747,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                     return bandingStart + (1.0 - (1.0 / ((bandedOffset * coefficient / range) + 1.0))) * range
                 }
                 
-                var hasLiveStream = false
-                if let componentView = self.controller?.chatListHeaderView(), let storyPeerListView = componentView.storyPeerListView(), storyPeerListView.isLiveStreaming {
-                    hasLiveStream = true
-                }
-                     
-                if case .compact = layout.metrics.widthClass, self.controller?.isStoryPostingAvailable == true && !(self.context.sharedContext.callManager?.hasActiveCall ?? false) {
+                if canOpenStoryCamera {
                     if hasLiveStream {
                         if translation.x >= 30.0 {
                             self.panRecognizer?.cancel()
@@ -733,12 +760,13 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                     let cameraIsAlreadyOpened = self.controller?.hasStoryCameraTransition ?? false
                     if selectedIndex <= 0 && translation.x > 0.0 {
                         transitionFraction = 0.0
+                        self.transitionFractionOffset = 0.0
                         self.controller?.storyCameraPanGestureChanged(transitionFraction: translation.x / layout.size.width)
                     } else if translation.x <= 0.0 && cameraIsAlreadyOpened {
                         self.controller?.storyCameraPanGestureChanged(transitionFraction: 0.0)
                     }
                     
-                    if cameraIsAlreadyOpened {
+                    if cameraIsAlreadyOpened || (self.controller?.hasStoryCameraTransition == true && self.transitionFraction.isZero && self.transitionFractionOffset.isZero && !self.isSwitchingCurrentItemFilterByDragging) {
                         transitionFraction = 0.0
                         return
                     }
@@ -804,7 +832,19 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                 
                 let hasStoryCameraTransition = self.controller?.hasStoryCameraTransition ?? false
                 if hasStoryCameraTransition {
-                    self.controller?.storyCameraPanGestureEnded(transitionFraction: translation.x / layout.size.width, velocity: velocity.x)
+                    if !self.transitionFraction.isZero || !self.transitionFractionOffset.isZero {
+                        self.transitionFraction = 0.0
+                        self.transitionFractionOffset = 0.0
+                        self.update(layout: layout, navigationBarHeight: navigationBarHeight, visualNavigationHeight: visualNavigationHeight, originalNavigationHeight: originalNavigationHeight, cleanNavigationBarHeight: cleanNavigationBarHeight, insets: insets, isReorderingFilters: isReorderingFilters, isEditing: isEditing, inlineNavigationLocation: inlineNavigationLocation, inlineNavigationTransitionFraction: inlineNavigationTransitionFraction, storiesInset: storiesInset, transition: .immediate)
+                    }
+                    let cancelled = recognizer.state == .cancelled
+                    self.controller?.storyCameraPanGestureEnded(transitionFraction: cancelled ? 0.0 : translation.x / layout.size.width, velocity: cancelled ? 0.0 : velocity.x)
+                    if self.isSwitchingCurrentItemFilterByDragging {
+                        self.isSwitchingCurrentItemFilterByDragging = false
+                        self.currentItemFilterUpdated?(self.currentItemFilter, self.transitionFraction, .immediate, false)
+                        self.pinnedHeaderDisplayFractionUpdated?(.immediate)
+                    }
+                    return
                 }
                 var applyNodeAsCurrent: ChatListFilterTabEntryId?
                 
@@ -908,7 +948,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         }
     }
     
-    public func updateAvailableFilters(_ availableFilters: [ChatListContainerNodeFilter], limit: Int32?, fallbackId: ChatListFilterTabEntryId? = nil) {
+    public func updateAvailableFilters(_ availableFilters: [ChatListContainerNodeFilter], limit: Int32?, fallbackId: ChatListFilterTabEntryId? = nil) { // MARK: NAGRAM
         if self.availableFilters != availableFilters {
             let apply: () -> Void = { [weak self] in
                 guard let strongSelf = self else {
@@ -977,7 +1017,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     
     public func switchToFilter(id: ChatListFilterTabEntryId, animated: Bool = true, completion: (() -> Void)? = nil) {
         self.onFilterSwitch?()
-        if let pendingItemNode = self.pendingItemNode, pendingItemNode.0 != id {
+        if let pendingItemNode = self.pendingItemNode, pendingItemNode.0 != id { // MARK: NAGRAM
             pendingItemNode.2.dispose()
             self.pendingItemNode = nil
         }
@@ -987,7 +1027,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                     return
                 }
                 
-                self.syncItemNodeNavigationOffset(itemNode)
+                self.syncItemNodeNavigationOffset(itemNode) // MARK: NAGRAM
                 
                 self.selectedId = id
                 self.applyItemNodeAsCurrent(id: id, itemNode: itemNode)
@@ -1007,7 +1047,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                 }, openArchiveSettings: { [weak self] in
                     self?.openArchiveSettings()
                 }, autoSetReady: !animated, isMainTab: index == 0)
-                itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset()
+                itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset() // MARK: NAGRAM
                 itemNode.listNode.navigationScrollHeightTopInset = self.currentNavigationScrollHeight()
                 self.pendingItemNode?.2.dispose()
                 let disposable = MetaDisposable()
@@ -1029,10 +1069,10 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                     strongSelf.pendingItemNode?.2.dispose()
                     strongSelf.pendingItemNode = nil
                     itemNode.listNode.tempTopInset = strongSelf.tempTopInset
-                    itemNode.listNode.scrollHeightTopInset = strongSelf.currentScrollHeightTopInset()
+                    itemNode.listNode.scrollHeightTopInset = strongSelf.currentScrollHeightTopInset() // MARK: NAGRAM
                     itemNode.listNode.navigationScrollHeightTopInset = strongSelf.currentNavigationScrollHeight()
                     
-                    strongSelf.syncItemNodeNavigationOffset(itemNode)
+                    strongSelf.syncItemNodeNavigationOffset(itemNode) // MARK: NAGRAM
                     
                     guard let (layout, navigationBarHeight, visualNavigationHeight, originalNavigationHeight, cleanNavigationBarHeight, insets, isReorderingFilters, isEditing, inlineNavigationLocation, inlineNavigationTransitionFraction, storiesInset) = strongSelf.validLayout else {
                         strongSelf.itemNodes[id] = itemNode
@@ -1158,7 +1198,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                         self?.openArchiveSettings()
                     }, autoSetReady: false, isMainTab: i == 0)
                     itemNode.listNode.tempTopInset = self.tempTopInset
-                    itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset()
+                    itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset() // MARK: NAGRAM
                     itemNode.listNode.navigationScrollHeightTopInset = self.currentNavigationScrollHeight()
                     self.itemNodes[id] = itemNode
                 }
@@ -1198,7 +1238,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                 }
                 
                 itemNode.listNode.isMainTab.set(self.availableFilters.firstIndex(where: { $0.id == id }) == 0)
-                itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset()
+                itemNode.listNode.scrollHeightTopInset = self.currentScrollHeightTopInset() // MARK: NAGRAM
                 itemNode.listNode.navigationScrollHeightTopInset = self.currentNavigationScrollHeight()
                 itemNode.updateLayout(size: layout.size, insets: insets, visualNavigationHeight: visualNavigationHeight, originalNavigationHeight: originalNavigationHeight, inlineNavigationLocation: inlineNavigationLocation, inlineNavigationTransitionFraction: itemInlineNavigationTransitionFraction, storiesInset: storiesInset, transition: nodeTransition)
                 if let scrollingOffset = self.scrollingOffset {
@@ -1647,8 +1687,10 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                     return nil
                 }
 
+                // The folder tabs describe the main list: a forum open inline has no folder of its own.
                 let selectedTab: HorizontalTabsComponent.Tab.Id
-                switch self.mainContainerNode.requestedItemFilter { // MARK: NAGRAM — inline 话题列表不应覆盖主列表分组选中态。
+                // MARK: NEXTGRAM — Keep quick-filter selection separate from the displayed inline topic list.
+                switch self.mainContainerNode.requestedItemFilter {
                 case .all:
                     selectedTab = AnyHashable(Int32.min)
                 case let .filter(id):
@@ -1668,7 +1710,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                         switch entry {
                         case .all:
                             id = Int32.min
-                            title = nagramFolderTabTitle(
+                            title = nagramFolderTabTitle( // MARK: NAGRAM
                                 text: self.presentationData.strings.ChatList_Tabs_All,
                                 entities: [],
                                 enableAnimations: false,
@@ -1678,14 +1720,14 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                             isMainTab = true
                         case let .filter(idValue, text, unread):
                             id = AnyHashable(idValue)
-                            title = nagramFolderTabTitle(
+                            title = nagramFolderTabTitle( // MARK: NAGRAM
                                 text: text.text,
                                 entities: text.entities,
                                 enableAnimations: text.enableAnimations,
                                 icon: nagramFolderTabIcons[entry.id] ?? "📁",
                                 displayMode: nagramFolderTabDisplayMode
                             )
-                            if unread.value != 0 {
+                            if unread.value != 0 && !NagramSettings.shared.hideFolderUnreadCount { // MARK: NAGRAM
                                 badge = HorizontalTabsComponent.Tab.Badge(
                                     title: "\(unread.value)",
                                     isAccent: unread.hasUnmuted
@@ -1795,7 +1837,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             }
         }
         
-        let shouldHideHomeSearchBar: Bool
+        let shouldHideHomeSearchBar: Bool // MARK: NAGRAM
         if case .chatList(groupId: .root) = self.location {
             shouldHideHomeSearchBar = !NagramSettings.shared.bottomBarSettings.topSearchVisible
         } else {
@@ -1819,7 +1861,8 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 theme: self.presentationData.theme,
                 strings: self.presentationData.strings,
                 statusBarHeight: layout.statusBarHeight ?? 0.0,
-                sideInset: layout.safeInsets.left,
+                leftInset: layout.safeInsets.left,
+                rightInset: layout.safeInsets.right,
                 search: shouldHideHomeSearchBar ? nil : ChatListNavigationBar.Search(isEnabled: true), // MARK: NAGRAM
                 activeSearch: self.isSearchDisplayControllerActive,
                 primaryContent: headerContent?.primaryContent,
@@ -1896,7 +1939,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         
         self.mainContainerNode.updateScrollingOffset(navigationHeight: navigationHeight, offset: mainOffset, transition: transition)
         
-        mainOffset = min(mainOffset, self.mainContainerNode.currentSearchScrollHeight())
+        mainOffset = min(mainOffset, self.mainContainerNode.currentSearchScrollHeight()) // MARK: NAGRAM
         if abs(mainOffset) < 0.1 {
             mainOffset = 0.0
         }
@@ -1909,7 +1952,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             } else {
                 inlineOffset = navigationHeight
             }
-            inlineOffset = min(inlineOffset, inlineStackContainerNode.currentSearchScrollHeight())
+            inlineOffset = min(inlineOffset, inlineStackContainerNode.currentSearchScrollHeight()) // MARK: NAGRAM
             if abs(inlineOffset) < 0.1 {
                 inlineOffset = 0.0
             }
@@ -1981,7 +2024,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         var storiesInset = storiesInset
         
         let navigationBarLayout = self.updateNavigationBar(layout: layout, deferScrollApplication: true, transition: ComponentTransition(transition))
-        self.mainContainerNode.initialScrollingOffset = self.mainContainerNode.currentScrollHeightTopInset()
+        self.mainContainerNode.initialScrollingOffset = self.mainContainerNode.currentScrollHeightTopInset() // MARK: NAGRAM
         
         navigationBarHeight = navigationBarLayout.navigationHeight
         visualNavigationHeight = navigationBarLayout.navigationHeight
@@ -2259,7 +2302,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             self.mainContainerNode.accessibilityElementsHidden = false
             self.inlineStackContainerNode?.accessibilityElementsHidden = false
             
-            return { [weak self, weak placeholderNode] in
+            return { [weak self, weak placeholderNode, searchDisplayController] in
                 guard let self, let (layout, _, _, cleanNavigationBarHeight, _) = self.containerLayout else {
                     return
                 }
@@ -2309,7 +2352,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 overscrollHiddenChatItemsAllowed = storyPeerListView.overscrollHiddenChatItemsAllowed
             }
             
-            var hasItemsToBeRevealed = false
+            var hasItemsToBeRevealed = false // MARK: NAGRAM
             if let chatListNode = listView as? ChatListNode {
                 hasItemsToBeRevealed = chatListNode.hasItemsToBeRevealed()
                 if hasItemsToBeRevealed {
@@ -2341,7 +2384,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                         var manuallyAllow = false
                         
                         if isPrimary {
-                            if hasItemsToBeRevealed {
+                            if hasItemsToBeRevealed { // MARK: NAGRAM
                                 manuallyAllow = true
                             } else if let storySubscriptions = controller.orderedStorySubscriptions, shouldDisplayStoriesInChatListHeader(storySubscriptions: storySubscriptions, isHidden: controller.location == .chatList(groupId: .archive)) {
                             } else {
@@ -2367,13 +2410,13 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                             if let currentOverscrollItemExpansionTimestamp = self.currentOverscrollItemExpansionTimestamp, currentOverscrollItemExpansionTimestamp <= timestamp - 0.0 {
                                 self.allowOverscrollItemExpansion = false
                                 
-                                let revealedGroupId: EngineChatList.Group?
+                                let revealedGroupId: EngineChatList.Group? // MARK: NAGRAM
                                 if isPrimary {
                                     revealedGroupId = self.mainContainerNode.currentItemNode.revealScrollHiddenItem()
                                 } else {
                                     revealedGroupId = self.inlineStackContainerNode?.currentItemNode.revealScrollHiddenItem()
                                 }
-                                if case .chatList(.root) = self.location, revealedGroupId == .archive, NagramSettings.shared.openArchiveOnPull {
+                                if case .chatList(.root) = self.location, revealedGroupId == .archive, NagramSettings.shared.openArchiveOnPull { // MARK: NAGRAM
                                     Queue.mainQueue().after(0.2) { [weak self] in
                                         self?.mainContainerNode.groupSelected?(.archive)
                                     }
@@ -2406,7 +2449,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }
         
         if let clippedScrollOffset = navigationBarComponentView.clippedScrollOffset {
-            let navigationScrollHeights = self.navigationScrollHeights(isPrimary: isPrimary)
+            let navigationScrollHeights = self.navigationScrollHeights(isPrimary: isPrimary) // MARK: NAGRAM
             if navigationScrollHeights.search > 0.0 && clippedScrollOffset > 0.0 && clippedScrollOffset < navigationScrollHeights.search {
                 return true
             } else if navigationScrollHeights.total > navigationScrollHeights.search && clippedScrollOffset > navigationScrollHeights.search && clippedScrollOffset < navigationScrollHeights.total {
@@ -2450,7 +2493,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }
         
         if let clippedScrollOffset = navigationBarComponentView.clippedScrollOffset {
-            let navigationScrollHeights = self.navigationScrollHeights(isPrimary: isPrimary)
+            let navigationScrollHeights = self.navigationScrollHeights(isPrimary: isPrimary) // MARK: NAGRAM
             if navigationScrollHeights.search > 0.0 && clippedScrollOffset > 0.0 && clippedScrollOffset < navigationScrollHeights.search {
                 if clippedScrollOffset < navigationScrollHeights.search * 0.5 {
                     let _ = listView.scrollToOffsetFromTop(0.0, animated: true)

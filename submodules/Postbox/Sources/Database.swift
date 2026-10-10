@@ -32,16 +32,46 @@ private let ensureInitialized: Void = {
 }()
 
 public final class Database {
+    public struct OpenError: Error {
+        public let code: Int32
+        public let systemErrno: Int32
+    }
+
     internal var handle: OpaquePointer? = nil
 
-    public init?(_ location: String, readOnly: Bool) {
+    private init(handle: OpaquePointer?) {
+        self.handle = handle
+    }
+
+    public convenience init?(_ location: String, readOnly: Bool) {
+        switch Database.openHandle(location, readOnly: readOnly) {
+        case let .success(handle):
+            self.init(handle: handle)
+        case .failure:
+            return nil
+        }
+    }
+
+    /// Like `init?`, but reports why the open failed. `systemErrno` is what the caller needs
+    /// to tell a problem with the file itself (EISDIR, EIO) from one deleting the file
+    /// cannot fix (EPERM/EACCES from data protection while the device is locked, descriptor
+    /// exhaustion, out of memory, disk full).
+    public static func open(_ location: String, readOnly: Bool) -> Result<Database, OpenError> {
+        switch Database.openHandle(location, readOnly: readOnly) {
+        case let .success(handle):
+            return .success(Database(handle: handle))
+        case let .failure(error):
+            return .failure(error)
+        }
+    }
+
+    private static func openHandle(_ location: String, readOnly: Bool) -> Result<OpaquePointer?, OpenError> {
         let _ = ensureInitialized
         
         if location != ":memory:" {
-            // MARK: NAGRAM
-            let guardFile = open(location + "-guard", O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)
-            if guardFile >= 0 {
-                close(guardFile)
+            let guardFd = Darwin.open(location + "-guard", O_WRONLY | O_CREAT | O_APPEND, S_IRUSR | S_IWUSR)
+            if guardFd >= 0 {
+                close(guardFd)
             }
         }
         let flags: Int32
@@ -50,11 +80,17 @@ public final class Database {
         } else {
             flags = SQLITE_OPEN_CREATE | SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX
         }
-        let res = sqlite3_open_v2(location, &self.handle, flags, nil)
+        var handle: OpaquePointer? = nil
+        let res = sqlite3_open_v2(location, &handle, flags, nil)
         if res != SQLITE_OK {
-            postboxLog("sqlite3_open_v2: \(res)")
-            return nil
+            // SQLite allocates the handle even when the open fails; it carries the errno and
+            // must be closed, or it leaks.
+            let systemErrno: Int32 = handle != nil ? sqlite3_system_errno(handle) : 0
+            postboxLog("sqlite3_open_v2: \(res), errno \(systemErrno)")
+            sqlite3_close(handle)
+            return .failure(OpenError(code: res, systemErrno: systemErrno))
         }
+        return .success(handle)
     }
 
     deinit {
@@ -66,10 +102,13 @@ public final class Database {
         if res == SQLITE_OK {
             return true
         } else {
+            // MARK: NAGRAM — Failures here are only asserted by callers, so release builds dropped them; keep them in the Postbox log.
+            // Statements can carry the database key, so only the leading keywords are logged.
+            let summary = SQL.split(separator: " ", maxSplits: 2).prefix(2).joined(separator: " ").split(separator: "=", maxSplits: 1).first.flatMap(String.init) ?? ""
             if let error = sqlite3_errmsg(self.handle), let str = NSString(utf8String: error) {
-                print("SQL error \(res): \(str) on SQL")
+                postboxLog("SQL error \(res): \(str) on \(summary)")
             } else {
-                print("SQL error \(res) on SQL")
+                postboxLog("SQL error \(res) on \(summary)")
             }
             return false
         }

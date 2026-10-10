@@ -93,6 +93,16 @@ func preparedChatHistoryViewTransition(from fromView: ChatHistoryView?, to toVie
             let _ = options.insert(.Synchronous)
             let _ = options.insert(.PreferSynchronousResourceLoading)
         }
+        // MARK: NAGRAM — A re-initial update (Postbox .Initial/.InitialUnread) can arrive after the list is
+        // already populated and positioned, e.g. when fetching new messages finishes after the chat was
+        // opened. Unlike .Reload it carries no stationary range, so the re-merge would land on the newest
+        // message and discard where the user was reading. Keep the visible items stationary instead, like
+        // Android does: load the messages in place and let the unread separator plus the pagedown counter
+        // advertise them. An explicit scrollPosition (unread anchor, position restoration, requested scroll)
+        // still wins, and a genuine first load has no previous entries so it is unaffected.
+        if !fadeIn, scrollPosition == nil, let fromView, !fromView.filteredEntries.isEmpty {
+            stationaryItemRange = (0, Int.max)
+        }
     case .InteractiveChanges:
         let _ = options.insert(.AnimateAlpha)
         let _ = options.insert(.AnimateInsertion)
@@ -141,7 +151,7 @@ func preparedChatHistoryViewTransition(from fromView: ChatHistoryView?, to toVie
     let curve: ListViewAnimationCurve = scrollAnimationCurve ?? .Default(duration: nil)
     
     var isSavedMusic = false
-    if case let .custom(_, _, _, isSavedMusicValue, _, _) = source {
+    if case let .custom(_, _, _, isSavedMusicValue, _, _, _) = source {
         isSavedMusic = isSavedMusicValue
     }
     

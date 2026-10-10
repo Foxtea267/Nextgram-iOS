@@ -58,9 +58,16 @@ public final class CallKitIntegration {
         }
     }
     
-    func startCall(context: AccountContext, peerId: EnginePeer.Id, phoneNumber: String?, localContactId: String?, isVideo: Bool, displayTitle: String) {
-        sharedProviderDelegate?.startCall(context: context, peerId: peerId, phoneNumber: phoneNumber, isVideo: isVideo, displayTitle: displayTitle)
-        self.donateIntent(peerId: peerId, displayTitle: displayTitle, localContactId: localContactId)
+    /// `completion` receives the error when the system refuses the `CXStartCallAction`. In that case
+    /// the provider never performs the action, so no call is created and nothing else reports the
+    /// failure — the caller must surface it.
+    func startCall(context: AccountContext, peerId: EnginePeer.Id, phoneNumber: String?, localContactId: String?, isVideo: Bool, displayTitle: String, completion: ((Error?) -> Void)? = nil) {
+        sharedProviderDelegate?.startCall(context: context, peerId: peerId, phoneNumber: phoneNumber, isVideo: isVideo, displayTitle: displayTitle, completion: { [weak self] error in
+            if error == nil {
+                self?.donateIntent(peerId: peerId, displayTitle: displayTitle, localContactId: localContactId)
+            }
+            completion?(error)
+        })
     }
     
     func answerCall(uuid: UUID) {
@@ -77,11 +84,12 @@ public final class CallKitIntegration {
         sharedProviderDelegate?.dropCall(uuid: uuid)
     }
     
-    public func reportIncomingCall(uuid: UUID, stableId: Int64, handle: String, phoneNumber: String?, isVideo: Bool, displayTitle: String, completion: ((NSError?) -> Void)?) {
+    // MARK: NAGRAM — fromVoIPPush marks reports that PushKit requires for a delivered VoIP push.
+    public func reportIncomingCall(uuid: UUID, stableId: Int64, handle: String, phoneNumber: String?, isVideo: Bool, displayTitle: String, fromVoIPPush: Bool = false, completion: ((NSError?) -> Void)?) {
         #if DEBUG
         print("CallKitIntegration: Report incoming call \(uuid)")
         #endif
-        sharedProviderDelegate?.reportIncomingCall(uuid: uuid, stableId: stableId, handle: handle, phoneNumber: phoneNumber, isVideo: isVideo, displayTitle: displayTitle, completion: completion)
+        sharedProviderDelegate?.reportIncomingCall(uuid: uuid, stableId: stableId, handle: handle, phoneNumber: phoneNumber, isVideo: isVideo, displayTitle: displayTitle, fromVoIPPush: fromVoIPPush, completion: completion)
     }
     
     func reportOutgoingCallConnected(uuid: UUID, at date: Date) {
@@ -92,7 +100,6 @@ public final class CallKitIntegration {
         let handle = INPersonHandle(value: "tg\(peerId.id._internalGetInt64Value())", type: .unknown)
         let contact = INPerson(personHandle: handle, nameComponents: nil, displayName: displayTitle, image: nil, contactIdentifier: localContactId, customIdentifier: "tg\(peerId.id._internalGetInt64Value())")
     
-        // MARK: NAGRAM
         let intent = INStartCallIntent(callRecordFilter: nil, callRecordToCallBack: nil, audioRoute: .unknown, destinationType: .normal, contacts: [contact], callCapability: .audioCall)
         
         let interaction = INInteraction(intent: intent, response: nil)
@@ -159,7 +166,6 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
     }
     
     private static func providerConfiguration() -> CXProviderConfiguration {
-        // MARK: NAGRAM
         let providerConfiguration = CXProviderConfiguration()
         
         providerConfiguration.supportsVideo = true
@@ -173,13 +179,14 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
         return providerConfiguration
     }
     
-    private func requestTransaction(_ transaction: CXTransaction, completion: ((Bool) -> Void)? = nil) {
+    private func requestTransaction(_ transaction: CXTransaction, completion: ((Error?) -> Void)? = nil) {
         Logger.shared.log("CallKitIntegration", "requestTransaction \(transaction)")
         self.callController.request(transaction) { error in
             if let error = error {
-                Logger.shared.log("CallKitIntegration", "error in requestTransaction \(transaction): \(error)")
+                let nsError = error as NSError
+                Logger.shared.log("CallKitIntegration", "error in requestTransaction \(transaction): \(nsError.domain) \(nsError.code) \(error)")
             }
-            completion?(error == nil)
+            completion?(error)
         }
     }
     
@@ -211,7 +218,7 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
         self.requestTransaction(transaction)
     }
     
-    func startCall(context: AccountContext, peerId: EnginePeer.Id, phoneNumber: String?, isVideo: Bool, displayTitle: String) {
+    func startCall(context: AccountContext, peerId: EnginePeer.Id, phoneNumber: String?, isVideo: Bool, displayTitle: String, completion: @escaping (Error?) -> Void) {
         let uuid = UUID()
         self.currentStartCallAccount = (uuid, context)
         let handle: CXHandle
@@ -231,7 +238,22 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
         
         Logger.shared.log("CallKitIntegration", "initiate call \(uuid)")
         
-        self.requestTransaction(transaction, completion: { _ in
+        self.requestTransaction(transaction, completion: { [weak self] error in
+            guard let self else {
+                return
+            }
+            if let error {
+                // The system refused the action, so `provider(_:perform: CXStartCallAction)` will
+                // never run for this uuid. Drop the bookkeeping for it instead of reporting an
+                // update on a call that does not exist.
+                if let currentStartCallAccount = self.currentStartCallAccount, currentStartCallAccount.0 == uuid {
+                    self.currentStartCallAccount = nil
+                }
+                self.uuidToPeerIdMapping.removeValue(forKey: uuid)
+                completion(error)
+                return
+            }
+            
             let update = CXCallUpdate()
             update.remoteHandle = handle
             update.localizedCallerName = displayTitle
@@ -243,11 +265,34 @@ class CallKitProviderDelegate: NSObject, CXProviderDelegate {
             self.provider.reportCall(with: uuid, updated: update)
             
             self.activeCalls.insert(uuid)
+            completion(nil)
         })
     }
     
-    func reportIncomingCall(uuid: UUID, stableId: Int64, handle: String, phoneNumber: String?, isVideo: Bool, displayTitle: String, completion: ((NSError?) -> Void)?) {
+    func reportIncomingCall(uuid: UUID, stableId: Int64, handle: String, phoneNumber: String?, isVideo: Bool, displayTitle: String, fromVoIPPush: Bool, completion: ((NSError?) -> Void)?) {
         if self.alreadyReportedIncomingCalls.contains(uuid) {
+            // MARK: NAGRAM
+            // PushKit aborts the app when a VoIP push is not followed by reportNewIncomingCall, including a push for a call
+            // that was already reported from the network connection or has already been dropped.
+            // A call CallKit still tracks rejects the duplicate report; one it no longer tracks is over, so it is ended at once.
+            if fromVoIPPush {
+                let update = CXCallUpdate()
+                if let phoneNumber = phoneNumber {
+                    update.remoteHandle = CXHandle(type: .phoneNumber, value: phoneNumber)
+                } else {
+                    update.remoteHandle = CXHandle(type: .generic, value: handle)
+                }
+                update.localizedCallerName = displayTitle
+                update.hasVideo = isVideo
+                
+                Logger.shared.log("CallKitIntegration", "report duplicate incoming call \(uuid) for VoIP push")
+                
+                self.provider.reportNewIncomingCall(with: uuid, update: update, completion: { error in
+                    if error == nil {
+                        self.provider.reportCall(with: uuid, endedAt: nil, reason: CXCallEndedReason.remoteEnded)
+                    }
+                })
+            }
             completion?(nil)
             return
         }

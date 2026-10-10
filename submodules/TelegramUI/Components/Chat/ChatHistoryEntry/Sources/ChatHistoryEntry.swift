@@ -21,8 +21,10 @@ public struct ChatMessageEntryAttributes: Equatable {
     public var displayContinueThreadFooter: Bool
     public var pinToTop: Bool
     public var isMusicPlaylist: Bool // MARK: NAGRAM // MARK: NEXTGRAM
+    public var isGiftMessageComposerPreview: Bool
     
-    public init(rank: CachedChannelAdminRank?, isContact: Bool, contentTypeHint: ChatMessageEntryContentType, updatingMedia: ChatUpdatingMessageMedia?, isPlaying: Bool, isCentered: Bool, authorStoryStats: EnginePeerStoryStats?, displayContinueThreadFooter: Bool, pinToTop: Bool, isMusicPlaylist: Bool = false) {
+    // MARK: NEXTGRAM — Keep playlist rendering alongside the upstream gift preview flag.
+    public init(rank: CachedChannelAdminRank?, isContact: Bool, contentTypeHint: ChatMessageEntryContentType, updatingMedia: ChatUpdatingMessageMedia?, isPlaying: Bool, isCentered: Bool, authorStoryStats: EnginePeerStoryStats?, displayContinueThreadFooter: Bool, pinToTop: Bool, isGiftMessageComposerPreview: Bool = false, isMusicPlaylist: Bool = false) {
         self.rank = rank
         self.isContact = isContact
         self.contentTypeHint = contentTypeHint
@@ -33,6 +35,7 @@ public struct ChatMessageEntryAttributes: Equatable {
         self.displayContinueThreadFooter = displayContinueThreadFooter
         self.pinToTop = pinToTop
         self.isMusicPlaylist = isMusicPlaylist
+        self.isGiftMessageComposerPreview = isGiftMessageComposerPreview
     }
     
     public init() {
@@ -46,6 +49,7 @@ public struct ChatMessageEntryAttributes: Equatable {
         self.displayContinueThreadFooter = false
         self.pinToTop = false
         self.isMusicPlaylist = false
+        self.isGiftMessageComposerPreview = false
     }
 }
 

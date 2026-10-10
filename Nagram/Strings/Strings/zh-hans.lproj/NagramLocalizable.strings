@@ -15,13 +15,56 @@
 "Nagram.InlineBotRules.Footer" = "规则由 Nextgram metadata 提供；匹配时保留输入框中的原始链接。";
 
 "Nagram.Section.Camera" = "相机";
-"Nagram.Section.Camera.Footer" = "聊天附件面板中的相机入口与实时预览。";
+"Nagram.Section.Camera.Footer" = "聊天附件面板中的相机入口与实时预览，以及圆形视频拍摄默认使用的摄像头。";
+"Nagram.RoundVideoCamera" = "圆形视频默认摄像头";
+"Nagram.RoundVideoCamera.front" = "前置";
+"Nagram.RoundVideoCamera.back" = "后置";
+"Nagram.ChooseFolderAfterJoining" = "加入群组或频道后选择分组";
+"Nagram.JoinedChatFolderUnavailable" = "无法添加此聊天，分组可能已被删除或达到聊天数量上限。请整理分组后重试。";
 "Nagram.Section.MessageDisplay" = "消息显示";
 "Nagram.Section.MessageList" = "消息列表";
 "Nagram.StayAtLatestMessageAfterRefresh" = "刷新后保持最新消息";
 "Nagram.StayAtLatestMessageAfterRefresh.Footer" = "关闭时遵循 Telegram 原生行为，刷新会保持当前消息位置；开启后，若刷新前位于最新消息边界，则继续显示最新消息。";
 "Nagram.HidePrivateChatActivities" = "隐藏私聊活动状态";
 "Nagram.TranslationProvider.llm" = "LLM";
+"Nagram.STT.Cancel" = "取消测试";
+"Nagram.STT.Error.Download" = "无法下载音频，请重试。";
+"Nagram.STT.Error.InvalidAudio" = "无法准备有效的音频文件。";
+"Nagram.STT.Error.FileTooLarge" = "音频超出 25 MB 上传限制。";
+"Nagram.STT.Error.Cancelled" = "已取消识别，点击可重试。";
+"Nagram.STT.Error.Timeout" = "识别超时，请重试。";
+"Nagram.STT.Error.InvalidResponse" = "API 响应未包含有效的识别文本。";
+"Nagram.STT.Error.NoSpeech" = "未识别到语音。";
+"Nagram.STT.Error.InvalidURL" = "请输入不含用户名和密码的有效 HTTP 或 HTTPS API 地址。OpenAI 必须使用 HTTPS。";
+"Nagram.STT.Error.MissingModel" = "请输入语音转文字模型名称。";
+"Nagram.STT.Error.MissingAPIKey" = "使用 api.openai.com 时必须填写 API Key。";
+"Nagram.STT.Error.InvalidLanguage" = "请输入 zh、en 等两字母语言代码，或留空以自动识别。";
+"Nagram.STT.Error.Keychain" = "无法访问本机钥匙串中的 API Key，请重试保存。";
+"Nagram.Section.STT" = "语音转文字";
+"Nagram.Section.STT.Footer" = "默认保留 Telegram 现有行为。自定义识别会将选中的语音或圆视频上传至配置的服务商，对方可能收取转写费用；不会自动上传消息。";
+"Nagram.STTProvider" = "识别方式";
+"Nagram.STTProvider.default" = "默认";
+"Nagram.STTProvider.openAICompatible" = "自定义（OpenAI 兼容）";
+"Nagram.STTSettings" = "自定义 STT API";
+"Nagram.STTBaseURL" = "Base URL";
+"Nagram.STTEndpoint" = "Endpoint";
+"Nagram.STTAPIKey" = "API Key";
+"Nagram.STTAPIKey.Placeholder" = "OpenAI 必填；本地服务可留空";
+"Nagram.STTModel" = "模型";
+"Nagram.STTLanguage" = "识别语言";
+"Nagram.STTLanguage.Placeholder" = "自动（留空）、zh、en…";
+"Nagram.STTSettings.Footer" = "修改后自动保存。Base URL 和 Endpoint 留空时使用 OpenAI 默认地址；Endpoint 也可以填写完整 URL。API Key 仅保存在本机钥匙串，不通过 iCloud 同步。切回默认后停止使用自定义服务商。";
+"Nagram.STTPrompt" = "识别提示词";
+"Nagram.STTPrompt.Placeholder" = "可选的人名、专有名词等提示";
+"Nagram.STTPrompt.Footer" = "可填写人名和专有名词，帮助提高识别准确度；是否支持取决于所选转写模型。";
+"Nagram.STTTest" = "测试转写";
+"Nagram.STTTesting" = "正在测试转写…";
+"Nagram.STTTest.Footer" = "将内置短音频上传至配置的 API，验证实际转写；不使用聊天中的音频。服务商可能对这次请求收费。";
+"Nagram.STTTestSucceeded" = "转写测试成功";
+"Nagram.STTTestFailed" = "转写测试失败";
+"Nagram.STTSaveFailed" = "API Key 未保存";
+"Nagram.STTRetranscribe" = "重新识别";
+"Nagram.STTCancelTranscription" = "取消识别";
 "Nagram.TranslationLLMSettings" = "LLM 设置";
 "Nagram.TranslationLLMSettings.Footer" = "Base URL 和 Endpoint 为空时使用所选格式的默认地址；Endpoint 也可以填完整 URL。API Key 仅保存在本机。";
 "Nagram.TranslationLLMAPIFormat" = "API 格式";
@@ -64,6 +107,11 @@
 "Nagram.ChatListMessagePreviewStyle.three" = "三行";
 "Nagram.ChatListMessagePreviewStyle.two" = "两行";
 "Nagram.HideSavedAndArchivedMessagesInList" = "在列表中隐藏收藏夹和归档会话信息";
+"Nagram.DisableCommunityChatGrouping" = "禁用社区会话合并展示";
+"Nagram.CommunityAvatarTapAction" = "点击社区头像行为";
+"Nagram.CommunityAvatarTapAction.chat" = "始终进入聊天";
+"Nagram.CommunityAvatarTapAction.community" = "始终打开社区";
+"Nagram.CommunityAvatarTapAction.arrow" = "仅在点击头像右下角箭头时打开社区页";
 "Nagram.MessagePlaceholderInSaved" = "这里是您的收藏夹会话";
 "Nagram.MessagePlaceholderInArchived" = "这里是您的归档会话";
 "Nagram.ChatListCompact" = "紧凑会话布局";
@@ -131,7 +179,7 @@
 "Nagram.ICloudSync" = "iCloud 同步";
 "Nagram.ICloudSync.Footer" = "开启后，Nextgram 设置和部分 Telegram 原生本地设置会通过 iCloud 在同一 Apple ID 的设备间同步。关闭不会删除云端已有设置。";
 "Nagram.ForceCopy" = "解除内容保护";
-"Nagram.ForceCopy.Footer" = "开启后，可在设置了内容保护（禁止复制/转发）的对话中复制消息文本、保存图片或视频，并基于图片创建贴纸。付费内容仍受保护。";
+"Nagram.ForceCopy.Footer" = "开启后，可在设置了内容保护（禁止复制/转发）的对话中复制消息文本、保存图片或视频，并基于图片创建贴纸，并允许截图。付费内容与私密聊天仍受保护。";
 "Nagram.MessageMenu" = "消息菜单管理";
 "Nagram.MessageMenu.Header" = "菜单项";
 "Nagram.MessageMenu.Footer" = "点按项目可开关显示，或上移 / 下移调整顺序。少数系统特殊项会保留原位置。";
@@ -287,6 +335,10 @@
 "Nagram.Section.Interface" = "界面";
 "Nagram.HideTabBarPermissionWarnings" = "隐藏标签栏权限警告";
 "Nagram.HideStories" = "隐藏动态";
+"Nagram.Section.Stories" = "动态";
+"Nagram.HideTopStories" = "隐藏顶部动态区域";
+"Nagram.DisableStoryCameraSwipe" = "关闭滑动录制动态";
+"Nagram.DisableChatAvatarStories" = "关闭聊天头像动态";
 "Nagram.ControlHighlight" = "控件高亮";
 "Nagram.GlassTransparency" = "Liquid Glass";
 "Nagram.GlassTransparency.system" = "跟随系统";
@@ -350,7 +402,7 @@
 "Nagram.HideAllChatsFolder" = "隐藏全部会话分组";
 "Nagram.ShowFoldersInShareSheet" = "分享面板显示文件夹";
 "Nagram.Section.Translation" = "翻译";
-"Nagram.Section.Translation.Footer" = "只替换翻译 provider，目标语言跟随 Telegram 原生翻译按钮选择。LLM 支持 OpenAI-compatible 和 Anthropic API 格式；API Key 仅保存在本机。其他 provider 不保留富文本格式。";
+"Nagram.Section.Translation.Footer" = "只替换翻译 provider，目标语言跟随 Telegram 原生翻译按钮选择。LLM 支持 OpenAI-compatible 和 Anthropic API 格式；API Key 仅保存在本机。「保留格式」会把粗体、链接等格式以 HTML 标签发给外部 provider；若译文中出现标签，请关闭。";
 "Nagram.TranslationProvider" = "翻译 Provider";
 "Nagram.TranslationProvider.telegram" = "Telegram";
 "Nagram.TranslationProvider.google" = "Google";
@@ -358,6 +410,7 @@
 "Nagram.TranslationProvider.microsoft" = "Microsoft";
 "Nagram.TranslationProvider.yandex" = "Yandex";
 "Nagram.TranslationProvider.transmart" = "TranSmart";
+"Nagram.TranslationKeepFormatting" = "保留格式";
 "Nagram.TranslateBeforeSend" = "发送前翻译";
 "Nagram.TranslateBeforeSend.Failed" = "翻译失败";
 "Nagram.TranslateBeforeSendTargetLang" = "翻译目标语言";
@@ -477,3 +530,108 @@
 "Nagram.DeletedMessageIndicatorColor" = "标识颜色";
 "Nagram.DeletedMessageIndicatorColor.Placeholder" = "#RRGGBB（留空跟随主题）";
 "Nagram.DeletedMessageSemiTransparent" = "已删除消息半透明";
+
+// MARK: NAGRAM — Session backup / restore (Pyrogram session strings)
+"Nagram.SessionBackup" = "会话备份";
+"Nagram.Section.SessionBackup" = "会话备份";
+"Nagram.SessionBackup.Footer" = "把当前账号导出为 Pyrogram 会话串，或用会话串添加账号。会话串与 Mithka 及其他基于 Pyrogram 的工具通用。
+
+开启 iCloud 钥匙串同步后，备份会同步到你的其他设备，并出现在那些设备的登录页。关闭后备份仅保存在本机。";
+"Nagram.SessionBackup.Title" = "会话备份";
+"Nagram.SessionBackup.Current" = "当前账号";
+"Nagram.SessionBackup.Current.Footer" = "会话串可以在不需要登录验证码的情况下完全访问该账号。拿到它的人能读取你的消息并以你的身份操作。仅存本机的备份不会离开这台设备；iCloud 钥匙串备份还会同步到你的其他设备。";
+"Nagram.SessionBackup.CopySessionString" = "复制会话串";
+"Nagram.SessionBackup.CopySessionString.Warning" = "会话串可在无需登录验证码的情况下完全访问该账号。仅在准备粘贴到你信任的软件时才复制。";
+"Nagram.SessionBackup.CopySessionString.Confirm" = "复制";
+"Nagram.SessionBackup.Copied" = "已复制到剪贴板。";
+"Nagram.SessionBackup.BackUpSynced" = "备份到 iCloud 钥匙串";
+"Nagram.SessionBackup.BackUpLocal" = "仅备份到本机";
+"Nagram.SessionBackup.SaveSucceeded" = "会话已备份。";
+"Nagram.SessionBackup.Import" = "导入会话";
+"Nagram.SessionBackup.Import.Placeholder" = "粘贴 Pyrogram 会话串";
+"Nagram.SessionBackup.Import.Paste" = "从剪贴板粘贴";
+"Nagram.SessionBackup.Import.Action" = "用会话串添加账号";
+"Nagram.SessionBackup.Import.Footer" = "仅在旧客户端已停止使用会话后恢复备份。如需两台设备同时登录，请使用扫码登录。";
+"Nagram.SessionBackup.Import.Warning" = "会话备份仅用于恢复或迁移。请先停止旧客户端，并且之后不要再打开旧客户端；同时使用可能使两台设备的会话都失效。如需两台设备同时登录，请使用扫码登录。仅继续恢复你自己的备份。";
+"Nagram.SessionBackup.Import.Confirm" = "旧客户端已停止";
+"Nagram.SessionBackup.Saved" = "已保存的备份";
+"Nagram.SessionBackup.Saved.Empty" = "暂无已保存的备份。";
+"Nagram.SessionBackup.Saved.Footer" = "点按备份可恢复、复制其会话串或删除。";
+"Nagram.SessionBackup.Storage.Synced" = "iCloud 钥匙串";
+"Nagram.SessionBackup.Storage.Local" = "本机";
+"Nagram.SessionBackup.Restore" = "恢复";
+"Nagram.SessionBackup.Delete" = "删除";
+"Nagram.SessionBackup.DeleteAll" = "删除所有备份";
+"Nagram.SessionBackup.DeleteAll.Warning" = "将从钥匙串中删除所有已保存的会话备份。已登录的账号不受影响。";
+"Nagram.SessionBackup.Import.Short" = "导入会话";
+"Nagram.SessionBackup.Saved.RestoreFooter" = "仅在旧客户端已停止使用会话后恢复备份。如需两台设备同时登录，请使用扫码登录。";
+"Nagram.QrLogin.Title" = "扫码登录";
+"Nagram.QrLogin.Text" = "1. 在已登录的设备上打开 Telegram。\n2. 进入 设置 → 设备 → 关联桌面设备。\n3. 用该设备扫描此二维码并确认。";
+"Nagram.LoginOptions.Title" = "其他登录方式";
+"Nagram.QrLogin.Accepted.Title" = "正在登录";
+"Nagram.QrLogin.Accepted.Text" = "二维码已被接受，正在完成登录…";
+"Nagram.SessionBackup.Import.Progress.Adding" = "正在添加账号…";
+"Nagram.SessionBackup.Import.Progress.Checking" = "正在确认该账号所属的数据中心…";
+"Nagram.SessionBackup.Import.Progress.Moving" = "正在迁移账号到数据中心 %@…";
+"Nagram.SavedAccounts.Title" = "已保存的账号";
+"Nagram.SavedAccounts.MenuItem" = "已保存的账号（%@）";
+"Nagram.SavedAccounts.Header" = "恢复账号";
+"Nagram.SavedAccounts.Footer" = "仅在旧客户端已停止使用会话后恢复备份。如需两台设备同时登录，请使用扫码登录。";
+"Nagram.SavedAccounts.Confirm" = "会话备份仅用于恢复或迁移。请先停止旧客户端，并且之后不要再打开旧客户端；同时使用可能使两台设备的会话都失效。如需两台设备同时登录，请使用扫码登录。仅继续恢复你自己的备份。";
+"Nagram.SavedAccounts.Loading" = "正在查找已保存的账号…";
+"Nagram.SavedAccounts.Empty" = "没有可在本机恢复的已保存账号。";
+"Nagram.QrLogin.Retrying" = "无法获取二维码，正在重试…";
+"Nagram.SessionBackup.ICloud" = "通过 iCloud 钥匙串同步备份";
+
+// Screenshot sharing failures
+"Nagram.Share.PreparationFailed" = "无法读取或处理分享的图片或文件，尚未发送。请重试，或将截图保存到照片后再分享。";
+"Nagram.Share.ReadTimeout" = "截图或文件来源在 30 秒内没有响应，尚未发送。请重试，或将截图保存到照片后再分享。";
+"Nagram.Share.FileTooBig" = "文件过大，无法分享。请选择较小的文件后重试。";
+"Nagram.Share.SendFailed" = "分享未能完成。请先检查目标聊天，再决定是否重试，以免重复发送。";
+
+// Media information
+"Nagram.MediaMetadata.ViewInfo" = "查看信息";
+"Nagram.MediaMetadata.Title" = "媒体信息";
+"Nagram.MediaMetadata.Resolution" = "分辨率";
+"Nagram.MediaMetadata.FileSize" = "文件大小";
+"Nagram.MediaMetadata.Type" = "类型";
+"Nagram.MediaMetadata.Image" = "图片";
+"Nagram.MediaMetadata.Video" = "视频";
+"Nagram.MediaMetadata.Audio" = "音频";
+"Nagram.MediaMetadata.Animation" = "动图";
+"Nagram.MediaMetadata.File" = "文件";
+"Nagram.MediaMetadata.Duration" = "时长";
+"Nagram.MediaMetadata.FrameRate" = "帧率";
+"Nagram.MediaMetadata.Bitrate" = "码率";
+"Nagram.MediaMetadata.Codec" = "编码";
+"Nagram.MediaMetadata.Unknown" = "未知";
+
+"Nagram.SaveSelectionUnavailable" = "部分所选消息已不可用，请重新选择后再收藏。";
+
+"Nagram.CopyImage" = "复制图片";
+"Nagram.ImageCopied" = "图片已复制";
+"Nagram.CopyImageFailed" = "无法复制此图片，请重新下载图片后重试。";
+
+"Nagram.HideFolderUnreadCount" = "隐藏分组标签未读数";
+
+"Nagram.ChatToolsEnabled" = "聊天顶部工具栏";
+"Nagram.ChatTools.search" = "搜索";
+"Nagram.ChatTools.media" = "媒体";
+"Nagram.ChatTools.pinned" = "置顶";
+"Nagram.ChatTools.beginning" = "开头";
+"Nagram.ChatTools.notifications" = "静音";
+"Nagram.ChatTools.unmute" = "取消静音";
+"Nagram.ChatTools.cache" = "清理缓存";
+"Nagram.ChatFolderNoneAvailable" = "没有可添加的分组。请先创建分组，或检查此聊天是否已加入所有分组。";
+
+"Nagram.InviteLinks.BulkRevoke" = "批量撤销邀请链接…";
+"Nagram.InviteLinks.ScopeInfo" = "仅处理额外的非永久邀请链接，主链接不会受到影响。";
+"Nagram.InviteLinks.RevokeAll" = "撤销所有链接";
+"Nagram.InviteLinks.RevokeUnavailable" = "撤销所有不可用链接";
+"Nagram.InviteLinks.ConfirmAll" = "将撤销你创建的全部 %@ 条额外邀请链接。主链接及其他永久链接不会受到影响。此操作无法撤销。";
+"Nagram.InviteLinks.ConfirmUnavailable" = "将撤销 %@ 条已过期或达到使用次数上限的额外邀请链接。主链接、其他永久链接和仍可用的额外链接不会受到影响。此操作无法撤销。";
+"Nagram.InviteLinks.NoAdditional" = "没有可撤销的额外邀请链接。";
+"Nagram.InviteLinks.NoUnavailable" = "没有不可用的额外邀请链接。";
+"Nagram.InviteLinks.FetchFailed" = "无法加载完整的额外邀请链接列表，请稍后重试。";
+"Nagram.InviteLinks.Success" = "已撤销 %@ 条额外邀请链接。";
+"Nagram.InviteLinks.PartialFailure" = "已撤销 %1$@ 条，另有 %2$@ 条撤销失败。列表正在刷新。";

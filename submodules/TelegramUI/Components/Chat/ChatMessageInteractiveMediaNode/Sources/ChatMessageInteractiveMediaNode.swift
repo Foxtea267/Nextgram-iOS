@@ -1,4 +1,5 @@
 import Foundation
+import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Postbox
@@ -35,6 +36,7 @@ import RangeSet
 import GiftItemComponent
 import MediaResources
 import UIKitRuntimeUtils
+import NagramSettings // MARK: NAGRAM
 
 private struct FetchControls {
     let fetch: (Bool) -> Void
@@ -1872,7 +1874,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                     
                     let imageApply = imageLayout(arguments)
                     
-                    return (boundingSize, { transition, synchronousLoads in
+                    return (boundingSize, { [context] transition, synchronousLoads in
                         if let strongSelf = self {
                             strongSelf.context = context
                             strongSelf.message = message
@@ -2015,7 +2017,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                                             autoFetchFullSizeThumbnail: true,
                                             continuePlayingWithoutSoundOnLostAudioSession: isInlinePlayableVideo,
                                             placeholderColor: emptyColor,
-                                            captureProtected: associatedData.isCopyProtectionEnabled || message.isCopyProtected() || isExtendedMedia,
+                                            captureProtected: ((associatedData.isCopyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled) || isExtendedMedia, // MARK: NAGRAM force-copy
                                             storeAfterDownload: { [weak context] in
                                                 guard let context, let peerId else {
                                                     return
@@ -2120,7 +2122,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                                         allowSticker = true
                                     }
                                     
-                                    let animatedStickerNode = DefaultAnimatedStickerNodeImpl()
+                                    let animatedStickerNode = DefaultAnimatedStickerNodeImpl(lottieSettings: context.lottieRenderingSettings)
                                     animatedStickerNode.isUserInteractionEnabled = false
                                     animatedStickerNode.started = {
                                         guard let strongSelf = self else {
@@ -2317,7 +2319,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                             }
                             
                             if let updateImageSignal = updateImageSignal {
-                                strongSelf.imageNode.captureProtected = associatedData.isCopyProtectionEnabled || message.isCopyProtected() || isExtendedMedia
+                                strongSelf.imageNode.captureProtected = ((associatedData.isCopyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled) || isExtendedMedia // MARK: NAGRAM force-copy
                                 strongSelf.imageNode.setSignal(updateImageSignal(synchronousLoads, false), attemptSynchronously: synchronousLoads)
 
                                 var imageDimensions: CGSize?

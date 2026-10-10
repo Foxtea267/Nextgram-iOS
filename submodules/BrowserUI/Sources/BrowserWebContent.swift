@@ -1,4 +1,5 @@
 import Foundation
+import LottieSettings
 import UIKit
 import Display
 import ComponentFlow
@@ -201,6 +202,45 @@ private func computedUserAgent() -> String {
     return DeviceModel.current.isIpad ? "Version/\(osVersion) Safari/605.1.15" : "Version/\(osVersion) Mobile/\(firmwareVersion) Safari/604.1"
 }
 
+// MARK: NAGRAM
+// WebKit throws NSInternalInconsistencyException when a JavaScript panel completion handler is released without being called.
+// That happens whenever the panel is dropped instead of shown (no window to present in) or torn down without an action.
+private final class JavaScriptPanelCompletion<Result> {
+    private var handler: ((Result) -> Void)?
+    private let unansweredResult: Result
+    
+    init(unansweredResult: Result, handler: @escaping (Result) -> Void) {
+        self.unansweredResult = unansweredResult
+        self.handler = handler
+    }
+    
+    func callAsFunction(_ result: Result) {
+        if let handler = self.handler {
+            self.handler = nil
+            handler(result)
+        }
+    }
+    
+    deinit {
+        if let handler = self.handler {
+            let unansweredResult = self.unansweredResult
+            if Thread.isMainThread {
+                handler(unansweredResult)
+            } else {
+                DispatchQueue.main.async {
+                    handler(unansweredResult)
+                }
+            }
+        }
+    }
+}
+
+private extension JavaScriptPanelCompletion where Result == Void {
+    func callAsFunction() {
+        self.callAsFunction(())
+    }
+}
+
 final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKUIDelegate, UIScrollViewDelegate, WKDownloadDelegate {
     private let context: AccountContext
     private var presentationData: PresentationData
@@ -237,6 +277,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     
     private var tempFile: EngineTempBoxFile?
     private var disposeTrustedDomain: (() -> Void)?
+    private var pendingMainFrameUrl: URL?
     
     init(context: AccountContext, presentationData: PresentationData, url: String, preferredConfiguration: WKWebViewConfiguration? = nil) {
         self.context = context
@@ -334,6 +375,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
         
         self._state = BrowserContentState(title: title, url: url, estimatedProgress: 0.1, readingProgress: 0.0, contentType: .webPage)
         self.statePromise = Promise<BrowserContentState>(self._state)
+        self.pendingMainFrameUrl = request?.url
         
         super.init(frame: .zero)
         
@@ -801,7 +843,8 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
                         theme: self.presentationData.theme,
                         title: self.presentationData.strings.Browser_ErrorTitle,
                         text: error.localizedDescription,
-                        insets: insets
+                        insets: insets,
+                        lottieSettings: self.context.lottieRenderingSettings
                     )
                 ),
                 environment: {},
@@ -920,6 +963,13 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
             self.ignoreUpdatesUntilScrollingStopped = true
         }
     }
+
+    private func updatePendingMainFrameUrl(for navigationAction: WKNavigationAction) {
+        guard navigationAction.targetFrame?.isMainFrame == true, let url = navigationAction.request.url, let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) else {
+            return
+        }
+        self.pendingMainFrameUrl = url
+    }
         
     @available(iOS 13.0, *)
     func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction, preferences: WKWebpagePreferences, decisionHandler: @escaping (WKNavigationActionPolicy, WKWebpagePreferences) -> Void) {
@@ -951,10 +1001,12 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
                         }
                         self.context.sharedContext.openExternalUrl(context: self.context, urlContext: .generic, url: url, forceExternal: true, presentationData: self.presentationData, navigationController: nil, dismissInput: {})
                     } else {
+                        self.updatePendingMainFrameUrl(for: navigationAction)
                         decisionHandler(.allow, preferences)
                     }
                 }
             } else {
+                self.updatePendingMainFrameUrl(for: navigationAction)
                 decisionHandler(.allow, preferences)
             }
         }
@@ -992,9 +1044,11 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
                 self.minimize()
                 self.openAppUrl(url)
             } else {
+                self.updatePendingMainFrameUrl(for: navigationAction)
                 decisionHandler(.allow)
             }
         } else {
+            self.updatePendingMainFrameUrl(for: navigationAction)
             decisionHandler(.allow)
         }
     }
@@ -1077,9 +1131,13 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
             completionHandler(.performDefaultHandling, nil)
             return
         }
+        let topLevelUrl = self.pendingMainFrameUrl ?? webView.url
+        guard browserHTTPAuthChallengeMatchesTopLevelOrigin(topLevelUrl: topLevelUrl, protectionSpace: challenge.protectionSpace) else {
+            completionHandler(.cancelAuthenticationChallenge, nil)
+            return
+        }
         var completed = false
-                
-        let host = webView.url?.host ?? ""
+        let host = challenge.protectionSpace.host
         
         let authController = authController(
             sharedContext: self.context.sharedContext,
@@ -1119,6 +1177,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     private var instantPageResources: [Any]?
     
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
+        self.pendingMainFrameUrl = nil
         if let _ = self.currentError {
             self.currentError = nil
             if let (size, insets, fullInsets, safeInsets) = self.validLayout {
@@ -1202,7 +1261,11 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     }
     
     func requestSaveToFiles() {
-        self.webView.evaluateJavaScript("document.contentType") { result, _ in
+        self.webView.evaluateJavaScript("document.contentType") { [weak self] result, _ in
+            guard let self else {
+                return
+            }
+
             guard let contentType = result as? String else {
                 return
             }
@@ -1364,6 +1427,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     
     
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        self.pendingMainFrameUrl = nil
         if [-1003, -1100].contains((error as NSError).code) {
             if let url = (error as NSError).userInfo["NSErrorFailingURLKey"] as? URL, url.absoluteString.hasPrefix("itms-appss:") {
             } else {
@@ -1403,6 +1467,8 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     }
     
     func webView(_ webView: WKWebView, runJavaScriptAlertPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping () -> Void) {
+        // MARK: NAGRAM
+        let completion = JavaScriptPanelCompletion<Void>(unansweredResult: (), handler: { _ in completionHandler() })
         let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
         var completed = false
         
@@ -1414,7 +1480,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
                 .init(title: presentationData.strings.Common_OK, type: .default, action: {
                     if !completed {
                         completed = true
-                        completionHandler()
+                        completion()
                     }
                 })
             ]
@@ -1423,7 +1489,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
             if byOutsideTap {
                 if !completed {
                     completed = true
-                    completionHandler()
+                    completion()
                 }
             }
         }
@@ -1431,6 +1497,8 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     }
 
     func webView(_ webView: WKWebView, runJavaScriptConfirmPanelWithMessage message: String, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (Bool) -> Void) {
+        // MARK: NAGRAM
+        let completion = JavaScriptPanelCompletion<Bool>(unansweredResult: false, handler: completionHandler)
         let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
         var completed = false
         
@@ -1442,13 +1510,13 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
                 .init(title: presentationData.strings.Common_Cancel, action: {
                     if !completed {
                         completed = true
-                        completionHandler(false)
+                        completion(false)
                     }
                 }),
                 .init(title: presentationData.strings.Common_OK, type: .default, action: {
                     if !completed {
                         completed = true
-                        completionHandler(true)
+                        completion(true)
                     }
                 })
             ]
@@ -1457,7 +1525,7 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
             if byOutsideTap {
                 if !completed {
                     completed = true
-                    completionHandler(false)
+                    completion(false)
                 }
             }
         }
@@ -1465,6 +1533,8 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     }
 
     func webView(_ webView: WKWebView, runJavaScriptTextInputPanelWithPrompt prompt: String, defaultText: String?, initiatedByFrame frame: WKFrameInfo, completionHandler: @escaping (String?) -> Void) {
+        // MARK: NAGRAM
+        let completion = JavaScriptPanelCompletion<String?>(unansweredResult: nil, handler: completionHandler)
         var completed = false
         let promptController = promptController(
             context: self.context,
@@ -1475,16 +1545,16 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
                 if !completed {
                     completed = true
                     if let value = value {
-                        completionHandler(value)
+                        completion(value)
                     } else {
-                        completionHandler(nil)
+                        completion(nil)
                     }
                 }
             },
             dismissed: {
                 if !completed {
                     completed = true
-                    completionHandler(nil)
+                    completion(nil)
                 }
             }
         )
@@ -1522,6 +1592,10 @@ final class BrowserWebContent: UIView, BrowserContent, WKNavigationDelegate, WKU
     }
     
     private func presentDownloadConfirmation(fileName: String, proceed: @escaping (Bool) -> Void) {
+        // MARK: NAGRAM
+        // `proceed` owns a WKNavigationDelegate decision handler, which WebKit also requires to be called exactly once.
+        // Without a window the alert is dropped by `present`, so an unanswered confirmation cancels the navigation.
+        let proceed = JavaScriptPanelCompletion<Bool>(unansweredResult: false, handler: proceed)
         let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
         var completed = false
         let alertController = AlertScreen(
@@ -1745,16 +1819,20 @@ private final class ErrorComponent: CombinedComponent {
     let text: String
     let insets: UIEdgeInsets
   
+    let lottieSettings: LottieRenderingSettings
+
     init(
         theme: PresentationTheme,
         title: String,
         text: String,
-        insets: UIEdgeInsets
+        insets: UIEdgeInsets,
+        lottieSettings: LottieRenderingSettings
     ) {
         self.theme = theme
         self.title = title
         self.text = text
         self.insets = insets
+        self.lottieSettings = lottieSettings
     }
     
     static func ==(lhs: ErrorComponent, rhs: ErrorComponent) -> Bool {
@@ -1798,7 +1876,8 @@ private final class ErrorComponent: CombinedComponent {
             
             let animation = animation.update(
                 component: LottieComponent(
-                    content: LottieComponent.AppBundleContent(name: "ChatListNoResults")
+                    content: LottieComponent.AppBundleContent(name: "ChatListNoResults"),
+                    lottieSettings: context.component.lottieSettings
                 ),
                 environment: {},
                 availableSize: CGSize(width: animationSize, height: animationSize),

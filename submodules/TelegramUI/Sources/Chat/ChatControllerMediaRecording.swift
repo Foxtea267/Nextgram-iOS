@@ -6,6 +6,7 @@ import AsyncDisplayKit
 import TelegramCore
 import SafariServices
 import MobileCoreServices
+import NagramSettings // MARK: NAGRAM
 import Intents
 import LegacyComponents
 import TelegramPresentationData
@@ -137,6 +138,7 @@ extension ChatControllerImpl {
                 self.context.sharedContext.mediaManager.audioRecorder(
                     resumeData: resumeData,
                     beginWithTone: beginWithTone,
+                    pauseMusicOnRecording: self.context.sharedContext.currentMediaInputSettings.with({ $0.pauseMusicOnRecording }),
                     applicationBindings: self.context.sharedContext.applicationBindings,
                     beganWithTone: { _ in
                     }
@@ -180,6 +182,8 @@ extension ChatControllerImpl {
                     viewOnceAvailable: viewOnceAvailable,
                     inputPanelFrame: (currentInputPanelFrame, self.chatDisplayNode.inputNode != nil),
                     chatNode: self.chatDisplayNode.historyNode,
+                    // MARK: NAGRAM - Apply the preferred camera when starting a new video message.
+                    initialCameraPosition: NagramSettings.shared.roundVideoCameraValue == .front ? .front : .back,
                     completion: { [weak self] message, silentPosting, scheduleTime, repeatPeriod in
                         guard let self, let videoController = self.videoRecorderValue else {
                             return
@@ -597,12 +601,8 @@ extension ChatControllerImpl {
         
         let insets = layout.insets(options: [.input])
         var screenWidth = layout.size.width
-        if layout.metrics.isTablet {
-            if layout.size.height == layout.deviceMetrics.screenSize.width {
-                screenWidth = layout.deviceMetrics.screenSize.height
-            } else {
-                screenWidth = layout.deviceMetrics.screenSize.width
-            }
+        if layout.metrics.isTablet, let windowSize = layout.metrics.windowSize {
+            screenWidth = windowSize.width
         }
         
         var sideOffset: CGFloat = 18.0

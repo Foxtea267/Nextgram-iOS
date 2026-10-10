@@ -16,6 +16,8 @@ import OpenInExternalAppUI
 import ScreenCaptureDetection
 import UndoUI
 import TranslateUI
+import UrlWhitelist
+import NagramSettings // MARK: NAGRAM
 
 private func tagsForMessage(_ message: Message) -> MessageTags? {
     //TODO:rewrite to take all media (effectiveMedia returns all rich-text media; we stop at the first)
@@ -62,6 +64,17 @@ private func galleryMediaForMedia(media: Media) -> Media? {
 }
 
 func mediaForMessage(message: Message, mediaSubject: GalleryMediaSubject? = nil) -> [(Media, TelegramMediaImage?)] {
+    if case let .richTextMedia(mediaId) = mediaSubject {
+        // The caller named the exact medium (a tap on one block of a rich message), so resolve it by id
+        // instead of falling into the first-match loop below. Returning [] on a miss is deliberate: a
+        // named-but-absent medium must open nothing, never fall back to some other attachment.
+        for media in message.effectiveMedia {
+            if media.id == mediaId, let result = galleryMediaForMedia(media: media) {
+                return [(result, nil)]
+            }
+        }
+        return []
+    }
     //TODO:rewrite to take all media (effectiveMedia returns all rich-text media; we return the first match)
     for media in message.effectiveMedia {
         if let result = galleryMediaForMedia(media: media) {
@@ -291,7 +304,7 @@ public func galleryItemForEntry(
     
     if let image = media as? TelegramMediaImage {
         if let file = image.video {
-            let captureProtected = message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil || peerIsCopyProtected
+            let captureProtected = ((message.isCopyProtected() || peerIsCopyProtected) && !NagramSettings.shared.forceCopyEnabled) || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil // MARK: NAGRAM force-copy
             
             var originData = GalleryItemOriginData(title: message.effectiveAuthor.flatMap(EnginePeer.init)?.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder), timestamp: message.timestamp)
             if Namespaces.Message.allNonRegular.contains(message.id.namespace) {
@@ -348,7 +361,7 @@ public func galleryItemForEntry(
     } else if let file = media as? TelegramMediaFile {
         if file.isVideo {
             let content: UniversalVideoContent
-            let captureProtected = message.isCopyProtected() || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil || peerIsCopyProtected
+            let captureProtected = ((message.isCopyProtected() || peerIsCopyProtected) && !NagramSettings.shared.forceCopyEnabled) || message.containsSecretMedia || message.minAutoremoveOrClearTimeout == viewOnceTimeout || message.paidContent != nil // MARK: NAGRAM force-copy
             if file.isAnimated {
                 content = NativeVideoContent(id: .message(message.stableId, file.fileId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: file), imageReference: mediaImage.flatMap({ ImageMediaReference.message(message: MessageReference(message), media: $0) }), loopVideo: true, enableSound: false, tempFilePath: tempFilePath, captureProtected: captureProtected, storeAfterDownload: generateStoreAfterDownload?(message, file))
             } else {
@@ -478,11 +491,11 @@ public func galleryItemForEntry(
         var content: UniversalVideoContent?
         switch websiteType(of: webpageContent.websiteName) {
         case .instagram where webpageContent.file != nil && webpageContent.image != nil && webpageContent.file!.isVideo:
-            content = NativeVideoContent(id: .message(message.stableId, webpageContent.file?.id ?? webpage.webpageId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: webpageContent.file!), imageReference: webpageContent.image.flatMap({ ImageMediaReference.message(message: MessageReference(message), media: $0) }), streamVideo: .conservative, enableSound: true, captureProtected: message.isCopyProtected() || message.containsSecretMedia || peerIsCopyProtected, storeAfterDownload: nil)
+            content = NativeVideoContent(id: .message(message.stableId, webpageContent.file?.id ?? webpage.webpageId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: webpageContent.file!), imageReference: webpageContent.image.flatMap({ ImageMediaReference.message(message: MessageReference(message), media: $0) }), streamVideo: .conservative, enableSound: true, captureProtected: ((message.isCopyProtected() || peerIsCopyProtected) && !NagramSettings.shared.forceCopyEnabled) || message.containsSecretMedia, /* MARK: NAGRAM force-copy */ storeAfterDownload: nil)
         default:
             if let embedUrl = webpageContent.embedUrl, let image = webpageContent.image {
                 if let file = webpageContent.file, file.isVideo {
-                    content = NativeVideoContent(id: .message(message.stableId, file.fileId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: file), imageReference: mediaImage.flatMap({ ImageMediaReference.message(message: MessageReference(message), media: $0) }), streamVideo: .conservative, loopVideo: loopVideos, tempFilePath: tempFilePath, captureProtected: message.isCopyProtected() || message.containsSecretMedia || peerIsCopyProtected, storeAfterDownload: generateStoreAfterDownload?(message, file))
+                    content = NativeVideoContent(id: .message(message.stableId, file.fileId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: file), imageReference: mediaImage.flatMap({ ImageMediaReference.message(message: MessageReference(message), media: $0) }), streamVideo: .conservative, loopVideo: loopVideos, tempFilePath: tempFilePath, captureProtected: ((message.isCopyProtected() || peerIsCopyProtected) && !NagramSettings.shared.forceCopyEnabled) || message.containsSecretMedia, /* MARK: NAGRAM force-copy */ storeAfterDownload: generateStoreAfterDownload?(message, file))
                 } else if URL(string: embedUrl)?.pathExtension == "mp4" {
                     content = SystemVideoContent(userLocation: .peer(message.id.peerId), url: embedUrl, imageReference: .webPage(webPage: WebpageReference(webpage), media: image), dimensions: webpageContent.embedSize?.cgSize ?? CGSize(width: 640.0, height: 640.0), duration: webpageContent.duration.flatMap(Double.init) ?? 0.0)
                 }
@@ -1200,7 +1213,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
                         let actionSheet = ActionSheetController(presentationData: presentationData)
                         
                         var items: [ActionSheetItem] = []
-                        items.append(ActionSheetTextItem(title: cleanUrl))
+                        items.append(ActionSheetTextItem(title: displayUrlRevealingLoginPart(url) ?? cleanUrl))
                         items.append(ActionSheetButtonItem(title: openText, color: .accent, action: { [weak actionSheet] in
                             actionSheet?.dismissAnimated()
                             if let strongSelf = self {
@@ -1973,7 +1986,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
             if let centralItemNode = self.galleryNode.pager.centralItemNode(), let itemSize = centralItemNode.contentSize() {
                 centralItemNode.adjustForPreviewing()
                 self.preferredContentSize = itemSize.aspectFitted(layout.size)
-                self.containerLayoutUpdated(ContainerViewLayout(size: self.preferredContentSize, metrics: LayoutMetrics(), deviceMetrics: layout.deviceMetrics, intrinsicInsets: UIEdgeInsets(), safeInsets: UIEdgeInsets(), additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: nil, inputHeightIsInteractivellyChanging: false, inVoiceOver: false), transition: .immediate)
+                self.containerLayoutUpdated(ContainerViewLayout(size: self.preferredContentSize, metrics: LayoutMetrics(), deviceMetrics: layout.deviceMetrics, intrinsicInsets: UIEdgeInsets(), safeInsets: UIEdgeInsets(), additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: nil, inputHeightIsInteractivellyChanging: false, inVoiceOver: false, presentedInFormSheet: false), transition: .immediate)
             }
         }
     }

@@ -3,7 +3,9 @@ import Security
 
 // MARK: NAGRAM — Local-only storage for LLM translation credentials.
 enum NagramTranslationLLMKeychain {
-    private static let service = "jp.foxtea.nextgram.translation.llm"
+    private static let service = NagramDemoMode.isEnabled
+        ? "jp.foxtea.nextgram.translation.llm.demo"
+        : "jp.foxtea.nextgram.translation.llm"
     private static let account = "api-key"
     private static let legacyDefaultsKey = "nagram.translationLLMAPIKey"
 
@@ -12,16 +14,16 @@ enum NagramTranslationLLMKeychain {
             if let value = self.read(), !value.isEmpty {
                 return value
             }
-            let legacyValue = UserDefaults.standard.string(forKey: self.legacyDefaultsKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let legacyValue = NagramDemoMode.userDefaults.string(forKey: self.legacyDefaultsKey)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             if !legacyValue.isEmpty {
                 self.write(legacyValue)
-                UserDefaults.standard.removeObject(forKey: self.legacyDefaultsKey)
+                NagramDemoMode.userDefaults.removeObject(forKey: self.legacyDefaultsKey)
             }
             return legacyValue
         }
         set {
             let value = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            UserDefaults.standard.removeObject(forKey: self.legacyDefaultsKey)
+            NagramDemoMode.userDefaults.removeObject(forKey: self.legacyDefaultsKey)
             if value.isEmpty {
                 self.delete()
             } else {

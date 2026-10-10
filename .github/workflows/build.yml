@@ -62,7 +62,7 @@ jobs:
   build:
     name: Build ${{ matrix.variant }} compatibility IPA
     needs: prepare
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -94,11 +94,15 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Select Xcode 26
+      - name: Select upstream Xcode toolchain
         run: |
           set -euo pipefail
-          XC="$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)"
-          test -n "$XC"
+          XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
+          XC="/Applications/Xcode_${XCODE_VERSION}.app"
+          if [[ ! -d "$XC" ]]; then
+            echo "::error::The runner is missing upstream Xcode ${XCODE_VERSION}."
+            exit 1
+          fi
           sudo xcode-select -s "$XC/Contents/Developer"
           xcodebuild -version
 
@@ -118,6 +122,13 @@ jobs:
         run: |
           cat > local.bazelrc <<'EOF'
           build --//Telegram:disableExtensions
+          # MARK: NEXTGRAM — Match upstream Xcode 27 / clang compatibility flags.
+          build --features=no_include_scanning
+          build --host_features=no_include_scanning
+          build --copt=-Wno-error
+          build --cxxopt=-Wno-error
+          build --objccopt=-Wno-error
+          build --@build_bazel_rules_swift//swift:copt=-no-warnings-as-errors
           EOF
 
       - name: Write build configuration
@@ -308,6 +319,9 @@ jobs:
             echo
             echo "Nextgram version: ${NEXTGRAM_RELEASE_VERSION}"
             echo "Nagram base version: ${NEXTGRAM_APP_VERSION}"
+            echo "已同步 Nagram / Telegram 13.0：翻译请求限流与格式保留、设置搜索生命周期、聊天布局及上游修复。"
+            echo "保留 Nextgram 聊天筛选、删除消息拦截、编辑历史、音乐搜索及其他自定义功能。"
+            echo "构建工具链升级至 Xcode 27 / Bazel 9.2。"
             echo
             echo "## 选择安装包 / Choose a compatibility IPA"
             echo

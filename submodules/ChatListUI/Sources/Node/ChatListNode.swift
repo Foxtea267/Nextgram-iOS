@@ -1,4 +1,5 @@
 import Foundation
+import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -647,7 +648,12 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                     var isCommunity = false
                     if let peer = chatPeer, case let .channel(channel) = peer, channel.isForumOrMonoForum {
                         isForum = true
-                        if editing {
+                        // A forum can only be selected via one of its topics in pickers that forward
+                        // INTO a chat (isSelecting == false, e.g. forward/share). Pickers that merely
+                        // collect peer ids (isSelecting == true: privacy exceptions, folder include /
+                        // exclude, auto-delete, paid-message fees) need no topic, so the forum itself
+                        // stays selectable there.
+                        if editing && !isSelecting {
                             enabled = false
                         }
                     } else if isIncludedCommunityContainer(chatPeer, filter: filter) {
@@ -658,7 +664,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                     }
                 
                     var selectable = editing
-                    if isForum || isCommunity {
+                    if (isForum && !isSelecting) || isCommunity {
                         selectable = false
                     }
 
@@ -684,7 +690,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
                                     nodeInteraction.peerSelected(chatPeer, nil, threadId, nil, false)
                                 }
                             }
-                        }, disabledAction: ((isForum || isCommunity) && editing) && !peerEntry.requiresPremiumForMessaging ? nil : { _ in
+                        }, disabledAction: (((isForum && !isSelecting) || isCommunity) && editing) && !peerEntry.requiresPremiumForMessaging ? nil : { _ in
                             if let chatPeer = chatPeer {
                                 nodeInteraction.disabledPeerSelected(chatPeer, threadId, peerEntry.requiresPremiumForMessaging ? .premiumRequired : .generic)
                             }
@@ -797,7 +803,7 @@ private func mappedInsertEntries(context: AccountContext, nodeInteraction: ChatL
         case let .ArchiveIntro(presentationData):
             return ListViewInsertItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListArchiveInfoItem(theme: presentationData.theme, strings: presentationData.strings), directionHint: entry.directionHint)
         case let .EmptyIntro(presentationData):
-            return ListViewInsertItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListEmptyInfoItem(theme: presentationData.theme, strings: presentationData.strings), directionHint: entry.directionHint)
+            return ListViewInsertItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListEmptyInfoItem(theme: presentationData.theme, strings: presentationData.strings, lottieSettings: context.lottieRenderingSettings), directionHint: entry.directionHint)
         case let .SectionHeader(presentationData, displayHide):
             return ListViewInsertItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListSectionHeaderItem(theme: presentationData.theme, strings: presentationData.strings, hide: displayHide ? {
                 hideChatListContacts(context: context)
@@ -964,20 +970,26 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                         }
                         
                         var isForum = false
+                        var isCommunity = false
                         if let peer = chatPeer, case let .channel(channel) = peer, channel.isForumOrMonoForum {
                             isForum = true
-                            if editing {
+                            // A forum can only be selected via one of its topics in pickers that forward
+                            // INTO a chat (isSelecting == false, e.g. forward/share). Pickers that merely
+                            // collect peer ids (isSelecting == true: privacy exceptions, folder include /
+                            // exclude, auto-delete, paid-message fees) need no topic, so the forum itself
+                            // stays selectable there.
+                            if editing && !isSelecting {
                                 enabled = false
                             }
                         } else if isIncludedCommunityContainer(chatPeer, filter: filter) {
-                            isForum = true
+                            isCommunity = true
                             if editing {
                                 enabled = false
                             }
                         }
                     
                         var selectable = editing
-                        if isForum {
+                        if (isForum && !isSelecting) || isCommunity {
                             selectable = false
                         }
                     
@@ -1003,7 +1015,7 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
                                         nodeInteraction.peerSelected(chatPeer, nil, threadId, nil, false)
                                     }
                                 }
-                            }, disabledAction: (isForum && editing) && !peerEntry.requiresPremiumForMessaging ? nil : { _ in
+                            }, disabledAction: (((isForum && !isSelecting) || isCommunity) && editing) && !peerEntry.requiresPremiumForMessaging ? nil : { _ in
                                 if let chatPeer = chatPeer {
                                     nodeInteraction.disabledPeerSelected(chatPeer, threadId, peerEntry.requiresPremiumForMessaging ? .premiumRequired : .generic)
                                 }
@@ -1116,7 +1128,7 @@ private func mappedUpdateEntries(context: AccountContext, nodeInteraction: ChatL
             case let .ArchiveIntro(presentationData):
                 return ListViewUpdateItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListArchiveInfoItem(theme: presentationData.theme, strings: presentationData.strings), directionHint: entry.directionHint)
             case let .EmptyIntro(presentationData):
-                return ListViewUpdateItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListEmptyInfoItem(theme: presentationData.theme, strings: presentationData.strings), directionHint: entry.directionHint)
+                return ListViewUpdateItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListEmptyInfoItem(theme: presentationData.theme, strings: presentationData.strings, lottieSettings: context.lottieRenderingSettings), directionHint: entry.directionHint)
             case let .SectionHeader(presentationData, displayHide):
                 return ListViewUpdateItem(index: entry.index, previousIndex: entry.previousIndex, item: ChatListSectionHeaderItem(theme: presentationData.theme, strings: presentationData.strings, hide: displayHide ? {
                     hideChatListContacts(context: context)
@@ -1490,6 +1502,7 @@ public final class ChatListNode: ListViewImpl {
         
         self.verticalScrollIndicatorColor = theme.list.scrollIndicatorColor
         self.verticalScrollIndicatorFollowsOverscroll = true
+        self.verticalScrollIndicatorRespectsSideInsets = true
         
         self.keepMinimalScrollHeightWithTopInset = self.scrollHeightTopInset
         
@@ -2001,6 +2014,12 @@ public final class ChatListNode: ListViewImpl {
         chatListViewUpdate = combineLatest(queue: .mainQueue(), chatListViewUpdate, nagramRegexFiltersSignal(), nagramBoolSignal("nagram.hideSavedAndArchivedMessagesInList", defaultValue: false), nagramBoolSignal("nagram.chatListUnreadFirst", defaultValue: false), nagramBoolSignal("nagram.chatListOldestFirst", defaultValue: false)) // MARK: NAGRAM — 预览与排序设置变化时重算对话列表。 // MARK: NEXTGRAM
         |> map { update, _, _, _, _ in
             return update
+        }
+        |> mapToSignal { update, filter -> Signal<(ChatListNodeViewUpdate, ChatListFilter?), NoError> in
+            return nagramChatListNodeViewUpdateWithPreviousUnhiddenMessages(account: context.account, update: update)
+            |> map { updatedView in
+                return (updatedView, filter)
+            }
         }
         
         let previousState = Atomic<ChatListNodeState>(value: self.currentState)
@@ -3734,7 +3753,7 @@ public final class ChatListNode: ListViewImpl {
             return false
         }
         switch self.visibleContentOffset() {
-        case let .known(value) where abs(value) < self.navigationScrollHeightTopInset - 1.0:
+        case let .known(value) where value < self.navigationScrollHeightTopInset - 1.0: // MARK: NAGRAM — Expanded stories keep navigation visible.
             return false
         case .none:
             return false
@@ -3769,7 +3788,7 @@ public final class ChatListNode: ListViewImpl {
         }
         var scrollToItem: ListViewScrollToItem?
         switch self.visibleContentOffset() {
-        case let .known(value) where abs(value) < self.navigationScrollHeightTopInset - 1.0:
+        case let .known(value) where value < self.navigationScrollHeightTopInset - 1.0: // MARK: NAGRAM
             if isNavigationHidden {
                 scrollToItem = ListViewScrollToItem(index: 0, position: .top(-self.navigationScrollHeightTopInset), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
             }

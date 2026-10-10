@@ -13,6 +13,7 @@ import SemanticStatusNode
 import FileMediaResourceStatus
 import CheckNode
 import MusicAlbumArtResources
+import NagramTranscription // MARK: NAGRAM
 import AudioBlob
 import ContextUI
 import ChatPresentationInterfaceState
@@ -352,16 +353,35 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
         guard let arguments = self.arguments, let context = self.context, let message = self.message else {
             return
         }
+
+        // MARK: NAGRAM — Custom STT uses its own provider limits while preserving media boundaries.
+        let useCustomTranscription = NagramTranscriptionService.isEnabled
+        let clientTranscription = message.attributes.first(where: { $0 is AudioTranscriptionMessageAttribute }) as? AudioTranscriptionMessageAttribute
+        let useManagedTranscription = useCustomTranscription || (clientTranscription?.requestId != nil && (clientTranscription?.source == .local || clientTranscription?.source == .external))
+        if useManagedTranscription {
+            guard message.id.namespace == Namespaces.Message.Cloud,
+                  message.id.peerId.namespace != Namespaces.Peer.SecretChat,
+                  message.minAutoremoveOrClearTimeout != viewOnceTimeout,
+                  !arguments.presentationData.isPreview,
+                  arguments.file.isVoice || arguments.file.isInstantVideo else {
+                return
+            }
+        }
         
-        if !context.isPremium, case .inProgress = self.audioTranscriptionState {
-            return
+        if !useCustomTranscription && !context.isPremium, case .inProgress = self.audioTranscriptionState {
+            // MARK: NAGRAM — A persisted client request can outlive its task after a process restart.
+            let canRetryInterruptedRequest = clientTranscription?.requestId != nil && clientTranscription?.id == 0 && clientTranscription?.isPending == true && self.transcribeDisposable == nil && !NagramTranscriptionService.shared.isTranscribing(context: context, messageId: message.id)
+            if !canRetryInterruptedRequest {
+                return
+            }
         }
         
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         let premiumConfiguration = PremiumConfiguration.with(appConfiguration: arguments.context.currentAppConfiguration.with { $0 })
         
         let transcriptionText = self.forcedAudioTranscriptionText ?? transcribedText(message: EngineMessage(message))
-        if transcriptionText == nil && !arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
+        // MARK: NAGRAM — Telegram subscriptions and trial quotas apply only to the default provider.
+        if !useCustomTranscription && transcriptionText == nil && !arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
             if premiumConfiguration.audioTransciptionTrialCount > 0 {
                 if !arguments.associatedData.isPremium {
                     if self.presentAudioTranscriptionTooltip(finished: false) {
@@ -420,7 +440,33 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                 self.audioTranscriptionState = .inProgress
                 self.requestUpdateLayout(true)
                 
-                if context.sharedContext.immediateExperimentalUISettings.localTranscription {
+                // MARK: NAGRAM — The service owns the request; this node only observes its state.
+                if useManagedTranscription {
+                    let messageId = message.id
+                    let disposable = MetaDisposable()
+                    self.transcribeDisposable = disposable
+                    disposable.set((NagramTranscriptionService.shared.transcribe(context: context, messageId: messageId, force: !useCustomTranscription)
+                    |> deliverOnMainQueue).startStrict(next: { [weak self] state in
+                        guard let self, self.message?.id == messageId else {
+                            return
+                        }
+                        switch state {
+                        case .inProgress:
+                            self.audioTranscriptionState = .inProgress
+                        case .completed:
+                            self.transcribeDisposable?.dispose()
+                            self.transcribeDisposable = nil
+                            self.audioTranscriptionState = .expanded
+                        case let .failed(error):
+                            self.transcribeDisposable?.dispose()
+                            self.transcribeDisposable = nil
+                            self.audioTranscriptionState = .collapsed
+                            self.arguments?.controllerInteraction.displayUndo(.info(title: nil, text: error, timeout: nil, customUndoText: nil))
+                        }
+                        self.requestUpdateLayout(true)
+                        self.updateTranscriptionExpanded?(self.audioTranscriptionState)
+                    }))
+                } else if context.sharedContext.immediateExperimentalUISettings.localTranscription {
                     let appLocale = presentationData.strings.baseLanguageCode
                     
                     let signal: Signal<LocallyTranscribedAudio?, NoError> = context.engine.data.get(TelegramEngine.EngineData.Item.Messages.Message(id: message.id))
@@ -574,8 +620,8 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
         let audioTranscriptionState = self.audioTranscriptionState
         let forcedAudioTranscriptionText = self.forcedAudioTranscriptionText
         
-        return { arguments in
-            return (CGFloat.greatestFiniteMagnitude, { constrainedSize in
+        return { [weak self] arguments in
+            return (CGFloat.greatestFiniteMagnitude, { [weak self] constrainedSize in
                 let titleFont = Font.regular(floor(arguments.presentationData.fontSize.baseDisplaySize * 16.0 / 17.0))
                 let descriptionFont = Font.with(size: floor(arguments.presentationData.fontSize.baseDisplaySize * 13.0 / 17.0), design: .regular, weight: .regular, traits: [.monospacedNumbers])
                 let durationFont = Font.regular(floor(arguments.presentationData.fontSize.baseDisplaySize * 11.0 / 17.0))
@@ -784,12 +830,20 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                 var textString: NSAttributedString?
                 var updatedAudioTranscriptionState: AudioTranscriptionButtonComponent.TranscriptionState?
                 
+                // MARK: NAGRAM — Existing transcripts stay readable when the provider changes.
+                let transcribedText = forcedAudioTranscriptionText ?? transcribedText(message: EngineMessage(arguments.message))
+
                 var displayTranscribe = false
                 if Namespaces.Message.allNonRegular.contains(arguments.message.id.namespace) {
                     displayTranscribe = false
                 } else if arguments.message.id.peerId.namespace != Namespaces.Peer.SecretChat && !isViewOnceMessage && !arguments.presentationData.isPreview {
                     let premiumConfiguration = PremiumConfiguration.with(appConfiguration: arguments.context.currentAppConfiguration.with { $0 })
-                    if arguments.associatedData.isPremium || arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
+                    // MARK: NAGRAM — Custom STT is available without Telegram Premium or a trial.
+                    if let result = transcribedText, case .success = result {
+                        displayTranscribe = true
+                    } else if NagramTranscriptionService.isEnabled {
+                        displayTranscribe = arguments.message.id.namespace == Namespaces.Message.Cloud
+                    } else if arguments.associatedData.isPremium || arguments.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
                         displayTranscribe = true
                     } else if premiumConfiguration.audioTransciptionTrialCount > 0 {
                         if arguments.incoming {
@@ -806,8 +860,6 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                     }
                 }
                 
-                let transcribedText = forcedAudioTranscriptionText ?? transcribedText(message: EngineMessage(arguments.message))
-                
                 switch audioTranscriptionState {
                 case .inProgress:
                     if transcribedText != nil {
@@ -818,8 +870,17 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                 }
                 
                 let currentTime = Int32(Date().timeIntervalSince1970)
-                if transcribedText == nil, let cooldownUntilTime = arguments.associatedData.audioTranscriptionTrial.cooldownUntilTime, cooldownUntilTime > currentTime {
+                // MARK: NAGRAM — Switching to custom STT clears a Telegram trial lock.
+                if NagramTranscriptionService.isEnabled, case .locked = audioTranscriptionState {
+                    updatedAudioTranscriptionState = .collapsed
+                }
+                if !NagramTranscriptionService.isEnabled, transcribedText == nil, let cooldownUntilTime = arguments.associatedData.audioTranscriptionTrial.cooldownUntilTime, cooldownUntilTime > currentTime {
                     updatedAudioTranscriptionState = .locked
+                }
+                // MARK: NAGRAM — Restore progress for menu requests and nodes recreated after scrolling.
+                if let transcription = arguments.message.attributes.first(where: { $0 is AudioTranscriptionMessageAttribute }) as? AudioTranscriptionMessageAttribute,
+                   transcription.requestId != nil && transcription.isPending && transcription.text.isEmpty {
+                    updatedAudioTranscriptionState = .inProgress
                 }
                 
                 let effectiveAudioTranscriptionState = updatedAudioTranscriptionState ?? audioTranscriptionState
@@ -1028,7 +1089,7 @@ public final class ChatMessageInteractiveFileNode: ASDisplayNode {
                     viewOnceIconImage = principalGraphics.radialIndicatorViewOnceIcon
                 }
                 
-                return (minLayoutWidth, { boundingWidth in
+                return (minLayoutWidth, { [weak self] boundingWidth in
                     let titleAndDescriptionHeight = titleLayout.size.height - 1.0 + descriptionLayout.size.height
                     
                     let normHeight: CGFloat

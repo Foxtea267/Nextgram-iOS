@@ -1,4 +1,5 @@
 import XCTest
+import UIKit
 import NagramSettings // MARK: NAGRAM
 import TelegramCore
 import Postbox
@@ -24,6 +25,44 @@ final class ChatInputContentConversionTests: XCTestCase {
         XCTAssertTrue(nagramNormalizeTextInputLineBreaks(input) === input)
     }
 
+    /// End-to-end guard for the LIVE legacy composer path: after `setInputContent` sets the field's
+    /// `attributedText = attributedString(from: content)`, the field runs `refreshChatTextInputAttributes`
+    /// (→ `refreshBlockQuotes`) as decoration. This verifies that a one-blockQuote multi-line quote's single
+    /// contiguous `.block` run SURVIVES that decoration (does not re-split at the interior newline), which is
+    /// what determines the number of on-screen quote boxes.
+    func test_liveDecoration_multiLineQuote_staysOneContiguousBlock() {
+        // What `attributedString(from: .blockQuote([para AAA, para BBB]))` produces: "AAA\nBBB" with ONE
+        // `.block` object over the whole range (interior "\n" included).
+        let content = ChatInputContent(blocks: [
+            .blockQuote(ChatInputBlockQuote(
+                content: ChatInputContent(blocks: [
+                    .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "AAA")])),
+                    .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "BBB")])),
+                ]),
+                collapsed: false))
+        ])
+        let textView = UITextView()
+        textView.attributedText = attributedString(from: content)
+
+        refreshChatTextInputAttributes(
+            context: NSObject(),
+            textView: textView,
+            primaryTextColor: .black,
+            accentTextColor: .blue,
+            baseFontSize: 17.0,
+            spoilersRevealed: false,
+            availableEmojis: Set(),
+            emojiViewProvider: nil,
+            makeCollapsedQuoteAttachment: nil)
+
+        XCTAssertEqual(textView.textStorage.string, "AAA\nBBB")
+        var ranges: [NSRange] = []
+        textView.textStorage.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: textView.textStorage.length), options: []) { value, range, _ in
+            if let v = value as? ChatTextInputTextQuoteAttribute, case .quote = v.kind { ranges.append(range) }
+        }
+        XCTAssertEqual(ranges, [NSRange(location: 0, length: 7)], "decoration must keep ONE contiguous quote box, not two")
+    }
+
     // MARK: - Task 4: attributedString(from:)
 
     func test_attributedString_emitsSemanticAttributes() {
@@ -34,6 +73,28 @@ final class ChatInputContentConversionTests: XCTestCase {
         let s = attributedString(from: content)
         XCTAssertEqual(s.string, "Hi")
         XCTAssertNotNil(s.attribute(ChatTextInputAttributes.bold, at: 0, effectiveRange: nil))
+    }
+
+    func test_attributedString_renderListMarkers_prependsBulletAndNumberText() {
+        let content = ChatInputContent(blocks: [
+            .paragraph(ChatInputParagraph(style: .body, list: ChatInputListMembership(marker: .bullet, level: 0), runs: [ChatInputRun(text: "First")])),
+            .paragraph(ChatInputParagraph(style: .body, list: ChatInputListMembership(marker: .bullet, level: 0), runs: [ChatInputRun(text: "Second")])),
+            .paragraph(ChatInputParagraph(style: .body, list: ChatInputListMembership(marker: .ordered, level: 0), runs: [ChatInputRun(text: "One")])),
+            .paragraph(ChatInputParagraph(style: .body, list: ChatInputListMembership(marker: .ordered, level: 0), runs: [ChatInputRun(text: "Two")])),
+        ])
+        // Default (unchanged legacy behavior): list membership is ignored, markers not rendered.
+        XCTAssertEqual(attributedString(from: content).string, "First\nSecond\nOne\nTwo")
+        // Opt-in: markers rendered as literal text (bullet, then a fresh 1./2. ordered run).
+        XCTAssertEqual(attributedString(from: content, renderListMarkers: true).string, "• First\n• Second\n1. One\n2. Two")
+    }
+
+    func test_attributedString_renderListMarkers_orderedResetsAfterNonListParagraph() {
+        let content = ChatInputContent(blocks: [
+            .paragraph(ChatInputParagraph(style: .body, list: ChatInputListMembership(marker: .ordered, level: 0), runs: [ChatInputRun(text: "A")])),
+            .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "gap")])),
+            .paragraph(ChatInputParagraph(style: .body, list: ChatInputListMembership(marker: .ordered, level: 0), runs: [ChatInputRun(text: "B")])),
+        ])
+        XCTAssertEqual(attributedString(from: content, renderListMarkers: true).string, "1. A\ngap\n1. B")
     }
 
     func test_attributedString_blocksJoinedByNewline_andCodeContiguous() {
@@ -73,10 +134,106 @@ final class ChatInputContentConversionTests: XCTestCase {
         }
         XCTAssertEqual(ranges, [NSRange(location: 2, length: 3)], "blockQuote must emit as one contiguous range incl. the interior newline")
         XCTAssertEqual(objects.count, 1, "the whole blockQuote emits one attribute object")
-        // Note: the NSAttributedString → model round-trip is LOSSY for a multi-paragraph blockQuote: the plain-text
-        // projection ("a\nb") is split back into two paragraph ranges, each becoming its own single-paragraph
-        // `.blockQuote`, so the inverse has two `.blockQuote` blocks instead of one multi-paragraph `.blockQuote`.
-        // This is documented lossy behavior of the legacy NSAttributedString path.
+        // The inverse round-trip is lossless: the one contiguous `.block` range parses back to a single
+        // multi-paragraph `.blockQuote` (see `test_chatInputContent_contiguousMultiLineQuote_mapsToSingleBlockQuote`
+        // and `test_modelRoundTrip_identity_multiParagraphBlockQuote`).
+        // MARK: NAGRAM — the inverse keeps the multi-paragraph blockQuote whole (#I0033).
+        XCTAssertEqual(chatInputContent(from: s), content)
+    }
+
+    // MARK: NAGRAM — #I0033: one quote attribute spanning several lines parses to ONE `.blockQuote`.
+    func test_chatInputContent_multiLineQuoteAttr_mapsToOneBlockQuote() {
+        let s = NSMutableAttributedString(string: "before\nq1\nq2\n\nq3\nafter")
+        // "before"=[0,6] \n=6 "q1"=[7,2] \n=9 "q2"=[10,2] \n=12 \n=13 "q3"=[14,2] \n=16 "after"=[17,5]
+        s.addAttribute(ChatTextInputAttributes.block,
+            value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false),
+            range: NSRange(location: 7, length: 9))
+
+        let parsed = chatInputContent(from: s)
+        XCTAssertEqual(parsed, ChatInputContent(blocks: [
+            .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "before")])),
+            .blockQuote(ChatInputBlockQuote(
+                content: ChatInputContent(blocks: [
+                    .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "q1")])),
+                    .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "q2")])),
+                    .paragraph(ChatInputParagraph(style: .body, runs: [])),
+                    .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "q3")])),
+                ]),
+                collapsed: false)),
+            .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "after")])),
+        ]))
+
+        let back = attributedString(from: parsed)
+        XCTAssertEqual(back.string, s.string)
+        var ranges: [NSRange] = []
+        back.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: back.length), options: []) { value, range, _ in
+            if let v = value as? ChatTextInputTextQuoteAttribute, case .quote = v.kind {
+                ranges.append(range)
+            }
+        }
+        XCTAssertEqual(ranges, [NSRange(location: 7, length: 9)], "the quote stays one contiguous range")
+        XCTAssertEqual(chatInputContent(from: back), parsed, "the round-trip is stable")
+
+        let quoteEntityRanges = generateChatInputTextEntities(back).compactMap { entity -> Range<Int>? in
+            if case .BlockQuote = entity.type {
+                return entity.range
+            }
+            return nil
+        }
+        XCTAssertEqual(quoteEntityRanges, [7 ..< 16], "the message carries a single blockquote entity")
+    }
+
+    // MARK: NAGRAM — a quoted trailing "\n" does not pull the empty last line into the quote.
+    func test_chatInputContent_quoteAttrWithTrailingNewline_keepsLastLineOutside() {
+        let s = NSMutableAttributedString(string: "q1\n")
+        s.addAttribute(ChatTextInputAttributes.block,
+            value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false),
+            range: NSRange(location: 0, length: 3))
+
+        XCTAssertEqual(chatInputContent(from: s), ChatInputContent(blocks: [
+            .blockQuote(ChatInputBlockQuote(
+                content: ChatInputContent(blocks: [.paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "q1")]))]),
+                collapsed: false)),
+            .paragraph(ChatInputParagraph(style: .body, runs: [])),
+        ]))
+    }
+
+    /// The BUG regression guard: a single `.block`/.quote object spanning an interior "\n" (how the legacy
+    /// UITextView represents a multi-line quote) must parse to ONE multi-paragraph `.blockQuote`, not one
+    /// `.blockQuote` per line. Previously the per-"\n" split fragmented it, so a save/restore round-trip
+    /// (persisted `content`) turned one quote into several.
+    func test_chatInputContent_contiguousMultiLineQuote_mapsToSingleBlockQuote() {
+        let s = NSMutableAttributedString(string: "AAA\nBBB")
+        s.addAttribute(ChatTextInputAttributes.block,
+            value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false),
+            range: NSRange(location: 0, length: 7))
+        let parsed = chatInputContent(from: s)
+        XCTAssertEqual(parsed.blocks.count, 1, "one contiguous quote run → one blockQuote")
+        guard case let .blockQuote(bq) = parsed.blocks[0] else { XCTFail("expected a blockQuote"); return }
+        XCTAssertFalse(bq.collapsed)
+        XCTAssertEqual(bq.content.blocks.count, 2, "the interior newline becomes two inner paragraphs")
+        // And the projection back emits a SINGLE contiguous quote range (one box), not two.
+        let back = attributedString(from: parsed)
+        XCTAssertEqual(back.string, "AAA\nBBB")
+        var ranges: [NSRange] = []
+        back.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: back.length), options: []) { value, range, _ in
+            if let v = value as? ChatTextInputTextQuoteAttribute, case .quote = v.kind { ranges.append(range) }
+        }
+        XCTAssertEqual(ranges, [NSRange(location: 0, length: 7)], "one quote box, not two")
+    }
+
+    /// A multi-paragraph `.blockQuote` now survives the NSAttributedString round-trip unchanged (was lossy).
+    func test_modelRoundTrip_identity_multiParagraphBlockQuote() {
+        let content = ChatInputContent(blocks: [
+            .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "x")])),
+            .blockQuote(ChatInputBlockQuote(
+                content: ChatInputContent(blocks: [
+                    .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "a")])),
+                    .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "b")])),
+                ]),
+                collapsed: false)),
+        ])
+        XCTAssertEqual(chatInputContent(from: attributedString(from: content)), content)
     }
 
     /// Per-line `.quote`-attributed spans map to separate `.blockQuote` blocks on parse (Task 16b). The resulting

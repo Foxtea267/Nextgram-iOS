@@ -292,6 +292,8 @@ func updateChatPresentationInterfaceStateImpl(
             break
         case .quickReplyMessageInput:
             break
+        case .welcomeMessages:
+            break
         case .businessLinkSetup:
             canHaveUrlPreview = false
         }

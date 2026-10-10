@@ -1,4 +1,5 @@
 import Foundation
+import NagramMediaActions // MARK: NAGRAM
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -30,7 +31,12 @@ import ComponentFlow
 import ComponentDisplayAdapters
 // MARK: NAGRAM
 import NagramMediaMetadata
+import NagramStrings // MARK: NAGRAM
 import NagramSettings
+
+/// Upper bound on the pixel dimensions a full-screen photo is decoded and rasterized at.
+/// Photos larger than this are downscaled to fit; smaller ones are left untouched.
+private let fullScreenImageMaxSize = CGSize(width: 4096.0, height: 4096.0)
 
 enum ChatMediaGalleryThumbnail: Equatable {
     case image(ImageMediaReference)
@@ -253,6 +259,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private let statusDisposable = MetaDisposable()
     private let dataDisposable = MetaDisposable()
     private let recognitionDisposable = MetaDisposable()
+    private let copyImageDisposable = MetaDisposable() // MARK: NAGRAM
     private var status: EngineMediaResource.FetchStatus?
     private var fetchedDimensions: PixelDimensions?
     
@@ -342,6 +349,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.statusDisposable.dispose()
         self.dataDisposable.dispose()
         self.recognitionDisposable.dispose()
+        self.copyImageDisposable.dispose() // MARK: NAGRAM
     }
     
     override func ready() -> Signal<Void, NoError> {
@@ -402,7 +410,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                                 window.rootViewController?.present(controller, animated: true)
                             }
                         case .speak:
-                            if let speechHolder = speakText(context: strongSelf.context, text: string) {
+                            if let speechHolder = speakText(text: string) {
                                 speechHolder.completion = { [weak self, weak speechHolder] in
                                     if let strongSelf = self, strongSelf.currentSpeechHolder == speechHolder {
                                         strongSelf.currentSpeechHolder = nil
@@ -463,7 +471,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.translateToLanguage = translateToLanguage
         self.peerIsCopyProtected = peerIsCopyProtected
         self.isSecret = isSecret
-        self.imageNode.captureProtected = message.id.peerId.namespace == Namespaces.Peer.SecretChat || message.isCopyProtected() || peerIsCopyProtected || isSecret || message.paidContent != nil
+        self.imageNode.captureProtected = message.id.peerId.namespace == Namespaces.Peer.SecretChat || ((message.isCopyProtected() || peerIsCopyProtected) && !NagramSettings.shared.forceCopyEnabled) || isSecret || message.paidContent != nil // MARK: NAGRAM force-copy
         self.updateFooter(animated: false)
         
         var title: String?
@@ -493,10 +501,10 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     
     fileprivate func setImage(userLocation: MediaResourceUserLocation, imageReference: ImageMediaReference) {
         if self.contextAndMedia == nil || !self.contextAndMedia!.1.media.isEqual(to: imageReference.media) {
-            if let largestSize = largestRepresentationForPhoto(imageReference.media) {
-                let displaySize = largestSize.dimensions.cgSize.fitted(CGSize(width: 1280.0, height: 1280.0)).dividedByScreenScale().integralFloor
+            if let largestSize = largestRepresentationForPhoto(imageReference.media, maxSize: PixelDimensions(fullScreenImageMaxSize)) {
+                let displaySize = largestSize.dimensions.cgSize.fitted(fullScreenImageMaxSize).dividedByScreenScale().integralFloor
                 self.imageNode.asyncLayout()(TransformImageArguments(corners: ImageCorners(), imageSize: displaySize, boundingSize: displaySize, intrinsicInsets: UIEdgeInsets()))()
-                let signal: Signal<(TransformImageArguments) -> DrawingContext?, NoError> = chatMessagePhotoInternal(photoData: chatMessagePhotoDatas(postbox: self.context.account.postbox, userLocation: userLocation, photoReference: imageReference, tryAdditionalRepresentations: true, synchronousLoad: false), synchronousLoad: false)
+                let signal: Signal<(TransformImageArguments) -> DrawingContext?, NoError> = chatMessagePhotoInternal(photoData: chatMessagePhotoDatas(postbox: self.context.account.postbox, userLocation: userLocation, photoReference: imageReference, fullRepresentationSize: fullScreenImageMaxSize, tryAdditionalRepresentations: true, synchronousLoad: false), synchronousLoad: false)
                 |> map { [weak self] _, quality, generate -> (TransformImageArguments) -> DrawingContext? in
                     Queue.mainQueue().async {
                         guard let strongSelf = self else {
@@ -738,6 +746,20 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                 })))
                 // MARK: NAGRAM — Allow protected media actions when forceCopyEnabled is enabled.
                 if (NagramSettings.shared.forceCopyEnabled || (!message.isCopyProtected() && !self.peerIsCopyProtected)) && message.paidContent == nil, let media = self.contextAndMedia?.1 {
+                    // MARK: NAGRAM - Copy the full image independently of its caption.
+                    if !self.isSecret && message.id.peerId.namespace != Namespaces.Peer.SecretChat {
+                        items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.CopyImage", self.presentationData.strings.baseLanguageCode), icon: { theme in
+                            generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Copy"), color: theme.contextMenu.primaryColor)
+                        }, action: { [weak self] _, f in
+                            f(.default)
+                            guard let self else {
+                                return
+                            }
+                            self.copyImageDisposable.set(nagramCopyImage(context: context, media: media, userLocation: .peer(message.id.peerId), presentationData: self.presentationData, present: { [weak self] controller in
+                                self?.galleryController()?.present(controller, in: .window(.root))
+                            }))
+                        })))
+                    }
                     items.append(.action(ContextMenuActionItem(text: self.presentationData.strings.Gallery_CreateSticker, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Sticker"), color: theme.actionSheet.primaryTextColor) }, action: { [weak self] _, f in
                         f(.default)
                         guard let self else {
@@ -804,7 +826,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
             
             // MARK: NAGRAM — 媒体信息菜单项
             if NagramSettings.shared.mediaMetadataEnabled, let media = self.contextAndMedia?.1 {
-                items.append(.action(ContextMenuActionItem(text: "查看信息", icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.actionSheet.primaryTextColor) }, action: { [weak self] _, f in
+                items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.MediaMetadata.ViewInfo", self.presentationData.strings.baseLanguageCode), icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Info"), color: theme.actionSheet.primaryTextColor) }, action: { [weak self] _, f in
                     f(.default)
                     guard let self, let controller = self.galleryController() else {
                         return

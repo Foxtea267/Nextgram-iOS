@@ -18,6 +18,7 @@ import AudioTranscriptionButtonComponent
 import UndoUI
 import TelegramNotices
 import Markdown
+import NagramTranscription // MARK: NAGRAM
 import TextFormat
 import ChatMessageForwardInfoNode
 import ChatMessageDateAndStatusNode
@@ -30,6 +31,7 @@ import ChatControllerInteraction
 import WallpaperBackgroundNode
 import TelegramStringFormatting
 import InvisibleInkDustNode
+import NagramSettings // MARK: NAGRAM
 
 public struct ChatMessageInstantVideoItemLayoutResult {
     public let contentSize: CGSize
@@ -102,7 +104,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
     private var item: ChatMessageBubbleContentItem?
     private var automaticDownload: Bool?
     public var media: TelegramMediaFile?
-    public var appliedForwardInfo: (Peer?, String?)?
+    public var appliedForwardInfo: ChatMessageAppliedForwardInfo?
         
     private let fetchDisposable = MetaDisposable()
 
@@ -254,7 +256,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
         let makeReplyInfoLayout = ChatMessageReplyInfoNode.asyncLayout(self.replyInfoNode)
         let makeForwardInfoLayout = ChatMessageForwardInfoNode.asyncLayout(self.forwardInfoNode)
         
-        return { item, width, displaySize, maximumDisplaySize, scaleProgress, statusDisplayType, automaticDownload, avatarInset in
+        return { [weak self] item, width, displaySize, maximumDisplaySize, scaleProgress, statusDisplayType, automaticDownload, avatarInset in
             var secretVideoPlaceholderBackgroundImage: UIImage?
             var updatedInfoBackgroundImage: UIImage?
             var updatedMuteIconImage: UIImage?
@@ -347,6 +349,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             let bubbleContentInsetsLeft: CGFloat = 6.0
             let availableWidth: CGFloat = max(60.0, width - 210.0 - bubbleEdgeInset * 2.0 - bubbleContentInsetsLeft - 20.0)
             let availableContentWidth: CGFloat = width - bubbleEdgeInset * 2.0 - bubbleContentInsetsLeft - 20.0
+            var inlineBotNameString: String?
             
             if !ignoreHeaders {
                 var replyMessage: Message?
@@ -356,7 +359,6 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 var replyStory: StoryId?
                 for attribute in item.message.attributes {
                     if let attribute = attribute as? InlineBotMessageAttribute {
-                        var inlineBotNameString: String?
                         if let peerId = attribute.peerId, let bot = item.message.peers[peerId] as? TelegramUser {
                             inlineBotNameString = bot.addressName
                         } else {
@@ -372,7 +374,9 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                             
                             viaBotApply = viaBotLayout(TextNodeLayoutArguments(attributedString: botString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0, availableWidth), height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
                             
-                            ignoreForward = true
+                            if item.message.forwardInfo?.psaType != nil {
+                                ignoreForward = true
+                            }
                         }
                     }
                     
@@ -436,27 +440,14 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
             if !ignoreForward && !ignoreHeaders, let forwardInfo = item.message.forwardInfo {
                 let forwardPsaType = forwardInfo.psaType
                 
-                if let source = forwardInfo.source {
-                    forwardSource = source
-                    if let authorSignature = forwardInfo.authorSignature {
-                        forwardAuthorSignature = authorSignature
-                    } else if let forwardInfoAuthor = forwardInfo.author, forwardInfoAuthor.id != source.id {
-                        forwardAuthorSignature = EnginePeer(forwardInfoAuthor).displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
-                    } else {
-                        forwardAuthorSignature = nil
-                    }
-                } else {
-                    if let currentForwardInfo = currentForwardInfo, forwardInfo.author == nil && currentForwardInfo.0 != nil {
-                        forwardSource = nil
-                        forwardAuthorSignature = currentForwardInfo.0.flatMap(EnginePeer.init)?.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
-                    } else {
-                        forwardSource = forwardInfo.author
-                        forwardAuthorSignature = forwardInfo.authorSignature
-                    }
-                }
+                let resolvedForwardInfo = chatMessageForwardInfoDisplay(forwardInfo: forwardInfo, messageId: item.message.id, previouslyApplied: currentForwardInfo, peerDisplayTitle: { peer in
+                    return EnginePeer(peer).displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
+                })
+                forwardSource = resolvedForwardInfo.source
+                forwardAuthorSignature = resolvedForwardInfo.authorSignature
                 let availableWidth: CGFloat = max(60.0, availableContentWidth - 220.0 + 6.0)
                 // MARK: NAGRAM — Include the original timestamp in the shared forward header.
-                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource.flatMap(EnginePeer.init), forwardAuthorSignature, forwardPsaType, nil, forwardInfo.date, CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude))
+                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource.flatMap(EnginePeer.init), forwardAuthorSignature, forwardPsaType == nil ? inlineBotNameString : nil, forwardPsaType, nil, forwardInfo.date, CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude))
             }
             
             var notConsumed = false
@@ -629,14 +620,21 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 break
             }
             
-            var updatedTranscriptionText: TranscribedText?
-            if audioTranscriptionText != transcribedText {
-                updatedTranscriptionText = transcribedText
-            }
+            // MARK: NAGRAM — A new request must also clear the previous forced text from the file node.
+            let transcriptionTextUpdated = audioTranscriptionText != transcribedText
             
             let currentTime = Int32(Date().timeIntervalSince1970)
-            if transcribedText == nil, let cooldownUntilTime = item.associatedData.audioTranscriptionTrial.cooldownUntilTime, cooldownUntilTime > currentTime {
+            // MARK: NAGRAM — A Telegram trial lock does not apply to custom STT.
+            if NagramTranscriptionService.isEnabled, case .locked = audioTranscriptionState {
+                updatedAudioTranscriptionState = .collapsed
+            }
+            if !NagramTranscriptionService.isEnabled, transcribedText == nil, let cooldownUntilTime = item.associatedData.audioTranscriptionTrial.cooldownUntilTime, cooldownUntilTime > currentTime {
                 updatedAudioTranscriptionState = .locked
+            }
+            // MARK: NAGRAM — Shared requests continue even when their original node has disappeared.
+            if let transcription = item.message.attributes.first(where: { $0 is AudioTranscriptionMessageAttribute }) as? AudioTranscriptionMessageAttribute,
+               transcription.requestId != nil && transcription.isPending && transcription.text.isEmpty {
+                updatedAudioTranscriptionState = .inProgress
             }
             
             let effectiveAudioTranscriptionState = updatedAudioTranscriptionState ?? audioTranscriptionState
@@ -648,7 +646,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 if let strongSelf = self {
                     strongSelf.item = item
                     strongSelf.videoFrame = displayVideoFrame
-                    strongSelf.appliedForwardInfo = (forwardSource, forwardAuthorSignature)
+                    strongSelf.appliedForwardInfo = ChatMessageAppliedForwardInfo(messageId: item.message.id, source: forwardSource, authorSignature: forwardAuthorSignature)
                     strongSelf.viewOnceIconImage = viewOnceIconImage
                     
                     strongSelf.automaticDownload = automaticDownload
@@ -670,8 +668,9 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                             strongSelf.updateTranscriptionExpanded?(strongSelf.audioTranscriptionState)
                         }
                     }
-                    if let updatedTranscriptionText = updatedTranscriptionText {
-                        strongSelf.audioTranscriptionText = updatedTranscriptionText
+                    // MARK: NAGRAM — Propagate nil when replacing an existing round-video transcription.
+                    if transcriptionTextUpdated {
+                        strongSelf.audioTranscriptionText = transcribedText
                         strongSelf.updateTranscriptionText?(strongSelf.audioTranscriptionText)
                     }
                     
@@ -780,7 +779,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                                         }
                                     }
                                 }
-                            }), content: NativeVideoContent(id: .message(item.message.stableId, telegramFile.fileId), userLocation: .peer(item.message.id.peerId), fileReference: .message(message: MessageReference(item.message), media: telegramFile), streamVideo: streamVideo ? .conservative : .none, enableSound: false, fetchAutomatically: false, isAudioVideoMessage: true, captureProtected: item.associatedData.isCopyProtectionEnabled || item.message.isCopyProtected(), storeAfterDownload: nil), priority: item.associatedData.isStandalone ? .overlay : .embedded, autoplay: item.context.sharedContext.energyUsageSettings.autoplayVideo && !isViewOnceMessage)
+                            }), content: NativeVideoContent(id: .message(item.message.stableId, telegramFile.fileId), userLocation: .peer(item.message.id.peerId), fileReference: .message(message: MessageReference(item.message), media: telegramFile), streamVideo: streamVideo ? .conservative : .none, enableSound: false, fetchAutomatically: false, isAudioVideoMessage: true, captureProtected: (item.associatedData.isCopyProtectionEnabled || item.message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled, /* MARK: NAGRAM force-copy */ storeAfterDownload: nil), priority: item.associatedData.isStandalone ? .overlay : .embedded, autoplay: item.context.sharedContext.energyUsageSettings.autoplayVideo && !isViewOnceMessage)
                             if let previousVideoNode = previousVideoNode {
                                 videoNode.bounds = previousVideoNode.bounds
                                 videoNode.position = previousVideoNode.position
@@ -841,7 +840,12 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                     var displayTranscribe = false
                     if item.message.id.peerId.namespace != Namespaces.Peer.SecretChat && statusDisplayType == .free && !isViewOnceMessage && !item.presentationData.isPreview {
                         let premiumConfiguration = PremiumConfiguration.with(appConfiguration: item.context.currentAppConfiguration.with { $0 })
-                        if item.associatedData.isPremium || item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
+                        // MARK: NAGRAM — Existing transcripts remain accessible; custom STT has its own limits.
+                        if let result = transcribedText, case .success = result {
+                            displayTranscribe = true
+                        } else if NagramTranscriptionService.isEnabled {
+                            displayTranscribe = item.message.id.namespace == Namespaces.Message.Cloud
+                        } else if item.associatedData.isPremium || item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
                             displayTranscribe = true
                         } else if premiumConfiguration.audioTransciptionTrialCount > 0 {
                             if incoming {
@@ -1704,7 +1708,7 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
 
     public static func asyncLayout(_ node: ChatMessageInteractiveInstantVideoNode?) -> (_ item: ChatMessageBubbleContentItem, _ width: CGFloat, _ displaySize: CGSize, _ maximumDisplaySize: CGSize, _ scaleProgress: CGFloat, _ statusType: ChatMessageInteractiveInstantVideoNodeStatusType, _ automaticDownload: Bool, _ avatarInset: CGFloat) -> (ChatMessageInstantVideoItemLayoutResult, (ChatMessageInstantVideoItemLayoutData, ListViewItemUpdateAnimation) -> ChatMessageInteractiveInstantVideoNode) {
         let makeLayout = node?.asyncLayout()
-        return { item, width, displaySize, maximumDisplaySize, scaleProgress, statusType, automaticDownload, avatarInset in
+        return { [node] item, width, displaySize, maximumDisplaySize, scaleProgress, statusType, automaticDownload, avatarInset in
             var createdNode: ChatMessageInteractiveInstantVideoNode?
             let sizeAndApplyLayout: (ChatMessageInstantVideoItemLayoutResult, (ChatMessageInstantVideoItemLayoutData, ListViewItemUpdateAnimation) -> Void)
             if let makeLayout = makeLayout {
@@ -1824,16 +1828,34 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
         guard let item = self.item, item.message.id.namespace == Namespaces.Message.Cloud else {
             return
         }
+
+        // MARK: NAGRAM — Keep custom uploads within the original supported message boundaries.
+        let useCustomTranscription = NagramTranscriptionService.isEnabled
+        let clientTranscription = item.message.attributes.first(where: { $0 is AudioTranscriptionMessageAttribute }) as? AudioTranscriptionMessageAttribute
+        let useManagedTranscription = useCustomTranscription || (clientTranscription?.requestId != nil && (clientTranscription?.source == .local || clientTranscription?.source == .external))
+        if useManagedTranscription {
+            guard item.message.id.peerId.namespace != Namespaces.Peer.SecretChat,
+                  item.message.minAutoremoveOrClearTimeout != viewOnceTimeout,
+                  !item.presentationData.isPreview,
+                  self.media?.isInstantVideo == true else {
+                return
+            }
+        }
         
-        if !item.context.isPremium, case .inProgress = self.audioTranscriptionState {
-            return
+        if !useCustomTranscription && !item.context.isPremium, case .inProgress = self.audioTranscriptionState {
+            // MARK: NAGRAM — An interrupted request remains retryable after restoring message history.
+            let canRetryInterruptedRequest = clientTranscription?.requestId != nil && clientTranscription?.id == 0 && clientTranscription?.isPending == true && self.transcribeDisposable == nil && !NagramTranscriptionService.shared.isTranscribing(context: item.context, messageId: item.message.id)
+            if !canRetryInterruptedRequest {
+                return
+            }
         }
         
         let presentationData = item.context.sharedContext.currentPresentationData.with { $0 }
         let premiumConfiguration = PremiumConfiguration.with(appConfiguration: item.context.currentAppConfiguration.with { $0 })
         
         let transcriptionText = transcribedText(message: EngineMessage(item.message))
-        if transcriptionText == nil && !item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
+        // MARK: NAGRAM — Provider selection is resolved before applying Telegram entitlement gates.
+        if !useCustomTranscription && transcriptionText == nil && !item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
             if premiumConfiguration.audioTransciptionTrialCount > 0 {
                 if !item.associatedData.isPremium {
                     if self.presentAudioTranscriptionTooltip(finished: false) {
@@ -1893,20 +1915,48 @@ public class ChatMessageInteractiveInstantVideoNode: ASDisplayNode {
                 self.audioTranscriptionState = .inProgress
                 self.requestUpdateLayout(true)
                 
-                self.transcribeDisposable = (item.context.engine.messages.transcribeAudio(messageId: item.message.id)
-                |> deliverOnMainQueue).startStrict(next: { [weak self] result in
-                    guard let strongSelf = self else {
-                        return
-                    }
-                    strongSelf.transcribeDisposable?.dispose()
-                    strongSelf.transcribeDisposable = nil
-                    
-                    if let item = strongSelf.item, !item.associatedData.isPremium && !item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
-                        Queue.mainQueue().after(0.1, {
-                            let _ = strongSelf.presentAudioTranscriptionTooltip(finished: true)
-                        })
-                    }
-                })
+                // MARK: NAGRAM — The shared service also prepares the audio track of round videos.
+                if useManagedTranscription {
+                    let messageId = item.message.id
+                    let disposable = MetaDisposable()
+                    self.transcribeDisposable = disposable
+                    disposable.set((NagramTranscriptionService.shared.transcribe(context: item.context, messageId: messageId, force: !useCustomTranscription)
+                    |> deliverOnMainQueue).startStrict(next: { [weak self] state in
+                        guard let self, self.item?.message.id == messageId else {
+                            return
+                        }
+                        switch state {
+                        case .inProgress:
+                            self.audioTranscriptionState = .inProgress
+                        case .completed:
+                            self.transcribeDisposable?.dispose()
+                            self.transcribeDisposable = nil
+                            self.audioTranscriptionState = .expanded
+                        case let .failed(error):
+                            self.transcribeDisposable?.dispose()
+                            self.transcribeDisposable = nil
+                            self.audioTranscriptionState = .collapsed
+                            self.item?.controllerInteraction.displayUndo(.info(title: nil, text: error, timeout: nil, customUndoText: nil))
+                        }
+                        self.requestUpdateLayout(true)
+                        self.updateTranscriptionExpanded?(self.audioTranscriptionState)
+                    }))
+                } else {
+                    self.transcribeDisposable = (item.context.engine.messages.transcribeAudio(messageId: item.message.id)
+                    |> deliverOnMainQueue).startStrict(next: { [weak self] result in
+                        guard let strongSelf = self else {
+                            return
+                        }
+                        strongSelf.transcribeDisposable?.dispose()
+                        strongSelf.transcribeDisposable = nil
+
+                        if let item = strongSelf.item, !item.associatedData.isPremium && !item.associatedData.alwaysDisplayTranscribeButton.providedByGroupBoost {
+                            Queue.mainQueue().after(0.1, {
+                                let _ = strongSelf.presentAudioTranscriptionTooltip(finished: true)
+                            })
+                        }
+                    })
+                }
             }
         }
         

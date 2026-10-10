@@ -25,10 +25,12 @@ swift_library(
         "//submodules/UndoUI:UndoUI",
         "//Nagram/Settings:NagramSettings",
         "//Nagram/MessageHistory:NagramMessageHistory",
+        "//Nagram/SessionBackupUI:NagramSessionBackupUI",
         "//Nagram/LinkMetadata:NagramLinkMetadata",
         "//Nagram/Strings:NagramStrings",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/Translate:NagramTranslate",
+        "//Nagram/Transcription:NagramTranscription",
         # MARK: NAGRAM — 贴纸尺寸滑杆(SliderComponent,复刻省电模式粗轨道)
         "//submodules/AsyncDisplayKit",
         "//submodules/ComponentFlow",

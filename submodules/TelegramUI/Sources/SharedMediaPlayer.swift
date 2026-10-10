@@ -9,6 +9,7 @@ import AccountContext
 import TelegramUniversalVideoContent
 import DeviceProximity
 import PeerMessagesMediaPlaylist
+import NagramSettings // MARK: NAGRAM
 
 private enum SharedMediaPlaybackItem: Equatable {
     case audio(MediaPlayer)
@@ -238,7 +239,7 @@ final class SharedMediaPlayer {
                                 if let mediaManager = strongSelf.mediaManager, let context = strongSelf.context, let item = item as? MessageMediaPlaylistItem {
                                     switch playbackData.source {
                                         case let .telegramFile(fileReference, _, _):
-                                        let videoNode = OverlayInstantVideoNode(context: context, audioSession: strongSelf.audioSession, manager: mediaManager.universalVideoManager, content: NativeVideoContent(id: .message(item.message.stableId, fileReference.media.fileId), userLocation: .peer(item.message.id.peerId), fileReference: fileReference, enableSound: false, baseRate: rateValue, isAudioVideoMessage: true, captureProtected: item.message.isCopyProtected(), storeAfterDownload: nil), close: { [weak mediaManager] in
+                                        let videoNode = OverlayInstantVideoNode(context: context, audioSession: strongSelf.audioSession, manager: mediaManager.universalVideoManager, content: NativeVideoContent(id: .message(item.message.stableId, fileReference.media.fileId), userLocation: .peer(item.message.id.peerId), fileReference: fileReference, enableSound: false, baseRate: rateValue, isAudioVideoMessage: true, captureProtected: item.message.isCopyProtected() && !NagramSettings.shared.forceCopyEnabled, /* MARK: NAGRAM force-copy */ storeAfterDownload: nil), close: { [weak mediaManager] in
                                                 mediaManager?.setPlaylist(nil, type: .voice, control: .playback(.pause))
                                             })
                                             strongSelf.playbackItem = .instantVideo(videoNode)
@@ -376,6 +377,21 @@ final class SharedMediaPlayer {
                     strongSelf.forceAudioToSpeaker = forceAudioToSpeaker
                     strongSelf.playbackItem?.setForceAudioToSpeaker(forceAudioToSpeaker)
                     if !forceAudioToSpeaker {
+                        // A voice or video message is being recorded: the sensor is covered by the user's face
+                        // while speaking, not to ask for playback on the ear speaker. Resuming would push a
+                        // playback audio session on top of the recorder's, and the recorder stops as soon as
+                        // its session is deactivated.
+                        //
+                        // Only the resume is skipped, and the state above is tracked either way. This block is
+                        // edge-triggered on forceAudioToSpeaker, so returning before the assignment would
+                        // strand it at its old value for good: the sensor and the stored value would disagree
+                        // from then on, and the next playback would take the wrong route - the ear speaker
+                        // with the phone in hand, i.e. inaudible. The assignment is safe here because the
+                        // playback holder is inactive while a recorder holds the session, so setOutputMode
+                        // only records the intended mode instead of touching the live session.
+                        if strongSelf.audioSession.getIsRecordingActive() {
+                            return
+                        }
                         if let playbackStateValue = strongSelf._playbackStateValue, case let .item(item) = playbackStateValue, item.status.timestamp < 1.5 {
                             strongSelf.control(.seek(0.0))
                         }

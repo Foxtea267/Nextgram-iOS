@@ -11,6 +11,7 @@ swift_library(
         #"-Xfrontend", "-debug-time-function-bodies"
     ],
     deps = [
+        "//Nagram/Settings:NagramSettings", # MARK: NAGRAM
         "//submodules/AsyncDisplayKit",
         "//submodules/Display",
         "//submodules/SSignalKit/SwiftSignalKit",
@@ -30,6 +31,7 @@ swift_library(
         "//submodules/UndoUI",
         "//submodules/TelegramNotices",
         "//submodules/Markdown",
+        "//Nagram/Transcription:NagramTranscription",  # MARK: NAGRAM
         "//submodules/TextFormat",
         "//submodules/InvisibleInkDustNode",
         "//submodules/TelegramUI/Components/Chat/ChatMessageForwardInfoNode",

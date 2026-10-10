@@ -10,7 +10,25 @@
 - 真机包永远不要开启 `disableProvisioningProfiles`，否则主 app 签名配置会走 `None` 分支。
 - 有正式/完整 provisioning 文件时，必须启用扩展；不要写 `build --//Telegram:disableExtensions`。
 - 只有免费 Apple ID 自签或模拟器免签时，才允许禁用扩展。
-- 本机当前使用 Xcode 26.5 CLI toolchain。Xcode 27 beta 相关问题不要和业务代码错误混在一起排查。
+- 2026-09-19 检查时，`/Applications/Xcode.app` 已是 Xcode 27，包含 iOS 27 SDK。下文 Xcode 26.5 workaround 属于历史配置，使用前必须核对实际安装版本。
+
+## UIScene 生命周期
+
+Nagram 的单窗口 scene 入口位于 `Nagram/AppLifecycle/NagramSceneDelegate.swift`，通过 filegroup 编入 `TelegramUI`。`Telegram/BUILD` 和两个应用 plist 都声明了 `NagramSceneDelegate`。
+
+- `AppDelegate` 在进程启动时初始化账户、推送和后台任务，以及不依赖 `UIWindow` 的展示宿主；后台唤醒不需要先连接 scene。
+- scene 连接时创建 `UIWindow(windowScene:)`；断开时释放窗口，保留账户和展示状态供重连复用。
+- 前后台状态、冷/热启动 URL、Universal Links 和快捷操作从 scene 转发；通知响应继续由 `UNUserNotificationCenterDelegate` 处理，避免重复消费。
+- 不要再让根控制器覆盖 `windowScene.delegate`。
+- iOS 27 的键盘窗口通过当前 scene 的 `keyboardSceneDelegate.keyboardWindow` 获取；旧的 `remoteKeyboardWindowForScreen:create:` 会触发系统断言，只保留给较早系统使用。
+
+Xcode 更新后，本地 `build-input/xcode/BUILD` 声明可能与实际工具链不符。不要仅凭 IPA 的 `DTSDKName` 判断 SDK；用 `xcrun vtool -show-build <Telegram.app/Telegram>` 检查 Mach-O 的 `LC_BUILD_VERSION`。iOS 27 SDK 构建的包必须接入 scene 生命周期。
+
+UI 回归用例 `UITests/testSceneForegroundRoundTrip` 使用 `--ui-test` 隔离数据，检查启动、输入、前后台往返和键盘恢复；`UITests/testSceneColdURL` 检查冷启动链接打开代理预览，不启用代理。链接处理需要等待账户界面 `isReady`，避免 scene 连接早于界面展示时丢失操作。
+
+生成工程缓存缺失时，按 README 重新运行 `Make.py generateProject` 后再测试。旧 DerivedData 的构建记录可能遗漏 Bazel 输出，遇到框架产物不存在时可用新的 `-derivedDataPath`。本机启用 Nix 时，给 `xcodebuild` 设置 `PATH=/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin`，否则 GNU `find` 无法执行生成脚本的 BSD `find -depth 2` 参数。
+
+2026-09-19 使用 Xcode 27 / iOS 27 模拟器运行以上两个 UI 用例，均通过。最终 `debug_arm64` 包 33235 使用完整签名，保留全部 6 个扩展，已在 iOS 27.2 真机安装并启动。真机回归覆盖启动、前后台往返和热链接；远程通知、CallKit、系统后台唤醒和 scene 被系统回收后的重连尚未做端到端验证。
 
 ## 签名模式选择
 
@@ -70,12 +88,7 @@ build --//Telegram:disableExtensions
 # 不写 disableProvisioningProfiles
 ```
 
-模拟器免签：
-
-```bazelrc
-build --//Telegram:disableProvisioningProfiles
-build --//Telegram:disableExtensions
-```
+模拟器免签：不改 `local.bazelrc`，给 `Make.py build` 加 `--disableProvisioningProfiles --disableExtensions`（见“模拟器免签”）。
 
 本机常用 toolchain workaround 可按需追加：
 
@@ -325,12 +338,7 @@ xcrun devicectl device install app --device <DEVICE_UDID> /tmp/tg-device/Payload
 
 ## 模拟器免签
 
-模拟器模式可以禁用 provisioning 和扩展：
-
-```bazelrc
-build --//Telegram:disableProvisioningProfiles
-build --//Telegram:disableExtensions
-```
+模拟器模式禁用 provisioning 和扩展，通过 `Make.py build` 的命令行参数开启；不要为此修改 `local.bazelrc`，它保持真机签名模式即可。`--disableProvisioningProfiles` 只接受 `debug_sim_arm64` / `release_sim_arm64`，真机配置会直接报错。
 
 编译：
 
@@ -340,7 +348,8 @@ python3 build-system/Make/Make.py --overrideXcodeVersion \
   build \
   --configurationPath build-system/appstore-configuration.json \
   --xcodeManagedCodesigning --buildNumber=1 \
-  --configuration=debug_sim_arm64 --continueOnError
+  --configuration=debug_sim_arm64 --continueOnError \
+  --disableProvisioningProfiles --disableExtensions
 ```
 
 安装：
@@ -370,7 +379,7 @@ build-input/bazel-8.4.2-darwin-arm64 build Telegram/Telegram \
   --watchos_cpus=arm64_32
 ```
 
-这个 fallback 复用当前 `local.bazelrc`，所以切换正式/免费/模拟器模式时仍要先改对签名 flag。
+这个 fallback 复用当前 `local.bazelrc`，所以切换正式/免费签名模式时仍要先改对签名 flag。模拟器模式不改 `local.bazelrc`，直接在命令行追加 `--//Telegram:disableProvisioningProfiles --//Telegram:disableExtensions`。
 
 ## 2026-06-14 编译问题记录
 
@@ -388,13 +397,9 @@ python3 build-system/Make/Make.py ... build ... --configuration=debug_sim_arm64 
 Make: error: unrecognized arguments: --disableProvisioningProfiles
 ```
 
-结论：`disableProvisioningProfiles` 不是当前 `Make.py` 的直接参数。模拟器免签应放到 `local.bazelrc`：
+当时的结论：`disableProvisioningProfiles` 不是 `Make.py build` 的直接参数，只能写进 `local.bazelrc`。
 
-```bazelrc
-build --//Telegram:disableProvisioningProfiles
-```
-
-真机构建必须注释掉这一行。
+现状：`Make.py build` 已支持 `--disableProvisioningProfiles` 和 `--disableExtensions`，模拟器免签直接加这两个参数，不再修改 `local.bazelrc`。
 
 ### 2. Make.py debug 配置把 Swift 并发参数当成输入文件
 

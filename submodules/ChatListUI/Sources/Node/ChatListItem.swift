@@ -29,6 +29,7 @@ import MultilineTextComponent
 import MultilineTextWithEntitiesComponent
 import ShimmerEffect
 import NagramSettings
+import NagramSettingsSignal // MARK: NAGRAM
 import NagramStrings // MARK: NAGRAM
 import GlassBackgroundComponent
 
@@ -503,6 +504,23 @@ public class ChatListItem: ListViewItem {
     let hideCommunityAvatarBadge: Bool
     let displayHiddenPeerIcon: Bool
     
+    // MARK: NAGRAM — 只控制聊天列表头像，保留社区内部和资料页行为。
+    var nagramUsesAvatarSettings: Bool {
+        guard case .chatList = self.chatListLocation else {
+            return false
+        }
+        return !self.useCommunityViewLayout && !self.hideCommunityAvatarBadge
+    }
+
+    var nagramHidesAvatarStories: Bool {
+        return self.nagramUsesAvatarSettings && NagramSettings.shared.disableChatAvatarStoriesEffective
+    }
+
+    // MARK: NAGRAM — 头像主体只在“打开社区”模式下拦截普通行点击。
+    var nagramOpensCommunityFromAvatar: Bool {
+        return !NagramSettings.shared.disableCommunityChatGrouping && (!self.nagramUsesAvatarSettings || NagramSettings.shared.communityAvatarTapActionValue == .community)
+    }
+
     public let selectable: Bool = true
     
     public var approximateHeight: CGFloat {
@@ -510,7 +528,15 @@ public class ChatListItem: ListViewItem {
     }
     
     let header: ListViewItemHeader?
-    
+
+    public var neighborDescriptor: AnyEquatable {
+        return AnyEquatable(ChatListItemNeighborDescriptor(
+            headerId: self.header?.id,
+            isPinned: self.isPinned,
+            hasActiveRevealControls: self.hasActiveRevealControls
+        ))
+    }
+
     public var isPinned: Bool {
         switch self.index {
         case let .chatList(index):
@@ -543,10 +569,10 @@ public class ChatListItem: ListViewItem {
         self.displayHiddenPeerIcon = displayHiddenPeerIcon
     }
     
-    public func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, previousItem: ListViewItem?, nextItem: ListViewItem?, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
+    public func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
         async {
             let node = ChatListItemNode()
-            let mergeType = ChatListItem.mergeType(item: self, previousItem: previousItem, nextItem: nextItem)
+            let mergeType = ChatListItem.mergeType(item: self, neighbors: neighbors)
             let first = mergeType.first
             var last = mergeType.last
             let firstWithHeader = mergeType.firstWithHeader
@@ -574,14 +600,14 @@ public class ChatListItem: ListViewItem {
         }
     }
     
-    public func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, previousItem: ListViewItem?, nextItem: ListViewItem?, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
+    public func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
         Queue.mainQueue().async {
             assert(node() is ChatListItemNode)
             if let nodeValue = node() as? ChatListItemNode {
                 nodeValue.setupItem(item: self, synchronousLoads: false)
                 let layout = nodeValue.asyncLayout()
                 async {
-                    let mergeType = ChatListItem.mergeType(item: self, previousItem: previousItem, nextItem: nextItem)
+                    let mergeType = ChatListItem.mergeType(item: self, neighbors: neighbors)
                     let first = mergeType.first
                     var last = mergeType.last
                     let firstWithHeader = mergeType.firstWithHeader
@@ -607,6 +633,10 @@ public class ChatListItem: ListViewItem {
     }
     
     public func selected(listView: ListView) {
+        self.nagramSelectChat() // MARK: NAGRAM — 与头像回退共用列表原有导航逻辑。
+    }
+
+    fileprivate func nagramSelectChat() {
         switch self.content {
         case .loading:
             break
@@ -662,14 +692,14 @@ public class ChatListItem: ListViewItem {
         return true
     }
         
-    static func mergeType(item: ChatListItem, previousItem: ListViewItem?, nextItem: ListViewItem?) -> (first: Bool, last: Bool, firstWithHeader: Bool, nextIsPinned: Bool, nextHasActiveRevealControls: Bool) {
+    static func mergeType(item: ChatListItem, neighbors: ListViewItemNeighbors) -> (first: Bool, last: Bool, firstWithHeader: Bool, nextIsPinned: Bool, nextHasActiveRevealControls: Bool) {
         var first = false
         var last = false
         var firstWithHeader = false
-        if let previousItem = previousItem {
+        if neighbors.previous != nil {
             if let header = item.header {
-                if let previousItem = previousItem as? ChatListItem {
-                    firstWithHeader = header.id != previousItem.header?.id
+                if let previousItem = neighbors.previous?.base(HeaderNeighborFacet.self), previousItem.headerFamily == .chatList {
+                    firstWithHeader = header.id != previousItem.headerId
                 } else {
                     firstWithHeader = true
                 }
@@ -680,10 +710,8 @@ public class ChatListItem: ListViewItem {
         }
         var nextIsPinned = false
         var nextHasActiveRevealControls = false
-        if let nextItem = nextItem as? ChatListItem {
-            if case let .chatList(nextIndex) = nextItem.index, nextIndex.pinningIndex != nil {
-                nextIsPinned = true
-            }
+        if let nextItem = neighbors.next?.base(ChatListNeighborFacet.self) {
+            nextIsPinned = nextItem.isPinned
             nextHasActiveRevealControls = nextItem.hasActiveRevealControls
         } else {
             last = true
@@ -919,9 +947,7 @@ private func leftRevealOptions(strings: PresentationStrings, theme: Presentation
                 if isPinned {
                     options.append(ItemListRevealOption(key: RevealOptionKey.unpin.rawValue, title: strings.DialogList_Unpin, icon: unpinIcon, color: theme.list.itemDisclosureActions.constructive.fillColor, iconColor: theme.list.itemDisclosureActions.constructive.foregroundColor, textColor: theme.chatList.dateTextColor))
                 } else {
-                    if filterData == nil || peer.id.namespace != Namespaces.Peer.SecretChat {
-                        options.append(ItemListRevealOption(key: RevealOptionKey.pin.rawValue, title: strings.DialogList_Pin, icon: pinIcon, color: theme.list.itemDisclosureActions.constructive.fillColor, iconColor: theme.list.itemDisclosureActions.constructive.foregroundColor, textColor: theme.chatList.dateTextColor))
-                    }
+                    options.append(ItemListRevealOption(key: RevealOptionKey.pin.rawValue, title: strings.DialogList_Pin, icon: pinIcon, color: theme.list.itemDisclosureActions.constructive.fillColor, iconColor: theme.list.itemDisclosureActions.constructive.foregroundColor, textColor: theme.chatList.dateTextColor))
                 }
             }
             return options
@@ -1413,12 +1439,14 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     private let communityAvatarShadowNode: ASImageNode
     private var communityAvatarBadgeBackgroundView: GlassBackgroundView?
     private var communityAvatarBadgeIconView: GlassBackgroundView.ContentImageView?
+    private var nagramCommunityArrowButton: UIButton? // MARK: NAGRAM
     public let avatarNode: AvatarNode
     var avatarIconView: ComponentHostView<Empty>?
     var avatarIconComponent: EmojiStatusComponent?
     var avatarVideoNode: AvatarVideoNode?
     var avatarTapRecognizer: UITapGestureRecognizer?
     private var avatarMediaNode: ChatListMediaPreviewNode?
+    private var nagramAvatarSettingsDisposable: Disposable? // MARK: NAGRAM
     
     private var inlineNavigationMarkLayer: SimpleLayer?
     
@@ -1577,11 +1605,11 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         } else {
                             result += item.presentationData.strings.VoiceOver_ChatList_OutgoingMessage
                         }
-                        let (_, initialHideAuthor, messageText, _, _, _, _) = chatListItemStrings(strings: item.presentationData.strings, nameDisplayOrder: item.presentationData.nameDisplayOrder, dateTimeFormat: item.presentationData.dateTimeFormat, contentSettings: item.context.currentContentSettings.with { $0 }, messages: messages, chatPeer: peer, accountPeerId: item.context.account.peerId, isPeerGroup: false)
+                        let (_, initialHideAuthor, messageText, _, _, _, richTextPreview) = chatListItemStrings(strings: item.presentationData.strings, nameDisplayOrder: item.presentationData.nameDisplayOrder, dateTimeFormat: item.presentationData.dateTimeFormat, contentSettings: item.context.currentContentSettings.with { $0 }, messages: messages, chatPeer: peer, accountPeerId: item.context.account.peerId, isPeerGroup: false)
                         if message.flags.contains(.Incoming), !initialHideAuthor, let author = message.author, case .user = author {
                             result += "\n\(item.presentationData.strings.VoiceOver_ChatList_MessageFrom(author.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)).string)"
                         }
-                        result += "\n\(messageText)"
+                        result += "\n\(richTextPreview.map(instantPagePreviewPlainText) ?? messageText)"
                         return result
                     } else if !peers.isEmpty {
                         var result = ""
@@ -1857,6 +1885,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
 
     deinit {
         self.cachedDataDisposable.dispose()
+        self.nagramAvatarSettingsDisposable?.dispose() // MARK: NAGRAM
     }
     
     override public func secondaryAction(at point: CGPoint) {
@@ -1869,6 +1898,29 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
     func setupItem(item: ChatListItem, synchronousLoads: Bool) {
         let previousItem = self.item
         self.item = item
+
+        // MARK: NAGRAM — 节点级订阅同时覆盖已有列表、搜索结果和节点复用。
+        if self.nagramAvatarSettingsDisposable == nil {
+            self.nagramAvatarSettingsDisposable = (combineLatest(
+                nagramBoolSignal("nagram.hideStories", defaultValue: false),
+                nagramBoolSignal("nagram.disableChatAvatarStories", defaultValue: false),
+                nagramStringSignal("nagram.communityAvatarTapAction", defaultValue: NagramCommunityAvatarTapAction.community.rawValue),
+                nagramBoolSignal("nagram.disableCommunityChatGrouping", defaultValue: false)
+            )
+            |> deliverOnMainQueue).start(next: { [weak self] _ in
+                // 异步到下一轮，避免初始订阅重入和 UserDefaults setter 的独占访问。
+                Queue.mainQueue().justDispatch { [weak self] in
+                    guard let self, let item = self.item else {
+                        return
+                    }
+                    self.setupItem(item: item, synchronousLoads: false)
+                    if let params = self.layoutParams {
+                        let (_, apply) = self.asyncLayout()(item, params.6, params.1, params.2, params.3, params.4, params.5)
+                        let _ = apply(false, false)
+                    }
+                }
+            })
+        }
         
         var storyState: ChatListItemContent.StoryState?
         if case let .peer(peerData) = item.content {
@@ -1877,6 +1929,15 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             storyState = groupReference.storyState
         }
         
+        // MARK: NAGRAM — 关闭头像动态时同时移除动态圈、直播标记和手势。
+        if item.nagramHidesAvatarStories {
+            storyState = nil
+        }
+        // MARK: NAGRAM — 已过期的空动态状态不应抢占社区或聊天点击。
+        if item.nagramUsesAvatarSettings, let stats = storyState?.stats, stats.totalCount == 0 && !stats.hasLiveItems {
+            storyState = nil
+        }
+
         var peer: EnginePeer?
         var displayAsMessage = false
         var enablePreview = true
@@ -1900,9 +1961,6 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     peerIsMonoforum = true
                 }
                 peerLinkedCommunityId = peerData.peer.peer?.containerPeerId
-            }
-            if peerData.peer.peerId.namespace == Namespaces.Peer.SecretChat {
-                enablePreview = false
             }
         case let .groupReference(groupReferenceData):
             if let previousItem = previousItem, case let .groupReference(previousGroupReferenceData) = previousItem.content, groupReferenceData.hiddenByDefault != previousGroupReferenceData.hiddenByDefault {
@@ -1928,7 +1986,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             lineWidth: 2.33,
             inactiveLineWidth: 1.33
         ), transition: .immediate)
-        self.avatarNode.isUserInteractionEnabled = !item.useCommunityViewLayout && ((storyState != nil && !peerIsCommunity) || peerLinkedCommunityId != nil)
+        self.avatarNode.isUserInteractionEnabled = !item.useCommunityViewLayout && !item.editing && !item.hasActiveRevealControls && ((storyState != nil && !peerIsCommunity) || (peerLinkedCommunityId != nil && item.nagramOpensCommunityFromAvatar)) // MARK: NAGRAM — 其余模式让头像主体走普通行点击
         
         if let stats = storyState?.stats, stats.hasLiveItems {
             if self.avatarLiveBadge == nil {
@@ -2172,9 +2230,9 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         self.contextContainer.isGestureEnabled = enablePreview && !item.editing
     }
     
-    override public func layoutForParams(_ params: ListViewItemLayoutParams, item: ListViewItem, previousItem: ListViewItem?, nextItem: ListViewItem?) {
+    override public func layoutForParams(_ params: ListViewItemLayoutParams, item: ListViewItem, neighbors: ListViewItemNeighbors) {
         let layout = self.asyncLayout()
-        let (first, last, firstWithHeader, nextIsPinned, nextHasActiveRevealControls) = ChatListItem.mergeType(item: item as! ChatListItem, previousItem: previousItem, nextItem: nextItem)
+        let (first, last, firstWithHeader, nextIsPinned, nextHasActiveRevealControls) = ChatListItem.mergeType(item: item as! ChatListItem, neighbors: neighbors)
         let (nodeLayout, apply) = layout(item as! ChatListItem, params, first, last, firstWithHeader, nextIsPinned, nextHasActiveRevealControls)
         apply(false, false)
         self.contentSize = nodeLayout.contentSize
@@ -2324,7 +2382,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         let currentChatListQuoteSearchResult = self.cachedChatListQuoteSearchResult
         let currentCustomTextEntities = self.cachedCustomTextEntities
         
-        return { item, params, first, last, firstWithHeader, nextIsPinned, nextHasActiveRevealControls in
+        return { [weak self] item, params, first, last, firstWithHeader, nextIsPinned, nextHasActiveRevealControls in
             let titleFont = Font.semibold(floor(item.presentationData.fontSize.itemListBaseFontSize * 16.0 / 17.0))
             let textFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))
             let italicTextFont = Font.italic(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))
@@ -2386,7 +2444,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     let peerValue = peerData.peer
                     if case .community = peerValue.peer {
                         isCommunity = true
-                    } else if !item.hideCommunityAvatarBadge, peerValue.peer?.containerPeerId != nil {
+                    } else if !item.hideCommunityAvatarBadge, !NagramSettings.shared.disableCommunityChatGrouping, peerValue.peer?.containerPeerId != nil { // MARK: NAGRAM — 拆分显示时隐藏 Community 展开徽标
                         displayCommunityAvatarBadge = true
                     }
                     let threadInfoValue = peerData.threadInfo
@@ -2858,7 +2916,10 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     
                     let messageText: String
                     let foldedRichTextPreview: NSAttributedString?
-                    if let currentChatListText = currentChatListText, currentChatListText.0 == text {
+                    if let richTextPreview {
+                        messageText = richTextPreview.string
+                        chatListText = nil
+                    } else if let currentChatListText = currentChatListText, currentChatListText.0 == text {
                         messageText = currentChatListText.1
                         chatListText = currentChatListText
                     } else {
@@ -2872,8 +2933,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         chatListText = (text, messageText)
                     }
                     if let richTextPreview {
-                        let foldedPreview = foldLineBreaks(richTextPreview)
-                        foldedRichTextPreview = foldedPreview.string == messageText ? foldedPreview : nil
+                        foldedRichTextPreview = richTextPreview
                     } else {
                         foldedRichTextPreview = nil
                     }
@@ -2955,7 +3015,13 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         }
                         
                         let messageString: NSAttributedString
-                        if !messageText.isEmpty && entities.count > 0 {
+                        if let foldedRichTextPreview {
+                            let spoilerRanges = (customTextEntities?.textEntities ?? []).compactMap { entity -> NSRange? in
+                                guard case .Spoiler = entity.type else { return nil }
+                                return NSRange(location: entity.range.lowerBound, length: entity.range.count)
+                            }
+                            messageString = chatListRichTextPreview(foldedRichTextPreview, font: textFont, italicFont: italicTextFont, textColor: theme.messageTextColor, additionalSpoilers: spoilerRanges)
+                        } else if !messageText.isEmpty && entities.count > 0 {
                             let appliedString = stringWithAppliedEntities(messageText, entities: entities, strings: item.presentationData.strings, dateTimeFormat: item.presentationData.dateTimeFormat, baseColor: theme.messageTextColor, linkColor: theme.messageTextColor, baseFont: textFont, linkFont: textFont, boldFont: textFont, italicFont: italicTextFont, boldItalicFont: textFont, fixedFont: textFont, blockQuoteFont: textFont, underlineLinks: false, message: message._asMessage())
                             messageString = foldLineBreaks(appliedString)
                         } else if spoilers != nil || customEmojiRanges != nil {
@@ -2982,13 +3048,6 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                                     mutableString.addAttribute(ChatTextInputAttributes.customEmoji, value: attribute, range: range)
                                 }
                             }
-                            messageString = mutableString
-                        } else if let foldedRichTextPreview {
-                            let mutableString = NSMutableAttributedString(attributedString: foldedRichTextPreview)
-                            mutableString.addAttributes([
-                                .font: textFont,
-                                .foregroundColor: theme.messageTextColor
-                            ], range: NSRange(location: 0, length: mutableString.length))
                             messageString = mutableString
                         } else {
                             messageString = NSAttributedString(string: messageText, font: textFont, textColor: theme.messageTextColor)
@@ -3297,7 +3356,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                             }
                         }
                     }
-                    if textString.length == 0, case let .groupReference(data) = item.content, let storyState = data.storyState, storyState.stats.totalCount != 0 {
+                    if textString.length == 0, !item.nagramHidesAvatarStories, case let .groupReference(data) = item.content, let storyState = data.storyState, storyState.stats.totalCount != 0 { // MARK: NAGRAM — 归档隐藏头像动态时不残留动态计数
                         let storyText: String = item.presentationData.strings.ChatList_ArchiveStoryCount(Int32(storyState.stats.totalCount))
                         textString.append(NSAttributedString(string: storyText, font: textFont, textColor: theme.messageTextColor))
                     }
@@ -3537,7 +3596,26 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             }
 
             if !isPeerGroup {
-                if hasUnseenMentions {
+                let hasUnreadIncomingGramTransfer = messages.last.map { message in
+                    guard let combinedReadState, combinedReadState.count > 0, !combinedReadState.isIncomingMessageIndexRead(message.index) else {
+                        return false
+                    }
+                    return message.effectivelyIncoming(account.peerId) && message.media.contains(where: { media in
+                        if let media = media as? TelegramMediaAction, case .gramTransfer = media.action {
+                            return true
+                        }
+                        return false
+                    })
+                } ?? false
+                if hasUnreadIncomingGramTransfer {
+                    currentMentionBadgeImage = PresentationResourcesChatList.badgeBackgroundGram(item.presentationData.theme, diameter: badgeDiameter, inactive: isRemovedFromTotalUnreadCount)
+                    mentionBadgeContent = .mention
+                    if unreadCount.count == 1 {
+                        badgeContent = .none
+                        currentBadgeBackgroundImage = nil
+                        currentAvatarBadgeBackgroundImage = nil
+                    }
+                } else if hasUnseenMentions {
                     if case .chatList(.archive) = item.chatListLocation {
                         currentMentionBadgeImage = PresentationResourcesChatList.badgeBackgroundInactiveMention(item.presentationData.theme, diameter: badgeDiameter)
                     } else {
@@ -4317,7 +4395,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         strongSelf.communityAvatarShadowNode.isHidden = true
                     }
 
-                    if useChatListLayout && displayCommunityAvatarBadge && avatarContentImageSpec == nil && !item.useCommunityViewLayout {
+                    if useChatListLayout && displayCommunityAvatarBadge && avatarContentImageSpec == nil && !item.useCommunityViewLayout && !NagramSettings.shared.disableCommunityChatGrouping && (!item.nagramUsesAvatarSettings || NagramSettings.shared.communityAvatarTapActionValue != .chat) { // MARK: NAGRAM — 按当前设置决定徽标，防止旧异步布局恢复它
                         let communityAvatarBadgeBackgroundView: GlassBackgroundView
                         let communityAvatarBadgeIconView: GlassBackgroundView.ContentImageView
                         if let currentBackgroundView = strongSelf.communityAvatarBadgeBackgroundView, let currentIconView = strongSelf.communityAvatarBadgeIconView {
@@ -4348,6 +4426,24 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         communityAvatarBadgeBackgroundView.update(size: badgeSize, cornerRadius: badgeSize.height * 0.5, isDark: item.presentationData.theme.overallDarkAppearance, tintColor: .init(kind: .panel), transition: ComponentTransition(transition))
                         transition.updateFrame(view: communityAvatarBadgeBackgroundView, frame: badgeFrame)
 
+                        // MARK: NAGRAM — 箭头独立命中，头像主体仍保留动态或普通聊天行为。
+                        if item.nagramUsesAvatarSettings && NagramSettings.shared.communityAvatarTapActionValue == .arrow {
+                            let button: UIButton
+                            if let current = strongSelf.nagramCommunityArrowButton {
+                                button = current
+                            } else {
+                                button = UIButton(type: .custom)
+                                button.addTarget(strongSelf, action: #selector(ChatListItemNode.nagramCommunityArrowPressed), for: .touchUpInside)
+                                strongSelf.avatarContainerNode.view.addSubview(button)
+                                strongSelf.nagramCommunityArrowButton = button
+                            }
+                            button.isHidden = item.editing || item.hasActiveRevealControls || item.interaction.inlineNavigationLocation != nil
+                            button.accessibilityLabel = ngI18n("Nagram.CommunityAvatarTapAction.community", item.presentationData.strings.baseLanguageCode)
+                            transition.updateFrame(view: button, frame: badgeFrame)
+                        } else {
+                            strongSelf.nagramCommunityArrowButton?.isHidden = true
+                        }
+
                         if let arrowImage = UIImage(bundleImageName: "Media Editor/DownArrow")?.withRenderingMode(.alwaysTemplate) {
                             communityAvatarBadgeIconView.image = arrowImage
                             communityAvatarBadgeIconView.tintColor = theme.titleColor
@@ -4356,6 +4452,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         }
                     } else {
                         strongSelf.communityAvatarBadgeBackgroundView?.isHidden = true
+                        strongSelf.nagramCommunityArrowButton?.isHidden = true // MARK: NAGRAM
                     }
 
                     transition.updatePosition(node: strongSelf.avatarNode, position: avatarFrame.offsetBy(dx: -avatarFrame.minX, dy: -avatarFrame.minY).center.offsetBy(dx: avatarScaleOffset, dy: 0.0))
@@ -4754,13 +4851,16 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     
                     if let (actionButtonTitleNodeLayout, apply) = actionButtonTitleNodeLayoutAndApply {
                         let actionButtonSideInset = floor(item.presentationData.fontSize.itemListBaseFontSize * 12.0 / 17.0)
-                        let actionButtonTopInset = floor(item.presentationData.fontSize.itemListBaseFontSize * 5.0 / 17.0)
-                        let actionButtonBottomInset = floor(item.presentationData.fontSize.itemListBaseFontSize * 4.0 / 17.0)
+                        let actionButtonTopInset = floor(item.presentationData.fontSize.itemListBaseFontSize * (nagramCompactChatList ? 2.0 : 5.0) / 17.0) // MARK: NAGRAM
+                        let actionButtonBottomInset = floor(item.presentationData.fontSize.itemListBaseFontSize * (nagramCompactChatList ? 2.0 : 4.0) / 17.0) // MARK: NAGRAM
                         
                         let actionButtonSize = CGSize(width: actionButtonTitleNodeLayout.size.width + actionButtonSideInset * 2.0, height: actionButtonTitleNodeLayout.size.height + actionButtonTopInset + actionButtonBottomInset)
                         var actionButtonFrame = CGRect(x: nextBadgeX - actionButtonSize.width, y: contentRect.minY + floor((contentRect.height - actionButtonSize.height) * 0.5), width: actionButtonSize.width, height: actionButtonSize.height)
                         actionButtonFrame.origin.y = max(actionButtonFrame.origin.y, dateFrame.maxY + floor(item.presentationData.fontSize.itemListBaseFontSize * 4.0 / 17.0))
                         actionButtonFrame.origin.y += 4.0
+                        if nagramCompactChatList { // MARK: NAGRAM — Keep the Mini App button inside the compact row.
+                            actionButtonFrame.origin.y = rightAccessoryY(actionButtonSize.height)
+                        }
                         
                         let actionButtonNode: HighlightableButtonNode
                         var animateActionButtonIn = false
@@ -5469,18 +5569,23 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     let leftSeparatorInset: CGFloat
                     let rightSeparatorInset: CGFloat
                     let hideCommunitySeparator = item.useCommunityViewLayout && last
+                    // Separators stay out of the side safe areas. The content-aligned ones end 16pt
+                    // before the right inset; the full-width ones run to the edge unless there is a
+                    // right inset, in which case they end where the content-aligned ones do.
+                    let contentRightSeparatorInset: CGFloat = params.rightInset + 16.0
+                    let fullWidthRightSeparatorInset: CGFloat = params.rightInset.isZero ? 0.0 : contentRightSeparatorInset
                     if case let .groupReference(groupReferenceData) = item.content, groupReferenceData.hiddenByDefault {
-                        leftSeparatorInset = 0.0
-                        rightSeparatorInset = 0.0
+                        leftSeparatorInset = params.leftInset
+                        rightSeparatorInset = fullWidthRightSeparatorInset
                     } else if item.useCommunityViewLayout {
                         leftSeparatorInset = editingOffset + leftInset + rawContentRect.origin.x
-                        rightSeparatorInset = 16.0
+                        rightSeparatorInset = contentRightSeparatorInset
                     } else if (!nextIsPinned && isPinned) || last {
-                        leftSeparatorInset = 0.0
-                        rightSeparatorInset = 0.0
+                        leftSeparatorInset = params.leftInset
+                        rightSeparatorInset = fullWidthRightSeparatorInset
                     } else {
                         leftSeparatorInset = editingOffset + leftInset + rawContentRect.origin.x
-                        rightSeparatorInset = 16.0
+                        rightSeparatorInset = contentRightSeparatorInset
                     }
                     
                     transition.updateFrame(node: strongSelf.separatorNode, frame: CGRect(origin: CGPoint(x: leftSeparatorInset, y: layoutOffset + itemHeight - separatorHeight), size: CGSize(width: params.width - leftSeparatorInset - rightSeparatorInset, height: separatorHeight)))
@@ -5535,7 +5640,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     
                     strongSelf.highlightedBackgroundNode.backgroundColor = highlightedBackgroundColor
                     let topNegativeInset: CGFloat = 0.0
-                    strongSelf.highlightedBackgroundNode.frame = CGRect(origin: CGPoint(x: strongSelf.revealOffset, y: layoutOffset - separatorHeight - topNegativeInset), size: CGSize(width: layout.contentSize.width, height: layout.contentSize.height + separatorHeight + topNegativeInset))
+                    strongSelf.highlightedBackgroundNode.frame = CGRect(origin: CGPoint(x: params.leftInset + strongSelf.revealOffset, y: layoutOffset - separatorHeight - topNegativeInset), size: CGSize(width: layout.contentSize.width - params.leftInset - params.rightInset, height: layout.contentSize.height + separatorHeight + topNegativeInset))
                     transition.updateCornerRadius(node: strongSelf.highlightedBackgroundNode, cornerRadius: strongSelf.isRevealOptionsActive ? 26.0 : 0.0)
                     
                     if let peerPresence = peerPresence {
@@ -5684,7 +5789,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         transition.updateBounds(node: self.contextContainer, bounds: self.contextContainer.frame.offsetBy(dx: -offset, dy: 0.0))
 
         let highlightedBackgroundFrame = self.highlightedBackgroundNode.frame
-        transition.updateFrame(node: self.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: offset, y: highlightedBackgroundFrame.minY), size: highlightedBackgroundFrame.size))
+        let highlightedBackgroundLeftInset = self.layoutParams?.6.leftInset ?? 0.0
+        transition.updateFrame(node: self.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: highlightedBackgroundLeftInset + offset, y: highlightedBackgroundFrame.minY), size: highlightedBackgroundFrame.size))
     }
 
     override public func revealOptionsActiveStateUpdated(isActive: Bool, transition: ContainedViewLayoutTransition) {
@@ -5934,14 +6040,23 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
             }
         }
         
+        // MARK: NAGRAM — 明确的箭头点击优先于头像动态手势。
+        if !item.editing, !item.hasActiveRevealControls, item.interaction.inlineNavigationLocation == nil,
+           item.nagramUsesAvatarSettings, !NagramSettings.shared.disableCommunityChatGrouping,
+           NagramSettings.shared.communityAvatarTapActionValue == .arrow,
+           let button = self.nagramCommunityArrowButton, !button.isHidden,
+           button.bounds.contains(self.view.convert(point, to: button)) {
+            return button
+        }
+
         if let _ = item.interaction.inlineNavigationLocation {
         } else {
             var isCommunity = false
             if case let .peer(peerData) = item.content, case .community = peerData.peer.peer {
                 isCommunity = true
             }
-            var shouldHitTestAvatar = !isCommunity && self.avatarNode.storyStats != nil
-            if case let .peer(peerData) = item.content, let peer = peerData.peer.peer, peer.containerPeerId != nil {
+            var shouldHitTestAvatar = !isCommunity && !item.nagramHidesAvatarStories && self.avatarNode.storyStats != nil // MARK: NAGRAM
+            if item.nagramOpensCommunityFromAvatar, case let .peer(peerData) = item.content, let peer = peerData.peer.peer, peer.containerPeerId != nil { // MARK: NAGRAM — 仅在整个头像打开社区时扩大命中区域
                 shouldHitTestAvatar = true
             }
             if shouldHitTestAvatar {
@@ -5954,22 +6069,62 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
         return super.hitTest(point, with: event)
     }
     
+    // MARK: NAGRAM — 箭头的点击不经过动态分支，并再次检查设置防止旧布局命中。
+    @objc private func nagramCommunityArrowPressed() {
+        guard let item = self.item, item.nagramUsesAvatarSettings, !item.editing, !item.hasActiveRevealControls,
+              item.interaction.inlineNavigationLocation == nil,
+              !NagramSettings.shared.disableCommunityChatGrouping,
+              NagramSettings.shared.communityAvatarTapActionValue == .arrow,
+              case let .peer(peerData) = item.content,
+              let communityId = peerData.peer.peer?.containerPeerId else {
+            return
+        }
+        item.interaction.openCommunity(communityId)
+    }
+
     @objc private func avatarStoryTapGesture(_ recognizer: UITapGestureRecognizer) {
         if case .ended = recognizer.state {
             guard let item = self.item else {
+                return
+            }
+            // MARK: NAGRAM — “打开社区”模式优先社区；其余模式保留动态或列表行导航。
+            if item.nagramUsesAvatarSettings {
+                guard !item.editing, !item.hasActiveRevealControls, item.interaction.inlineNavigationLocation == nil else {
+                    return
+                }
+                switch item.content {
+                case .loading:
+                    return
+                case let .peer(peerData):
+                    if item.nagramOpensCommunityFromAvatar, let communityId = peerData.peer.peer?.containerPeerId {
+                        item.interaction.openCommunity(communityId)
+                    } else if !item.nagramHidesAvatarStories, let stats = peerData.storyState?.stats, stats.totalCount > 0 || stats.hasLiveItems {
+                        item.interaction.openStories(.peer(peerData.peer.peerId), self)
+                    } else {
+                        item.nagramSelectChat()
+                    }
+                case .groupReference:
+                    if !item.nagramHidesAvatarStories, self.avatarNode.storyStats != nil {
+                        item.interaction.openStories(.archive, self)
+                    } else {
+                        item.nagramSelectChat()
+                    }
+                }
                 return
             }
             switch item.content {
             case .loading:
                 break
             case let .peer(peerData):
-                if let peer = peerData.peer.peer, let linkedCommunityId = peer.containerPeerId {
+                if !NagramSettings.shared.disableCommunityChatGrouping, let peer = peerData.peer.peer, let linkedCommunityId = peer.containerPeerId { // MARK: NAGRAM — 拆分显示时头像恢复原有动态入口
                     item.interaction.openCommunity(linkedCommunityId)
-                } else {
+                } else if !item.nagramHidesAvatarStories { // MARK: NAGRAM — 防止设置刷新前的旧手势打开动态。
                     item.interaction.openStories(.peer(peerData.peer.peerId), self)
                 }
             case .groupReference:
-                item.interaction.openStories(.archive, self)
+                if !item.nagramHidesAvatarStories { // MARK: NAGRAM
+                    item.interaction.openStories(.archive, self)
+                }
             }
         }
     }

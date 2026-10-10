@@ -28,6 +28,7 @@ enum NagramSettingsSyncKeys {
         "nagram.disableScrollToNextTopic",
         "nagram.disableGalleryCamera",
         "nagram.disableGalleryCameraPreview",
+        "nagram.roundVideoCamera",
         "nagram.disableSendAsButton",
         "nagram.hideRecordingButton",
         "nagram.secondsInMessages",
@@ -56,10 +57,15 @@ enum NagramSettingsSyncKeys {
         "nagram.openArchiveOnPull",
         "nagram.showArchiveInFolders",
         "nagram.hideSavedAndArchivedMessagesInList",
+        "nagram.disableCommunityChatGrouping",
+        "nagram.communityAvatarTapAction",
         "nagram.chatListStartupFolderMode",
         "nagram.chatListFolderTabsCompact",
         "nagram.hideAllChatsFolder",
+        "nagram.hideFolderUnreadCount",
         "nagram.showFoldersInShareSheet",
+        "nagram.chooseFolderAfterJoining",
+        "nagram.chatToolsEnabled",
         "nagram.chatListFolderTabDisplayMode",
         "nagram.chatListMessagePreviewStyle",
         "nagram.chatListLines",
@@ -79,6 +85,13 @@ enum NagramSettingsSyncKeys {
         "nagram.translationLLMPrompt",
         "nagram.translationLLMUseContext",
         "nagram.translationLLMTemperatureTenths",
+        "nagram.translationKeepFormatting",
+        "nagram.sttProvider",
+        "nagram.sttBaseURL",
+        "nagram.sttEndpoint",
+        "nagram.sttModel",
+        "nagram.sttLanguage",
+        "nagram.sttPrompt",
         "nagram.sendWithReturnKey",
         "nagram.defaultMessageFormat",
         "nagram.showTextStyleToolbar",
@@ -88,6 +101,9 @@ enum NagramSettingsSyncKeys {
         "nagram.wideChannelPosts",
         "nagram.recentStickerLimit",
         "nagram.hideStories",
+        "nagram.hideTopStories",
+        "nagram.disableStoryCameraSwipe",
+        "nagram.disableChatAvatarStories",
         "nagram.showRegDate",
         "nagram.groupProfileSettingItems",
         "nagram.hidePhoneInSettings",
@@ -147,7 +163,12 @@ final class NagramSettingsCloudSync {
     static let shared = NagramSettingsCloudSync()
     private static let enabledKey = "nagram.iCloudSyncEnabled"
 
-    private let store = NSUbiquitousKeyValueStore.default
+    /// 只在同步已开启的路径上访问。实例化 `NSUbiquitousKeyValueStore` 会在缺少
+    /// `com.apple.developer.ubiquity-kvstore-identifier` entitlement 的构建里触发 SyncedDefaults 的
+    /// "BUG IN CLIENT OF KVS" fault（iOS 15 上报为 EXC_GUARD 模拟崩溃），所以不能在单例初始化时创建。
+    private var store: NSUbiquitousKeyValueStore {
+        return NSUbiquitousKeyValueStore.default
+    }
     private let lock = NSLock()
     private var observer: NSObjectProtocol?
     private var isStarted = false
@@ -155,11 +176,29 @@ final class NagramSettingsCloudSync {
 
     private init() {}
 
-    static func isEnabled(defaults: UserDefaults = .standard) -> Bool {
-        return defaults.bool(forKey: self.enabledKey)
+    private static let availabilityLock = NSLock()
+    private static var keyValueStoreAvailable = false
+
+    /// 构建是否带 iCloud KVS entitlement。由 AppDelegate 在启动时按 BuildConfig 设置；
+    /// 没有 entitlement 的构建里同步始终视为关闭，不会实例化 KVS。
+    static var isKeyValueStoreAvailable: Bool {
+        get {
+            self.availabilityLock.lock()
+            defer { self.availabilityLock.unlock() }
+            return self.keyValueStoreAvailable
+        }
+        set {
+            self.availabilityLock.lock()
+            self.keyValueStoreAvailable = newValue
+            self.availabilityLock.unlock()
+        }
     }
 
-    func setEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
+    static func isEnabled(defaults: UserDefaults = NagramDemoMode.userDefaults) -> Bool {
+        return self.isKeyValueStoreAvailable && !NagramDemoMode.isEnabled && defaults.bool(forKey: self.enabledKey)
+    }
+
+    func setEnabled(_ enabled: Bool, defaults: UserDefaults = NagramDemoMode.userDefaults) {
         defaults.set(enabled, forKey: Self.enabledKey)
         guard defaults === UserDefaults.standard else {
             return
@@ -208,7 +247,7 @@ final class NagramSettingsCloudSync {
         }
     }
 
-    func set(_ value: Any, forKey key: String, defaults: UserDefaults = .standard) {
+    func set(_ value: Any, forKey key: String, defaults: UserDefaults = NagramDemoMode.userDefaults) {
         defaults.set(value, forKey: key)
         guard defaults === UserDefaults.standard, Self.isEnabled() else {
             return
@@ -217,7 +256,7 @@ final class NagramSettingsCloudSync {
         self.exportValue(value, forKey: key)
     }
 
-    func removeObject(forKey key: String, defaults: UserDefaults = .standard) {
+    func removeObject(forKey key: String, defaults: UserDefaults = NagramDemoMode.userDefaults) {
         defaults.removeObject(forKey: key)
         guard defaults === UserDefaults.standard, Self.isEnabled() else {
             return

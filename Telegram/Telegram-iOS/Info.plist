@@ -2,6 +2,24 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- MARK: NAGRAM — single-window UIKit scene lifecycle. -->
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<false/>
+		<key>UISceneConfigurations</key>
+		<dict>
+			<key>UIWindowSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneConfigurationName</key>
+					<string>Nagram</string>
+					<key>UISceneDelegateClassName</key>
+					<string>NagramSceneDelegate</string>
+				</dict>
+			</array>
+		</dict>
+	</dict>
 	<key>BGTaskSchedulerPermittedIdentifiers</key>
 	<array>
 		<string>$(PRODUCT_BUNDLE_IDENTIFIER).refresh</string>
@@ -204,6 +222,8 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>telegram</string>
+				<!-- MARK: NAGRAM — Nagram-branded alias of telegram://. -->
+				<string>nagram</string>
 			</array>
 		</dict>
 		<dict>
@@ -214,6 +234,8 @@
 			<key>CFBundleURLSchemes</key>
 			<array>
 				<string>tg</string>
+				<!-- MARK: NAGRAM — Nagram-branded alias of tg://. -->
+				<string>na</string>
 				<string>$(APP_SPECIFIC_URL_SCHEME)</string>
 			</array>
 		</dict>
@@ -346,8 +368,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<!-- MARK: NAGRAM — status bar appearance belongs to the scene root controller. -->
 	<key>UIViewControllerBasedStatusBarAppearance</key>
-	<false/>
+	<true/>
 	<key>UIViewEdgeAntialiasing</key>
 	<false/>
 	<key>UIViewGroupOpacity</key>

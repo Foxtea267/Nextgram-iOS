@@ -18,6 +18,7 @@ import ChatMessageItemCommon
 import MessageInlineBlockBackgroundView
 import CheckNode
 import EmojiTextAttachmentView
+import NagramSettings // MARK: NAGRAM
 
 public enum ChatMessageReplyInfoType {
     case bubble(incoming: Bool)
@@ -516,11 +517,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                     messageText = NSAttributedString(string: quote.text, font: textFont, textColor: textColor)
                 }
             } else {
-                let mutableTextString = NSMutableAttributedString(attributedString: foldLineBreaks(textString))
-                mutableTextString.addAttributes([
-                    .font: textFont,
-                    .foregroundColor: textColor
-                ], range: NSRange(location: 0, length: mutableTextString.length))
+                let mutableTextString = styleInstantPagePreview(foldLineBreaks(textString), font: textFont, italicFont: Font.italic(textFont.pointSize), textColor: textColor)
                 messageText = renderInstantPagePreviewIcons(mutableTextString, font: textFont, textColor: textColor)
                 
                 if let _ = arguments.message?.media.first(where: { $0 is TelegramMediaPoll }) as? TelegramMediaPoll {
@@ -810,7 +807,7 @@ public class ChatMessageReplyInfoNode: ASDisplayNode {
                     node.imageNode = nil
                 }
                 if let message = arguments.message {
-                    node.imageNode?.captureProtected = arguments.associatedData.isCopyProtectionEnabled || message.isCopyProtected()
+                    node.imageNode?.captureProtected = (arguments.associatedData.isCopyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled // MARK: NAGRAM force-copy
                 }
                 
                 titleNode.frame = CGRect(origin: CGPoint(x: leftInset - textInsets.left - 2.0, y: spacing - textInsets.top + 1.0), size: titleLayout.size)

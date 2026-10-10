@@ -1,4 +1,7 @@
 import Foundation
+import LottieSettings
+// MARK: NAGRAM
+import NagramStrings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -275,8 +278,9 @@ private final class ShareContentInfoView: UIView {
         let iconSize = self.icon.update(
             transition: .immediate,
             component: AnyComponent(LottieComponent(
-                content: LottieComponent.AppBundleContent(name: "ToastCollectibleUsernameEmoji"),
-                loop: false
+                content: LottieComponent.AppBundleContent(name: "anim_collectible_username"),
+                loop: false,
+                lottieSettings: .noAccountFallback
             )),
             environment: {},
             containerSize: CGSize(width: 30.0, height: 30.0)
@@ -337,6 +341,8 @@ final class ShareControllerNode: ViewControllerTracingNode, ASScrollViewDelegate
     private let selectChatListFilter: (Int32?) -> Void // MARK: NAGRAM
     private let requestLayout: (ContainedViewLayoutTransition) -> Void
     private let presentError: (String?, String) -> Void
+    // MARK: NAGRAM — Selecting another peer must not start a second send while reading attachments.
+    private var isSending = false
     
     private var containerLayout: (ContainerViewLayout, CGFloat, CGFloat)?
     
@@ -1017,7 +1023,10 @@ final class ShareControllerNode: ViewControllerTracingNode, ASScrollViewDelegate
                             if strongSelf.previousContentNode === previous {
                                 strongSelf.previousContentNode = nil
                             }
-                            previous.removeFromSupernode()
+                            // MARK: NAGRAM — A fast preparation failure may have restored this node.
+                            if strongSelf.contentNode !== previous {
+                                previous.removeFromSupernode()
+                            }
                         }
                     })
                 } else {
@@ -1186,7 +1195,7 @@ final class ShareControllerNode: ViewControllerTracingNode, ASScrollViewDelegate
         }
         
         if let topicsContentNode = self.topicsContentNode {
-            let topicsTitleAreaHeight: CGFloat = 64.0
+            let topicsTitleAreaHeight: CGFloat = 64.0 // MARK: NAGRAM
             let topicsContentSize = CGSize(width: contentFrame.size.width, height: max(32.0, contentFrame.size.height - topicsTitleAreaHeight))
             transition.updateFrame(node: topicsContentNode, frame: CGRect(origin: CGPoint(x: floor((contentContainerFrame.size.width - contentFrame.size.width) / 2.0), y: topicsTitleAreaHeight), size: topicsContentSize))
             
@@ -1204,7 +1213,8 @@ final class ShareControllerNode: ViewControllerTracingNode, ASScrollViewDelegate
                 statusBarHeight: nil,
                 inputHeight: nil,
                 inputHeightIsInteractivellyChanging: false,
-                inVoiceOver: false
+                inVoiceOver: false,
+                presentedInFormSheet: false
             )
             controller.presentationContext.containerLayoutUpdated(subLayout, transition: transition)
         }
@@ -1404,6 +1414,10 @@ final class ShareControllerNode: ViewControllerTracingNode, ASScrollViewDelegate
     }
     
     private func commitSend(peerId: PeerId?, showNames: Bool, silently: Bool) {
+        // MARK: NAGRAM
+        guard !self.isSending else {
+            return
+        }
         if !self.inputFieldNode.text.isEmpty {
             for peer in self.controllerInteraction!.selectedPeers {
                 if case let .channel(channel) = peer.peer, channel.isRestrictedBySlowmode {
@@ -1413,6 +1427,12 @@ final class ShareControllerNode: ViewControllerTracingNode, ASScrollViewDelegate
             }
         }
         
+        // MARK: NAGRAM — Preserve the selection/search view for a failed attempt.
+        self.isSending = self.fromForeignApp
+        let previousContentNode = self.contentNode
+        if self.fromForeignApp {
+            Logger.shared.log("SharePreparation", "send UI started")
+        }
         self.inputFieldNode.deactivateInput()
         let transition: ContainedViewLayoutTransition
         if peerId == nil {
@@ -1534,8 +1554,39 @@ final class ShareControllerNode: ViewControllerTracingNode, ASScrollViewDelegate
                             strongSelf.dismiss?(true)
                         }
                 }
-            }, error: { _ in
-                
+            }, error: { [weak self] error in
+                // MARK: NAGRAM — Failed sends must not leave a hidden button and a stuck selection.
+                guard let self else {
+                    return
+                }
+                self.isSending = false
+                guard self.fromForeignApp else {
+                    return
+                }
+                Logger.shared.log("SharePreparation", "send failed: \(error)")
+                if let previousContentNode {
+                    self.transitionToContentNode(previousContentNode, animated: false)
+                }
+                let transition = ContainedViewLayoutTransition.immediate
+                transition.updateAlpha(node: self.actionButtonNode, alpha: 1.0)
+                transition.updateAlpha(node: self.inputFieldNode, alpha: 1.0)
+                transition.updateAlpha(node: self.actionSeparatorNode, alpha: 1.0)
+                transition.updateAlpha(node: self.actionsBackgroundNode, alpha: 1.0)
+                if let startAtTimestampNode = self.startAtTimestampNode {
+                    transition.updateAlpha(node: startAtTimestampNode, alpha: 1.0)
+                }
+                let language = self.presentationData.strings.baseLanguageCode
+                let text: String
+                switch error {
+                case let .preparationFailed(code):
+                    let key = code == "provider-timeout" ? "Nagram.Share.ReadTimeout" : "Nagram.Share.PreparationFailed"
+                    text = ngI18n(key, language) + "\n[\(code)]"
+                case .fileTooBig:
+                    text = ngI18n("Nagram.Share.FileTooBig", language)
+                case .generic:
+                    text = ngI18n("Nagram.Share.SendFailed", language)
+                }
+                self.presentError(nil, text)
             }, completed: {
                 if !wasDone && fromForeignApp {
                     doneImpl(false)

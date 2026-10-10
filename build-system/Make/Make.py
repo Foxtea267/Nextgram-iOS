@@ -46,6 +46,7 @@ class BazelCommandLine:
         self.show_actions = False
         self.enable_sandbox = False
         self.disable_provisioning_profiles = False
+        self.disable_extensions = False
         self.profile_swift = False
         self.embed_watch_app = False
         self.watch_api_id = None
@@ -83,6 +84,9 @@ class BazelCommandLine:
         ]
 
         self.common_release_args = [
+            # Enable cross-crate link-time optimization for Rust targets.
+            '--@rules_rust//rust/settings:lto=fat',
+
             # https://github.com/bazelbuild/rules_swift
             # Enable whole module optimization.
             '--features=swift.opt_uses_wmo',
@@ -134,6 +138,10 @@ class BazelCommandLine:
 
     def set_disable_provisioning_profiles(self):
         self.disable_provisioning_profiles = True
+
+    # MARK: NAGRAM
+    def set_disable_extensions(self):
+        self.disable_extensions = True
 
     def set_profile_swift(self, value):
         self.profile_swift = value
@@ -295,6 +303,9 @@ class BazelCommandLine:
 
         if self.disable_provisioning_profiles:
             combined_arguments += ['--//Telegram:disableProvisioningProfiles']
+        # MARK: NAGRAM
+        if self.disable_extensions:
+            combined_arguments += ['--//Telegram:disableExtensions']
 
         combined_arguments += self.common_args
         combined_arguments += self.common_build_args
@@ -900,20 +911,6 @@ def generate_project(bazel, arguments):
     patch_generated_xcodeproj_archive_layout(xcodeproj_path)
     patch_generated_xcodeproj_telegram_scheme(xcodeproj_path)
 
-    if target_name == "Telegram":
-        run_executable_with_output('swift', arguments=[
-            'run',
-            '-c',
-            'release',
-            '--package-path',
-            'build-system/XcodeParse',
-            'XcodeParse',
-            '--project-path',
-            xcodeproj_path,
-            '--output-path',
-            'Telegram/Telegram.LSP.json'
-        ], check_result=True)
-
     call_executable(['open', xcodeproj_path])
 
 
@@ -1001,6 +998,13 @@ def build(bazel, arguments):
             )
         else:
             print('TelegramBuild: warning: --embedWatchApp requires a device configuration (debug_arm64 or release_arm64); ignored for simulator builds.')
+    # MARK: NAGRAM
+    if arguments.disableProvisioningProfiles:
+        if arguments.configuration not in ('debug_sim_arm64', 'release_sim_arm64'):
+            raise Exception('--disableProvisioningProfiles is only valid for simulator configurations; device builds must keep provisioning profiles.')
+        bazel_command_line.set_disable_provisioning_profiles()
+    if arguments.disableExtensions:
+        bazel_command_line.set_disable_extensions()
     bazel_command_line.set_build_number(arguments.buildNumber)
     bazel_command_line.set_custom_target(arguments.target)
     bazel_command_line.set_continue_on_error(arguments.continueOnError)
@@ -1407,6 +1411,19 @@ if __name__ == '__main__':
         default=False,
         help='Respect MODULE.bazel.lock.'
     )
+    # MARK: NAGRAM
+    buildParser.add_argument(
+        '--disableProvisioningProfiles',
+        action='store_true',
+        default=False,
+        help='Build for simulator without codesigning identities or provisioning profiles. Rejected for device configurations.'
+    )
+    buildParser.add_argument(
+        '--disableExtensions',
+        action='store_true',
+        default=False,
+        help='Build without app extensions.'
+    )
     buildParser.add_argument(
         '--embedWatchApp',
         action='store_true',
@@ -1520,6 +1537,33 @@ if __name__ == '__main__':
         required=False,
         type=str,
         help='Bazel remote cache host address.'
+    )
+    vm_build_parser.add_argument(
+        '--vmImage',
+        required=False,
+        type=str,
+        help='Name of the Tart image to clone. Defaults to macos-<macos_version>-xcode-<xcode_version> as declared in versions.json.',
+        metavar='name'
+    )
+    vm_build_parser.add_argument(
+        '--persistentVM',
+        action='store_true',
+        default=False,
+        help='Reuse the VM named by --vmImage instead of cloning a throwaway copy of it. The VM is booted in place and kept afterwards, so its guest-side bazel cache and source tree survive between builds.'
+    )
+    vm_build_parser.add_argument(
+        '--vmCpu',
+        required=False,
+        type=int,
+        help='Number of CPUs to give the ephemeral VM clone. Defaults to the host CPU count minus one. Not valid with --persistentVM, which uses the VM as it is configured.',
+        metavar='n'
+    )
+    vm_build_parser.add_argument(
+        '--vmMemory',
+        required=False,
+        type=int,
+        help='Memory in megabytes to give the ephemeral VM clone. Defaults to half of host memory, capped at 32 GB. Not valid with --persistentVM, which uses the VM as it is configured.',
+        metavar='megabytes'
     )
 
     generate_profiles_build_parser = subparsers.add_parser('generate-verification-profiles', help='Generate provisioning profiles that can be used to build a veritication IPA.')
@@ -1747,31 +1791,51 @@ if __name__ == '__main__':
                 watch_provisioning_profile_remote_path=watch_provisioning_profile_remote_path
             )
         elif args.commandName == 'vm-build':
+            # Checked before the codesigning repository work below, so a bad combination
+            # fails at once instead of after a git checkout.
+            if args.persistentVM and (args.vmCpu is not None or args.vmMemory is not None):
+                raise Exception('--vmCpu and --vmMemory are not valid with --persistentVM: a persistent VM is used as it is configured.')
+
             base_path = os.getcwd()
-            remote_input_path = '{}/build-input/remote-input'.format(base_path)
-            if os.path.exists(remote_input_path):
-                shutil.rmtree(remote_input_path)
-            os.makedirs(remote_input_path)
-            os.makedirs(remote_input_path + '/certs')
-            os.makedirs(remote_input_path + '/profiles')
+            versions = BuildEnvironmentVersions(base_path=base_path)
 
-            versions = BuildEnvironmentVersions(base_path=os.getcwd())
+            # The lock is taken here, not inside remote_build_tart, because everything
+            # below shares state between runs: build-input/remote-input is deleted and
+            # rebuilt, and resolve_configuration checks out the codesigning repository.
+            # A second vm-build does all of that before it discovers it is refused, so a
+            # late lock let a refused run empty the certificates directory underneath a
+            # build that was already rsyncing it into its VM.
+            with TartBuild.exclusive_vm_build(
+                target=args.vmImage if args.vmImage is not None else TartBuild.default_vm_image_name(versions.macos_version, versions.xcode_version),
+                mode='persistent' if args.persistentVM else 'ephemeral'
+            ):
+                remote_input_path = '{}/build-input/remote-input'.format(base_path)
+                if os.path.exists(remote_input_path):
+                    shutil.rmtree(remote_input_path)
+                os.makedirs(remote_input_path)
+                os.makedirs(remote_input_path + '/certs')
+                os.makedirs(remote_input_path + '/profiles')
 
-            resolve_configuration(
-                base_path=os.getcwd(),
-                bazel_command_line=None,
-                arguments=args,
-                additional_codesigning_output_path=remote_input_path
-            )
-            
-            shutil.copyfile(args.configurationPath, remote_input_path + '/configuration.json')
+                resolve_configuration(
+                    base_path=os.getcwd(),
+                    bazel_command_line=None,
+                    arguments=args,
+                    additional_codesigning_output_path=remote_input_path
+                )
 
-            TartBuild.remote_build_tart(
-                macos_version=versions.macos_version,
-                bazel_cache_host=args.cacheHost,
-                configuration=args.configuration,
-                build_input_data_path=remote_input_path
-            )
+                shutil.copyfile(args.configurationPath, remote_input_path + '/configuration.json')
+
+                TartBuild.remote_build_tart(
+                    macos_version=versions.macos_version,
+                    bazel_cache_host=args.cacheHost,
+                    configuration=args.configuration,
+                    build_input_data_path=remote_input_path,
+                    vm_image=args.vmImage,
+                    override_xcode_version=args.overrideXcodeVersion,
+                    ephemeral_vm=not args.persistentVM,
+                    vm_cpu=args.vmCpu,
+                    vm_memory=args.vmMemory
+                )
         elif args.commandName == 'generate-verification-profiles':
             base_path = os.getcwd()
             remote_input_path = '{}/build-input/remote-input'.format(base_path)
@@ -1831,5 +1895,10 @@ if __name__ == '__main__':
             build_spm(bazel=bazel_path, arguments=args)
         else:
             raise Exception('Unknown command')
+    except TartBuild.TartBuildError as e:
+        # Refusing a second concurrent vm-build is a routine outcome, not a crash;
+        # a stack trace buries the one line the user needs to act on.
+        print('error: {}'.format(e), file=sys.stderr)
+        sys.exit(1)
     except KeyboardInterrupt:
         pass
