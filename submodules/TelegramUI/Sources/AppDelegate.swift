@@ -2251,7 +2251,6 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
 
     // MARK: NEXTGRAM — Preserve agreement presentation under the upstream scene lifecycle.
     func handleDidBecomeActive() {
-        let application = UIApplication.shared
         self.isInForegroundValue = true
         self.isInForegroundPromise.set(true)
         self.isActiveValue = true
