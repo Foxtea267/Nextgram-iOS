@@ -114,9 +114,9 @@ git submodule status --recursive
 | `Nextgram-Turrit.ipa` | `com.seastar.turrit` | `27626847` | `TURRIT_API_HASH` |
 | `Nextgram-Telegram.ipa` | `ph.telegra.Telegraph` | `8` | `TELEGRAM_OFFICIAL_API_HASH` |
 
-API ID 已在变体配置中指定，不再读取旧的 `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` Secrets。Hash 仅保存在对应 Secret 中，不写入源码；缺失或格式错误会终止该变体构建，不会回退到其他客户端配置。
+API ID 已在变体配置中指定，不再读取旧的 `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` Secrets。Hash 仅保存在对应 Secret 中，不写入源码；未设置 Secret 的变体会被跳过并在构建日志中给出警告；格式错误会终止该变体构建，不会回退到其他客户端配置。
 
-五种包全部构建并校验成功后，统一上传到一个 **Release**，每种 IPA 均可单独下载。运行页面同时保留 `Nextgram-<variant>-<commit>` artifact，包含该 IPA 和可用时生成的 dSYM 压缩包。
+已配置 Secret 的包全部构建并校验成功后，统一上传到一个 **Release**，每种 IPA 均可单独下载。运行页面同时保留 `Nextgram-<variant>-<commit>` artifact，包含该 IPA 和可用时生成的 dSYM 压缩包。
 
 五种包的功能、名称、图标和 URL Scheme 均为 Nextgram，仅兼容身份不同；App Group 由各 Bundle ID 生成 `group.<bundle_id>`。请选择手机未安装对应原版的包，例如已安装 Nagram 时选择其他四种，已安装官方 Telegram 时不要选择 Telegram 包。安装同包名应用可能覆盖原版或发生冲突，请先备份重要数据。这些包不是旧包名 `jp.foxtea.nextgram` 的原位更新，账号与本地缓存不会自动迁移；不同兼容包也不共享账号和缓存。
 
