@@ -320,7 +320,7 @@ jobs:
           PY
             echo
             echo "Standalone re-signable IPA. Re-sign before installation."
-            echo "四种包的功能、Nextgram 名称和图标相同；请选择手机未安装对应原版的兼容包。"
+            echo "五种包的功能、Nextgram 名称和图标相同；请选择手机未安装对应原版的兼容包。"
             echo "这些兼容包不是 jp.foxtea.nextgram 的原位更新，不会自动迁移其账号和本地缓存。"
             echo "推送兼容性仍需在企业重签后实测，不保证通知恢复。"
           } > build/release-notes.md
