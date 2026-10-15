@@ -121,9 +121,7 @@ API ID 已在变体配置中指定，不再读取旧的 `TELEGRAM_API_ID` / `TEL
 
 兼容身份来自维护者指定的配置，不代表相关客户端的授权或背书。企业重签后的通知效果仍需真机验证，不保证通知恢复；详见[通知排查](docs/notifications.md)。
 
-Release 和“关于 Nextgram”使用 **Nagram 基础版本 + Nextgram 修订号**，例如基础版本为 `12.1.0` 时，第 2 个 Nextgram 版本为 `12.1.0.2`。当前代码基础版本为 `12.9.3`，新格式从 `12.9.3.1` 开始。Actions 根据同一基础版本已发布的 Release 自动递增末段；失败构建不占用修订号，四种兼容包共用同一版本号。基础版本变更后，修订号重新从 1 开始。`versions.json` 的 `app` 保存基础版本，`nextgram_revision` 保存修订号的起始值或最低值。
-
-按 [Apple 的版本字段要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)，IPA 的 `CFBundleShortVersionString` 保留三段基础版本，完整四段版本保存为 `NextgramVersion`，系统构建号 `CFBundleVersion` 继续递增。Release 说明会列出上一个发布版本以来的提交、基础版本、Nextgram 版本与安装包选择表。
+版本号与 Telegram 官方一致，保存在 `versions.json` 的 `app` 中（当前为 `13.0`）。每次构建的构建号 `CFBundleVersion` 自动递增，“关于 Nextgram”显示为 `13.0 (构建号)`，Release 名称为 `13.0-构建号`，四种兼容包共用同一版本号与构建号。Release 说明会列出上一个发布版本以来的提交、版本号与安装包选择表。
 
 > [!WARNING]
 > GitHub Actions 产物只包含主应用；打包时会移除临时签名与 provisioning profile，仅用于后续重签，不能直接安装。请使用自己的证书或签名工具重签 IPA。
