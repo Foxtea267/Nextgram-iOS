@@ -9,6 +9,7 @@ import SettingsUI
 import NagramSettingsUI
 import PeerInfoStoryGridScreen
 import CallListUI
+import ContactListUI // MARK: NAGRAM
 import PassportUI
 import AccountUtils
 import OverlayStatusController
@@ -84,7 +85,7 @@ extension PeerInfoScreenNode {
                     return
                 }
                 if let controller = self.controller, let navigationController = controller.navigationController as? NavigationController {
-                    self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(peer)))
+                    self.context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: self.context, chatLocation: .peer(peer), keepStack: self.nagramChatKeepStack(navigationController: navigationController))) // MARK: NAGRAM
                 }
             })
         case .recentCalls:
@@ -162,6 +163,9 @@ extension PeerInfoScreenNode {
             if let controller = self.context.sharedContext.makeDebugSettingsController(context: self.context) {
                 push(controller)
             }
+        // MARK: NAGRAM — 联系人 tab 被隐藏时的入口
+        case .nagramContacts:
+            push(ContactsController(context: self.context, nagramIsPushed: true))
         case .appearance:
             push(themeSettingsController(context: self.context))
         case .language:
@@ -360,12 +364,21 @@ extension PeerInfoScreenNode {
         })
     }
     
+    // MARK: NAGRAM — 设置 tab 被隐藏时设置页是推入的独立页面，从它打开聊天要保留导航栈才能返回到它。
+    private func nagramChatKeepStack(navigationController: NavigationController) -> NavigateToChatKeepStack {
+        guard let controller = self.controller else {
+            return .default
+        }
+        return navigationController.viewControllers.contains(where: { $0 === controller }) ? .always : .default
+    }
+    
     private func openTips() {
         let controller = OverlayStatusController(theme: self.presentationData.theme, type: .loading(cancelled: nil))
         self.controller?.present(controller, in: .window(.root))
         
         let context = self.context
         let navigationController = self.controller?.navigationController as? NavigationController
+        let keepStack: NavigateToChatKeepStack = navigationController.flatMap { self.nagramChatKeepStack(navigationController: $0) } ?? .default // MARK: NAGRAM
         self.tipsPeerDisposable.set((self.context.engine.peers.resolvePeerByName(name: self.presentationData.strings.Settings_TipsUsername, referrer: nil)
         |> mapToSignal { result -> Signal<EnginePeer?, NoError> in
             guard case let .result(result) = result else {
@@ -376,7 +389,7 @@ extension PeerInfoScreenNode {
         |> deliverOnMainQueue).startStrict(next: { [weak controller] peer in
             controller?.dismiss()
             if let peer = peer, let navigationController = navigationController {
-                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer)))
+                context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), keepStack: keepStack)) // MARK: NAGRAM
             }
         }))
     }

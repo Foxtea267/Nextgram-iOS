@@ -248,6 +248,15 @@ extension's still-mapped `-shm` with a different WAL file. `.tempkey` creation i
 is serialized across processes with `flock` on `.tempkey.lock` for the same reason (two generators
 would each key a database with material only one of them persisted).
 
+## Release notes
+
+`docs/nagram/releases/<app version>.md` holds the notes of **one TestFlight build**: what changed
+since the previous release (the latest `v<version>-<build>` tag), in user-facing Chinese. Overwrite
+the whole file for every release; do not append to it. A push to `release` publishes it as the
+build's What to Test text, the GitHub release body and the channel post, and the workflow refuses to
+publish notes that are unchanged since the previous release tag. The notes of earlier builds stay in
+their GitHub releases; the notes of an App Store version are gathered from those.
+
 ## Code Style Guidelines
 
 - **Naming**: PascalCase for types, camelCase for variables/methods

@@ -103,10 +103,12 @@
 
 "Nagram.SecondsInMessages" = "Show Seconds in Timestamps";
 "Nagram.ShowForwardedMessageDate" = "Show Original Time for Forwarded Messages";
+"Nagram.ShowMessageId" = "Show Message ID";
 "Nagram.ChatListMessagePreviewStyle" = "Message Preview Style";
 "Nagram.ChatListMessagePreviewStyle.three" = "Three Lines";
 "Nagram.ChatListMessagePreviewStyle.two" = "Two Lines";
 "Nagram.HideSavedAndArchivedMessagesInList" = "Hide Saved and Archived Messages in List";
+"Nagram.KeepNewChatsVisibleAtTop" = "Keep New Chats Visible at Top";
 "Nagram.DisableCommunityChatGrouping" = "Disable Community Chat Grouping";
 "Nagram.CommunityAvatarTapAction" = "Community Avatar Tap Action";
 "Nagram.CommunityAvatarTapAction.chat" = "Always Open Chat";
@@ -129,6 +131,21 @@
 "Nagram.DefaultMessageFormat.strikethrough" = "Strikethrough";
 "Nagram.DefaultMessageFormat.spoiler" = "Spoiler";
 "Nagram.TextStyleToolbar" = "Text Style Toolbar";
+"Nagram.TextStyleToolbar.off" = "Off";
+"Nagram.TextStyleToolbar.panel" = "Keyboard Panel";
+"Nagram.TextStyleToolbar.bar" = "Persistent Bar";
+"Nagram.TextStyleToolbar.both" = "Panel + Bar";
+"Nagram.TextStyleMenu" = "Selection Menu";
+"Nagram.TextStyleMenu.PositionHeader" = "Insert Position";
+"Nagram.TextStyleMenu.Position.first" = "At the Beginning";
+"Nagram.TextStyleMenu.Position.beforeFormat" = "Before “Format” (after Copy / Paste)";
+"Nagram.TextStyleMenu.Position.afterFormat" = "After “Format”";
+"Nagram.TextStyleMenu.Position.last" = "At the End";
+"Nagram.TextStyleMenu.PositionFooter" = "The full Format menu always stays in its usual place. The system menu shows about 5 items per page; later items need “>” to page.";
+"Nagram.TextStyleMenu.ItemsHeader" = "Styles Shown in the Menu";
+"Nagram.TextStyleMenu.ItemsFooter" = "Enabled styles appear directly on the first level of the text selection menu. Tap Edit to reorder. Quote, Spoiler and Date are hidden in secret chats.";
+"Nagram.TextStyleMenu.Reset" = "Reset Selection Menu";
+"Nagram.TextStyleMenu.ResetConfirm" = "Reset all selection menu styles, order and position?";
 "Nagram.PanguOnSending" = "Enable Pangu on Sending";
 "Nagram.PanguOnEditing" = "Enable Pangu on Editing";
 "Nagram.HideRecordingButton" = "Hide Voice Recording Button";
@@ -635,3 +652,6 @@ With iCloud Keychain sync on, backups follow your other devices and appear on th
 "Nagram.InviteLinks.FetchFailed" = "Couldn't load the complete list of additional invite links. Please try again later.";
 "Nagram.InviteLinks.Success" = "Revoked additional invite links: %@.";
 "Nagram.InviteLinks.PartialFailure" = "Revoked: %1$@. Failed: %2$@. The list is refreshing.";
+"Nagram.MutualContact.Description" = "This contact is a mutual contact.";
+"Nagram.UnpinAllMessagesAlert" = "Would you like to unpin all messages?";
+"Nagram.ConfirmUnpin" = "Confirm Before Unpinning";

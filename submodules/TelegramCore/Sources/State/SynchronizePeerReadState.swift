@@ -11,12 +11,20 @@ private enum PeerReadStateMarker: Equatable {
 }
 
 private func inputPeer(postbox: Postbox, peerId: PeerId) -> Signal<Api.InputPeer, PeerReadStateValidationError> {
-    return postbox.loadedPeerWithId(peerId)
-    |> mapToSignalPromotingError { peer -> Signal<Api.InputPeer, PeerReadStateValidationError> in
-        if let inputPeer = apiInputPeer(peer) {
+    // MARK: NAGRAM
+    // A peer stored without an access hash has no Api.InputPeer, and nothing a retry does
+    // gives it one: the manager restarts a failed operation at once, so failing here respun
+    // the same operation without a request in between (about 18,000 times a second for one
+    // user, measured from a device log). Wait for the peer record to change instead, the way
+    // loadedPeerWithId already waits for a peer that is not stored at all.
+    let key = PostboxViewKey.basicPeer(peerId)
+    return postbox.combinedView(keys: [key])
+    |> castError(PeerReadStateValidationError.self)
+    |> mapToSignal { views -> Signal<Api.InputPeer, PeerReadStateValidationError> in
+        if let peer = (views.views[key] as? BasicPeerView)?.peer, let inputPeer = apiInputPeer(peer) {
             return .single(inputPeer)
         } else {
-            return .fail(.retry)
+            return .complete()
         }
     }
     |> take(1)
@@ -179,7 +187,7 @@ private func confirmSynchronized(postbox: Postbox, peerId: PeerId) -> Signal<Voi
 private func validatePeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId) -> Signal<Never, PeerReadStateValidationError> {
     if peerId.namespace == Namespaces.Peer.SecretChat {
         // A secret chat has no Api.InputPeer, so there is no dialog to read an authoritative
-        // read state from: every step below fails at inputPeer and asks to retry, forever.
+        // read state from: every step below stops at inputPeer, which waits for one forever.
         // Treat it like a peer the server reports no dialog for, which is already confirmed
         // rather than retried. This does discard a validation that a detected inconsistency
         // asked for - a hole among deleted unread messages, an undercount - without

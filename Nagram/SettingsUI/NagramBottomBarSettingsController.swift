@@ -137,6 +137,31 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
         return lhs.stableId < rhs.stableId
     }
 
+    var tag: ItemListItemTag? {
+        switch self {
+        case let .toggle(_, _, _, _, option):
+            switch option {
+            case .topSearch:
+                return NagramSettingsFocusTag("TopSearch")
+            case .labels:
+                return NagramSettingsFocusTag("ShowLabels")
+            }
+        case .visibility:
+            return NagramSettingsFocusTag("Visibility")
+        case .slider:
+            return NagramSettingsFocusTag("ButtonWidth")
+        case let .disclosure(_, _, _, _, option):
+            switch option {
+            case .alignment:
+                return NagramSettingsFocusTag("Alignment")
+            case .searchMode:
+                return NagramSettingsFocusTag("SearchStyle")
+            }
+        case .preview, .header, .reset, .footer:
+            return nil
+        }
+    }
+
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! NagramBottomBarArguments
         switch self {
@@ -166,7 +191,7 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                         settings.showLabels = value
                     }
                 }
-            })
+            }, tag: self.tag)
         case let .visibility(_, section, title, settings, itemTitles):
             let visibleBottomItems = Set(settings.visibleBottomItems)
             let chips = NagramBottomBarItemId.allCases.map { id in
@@ -197,11 +222,11 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                     settings.widthMode = value >= 100 ? .full : .adaptive
                     settings.slotMode = value <= 0 ? .preserveHidden : .visibleOnly
                 }
-            })
+            }, tag: self.tag)
         case let .disclosure(_, section, title, label, option):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: label, sectionId: section, style: .blocks, action: {
                 arguments.option(option)
-            })
+            }, tag: self.tag)
         case let .reset(_, section, title):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: section, style: .blocks, action: {
                 arguments.reset()
@@ -230,7 +255,7 @@ private func nagramBottomBarSettings(_ settings: NagramBottomBarSettings, applyi
     return nagramBottomBarSettingsNormalizedForLayout(result)
 }
 
-public func nagramBottomBarSettingsController(context: AccountContext) -> ViewController {
+public func nagramBottomBarSettingsController(context: AccountContext, focusOnRow: String? = nil) -> ViewController {
     let updatePromise = ValuePromise<Int32>(0, ignoreRepeated: false)
     var updateValue: Int32 = 0
     let bump: () -> Void = {
@@ -373,12 +398,13 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
         ]
 
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(ngI18n("Nagram.BottomBarLayout", lang)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, initialScrollToItem: nagramFocusScrollToItem(entries: entries, focusOnRow: focusOnRow), animateChanges: false)
         return (controllerState, (listState, arguments))
     }
 
     let controller = ItemListController(context: context, state: signal)
     controller.navigationPresentation = .default
+    nagramHighlightFocusedRow(controller: controller, focusOnRow: focusOnRow)
     presentControllerImpl = { [weak controller] c, presentationArguments in
         controller?.present(c, in: .window(.root), with: presentationArguments)
     }

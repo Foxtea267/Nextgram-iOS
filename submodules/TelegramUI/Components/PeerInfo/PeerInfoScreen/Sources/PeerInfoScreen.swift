@@ -279,6 +279,8 @@ enum PeerInfoSettingsSection {
     case nagram
     // MARK: NAGRAM — Debug fallback when the bottom tab bar is hidden.
     case nagramDebug
+    // MARK: NAGRAM — 联系人 tab 被隐藏时的入口
+    case nagramContacts
 }
 
 enum PeerInfoReportType {
@@ -388,6 +390,9 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
     let addMemberDisposable = MetaDisposable()
     let preloadHistoryDisposable = MetaDisposable()
     let nagramProfileSettingsDisposable = MetaDisposable() // MARK: NAGRAM
+    // MARK: NAGRAM — 设置页联系人 / 通话记录入口随底栏设置刷新
+    private var nagramShowCallsTab: Bool = CallListSettings.defaultSettings.showTab
+    private var nagramTabEntriesDisposable: Disposable?
     var shareStatusDisposable: MetaDisposable?
     let joinChannelDisposable = MetaDisposable()
     
@@ -2612,6 +2617,26 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             self?.requestLayout(animated: false)
         }))
         
+        // MARK: NAGRAM — 设置页联系人 / 通话记录入口随底栏设置刷新
+        if self.isSettings {
+            let showCallsTab = context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.callListSettings])
+            |> map { sharedData -> Bool in
+                return sharedData.entries[ApplicationSpecificSharedDataKeys.callListSettings]?.get(CallListSettings.self)?.showTab ?? CallListSettings.defaultSettings.showTab
+            }
+            |> distinctUntilChanged
+            self.nagramTabEntriesDisposable = combineLatest(
+                queue: Queue.mainQueue(),
+                showCallsTab,
+                nagramBottomBarSettingsSignal()
+            ).startStrict(next: { [weak self] showCallsTab, _ in
+                guard let self else {
+                    return
+                }
+                self.nagramShowCallsTab = showCallsTab
+                self.requestLayout(animated: false)
+            })
+        }
+        
         self.customStatusDisposable = (self.customStatusPromise.get()
         |> deliverOnMainQueue).startStrict(next: { [weak self] value in
             guard let strongSelf = self else {
@@ -2745,6 +2770,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         self.addMemberDisposable.dispose()
         self.preloadHistoryDisposable.dispose()
         self.nagramProfileSettingsDisposable.dispose() // MARK: NAGRAM
+        self.nagramTabEntriesDisposable?.dispose() // MARK: NAGRAM
         self.resolvePeerByNameDisposable?.dispose()
         self.navigationActionDisposable.dispose()
         self.enqueueMediaMessageDisposable.dispose()
@@ -5596,7 +5622,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             insets.right += sectionInset
             
             let editItems = (self.isSettings || self.isMyProfile) ? settingsEditingItems(data: self.data, state: self.state, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isMyProfile: self.isMyProfile) : editingItems(data: self.data, boostStatus: self.boostStatus, state: self.state, chatLocation: self.chatLocation, context: self.context, presentationData: self.presentationData, interaction: self.interaction)
-            var items = self.isSettings ? settingsItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
+            var items = self.isSettings ? settingsItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, isExpanded: self.headerNode.isAvatarExpanded, nagramShowCallsTab: self.nagramShowCallsTab) : infoItems(data: self.data, context: self.context, presentationData: self.presentationData, interaction: self.interaction, reactionSourceMessageId: self.reactionSourceMessageId, canDeleteReaction: self.canDeleteReaction, callMessages: self.callMessages, chatLocation: self.chatLocation, isOpenedFromChat: self.isOpenedFromChat, isMyProfile: self.isMyProfile)
             
             // MARK: NAGRAM — Expose user-selected group settings items on the group profile.
             if let peer = self.data?.peer {

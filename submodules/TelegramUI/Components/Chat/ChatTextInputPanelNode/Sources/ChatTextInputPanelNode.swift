@@ -242,6 +242,36 @@ private enum ChatTextFormattingToolbarAction: Int, CaseIterable, Hashable {
         }
     }
 
+    func attributedIcon(color: UIColor, fontSize: CGFloat = 20.0) -> NSAttributedString {
+        let font: UIFont
+        switch self {
+        case .bold:
+            font = UIFont.boldSystemFont(ofSize: fontSize)
+        case .italic:
+            font = UIFont.italicSystemFont(ofSize: fontSize)
+        case .code:
+            font = UIFont.systemFont(ofSize: fontSize * 0.7, weight: .semibold)
+        case .monospace:
+            font = Font.monospace(fontSize)
+        default:
+            font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
+        }
+
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color
+        ]
+        switch self {
+        case .underline:
+            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        case .strikethrough:
+            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        default:
+            break
+        }
+        return NSAttributedString(string: self.title, attributes: attributes)
+    }
+
     func accessibilityLabel(strings: PresentationStrings) -> String {
         switch self {
         case .quote:
@@ -325,7 +355,7 @@ private final class ChatTextFormattingActionButton: UIControl {
 
         self.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.16 : 0.10) : UIColor.clear
         self.iconBackgroundView.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.26 : 0.15) : theme.chat.inputPanel.inputBackgroundColor.withAlphaComponent(theme.overallDarkAppearance ? 0.65 : 0.82)
-        self.iconLabel.attributedText = self.attributedIcon(color: effectiveForegroundColor)
+        self.iconLabel.attributedText = self.action.attributedIcon(color: effectiveForegroundColor)
         self.titleLabel.attributedText = NSAttributedString(string: self.action.accessibilityLabel(strings: strings), font: Font.regular(11.0), textColor: effectiveForegroundColor)
         self.alpha = isEnabled ? 1.0 : 0.55
     }
@@ -348,35 +378,6 @@ private final class ChatTextFormattingActionButton: UIControl {
         self.titleLabel.frame = CGRect(x: 4.0, y: titleTop, width: max(1.0, size.width - 8.0), height: max(1.0, size.height - titleTop - 4.0))
     }
 
-    private func attributedIcon(color: UIColor) -> NSAttributedString {
-        let font: UIFont
-        switch self.action {
-        case .bold:
-            font = UIFont.boldSystemFont(ofSize: 20.0)
-        case .italic:
-            font = UIFont.italicSystemFont(ofSize: 20.0)
-        case .code:
-            font = UIFont.systemFont(ofSize: 14.0, weight: .semibold)
-        case .monospace:
-            font = Font.monospace(20.0)
-        default:
-            font = UIFont.systemFont(ofSize: 20.0, weight: .semibold)
-        }
-
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: color
-        ]
-        switch self.action {
-        case .underline:
-            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-        case .strikethrough:
-            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-        default:
-            break
-        }
-        return NSAttributedString(string: self.action.title, attributes: attributes)
-    }
 }
 
 // MARK: NAGRAM — 键盘区域文本格式面板
@@ -530,6 +531,112 @@ private final class ChatTextFormattingInputView: UIInputView, UIInputViewAudioFe
     }
 }
 
+// MARK: NAGRAM — 输入框下方的常驻格式条，与键盘区格式面板共用动作、选中态和执行逻辑。
+private final class ChatTextFormattingBarButton: UIControl {
+    let action: ChatTextFormattingToolbarAction
+    private let label = UILabel()
+
+    init(action: ChatTextFormattingToolbarAction) {
+        self.action = action
+        super.init(frame: CGRect())
+        self.isAccessibilityElement = true
+        self.layer.cornerRadius = 14.0
+        self.label.textAlignment = .center
+        self.label.isUserInteractionEnabled = false
+        self.addSubview(self.label)
+    }
+
+    required init?(coder: NSCoder) {
+        preconditionFailure()
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            self.label.alpha = self.isHighlighted ? 0.5 : 1.0
+        }
+    }
+
+    func update(theme: PresentationTheme, strings: PresentationStrings, isEnabled: Bool, isSelected: Bool) {
+        self.isEnabled = isEnabled
+        self.accessibilityLabel = self.action.accessibilityLabel(strings: strings)
+        self.accessibilityTraits = isSelected ? [.button, .selected] : [.button]
+
+        let accentColor = theme.chat.inputPanel.panelControlAccentColor
+        let foregroundColor = theme.chat.inputPanel.inputControlColor
+        let color = isEnabled ? (isSelected ? accentColor : foregroundColor) : foregroundColor.withAlphaComponent(0.35)
+        self.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.2 : 0.12) : .clear
+        self.label.attributedText = self.action.attributedIcon(color: color, fontSize: 17.0)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.label.frame = self.bounds
+    }
+}
+
+private final class ChatTextFormattingBarView: UIView {
+    static let height: CGFloat = 40.0
+
+    let backgroundView: GlassBackgroundView
+    private var buttons: [ChatTextFormattingToolbarAction: ChatTextFormattingBarButton] = [:]
+    private var actions: [ChatTextFormattingToolbarAction] = []
+    private(set) var glassTintColor: GlassBackgroundView.TintColor = .init(kind: .panel)
+
+    var pressed: ((ChatTextFormattingToolbarAction) -> Void)?
+
+    override init(frame: CGRect) {
+        self.backgroundView = GlassBackgroundView(frame: CGRect())
+        super.init(frame: frame)
+        self.addSubview(self.backgroundView)
+    }
+
+    required init?(coder: NSCoder) {
+        preconditionFailure()
+    }
+
+    func update(size: CGSize, theme: PresentationTheme, strings: PresentationStrings, tintColor: GlassBackgroundView.TintColor, actions: [ChatTextFormattingToolbarAction], enabledActions: Set<ChatTextFormattingToolbarAction>, selectedActions: Set<ChatTextFormattingToolbarAction>, transition: ComponentTransition) {
+        self.actions = actions
+        self.glassTintColor = tintColor
+        self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: theme.overallDarkAppearance, tintColor: tintColor, isInteractive: true, transition: transition)
+        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(), size: size))
+
+        let visible = Set(actions)
+        for action in actions {
+            let button: ChatTextFormattingBarButton
+            if let current = self.buttons[action] {
+                button = current
+            } else {
+                button = ChatTextFormattingBarButton(action: action)
+                button.addTarget(self, action: #selector(self.buttonPressed(_:)), for: .touchUpInside)
+                self.buttons[action] = button
+                self.backgroundView.contentView.addSubview(button)
+            }
+            button.isHidden = false
+            button.update(theme: theme, strings: strings, isEnabled: enabledActions.contains(action), isSelected: selectedActions.contains(action))
+        }
+        for (action, button) in self.buttons where !visible.contains(action) {
+            button.isHidden = true
+        }
+
+        guard !actions.isEmpty else {
+            return
+        }
+        let sideInset: CGFloat = 6.0
+        let step = (size.width - sideInset * 2.0) / CGFloat(actions.count)
+        for (index, action) in actions.enumerated() {
+            guard let button = self.buttons[action] else {
+                continue
+            }
+            let buttonWidth = min(44.0, step - 2.0)
+            button.frame = CGRect(x: floorToScreenPixels(sideInset + step * CGFloat(index) + (step - buttonWidth) * 0.5), y: 6.0, width: buttonWidth, height: size.height - 12.0)
+        }
+    }
+
+    @objc private func buttonPressed(_ button: ChatTextFormattingBarButton) {
+        self.pressed?(button.action)
+    }
+}
+
 public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, ChatInputTextNodeDelegate {
     private enum AudioRecordingRemoveAnimationState {
         case recordingToAttachButton
@@ -664,6 +771,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     // MARK: NAGRAM — 键盘区域文本格式面板
     private var textFormattingInputView: ChatTextFormattingInputView?
     private var isTextFormattingPanelExpanded = false
+    // MARK: NAGRAM — 常驻格式条
+    private var textFormattingBarView: ChatTextFormattingBarView?
     
     private var theme: PresentationTheme?
     private var strings: PresentationStrings?
@@ -761,7 +870,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     
     // MARK: NAGRAM — 文本格式面板按钮插在 emoji / stickers 按钮旁边。
     private func effectiveAccessoryItems(_ accessoryItems: [ChatTextInputAccessoryItem]) -> [ChatTextInputAccessoryItem] {
-        guard NagramSettings.shared.showTextStyleToolbar else {
+        guard NagramSettings.shared.textStyleToolbarMode.showsPanel else {
             return accessoryItems
         }
         var result = accessoryItems
@@ -2134,7 +2243,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.sendingTextDisabled = sendingTextDisabled
         
         // MARK: NAGRAM — 禁用发送、录音或关闭设置时收起格式面板。
-        if self.isTextFormattingPanelExpanded && (sendingTextDisabled || interfaceState.inputTextPanelState.mediaRecordingState != nil || !NagramSettings.shared.showTextStyleToolbar) {
+        if self.isTextFormattingPanelExpanded && (sendingTextDisabled || interfaceState.inputTextPanelState.mediaRecordingState != nil || !NagramSettings.shared.textStyleToolbarMode.showsPanel) {
             self.collapseTextFormattingPanel(switchToKeyboard: false, requestLayout: false)
         }
 
@@ -4252,6 +4361,9 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             }
         }
 
+        // MARK: NAGRAM — 常驻格式条排在输入框下方，高度计入面板。
+        contentHeight += self.updateTextFormattingBar(frame: CGRect(x: hideOffset.x + leftInset + 8.0, y: textInputContainerBackgroundFrame.maxY + 6.0, width: max(0.0, width - leftInset - rightInset - 16.0), height: ChatTextFormattingBarView.height), interfaceState: interfaceState, tintColor: defaultGlassTintColor, transition: transition)
+
         let containerFrame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: contentHeight + 64.0))
         transition.updateFrame(view: self.glassBackgroundContainer, frame: containerFrame)
         self.glassBackgroundContainer.update(size: containerFrame.size, isDark: interfaceState.theme.overallDarkAppearance, transition: ComponentTransition(transition))
@@ -4443,7 +4555,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     }
 
     private func expandTextFormattingPanel() {
-        guard NagramSettings.shared.showTextStyleToolbar, !self.sendingTextDisabled else {
+        guard NagramSettings.shared.textStyleToolbarMode.showsPanel, !self.sendingTextDisabled else {
             return
         }
         if self.richTextInputNode == nil {
@@ -4634,6 +4746,59 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
         let toolbarState = self.textFormattingToolbarState(selectedRange: richTextInputNode.selectedRange, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes)
         self.ensureTextFormattingInputView().update(theme: presentationInterfaceState.theme, strings: presentationInterfaceState.strings, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes, enabledActions: toolbarState.enabledActions, selectedActions: toolbarState.selectedActions)
+    }
+
+    // MARK: NAGRAM — 常驻格式条：返回它在面板中占用的高度（不显示时为 0）。
+    private func updateTextFormattingBar(frame: CGRect, interfaceState: ChatPresentationInterfaceState, tintColor: GlassBackgroundView.TintColor, transition: ContainedViewLayoutTransition) -> CGFloat {
+        let isVisible = NagramSettings.shared.textStyleToolbarMode.showsBar
+            && !self.sendingTextDisabled
+            && !self.extendedSearchLayout
+            && interfaceState.inputTextPanelState.mediaRecordingState == nil
+            && interfaceState.interfaceState.mediaDraftState == nil
+            && self.richTextInputNode?.isInputFirstResponder == true
+
+        guard isVisible else {
+            if let barView = self.textFormattingBarView {
+                self.textFormattingBarView = nil
+                transition.updateAlpha(layer: barView.layer, alpha: 0.0, completion: { [weak barView] _ in
+                    barView?.removeFromSuperview()
+                })
+            }
+            return 0.0
+        }
+
+        let barView: ChatTextFormattingBarView
+        var barTransition = ComponentTransition(transition)
+        if let current = self.textFormattingBarView {
+            barView = current
+        } else {
+            barView = ChatTextFormattingBarView(frame: frame)
+            barView.pressed = { [weak self] action in
+                self?.performTextFormattingToolbarAction(action)
+            }
+            self.textFormattingBarView = barView
+            self.glassBackgroundContainer.contentView.addSubview(barView)
+            barView.alpha = 0.0
+            barTransition = .immediate
+        }
+        transition.updateFrame(view: barView, frame: frame)
+        transition.updateAlpha(layer: barView.layer, alpha: 1.0)
+        self.updateTextFormattingBarContent(size: frame.size, interfaceState: interfaceState, tintColor: tintColor, transition: barTransition)
+        return frame.height + 6.0
+    }
+
+    private func updateTextFormattingBarContent(size: CGSize, interfaceState: ChatPresentationInterfaceState, tintColor: GlassBackgroundView.TintColor, transition: ComponentTransition) {
+        guard let barView = self.textFormattingBarView, let richTextInputNode = self.richTextInputNode else {
+            return
+        }
+        var hasSpoilers = true
+        var hasQuotes = true
+        if interfaceState.chatLocation.peerId?.namespace == Namespaces.Peer.SecretChat {
+            hasSpoilers = false
+            hasQuotes = false
+        }
+        let toolbarState = self.textFormattingToolbarState(selectedRange: richTextInputNode.selectedRange, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes)
+        barView.update(size: size, theme: interfaceState.theme, strings: interfaceState.strings, tintColor: tintColor, actions: ChatTextFormattingToolbarAction.visibleActions(hasSpoilers: hasSpoilers, hasQuotes: hasQuotes), enabledActions: toolbarState.enabledActions, selectedActions: toolbarState.selectedActions, transition: transition)
     }
 
     // MARK: NAGRAM — 可视化文本样式工具栏
@@ -5590,6 +5755,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             if self.isTextFormattingPanelExpanded {
                 self.updateTextFormattingInputView()
             }
+            // MARK: NAGRAM — 常驻格式条跟随选区刷新按钮状态
+            if let barView = self.textFormattingBarView {
+                self.updateTextFormattingBarContent(size: barView.bounds.size, interfaceState: presentationInterfaceState, tintColor: barView.glassTintColor, transition: .immediate)
+            }
             self.updateInputField(textInputFrame: richTextInputNode.textFieldFrame, transition: .immediate)
         }
     }
@@ -5617,6 +5786,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
         
         self.inputMenu.activate()
+        // MARK: NAGRAM — 常驻格式条随输入框焦点出现
+        if NagramSettings.shared.textStyleToolbarMode.showsBar {
+            self.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
+        }
         
         if let touchDownGestureRecognizer = self.touchDownGestureRecognizer {
             self.richTextInputNode?.inputView.addGestureRecognizer(touchDownGestureRecognizer)
@@ -5638,6 +5811,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.dismissedEmojiSuggestionPosition = nil
         // MARK: NAGRAM — 键盘区域文本格式面板
         self.collapseTextFormattingPanel(switchToKeyboard: false)
+        // MARK: NAGRAM — 常驻格式条随输入框失焦收起
+        if self.textFormattingBarView != nil {
+            self.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
+        }
         
         if let presentationInterfaceState = self.presentationInterfaceState, !self.skipPresentationInterfaceStateUpdate {
             if let peer = presentationInterfaceState.renderedPeer?.peer as? TelegramUser, peer.botInfo != nil, let keyboardButtonsMessage = presentationInterfaceState.keyboardButtonsMessage, let keyboardMarkup = keyboardButtonsMessage.visibleButtonKeyboardMarkup, keyboardMarkup.flags.contains(.persistent) {
@@ -5851,8 +6028,94 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             
             let formatMenu = UIMenu(title: self.strings?.TextFormat_Format ?? "Format", image: nil, children: children)
             actions.insert(formatMenu, at: 1)
+            // MARK: NAGRAM — 选中文字菜单平铺样式
+            actions = self.nagramInsertingFlatTextStyles(into: actions, formatMenuIndex: 1, hasSpoilers: hasSpoilers, perform: { [weak self] id in
+                guard let self else {
+                    return
+                }
+                switch id {
+                case .quote:
+                    self.formatAttributesQuote(self)
+                case .spoiler:
+                    self.formatAttributesSpoiler(self)
+                case .bold:
+                    self.formatAttributesBold(self)
+                case .italic:
+                    self.formatAttributesItalic(self)
+                case .monospace:
+                    self.formatAttributesMonospace(self)
+                case .link:
+                    self.formatAttributesLink(self)
+                case .date:
+                    self.formatAttributesDate(self)
+                case .strikethrough:
+                    self.formatAttributesStrikethrough(self)
+                case .underline:
+                    self.formatAttributesUnderline(self)
+                case .code:
+                    self.formatAttributesCodeBlock(self)
+                }
+            })
         }
         return UIMenu(children: actions)
+    }
+
+    // MARK: NAGRAM — 选中文字菜单：把设置里开启的样式按顺序平铺到菜单第一层。
+    // 完整的「格式」子菜单保持在 formatMenuIndex 不动；私密聊天沿用上游规则隐藏引用、剧透和日期。
+    private func nagramInsertingFlatTextStyles(into elements: [UIMenuElement], formatMenuIndex: Int, hasSpoilers: Bool, perform: @escaping (NagramTextStyleMenuItemId) -> Void) -> [UIMenuElement] {
+        let ids = NagramSettings.shared.enabledTextStyleMenuItems.filter { id in
+            switch id {
+            case .quote, .spoiler, .date:
+                return hasSpoilers
+            default:
+                return true
+            }
+        }
+        guard !ids.isEmpty else {
+            return elements
+        }
+        let flatActions: [UIMenuElement] = ids.map { id in
+            let title: String
+            switch id {
+            case .quote:
+                title = self.strings?.TextFormat_Quote ?? "Quote"
+            case .spoiler:
+                title = self.strings?.TextFormat_Spoiler ?? "Spoiler"
+            case .bold:
+                title = self.strings?.TextFormat_Bold ?? "Bold"
+            case .italic:
+                title = self.strings?.TextFormat_Italic ?? "Italic"
+            case .monospace:
+                title = self.strings?.TextFormat_Monospace ?? "Monospace"
+            case .link:
+                title = self.strings?.TextFormat_Link ?? "Link"
+            case .date:
+                title = self.strings?.TextFormat_Date ?? "Date"
+            case .strikethrough:
+                title = self.strings?.TextFormat_Strikethrough ?? "Strikethrough"
+            case .underline:
+                title = self.strings?.TextFormat_Underline ?? "Underline"
+            case .code:
+                title = self.strings?.TextFormat_Code ?? "Code"
+            }
+            return UIAction(title: title, image: nil) { _ in
+                perform(id)
+            }
+        }
+        let index: Int
+        switch NagramSettings.shared.textStyleMenuPosition {
+        case .first:
+            index = 0
+        case .beforeFormat:
+            index = formatMenuIndex
+        case .afterFormat:
+            index = formatMenuIndex + 1
+        case .last:
+            index = elements.count
+        }
+        var result = elements
+        result.insert(UIMenu(title: "", options: .displayInline, children: flatActions), at: min(index, result.count))
+        return result
     }
 
     /// Transforms the editor's default edit-menu elements for the NEW (native) rich-text editor backend.
@@ -5922,6 +6185,31 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         var elements = defaultElements.filter { ($0 as? UIMenu)?.identifier != UIMenu.Identifier("org.telegram.RichTextEditor.format") }
         let insertIndex = min(1, elements.count)
         elements.insert(formatMenu, at: insertIndex)
+        // MARK: NAGRAM — 选中文字菜单平铺样式
+        elements = self.nagramInsertingFlatTextStyles(into: elements, formatMenuIndex: insertIndex, hasSpoilers: hasSpoilers, perform: { [weak self, weak richTextInputNode] id in
+            switch id {
+            case .quote:
+                richTextInputNode?.performFormatAction(.quote)
+            case .spoiler:
+                richTextInputNode?.performFormatAction(.spoiler)
+            case .bold:
+                richTextInputNode?.performFormatAction(.bold)
+            case .italic:
+                richTextInputNode?.performFormatAction(.italic)
+            case .monospace:
+                richTextInputNode?.performFormatAction(.monospace)
+            case .link:
+                self?.interfaceInteraction?.openLinkEditing()
+            case .date:
+                richTextInputNode?.performFormatAction(.date)
+            case .strikethrough:
+                richTextInputNode?.performFormatAction(.strikethrough)
+            case .underline:
+                richTextInputNode?.performFormatAction(.underline)
+            case .code:
+                richTextInputNode?.performFormatAction(.code)
+            }
+        })
         return elements
     }
 
