@@ -103,10 +103,12 @@
 
 "Nagram.SecondsInMessages" = "タイムスタンプに秒を表示";
 "Nagram.ShowForwardedMessageDate" = "転送メッセージの元の時刻を表示";
+"Nagram.ShowMessageId" = "メッセージ ID を表示";
 "Nagram.ChatListMessagePreviewStyle" = "メッセージプレビュー形式";
 "Nagram.ChatListMessagePreviewStyle.three" = "3行";
 "Nagram.ChatListMessagePreviewStyle.two" = "2行";
 "Nagram.HideSavedAndArchivedMessagesInList" = "リストで保存済みとアーカイブ済みのチャット情報を隠す";
+"Nagram.KeepNewChatsVisibleAtTop" = "新着チャットをリスト上部に表示し続ける";
 "Nagram.DisableCommunityChatGrouping" = "コミュニティチャットのグループ表示を無効化";
 "Nagram.CommunityAvatarTapAction" = "コミュニティのアバターをタップしたとき";
 "Nagram.CommunityAvatarTapAction.chat" = "常にチャットを開く";
@@ -129,6 +131,21 @@
 "Nagram.DefaultMessageFormat.strikethrough" = "取り消し線";
 "Nagram.DefaultMessageFormat.spoiler" = "ネタバレ";
 "Nagram.TextStyleToolbar" = "文字スタイルツールバー";
+"Nagram.TextStyleToolbar.off" = "オフ";
+"Nagram.TextStyleToolbar.panel" = "キーボードパネル";
+"Nagram.TextStyleToolbar.bar" = "常時表示バー";
+"Nagram.TextStyleToolbar.both" = "パネル + バー";
+"Nagram.TextStyleMenu" = "選択メニュー";
+"Nagram.TextStyleMenu.PositionHeader" = "挿入位置";
+"Nagram.TextStyleMenu.Position.first" = "先頭";
+"Nagram.TextStyleMenu.Position.beforeFormat" = "「書式」の前（コピー / ペーストの後）";
+"Nagram.TextStyleMenu.Position.afterFormat" = "「書式」の後";
+"Nagram.TextStyleMenu.Position.last" = "末尾";
+"Nagram.TextStyleMenu.PositionFooter" = "「書式」メニューは常に元の位置に残ります。システムメニューは 1 ページに約 5 項目で、後ろの項目は「>」でページ送りが必要です。";
+"Nagram.TextStyleMenu.ItemsHeader" = "メニューに表示するスタイル";
+"Nagram.TextStyleMenu.ItemsFooter" = "オンにしたスタイルはテキスト選択メニューの最初の階層に直接表示されます。「編集」で並べ替えできます。シークレットチャットでは引用・スポイラー・日付は表示されません。";
+"Nagram.TextStyleMenu.Reset" = "選択メニューをリセット";
+"Nagram.TextStyleMenu.ResetConfirm" = "選択メニューのスタイル、順序、挿入位置をすべてリセットしますか？";
 "Nagram.PanguOnSending" = "送信メッセージをPangu化";
 "Nagram.PanguOnEditing" = "編集メッセージをPangu化";
 "Nagram.HideRecordingButton" = "音声録音ボタンを非表示";
@@ -635,3 +652,6 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.InviteLinks.FetchFailed" = "追加の招待リンクの完全な一覧を読み込めませんでした。しばらくしてからもう一度お試しください。";
 "Nagram.InviteLinks.Success" = "追加の招待リンク %@ 件を取り消しました。";
 "Nagram.InviteLinks.PartialFailure" = "%1$@ 件を取り消しました。%2$@ 件は取り消せませんでした。一覧を更新しています。";
+"Nagram.MutualContact.Description" = "この連絡先は相互連絡先です。";
+"Nagram.UnpinAllMessagesAlert" = "すべてのメッセージのピン留めを解除しますか？";
+"Nagram.ConfirmUnpin" = "ピン留め解除前に確認";

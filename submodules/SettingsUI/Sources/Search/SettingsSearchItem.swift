@@ -71,6 +71,9 @@ extension SettingsSearchableItemIcon {
                 return PresentationResourcesSettings.premiumGift
             case .powerSaving:
                 return PresentationResourcesSettings.powerSaving
+            // MARK: NAGRAM
+            case .nagram:
+                return PresentationResourcesSettings.settings
         }
     }
 }
@@ -254,6 +257,12 @@ public final class SettingsSearchContainerNode: SearchDisplayControllerContentNo
     
     private let edgeEffectView: EdgeEffectView
     
+    // MARK: NAGRAM — 查询 0 结果时的「无结果」占位
+    private let emptyResultsTitleNode: ImmediateTextNode
+    private let emptyResultsTextNode: ImmediateTextNode
+    private var emptyResultsQuery: String?
+    private var validLayout: (ContainerViewLayout, CGFloat)?
+    
     private var enqueuedTransitions: [SettingsSearchContainerTransition] = []
     private var enqueuedRecentTransitions: [(SettingsSearchContainerRecentTransition, Bool)] = []
     private var hasValidLayout = false
@@ -300,12 +309,26 @@ public final class SettingsSearchContainerNode: SearchDisplayControllerContentNo
         
         self.edgeEffectView = EdgeEffectView()
         
+        // MARK: NAGRAM
+        self.emptyResultsTitleNode = ImmediateTextNode()
+        self.emptyResultsTitleNode.textAlignment = .center
+        self.emptyResultsTitleNode.isUserInteractionEnabled = false
+        self.emptyResultsTitleNode.isHidden = true
+        self.emptyResultsTextNode = ImmediateTextNode()
+        self.emptyResultsTextNode.maximumNumberOfLines = 0
+        self.emptyResultsTextNode.textAlignment = .center
+        self.emptyResultsTextNode.isUserInteractionEnabled = false
+        self.emptyResultsTextNode.isHidden = true
+        
         super.init()
         
         self.backgroundColor = self.presentationData.theme.chatList.backgroundColor
         
         self.addSubnode(self.recentListNode)
         self.addSubnode(self.listNode)
+        // MARK: NAGRAM
+        self.addSubnode(self.emptyResultsTitleNode)
+        self.addSubnode(self.emptyResultsTextNode)
         self.view.addSubview(self.edgeEffectView)
         
         let interaction = SettingsSearchInteraction(
@@ -447,10 +470,13 @@ public final class SettingsSearchContainerNode: SearchDisplayControllerContentNo
                 }
             }
             
-            if !entries.isEmpty || currentQuery == nil {
+            // MARK: NAGRAM — 上游在新查询 0 结果时不刷新列表，会残留上一次查询的结果；这里改为清空并显示「无结果」。
+            do {
                 let previousEntriesAndPresentationData = previousEntriesHolder.swap((entries, presentationData.theme, presentationData.strings))
                 let transition = preparedSettingsSearchContainerTransition(theme: presentationData.theme, strings: presentationData.strings, from: previousEntriesAndPresentationData?.0 ?? [], to: entries, interaction: interaction, isSearching: queryAndFoundItems != nil, forceUpdate: previousEntriesAndPresentationData?.1 !== presentationData.theme || previousEntriesAndPresentationData?.2 !== presentationData.strings)
                 strongSelf.enqueueTransition(transition)
+                strongSelf.emptyResultsQuery = entries.isEmpty ? currentQuery : nil
+                strongSelf.updateEmptyResults()
             }
         }))
         
@@ -496,6 +522,36 @@ public final class SettingsSearchContainerNode: SearchDisplayControllerContentNo
         } else {
             self.searchQuery.set(.single(text))
         }
+    }
+    
+    // MARK: NAGRAM
+    private func updateEmptyResults() {
+        guard let (layout, navigationBarHeight) = self.validLayout else {
+            return
+        }
+        guard let query = self.emptyResultsQuery else {
+            self.emptyResultsTitleNode.isHidden = true
+            self.emptyResultsTextNode.isHidden = true
+            return
+        }
+        var insets = layout.insets(options: [.input])
+        insets.top += navigationBarHeight
+        
+        let theme = self.presentationData.theme
+        let strings = self.presentationData.strings
+        self.emptyResultsTitleNode.attributedText = NSAttributedString(string: strings.ChatList_Search_NoResults, font: Font.semibold(17.0), textColor: theme.list.freeTextColor)
+        self.emptyResultsTextNode.attributedText = NSAttributedString(string: strings.ChatList_Search_NoResultsQueryDescription(query).string, font: Font.regular(15.0), textColor: theme.list.freeTextColor)
+        
+        let constrainedSize = CGSize(width: layout.size.width - layout.safeInsets.left - layout.safeInsets.right - 64.0, height: CGFloat.greatestFiniteMagnitude)
+        let titleSize = self.emptyResultsTitleNode.updateLayout(constrainedSize)
+        let textSize = self.emptyResultsTextNode.updateLayout(constrainedSize)
+        let spacing: CGFloat = 8.0
+        let contentHeight = titleSize.height + spacing + textSize.height
+        let originY = insets.top + floor((layout.size.height - insets.top - insets.bottom - contentHeight) / 2.0)
+        self.emptyResultsTitleNode.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - titleSize.width) / 2.0), y: originY), size: titleSize)
+        self.emptyResultsTextNode.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - textSize.width) / 2.0), y: originY + titleSize.height + spacing), size: textSize)
+        self.emptyResultsTitleNode.isHidden = false
+        self.emptyResultsTextNode.isHidden = false
     }
     
     private func enqueueTransition(_ transition: SettingsSearchContainerTransition) {
@@ -571,6 +627,10 @@ public final class SettingsSearchContainerNode: SearchDisplayControllerContentNo
                 self.dequeueTransition()
             }
         }
+        
+        // MARK: NAGRAM
+        self.validLayout = (layout, navigationBarHeight)
+        self.updateEmptyResults()
         
         let edgeEffectHeight: CGFloat = insets.bottom + 8.0
         let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - edgeEffectHeight), size: CGSize(width: layout.size.width, height: edgeEffectHeight))

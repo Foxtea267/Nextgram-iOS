@@ -25,6 +25,7 @@ import NewSessionInfoScreen
 import PresentationDataUtils
 import GlobalControlPanelsContext
 import NagramSettingsSignal // MARK: NAGRAM
+import NagramSettings // MARK: NAGRAM
 
 public enum ChatListNodeMode {
     case chatList(appendContacts: Bool)
@@ -3330,6 +3331,19 @@ public final class ChatListNode: ListViewImpl {
         }
     }
     
+    private func restingTopContentOffsetForKeepingNewChatsVisible(transition: ChatListNodeListViewTransition) -> CGFloat? { // MARK: NAGRAM
+        guard NagramSettings.shared.keepNewChatsVisibleAtTop, case .chatList = self.mode else {
+            return nil
+        }
+        if transition.insertItems.isEmpty || self.isTracking || self.isDragging || self.isDeceleratingAfterTracking {
+            return nil
+        }
+        guard case let .known(offset) = self.visibleContentOffset(), offset > CGFloat.ulpOfOne, offset <= self.navigationScrollHeightTopInset + 1.0 else {
+            return nil
+        }
+        return offset
+    }
+    
     private func temporaryHiddenItemIsUncovered() -> Bool? { // MARK: NAGRAM
         let topInset = self.visibleTopInset ?? self.insets.top
         var hasHiddenItem = false
@@ -3741,6 +3755,11 @@ public final class ChatListNode: ListViewImpl {
                     }
                 }
                 scrollToItem = ListViewScrollToItem(index: 0, position: .top(offset), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
+            }
+            // MARK: NAGRAM — A row inserted above a first row that sits under the top inset (the search
+            // bar is collapsed) goes above it, out of sight. Pin the first position where it is instead.
+            if scrollToItem == nil, let offset = self.restingTopContentOffsetForKeepingNewChatsVisible(transition: transition) {
+                scrollToItem = ListViewScrollToItem(index: 0, position: .top(-offset), animated: false, curve: .Default(duration: 0.0), directionHint: .Up)
             }
             
             let updatedOpaqueState: Any? = ChatListOpaqueTransactionState(chatListView: transition.chatListView)

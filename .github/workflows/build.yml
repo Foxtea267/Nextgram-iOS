@@ -19,20 +19,21 @@ jobs:
       matrix: ${{ steps.configuration.outputs.matrix }}
       app_version: ${{ steps.configuration.outputs.app_version }}
       release_version: ${{ steps.configuration.outputs.release_version }}
+      build_number: ${{ steps.configuration.outputs.build_number }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Define variants and shared version
         id: configuration
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          mkdir -p build
-          gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate \
-            --jq '.[] | select(.draft == false) | .tag_name' > build/nextgram-release-tags.txt
-          python3 - <<'PY' >> "${GITHUB_OUTPUT}"
+          BUILD_NUMBER="$(( $(git rev-list --count HEAD) + $(cat build_number_offset) ))"
+          python3 - "${BUILD_NUMBER}" <<'PY'
           import json
+          import os
           import re
+          import sys
 
           with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
               variants = json.load(source)
@@ -47,16 +48,14 @@ jobs:
           with open("versions.json", encoding="utf-8") as source:
               versions = json.load(source)
           base_version = versions["app"]
-          assert re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", base_version), "Nagram base version must have three numeric components"
-          minimum_revision = versions["nextgram_revision"]
-          assert type(minimum_revision) is int and minimum_revision > 0, "Nextgram revision must be a positive integer"
-          pattern = re.compile(re.escape(base_version) + r"\.([1-9][0-9]*)")
-          with open("build/nextgram-release-tags.txt", encoding="utf-8") as source:
-              published_revisions = [int(match.group(1)) for tag in source for match in [pattern.fullmatch(tag.strip())] if match]
-          revision = max(minimum_revision, max(published_revisions, default=0) + 1)
-          print("matrix=" + json.dumps({"include": variants}, separators=(",", ":")))
-          print(f"app_version={base_version}")
-          print(f"release_version={base_version}.{revision}")
+          assert re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?", base_version), "App version must have two or three numeric components"
+          build_number = sys.argv[1]
+          assert build_number.isdigit(), "Build number must be numeric"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write("matrix=" + json.dumps({"include": variants}, separators=(",", ":")) + "\n")
+              output.write(f"app_version={base_version}\n")
+              output.write(f"build_number={build_number}\n")
+              output.write(f"release_version={base_version}-{build_number}\n")
           PY
 
   build:
@@ -78,23 +77,28 @@ jobs:
       API_HASH_SECRET_NAME: ${{ matrix.api_hash_secret }}
       NEXTGRAM_APP_VERSION: ${{ needs.prepare.outputs.app_version }}
       NEXTGRAM_RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+      NEXTGRAM_BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
 
     steps:
       - name: Validate variant credentials
         run: |
           set -euo pipefail
-          if [[ ! "${TELEGRAM_API_HASH}" =~ ^[0-9a-fA-F]{32}$ ]]; then
+          if [[ -z "${TELEGRAM_API_HASH}" ]]; then
+            echo "::warning::Skipping ${VARIANT}: the ${API_HASH_SECRET_NAME} secret is not set."
+          elif [[ ! "${TELEGRAM_API_HASH}" =~ ^[0-9a-fA-F]{32}$ ]]; then
             echo "::error::Set ${API_HASH_SECRET_NAME} to the matching ${VARIANT} API hash before building."
             exit 1
           fi
 
       - name: Check out source and submodules
+        if: env.TELEGRAM_API_HASH != ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Select upstream Xcode toolchain
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
@@ -107,9 +111,11 @@ jobs:
           xcodebuild -version
 
       - name: Install Metal toolchain
+        if: env.TELEGRAM_API_HASH != ''
         run: xcodebuild -downloadComponent MetalToolchain || true
 
       - name: Cache Bazel downloads and build outputs
+        if: env.TELEGRAM_API_HASH != ''
         uses: actions/cache@v4
         with:
           path: ~/telegram-bazel-cache
@@ -119,6 +125,7 @@ jobs:
             nextgram-bazel-${{ runner.os }}-
 
       - name: Configure re-signable build
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           cat > local.bazelrc <<'EOF'
           build --//Telegram:disableExtensions
@@ -132,6 +139,7 @@ jobs:
           EOF
 
       - name: Write build configuration
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           mkdir -p build-input
@@ -153,9 +161,11 @@ jobs:
           JSON
 
       - name: Import disposable build certificate
+        if: env.TELEGRAM_API_HASH != ''
         run: python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
 
       - name: Generate matching disposable provisioning profile
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           CODESIGNING_PATH="build-input/nextgram-codesigning"
@@ -197,31 +207,19 @@ jobs:
             -out "${CODESIGNING_PATH}/profiles/Telegram.mobileprovision"
 
       - name: Build arm64 IPA
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
-          python3 - "${NEXTGRAM_APP_VERSION}" "${NEXTGRAM_RELEASE_VERSION}" <<'PY'
-          import json
-          import sys
-
-          path = "versions.json"
-          with open(path, "r", encoding="utf-8") as source:
-              versions = json.load(source)
-          versions["app"] = sys.argv[1]
-          versions["nextgram_revision"] = int(sys.argv[2].split(".")[-1])
-          with open(path, "w", encoding="utf-8") as destination:
-              json.dump(versions, destination, indent=4)
-              destination.write("\n")
-          PY
-          BUILD_NUMBER="$(( $(git rev-list --count HEAD) + $(cat build_number_offset) ))"
           python3 build-system/Make/Make.py --overrideXcodeVersion \
             --cacheDir "$HOME/telegram-bazel-cache" \
             build \
             --configurationPath build-input/nextgram-ci.json \
             --codesigningInformationPath build-input/nextgram-codesigning \
-            --buildNumber "$BUILD_NUMBER" \
+            --buildNumber "${NEXTGRAM_BUILD_NUMBER}" \
             --configuration release_arm64
 
       - name: Prepare artifacts
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           rm -rf build/package
@@ -231,7 +229,7 @@ jobs:
           test -n "${APP_PATH}"
           test "$(plutil -extract CFBundleIdentifier raw "${APP_PATH}/Info.plist")" = "${BUNDLE_ID}"
           test "$(plutil -extract CFBundleShortVersionString raw "${APP_PATH}/Info.plist")" = "${NEXTGRAM_APP_VERSION}"
-          test "$(plutil -extract NextgramVersion raw "${APP_PATH}/Info.plist")" = "${NEXTGRAM_RELEASE_VERSION}"
+          test "$(plutil -extract CFBundleVersion raw "${APP_PATH}/Info.plist")" = "${NEXTGRAM_BUILD_NUMBER}"
           test "$(plutil -extract CFBundleDisplayName raw "${APP_PATH}/Info.plist")" = "Nextgram"
           test "$(plutil -extract CFBundleName raw "${APP_PATH}/Info.plist")" = "Nextgram"
           find "${APP_PATH}" -type d -name _CodeSignature -prune -exec rm -rf {} +
@@ -246,6 +244,7 @@ jobs:
           fi
 
       - name: Upload IPA and symbols
+        if: env.TELEGRAM_API_HASH != ''
         uses: actions/upload-artifact@v4
         with:
           name: Nextgram-${{ matrix.variant }}-${{ github.sha }}
@@ -263,6 +262,7 @@ jobs:
     env:
       NEXTGRAM_APP_VERSION: ${{ needs.prepare.outputs.app_version }}
       NEXTGRAM_RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
+      NEXTGRAM_BUILD_NUMBER: ${{ needs.prepare.outputs.build_number }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -284,9 +284,10 @@ jobs:
 
           with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
               variants = json.load(source)
-          expected_files = {f"Nextgram-{entry['variant']}.ipa" for entry in variants}
           actual_files = {path.name for path in Path("build/artifacts").glob("*.ipa")}
-          assert actual_files == expected_files, "Missing or unexpected compatibility IPA"
+          assert actual_files <= {f"Nextgram-{entry['variant']}.ipa" for entry in variants}, "Unexpected compatibility IPA"
+          variants = [entry for entry in variants if f"Nextgram-{entry['variant']}.ipa" in actual_files]
+          assert variants, "No compatibility IPA was built"
           for entry in variants:
               filename = f"Nextgram-{entry['variant']}.ipa"
               with zipfile.ZipFile(Path("build/artifacts") / filename) as archive:
@@ -295,7 +296,7 @@ jobs:
                   info = plistlib.loads(archive.read(info_paths[0]))
                   assert info["CFBundleIdentifier"] == entry["bundle_id"], f"Wrong bundle ID in {filename}"
                   assert info["CFBundleShortVersionString"] == os.environ["NEXTGRAM_APP_VERSION"], f"Wrong version in {filename}"
-                  assert info["NextgramVersion"] == os.environ["NEXTGRAM_RELEASE_VERSION"], f"Wrong Nextgram revision in {filename}"
+                  assert info["CFBundleVersion"] == os.environ["NEXTGRAM_BUILD_NUMBER"], f"Wrong build number in {filename}"
                   assert info["CFBundleDisplayName"] == "Nextgram", f"Wrong display name in {filename}"
               print(f"Verified {filename}: {entry['bundle_id']}")
           PY
@@ -317,8 +318,7 @@ jobs:
             fi
             echo
             echo
-            echo "Nextgram version: ${NEXTGRAM_RELEASE_VERSION}"
-            echo "Nagram base version: ${NEXTGRAM_APP_VERSION}"
+            echo "Version: ${NEXTGRAM_APP_VERSION} (${NEXTGRAM_BUILD_NUMBER})"
             echo "已同步 Nagram / Telegram 13.0：翻译请求限流与格式保留、设置搜索生命周期、聊天布局及上游修复。"
             echo "保留 Nextgram 聊天筛选、删除消息拦截、编辑历史、音乐搜索及其他自定义功能。"
             echo "构建工具链升级至 Xcode 27 / Bazel 9.2。"
@@ -327,8 +327,9 @@ jobs:
             echo
             python3 - <<'PY'
           import json
+          from pathlib import Path
           with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
-              variants = json.load(source)
+              variants = [entry for entry in json.load(source) if Path(f"build/artifacts/Nextgram-{entry['variant']}.ipa").exists()]
           print("| IPA | Bundle ID | 避免同时安装的原版 |")
           print("| --- | --- | --- |")
           for entry in variants:
@@ -336,7 +337,7 @@ jobs:
           PY
             echo
             echo "Standalone re-signable IPA. Re-sign before installation."
-            echo "四种包的功能、Nextgram 名称和图标相同；请选择手机未安装对应原版的兼容包。"
+            echo "各兼容包的功能、Nextgram 名称和图标相同；请选择手机未安装对应原版的兼容包。"
             echo "这些兼容包不是 jp.foxtea.nextgram 的原位更新，不会自动迁移其账号和本地缓存。"
             echo "推送兼容性仍需在企业重签后实测，不保证通知恢复。"
           } > build/release-notes.md

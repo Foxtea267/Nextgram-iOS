@@ -15,6 +15,7 @@ import ChatFolderLinkPreviewScreen
 import EdgeEffect
 import ComponentDisplayAdapters
 import NagramChatListFilters // MARK: NEXTGRAM
+import NagramSettings // MARK: NAGRAM
 
 final class ChatListContainerItemNode: ASDisplayNode {
     private final class TopPanelItem {
@@ -456,7 +457,9 @@ final class ChatListContainerItemNode: ASDisplayNode {
         let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: size.height - edgeEffectHeight), size: CGSize(width: size.width, height: edgeEffectHeight))
         transition.updateFrame(view: self.edgeEffectView, frame: edgeEffectFrame)
         self.edgeEffectView.update(content: self.presentationData.theme.list.plainBackgroundColor, alpha: 0.6, rect: edgeEffectFrame, edge: .bottom, edgeSize: min(edgeEffectFrame.height, 40.0), transition: ComponentTransition(transition))
-        transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 ? 1.0 : 0.0)
+        // MARK: NAGRAM — a lone search button leaves the rest of this strip over tappable chats.
+        let hidesEdgeEffect = NagramSettings.shared.bottomBarSettings.showsOnlySearchButton
+        transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 && !hidesEdgeEffect ? 1.0 : 0.0)
     }
     
     func updateScrollingOffset(navigationHeight: CGFloat, offset: CGFloat, transition: ContainedViewLayoutTransition) {

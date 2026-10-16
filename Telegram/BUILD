@@ -679,14 +679,12 @@ plist_fragment(
     ])
 )
 
-# MARK: NEXTGRAM — Keep the system version three-part and expose the downstream revision separately.
 genrule(
     name = "VersionInfoPlist",
     srcs = ["//:versions.json"],
     outs = ["VersionInfoPlist.plist"],
     cmd = """
         version=$$(python3 -c "import json; print(json.load(open('$(location //:versions.json)'))['app'])")
-        nextgram_version=$$(python3 -c "import json; v=json.load(open('$(location //:versions.json)')); print(v['app'] + '.' + str(v['nextgram_revision']))")
         cat > $@ <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -694,8 +692,6 @@ genrule(
 <dict>
     <key>CFBundleShortVersionString</key>
     <string>$$version</string>
-    <key>NextgramVersion</key>
-    <string>$$nextgram_version</string>
 </dict>
 </plist>
 PLIST

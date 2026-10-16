@@ -105,6 +105,7 @@ swift_library(
         "//Nagram/Settings:NagramSettings",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/Strings:NagramStrings",
+        "//submodules/ContactListUI", # MARK: NAGRAM — 设置页联系人入口
         "//submodules/ShareController",
         "//submodules/TelegramUI/Components/ShareWithPeersScreen",
         "//submodules/StatisticsUI",

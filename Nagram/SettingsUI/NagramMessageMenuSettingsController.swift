@@ -87,6 +87,13 @@ private enum NagramMessageMenuEntry: ItemListNodeEntry {
         return lhs.sortIndex < rhs.sortIndex
     }
 
+    var tag: ItemListItemTag? {
+        if case let .item(_, id, _, _, _, _) = self {
+            return NagramSettingsFocusTag(id.rawValue)
+        }
+        return nil
+    }
+
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! NagramMessageMenuArguments
         switch self {
@@ -95,7 +102,7 @@ private enum NagramMessageMenuEntry: ItemListNodeEntry {
         case let .item(_, id, title, value, isEditing, canReorder):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, editing: isEditing, reorderable: canReorder, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.itemUpdated(id, value)
-            })
+            }, tag: self.tag)
         case let .reset(title):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: "", sectionId: self.section, style: .blocks, action: {
                 arguments.resetAction()
@@ -106,7 +113,7 @@ private enum NagramMessageMenuEntry: ItemListNodeEntry {
     }
 }
 
-public func nagramMessageMenuSettingsController(context: AccountContext) -> ViewController {
+public func nagramMessageMenuSettingsController(context: AccountContext, focusOnRow: String? = nil) -> ViewController {
     let updatePromise = ValuePromise<Int32>(0, ignoreRepeated: false)
     let editingPromise = ValuePromise<Bool>(false, ignoreRepeated: true)
     var updateValue: Int32 = 0
@@ -164,12 +171,13 @@ public func nagramMessageMenuSettingsController(context: AccountContext) -> View
             editingPromise.set(!isEditing)
         })
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(ngI18n("Nagram.MessageMenu", lang)), leftNavigationButton: nil, rightNavigationButton: rightNavigationButton, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: true)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, initialScrollToItem: nagramFocusScrollToItem(entries: entries, focusOnRow: focusOnRow), animateChanges: true)
         return (controllerState, (listState, arguments))
     }
 
     let controller = ItemListController(context: context, state: signal)
     controller.navigationPresentation = .default
+    nagramHighlightFocusedRow(controller: controller, focusOnRow: focusOnRow)
     presentControllerImpl = { [weak controller] c, presentationArguments in
         controller?.present(c, in: .window(.root), with: presentationArguments)
     }

@@ -67,21 +67,47 @@ private enum NagramSTTSettingsEntry: ItemListNodeEntry {
         return lhs.stableId < rhs.stableId
     }
 
+    var tag: ItemListItemTag? {
+        switch self {
+        case let .input(field, _, _, _):
+            switch field {
+            case .baseURL:
+                return NagramSettingsFocusTag("STTBaseURL")
+            case .endpoint:
+                return NagramSettingsFocusTag("STTEndpoint")
+            case .apiKey:
+                return NagramSettingsFocusTag("STTAPIKey")
+            case .model:
+                return NagramSettingsFocusTag("STTModel")
+            case .language:
+                return NagramSettingsFocusTag("STTLanguage")
+            case .prompt:
+                return nil
+            }
+        case .prompt:
+            return NagramSettingsFocusTag("STTPrompt")
+        case .test:
+            return NagramSettingsFocusTag("STTTest")
+        case .header, .footer:
+            return nil
+        }
+    }
+
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! NagramSTTSettingsArguments
         switch self {
         case let .header(section, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .input(field, title, text, placeholder):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: field == .apiKey ? .password : .regular(capitalization: false, autocorrection: false), spacing: 8.0, clearType: .onFocus, sectionId: 0, textUpdated: { value in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: field == .apiKey ? .password : .regular(capitalization: false, autocorrection: false), spacing: 8.0, clearType: .onFocus, tag: self.tag, sectionId: 0, textUpdated: { value in
                 arguments.inputUpdated(field, value)
             }, action: {})
         case let .prompt(text, placeholder):
             return ItemListMultilineInputItem(presentationData: presentationData, systemStyle: .glass, text: text, placeholder: placeholder, maxLength: nil, sectionId: 1, style: .blocks, capitalization: false, autocorrection: false, returnKeyType: .default, minimalHeight: 100.0, maximalHeight: 240.0, textUpdated: { value in
                 arguments.inputUpdated(.prompt, value)
-            })
+            }, tag: self.tag)
         case let .test(title):
-            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: 2, style: .blocks, action: arguments.test)
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: 2, style: .blocks, action: arguments.test, tag: self.tag)
         case let .footer(section, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
@@ -139,7 +165,7 @@ private func nagramSTTSettingsEntries(presentationData: PresentationData, apiKey
     ]
 }
 
-public func nagramSTTSettingsController(context: AccountContext) -> ViewController {
+public func nagramSTTSettingsController(context: AccountContext, focusOnRow: String? = nil) -> ViewController {
     let updatePromise = ValuePromise<Int32>(0, ignoreRepeated: false)
     var updateValue: Int32 = 0
     let bump: () -> Void = {
@@ -228,7 +254,8 @@ public func nagramSTTSettingsController(context: AccountContext) -> ViewControll
     let signal = combineLatest(queue: .mainQueue(), context.sharedContext.presentationData, updatePromise.get())
     |> map { presentationData, _ -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(ngI18n("Nagram.STTSettings", presentationData.strings.baseLanguageCode)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: nagramSTTSettingsEntries(presentationData: presentationData, apiKey: apiKey, isTesting: isTesting), style: .blocks, animateChanges: true)
+        let entries = nagramSTTSettingsEntries(presentationData: presentationData, apiKey: apiKey, isTesting: isTesting)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, initialScrollToItem: nagramFocusScrollToItem(entries: entries, focusOnRow: focusOnRow), animateChanges: true)
         return (controllerState, (listState, arguments))
     }
     |> afterDisposed {
@@ -236,6 +263,7 @@ public func nagramSTTSettingsController(context: AccountContext) -> ViewControll
     }
     let controller = ItemListController(context: context, state: signal)
     controller.navigationPresentation = .default
+    nagramHighlightFocusedRow(controller: controller, focusOnRow: focusOnRow)
     presentControllerImpl = { [weak controller] alert in
         controller?.present(alert, in: .window(.root), with: nil)
     }

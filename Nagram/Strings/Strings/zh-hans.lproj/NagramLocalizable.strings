@@ -103,10 +103,12 @@
 
 "Nagram.SecondsInMessages" = "时间戳显示秒";
 "Nagram.ShowForwardedMessageDate" = "显示转发消息的原始时间";
+"Nagram.ShowMessageId" = "显示消息 ID";
 "Nagram.ChatListMessagePreviewStyle" = "消息预览样式";
 "Nagram.ChatListMessagePreviewStyle.three" = "三行";
 "Nagram.ChatListMessagePreviewStyle.two" = "两行";
 "Nagram.HideSavedAndArchivedMessagesInList" = "在列表中隐藏收藏夹和归档会话信息";
+"Nagram.KeepNewChatsVisibleAtTop" = "列表顶部保持显示新消息会话";
 "Nagram.DisableCommunityChatGrouping" = "禁用社区会话合并展示";
 "Nagram.CommunityAvatarTapAction" = "点击社区头像行为";
 "Nagram.CommunityAvatarTapAction.chat" = "始终进入聊天";
@@ -129,6 +131,21 @@
 "Nagram.DefaultMessageFormat.strikethrough" = "删除线";
 "Nagram.DefaultMessageFormat.spoiler" = "剧透";
 "Nagram.TextStyleToolbar" = "文字样式工具栏";
+"Nagram.TextStyleToolbar.off" = "关闭";
+"Nagram.TextStyleToolbar.panel" = "键盘面板";
+"Nagram.TextStyleToolbar.bar" = "常驻格式条";
+"Nagram.TextStyleToolbar.both" = "面板 + 常驻条";
+"Nagram.TextStyleMenu" = "选中文字菜单";
+"Nagram.TextStyleMenu.PositionHeader" = "插入位置";
+"Nagram.TextStyleMenu.Position.first" = "最前面";
+"Nagram.TextStyleMenu.Position.beforeFormat" = "「格式」之前（拷贝 / 粘贴之后）";
+"Nagram.TextStyleMenu.Position.afterFormat" = "「格式」之后";
+"Nagram.TextStyleMenu.Position.last" = "最后面";
+"Nagram.TextStyleMenu.PositionFooter" = "完整的「格式」菜单始终保留在原位置。系统菜单一屏约放 5 项，靠后的需要点「>」翻页。";
+"Nagram.TextStyleMenu.ItemsHeader" = "平铺到菜单的样式";
+"Nagram.TextStyleMenu.ItemsFooter" = "开启的样式会直接显示在选中文字菜单的第一层。点「编辑」后可拖动排序。私密聊天不显示引用、剧透和日期。";
+"Nagram.TextStyleMenu.Reset" = "重置选中文字菜单";
+"Nagram.TextStyleMenu.ResetConfirm" = "重置所有选中文字菜单的样式、排序和插入位置？";
 "Nagram.PanguOnSending" = "发送消息 Pangu 化";
 "Nagram.PanguOnEditing" = "编辑消息 Pangu 化";
 "Nagram.HideRecordingButton" = "隐藏语音录制按钮";
@@ -635,3 +652,6 @@
 "Nagram.InviteLinks.FetchFailed" = "无法加载完整的额外邀请链接列表，请稍后重试。";
 "Nagram.InviteLinks.Success" = "已撤销 %@ 条额外邀请链接。";
 "Nagram.InviteLinks.PartialFailure" = "已撤销 %1$@ 条，另有 %2$@ 条撤销失败。列表正在刷新。";
+"Nagram.MutualContact.Description" = "此联系人是双向联系人。";
+"Nagram.UnpinAllMessagesAlert" = "要取消所有消息的置顶吗？";
+"Nagram.ConfirmUnpin" = "取消置顶前确认";

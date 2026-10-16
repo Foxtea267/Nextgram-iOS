@@ -178,6 +178,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["showSeconds", "ShowSeconds"]
     case "Nagram.ShowForwardedMessageDate":
         return ["showForwardDate", "dateOfForwardedMsg"]
+    case "Nagram.ShowMessageId":
+        return ["showMessageID", "ShowMessageId", "MessageID"]
     case "Nagram.HideReactions":
         return ["disableReactionsWhenSelecting", "HideReactions"]
     case "Nagram.HideChannelBottomButton":
@@ -226,6 +228,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["ChatListSwipeAction"]
     case "Nagram.OpenArchiveOnPull":
         return ["OpenArchiveOnPull", "PullArchive", "PullDownArchive"]
+    case "Nagram.KeepNewChatsVisibleAtTop":
+        return ["KeepNewChatsVisibleAtTop", "NewChatsAtTop", "ChatListScrollToNew"]
     case "Nagram.ShowArchiveInFolders":
         return ["ShowArchiveInFolders", "ArchiveInFolders", "ShowArchiveInTabs"]
     case "Nagram.ChatListStartupFolder":
@@ -256,6 +260,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["HidePhone", "hidePhoneInSettings"]
     case "Nagram.ConfirmCalls":
         return ["AskBeforeCalling", "ConfirmCalls"]
+    case "Nagram.ConfirmUnpin":
+        return ["ConfirmUnpin", "AskBeforeUnpin", "UnpinConfirmation"]
     case "Nagram.DisableFiltering":
         return ["DisableFiltering"]
     case "Nagram.SkipSensitiveContentWarning":
@@ -420,6 +426,7 @@ private func nagramGroups(
     exportDeletedMessagesAction: @escaping () -> Void,
     importDeletedMessagesAction: @escaping () -> Void,
     messageMenuAction: @escaping () -> Void,
+    textStyleMenuAction: @escaping () -> Void,
     regexFiltersAction: @escaping () -> Void,
     inlineBotRulesAction: @escaping () -> Void,
     llmTranslationSettingsAction: @escaping () -> Void,
@@ -467,6 +474,7 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.ShowFoldersInShareSheet", get: { NagramSettings.shared.showFoldersInShareSheet }, set: { NagramSettings.shared.showFoldersInShareSheet = $0 }),
             .toggle(titleKey: "Nagram.ChooseFolderAfterJoining", get: { NagramSettings.shared.chooseFolderAfterJoining }, set: { NagramSettings.shared.chooseFolderAfterJoining = $0 }),
             .toggle(titleKey: "Nagram.HideSavedAndArchivedMessagesInList", get: { NagramSettings.shared.hideSavedAndArchivedMessagesInList }, set: { NagramSettings.shared.hideSavedAndArchivedMessagesInList = $0 }),
+            .toggle(titleKey: "Nagram.KeepNewChatsVisibleAtTop", get: { NagramSettings.shared.keepNewChatsVisibleAtTop }, set: { NagramSettings.shared.keepNewChatsVisibleAtTop = $0 }),
             .toggle(titleKey: "Nagram.DisableCommunityChatGrouping", get: { NagramSettings.shared.disableCommunityChatGrouping }, set: { NagramSettings.shared.disableCommunityChatGrouping = $0 }),
             .choice(titleKey: "Nagram.CommunityAvatarTapAction", prefix: "Nagram.CommunityAvatarTapAction", options: NagramCommunityAvatarTapAction.allCases.map { $0.rawValue }, current: { NagramSettings.shared.communityAvatarTapActionValue.rawValue }, set: { NagramSettings.shared.communityAvatarTapAction = $0 }),
             .choice(titleKey: "Nagram.ChatListMessagePreviewStyle", prefix: "Nagram.ChatListMessagePreviewStyle", options: ["three", "two"], current: { NagramSettings.shared.chatListMessagePreviewStyleMode.rawValue }, set: { value in
@@ -506,6 +514,7 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.ChatToolsEnabled", get: { NagramSettings.shared.chatToolsEnabled }, set: { NagramSettings.shared.chatToolsEnabled = $0 }),
             .toggle(titleKey: "Nagram.SecondsInMessages", get: { NagramSettings.shared.secondsInMessages }, set: { NagramSettings.shared.secondsInMessages = $0 }),
             .toggle(titleKey: "Nagram.ShowForwardedMessageDate", get: { NagramSettings.shared.showForwardedMessageDate }, set: { NagramSettings.shared.showForwardedMessageDate = $0 }),
+            .toggle(titleKey: "Nagram.ShowMessageId", get: { NagramSettings.shared.showMessageId }, set: { NagramSettings.shared.showMessageId = $0 }),
             .toggle(titleKey: "Nagram.HideReactions", get: { NagramSettings.shared.hideReactions }, set: { NagramSettings.shared.hideReactions = $0 }),
             .toggle(titleKey: "Nagram.HideChannelBottomButton", get: { NagramSettings.shared.hideChannelBottomButton }, set: { NagramSettings.shared.hideChannelBottomButton = $0 }),
             .toggle(titleKey: "Nagram.HideSponsoredMessages", get: { NagramSettings.shared.hideSponsoredMessages }, set: { NagramSettings.shared.hideSponsoredMessages = $0 }),
@@ -546,6 +555,7 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.MessageMenu", footerKey: nil, rows: [
             .navigation(titleKey: "Nagram.MessageMenu", action: messageMenuAction),
+            .toggle(titleKey: "Nagram.ConfirmUnpin", get: { NagramSettings.shared.confirmUnpin }, set: { NagramSettings.shared.confirmUnpin = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Filtering", footerKey: "Nagram.RegexFilters.Main.Footer", rows: [
             .toggle(titleKey: "Nagram.RegexFilters.GlobalEnabled", get: { NagramSettings.shared.regexFiltersEnabled }, set: { NagramSettings.shared.regexFiltersEnabled = $0 }),
@@ -568,7 +578,12 @@ private func nagramGroups(
             .choice(titleKey: "Nagram.DefaultMessageFormat", prefix: "Nagram.DefaultMessageFormat", options: NagramDefaultMessageFormat.allCases.map { $0.rawValue }, current: { NagramSettings.shared.defaultMessageFormatValue.rawValue }, set: { NagramSettings.shared.defaultMessageFormat = $0 }),
             .toggle(titleKey: "Nagram.DisableSendAsButton", get: { NagramSettings.shared.disableSendAsButton }, set: { NagramSettings.shared.disableSendAsButton = $0 }),
             .toggle(titleKey: "Nagram.SendWithReturnKey", get: { NagramSettings.shared.sendWithReturnKey }, set: { NagramSettings.shared.sendWithReturnKey = $0 }),
-            .toggle(titleKey: "Nagram.TextStyleToolbar", get: { NagramSettings.shared.showTextStyleToolbar }, set: { NagramSettings.shared.showTextStyleToolbar = $0 }),
+            .choice(titleKey: "Nagram.TextStyleToolbar", prefix: "Nagram.TextStyleToolbar", options: NagramTextStyleToolbarMode.allCases.map(\.rawValue), current: { NagramSettings.shared.textStyleToolbarMode.rawValue }, set: { value in
+                if let mode = NagramTextStyleToolbarMode(rawValue: value) {
+                    NagramSettings.shared.textStyleToolbarMode = mode
+                }
+            }),
+            .navigation(titleKey: "Nagram.TextStyleMenu", action: textStyleMenuAction),
             .toggle(titleKey: "Nagram.HideRecordingButton", get: { NagramSettings.shared.hideRecordingButton }, set: { NagramSettings.shared.hideRecordingButton = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Gesture", footerKey: "Nagram.Section.Gesture.Footer", rows: [
@@ -643,6 +658,156 @@ private func nagramGroups(
         // 没有 iCloud KVS entitlement 的构建里同步不可用，不显示该分组。
         return group.headerKey != "Nagram.Section.Sync" || NagramSettings.isICloudSyncAvailable
     }
+}
+
+// MARK: NAGRAM — 设置搜索索引：与设置页共用 nagramGroups() 这张表，每行一条，打开方式即行级 deep link；
+// 子页面内的静态设置行也各一条，打开方式是直接进子页面并定位到该行。
+public struct NagramSettingsSearchEntry {
+    public let id: String
+    public let title: String
+    public let alternate: [String]
+    public let breadcrumbs: [String]
+    public let makeController: (AccountContext) -> ViewController
+}
+
+private struct NagramSubpageSearchRows {
+    let rows: [(key: String, titleKey: String)]
+    let makeController: (AccountContext, String) -> ViewController
+}
+
+// 子页面里可搜索的行。key 必须与该子页面 entry 的 NagramSettingsFocusTag 一致。
+// 规则列表这类动态内容（正则过滤规则、Inline Bot 规则）不进索引。
+private func nagramSubpageSearchRows(parentTitleKey: String) -> NagramSubpageSearchRows? {
+    switch parentTitleKey {
+    case "Nagram.BottomBarLayout":
+        return NagramSubpageSearchRows(rows: ["TopSearch", "Visibility", "SearchStyle", "ShowLabels", "ButtonWidth", "Alignment"].map { (key: $0, titleKey: "Nagram.BottomBarLayout.\($0)") }, makeController: { context, key in
+            return nagramBottomBarSettingsController(context: context, focusOnRow: key)
+        })
+    case "Nagram.MessageMenu":
+        return NagramSubpageSearchRows(rows: NagramSettings.shared.messageMenuItemOrder.map { (key: $0.rawValue, titleKey: "Nagram.MessageMenu.Item.\($0.rawValue)") }, makeController: { context, key in
+            return nagramMessageMenuSettingsController(context: context, focusOnRow: key)
+        })
+    case "Nagram.GroupProfileSettings":
+        return NagramSubpageSearchRows(rows: NagramGroupProfileSettingItem.allCases.map { (key: $0.rawValue, titleKey: "Nagram.GroupProfileSettings.Item.\($0.rawValue)") }, makeController: { context, key in
+            return nagramGroupProfileSettingsController(context: context, focusOnRow: key)
+        })
+    case "Nagram.STTSettings":
+        return NagramSubpageSearchRows(rows: ["STTBaseURL", "STTEndpoint", "STTAPIKey", "STTModel", "STTLanguage", "STTPrompt", "STTTest"].map { (key: $0, titleKey: "Nagram.\($0)") }, makeController: { context, key in
+            return nagramSTTSettingsController(context: context, focusOnRow: key)
+        })
+    case "Nagram.TranslationLLMSettings":
+        var keys = ["TranslationLLMAPIFormat", "TranslationLLMBaseURL", "TranslationLLMEndpoint", "TranslationLLMAPIKey", "TranslationLLMModel", "TranslationLLMFetchModels", "TranslationLLMTestModel", "TranslationLLMPrompt", "TranslationLLMUseContext"]
+        if NagramSettings.shared.translationLLMAPIFormatValue == .openai {
+            keys.append("TranslationLLMTemperature")
+        }
+        return NagramSubpageSearchRows(rows: keys.map { (key: $0, titleKey: "Nagram.\($0)") }, makeController: { context, key in
+            return nagramLLMTranslationSettingsController(context: context, focusOnRow: key)
+        })
+    default:
+        return nil
+    }
+}
+
+private func nagramSearchAlternates(titleKey: String, title: String, key: String) -> [String] {
+    // 非英文界面下也能用英文标题和行 key 搜到。
+    var alternate: [String] = []
+    let englishTitle = ngI18n(titleKey, nagramFallbackLocale)
+    if englishTitle != title {
+        alternate.append(englishTitle)
+    }
+    alternate.append(key)
+    return alternate
+}
+
+private func nagramRowIsVisible(_ row: NagramRow) -> Bool {
+    switch row {
+    case let .toggle(_, _, _, isVisible):
+        return isVisible()
+    case let .input(_, _, _, _, _, isVisible):
+        return isVisible()
+    case let .slider(_, _, _, _, _, isVisible):
+        return isVisible()
+    case .toggleWithEnabled, .choice, .startupFolder, .navigation:
+        return true
+    }
+}
+
+public func nagramSettingsSearchEntries(lang: String) -> [NagramSettingsSearchEntry] {
+    let groups = nagramGroups(
+        hideCalls: { false },
+        setHideCalls: { _ in },
+        sensitiveContentConfiguration: { nil },
+        setSensitiveContentEnabled: { _ in },
+        latencyTestAction: {},
+        setLocalNotificationFallbackEnabled: { _ in },
+        notificationDiagnosticsAction: {},
+        bottomBarLayoutAction: {},
+        antiRecallRulesAction: {},
+        exportDeletedMessagesAction: {},
+        importDeletedMessagesAction: {},
+        messageMenuAction: {},
+        textStyleMenuAction: {},
+        regexFiltersAction: {},
+        inlineBotRulesAction: {},
+        llmTranslationSettingsAction: {},
+        sttSettingsAction: {},
+        groupProfileSettingsAction: {},
+        sessionBackupAction: {},
+        aboutAction: {}
+    )
+
+    let rootTitle = "Nextgram"
+    var entries: [NagramSettingsSearchEntry] = [
+        NagramSettingsSearchEntry(id: "nagram", title: rootTitle, alternate: [], breadcrumbs: [], makeController: { context in
+            return nagramSettingsController(context: context)
+        })
+    ]
+    for group in groups {
+        let tabTitle = ngI18n(group.tab.titleKey, lang)
+        let headerTitle = group.headerKey.map { ngI18n($0, lang) }
+        for row in group.rows where nagramRowIsVisible(row) {
+            let titleKey = nagramRowTitleKey(row)
+            let key = nagramRowDeepLinkKey(row)
+            let title = ngI18n(titleKey, lang)
+
+            var breadcrumbs = [rootTitle, tabTitle]
+            if let headerTitle, headerTitle != title {
+                breadcrumbs.append(headerTitle)
+            }
+
+            // 另外带上 Android 侧的别名。
+            let alternate = nagramSearchAlternates(titleKey: titleKey, title: title, key: key) + nagramRowDeepLinkAliases(titleKey: titleKey)
+            let deepLinkPath = "\(group.tab.deepLinkSection)?r=\(key)"
+
+            entries.append(NagramSettingsSearchEntry(
+                id: "nagram/\(group.tab.deepLinkSection)/\(key)",
+                title: title,
+                alternate: alternate,
+                breadcrumbs: breadcrumbs,
+                makeController: { context in
+                    return nagramSettingsController(context: context, deepLinkPath: deepLinkPath)
+                }
+            ))
+
+            if case .navigation = row, let subpage = nagramSubpageSearchRows(parentTitleKey: titleKey) {
+                for subRow in subpage.rows {
+                    let subTitle = ngI18n(subRow.titleKey, lang)
+                    let subKey = subRow.key
+                    let makeController = subpage.makeController
+                    entries.append(NagramSettingsSearchEntry(
+                        id: "nagram/\(group.tab.deepLinkSection)/\(key)/\(subKey)",
+                        title: subTitle,
+                        alternate: nagramSearchAlternates(titleKey: subRow.titleKey, title: subTitle, key: subKey),
+                        breadcrumbs: [rootTitle, tabTitle, title],
+                        makeController: { context in
+                            return makeController(context, subKey)
+                        }
+                    ))
+                }
+            }
+        }
+    }
+    return entries
 }
 
 private final class NagramSettingsArguments {
@@ -927,6 +1092,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         importDeletedMessages()
     }, messageMenuAction: {
         pushControllerImpl?(nagramMessageMenuSettingsController(context: context))
+    }, textStyleMenuAction: {
+        pushControllerImpl?(nagramTextStyleMenuSettingsController(context: context))
     }, regexFiltersAction: {
         pushControllerImpl?(nagramRegexFilterSettingsController(context: context))
     }, inlineBotRulesAction: {

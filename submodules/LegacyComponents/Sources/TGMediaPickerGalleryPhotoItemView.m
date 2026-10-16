@@ -613,7 +613,15 @@ static TGMediaLivePhotoMode TGMediaPickerGalleryResolvedLivePhotoMode(TGMediaEdi
     static const CGFloat TGMediaPickerGalleryPhotoItemViewMaxLivePhotoPreviewSide = 1280.0f;
     
     CGSize originalSize = self.item.asset.originalSize;
-    
+
+    // MARK: NAGRAM
+    // Every fit below divides by the asset size or the crop size. With either at zero (an asset
+    // with no backing PHAsset reports CGSizeZero) the frames come out NaN and CALayer throws.
+    // This only positions the overlays in _contentView (entities, painting, live photo video),
+    // which have nothing to cover in that case, so they are left where they were.
+    if (!(originalSize.width > 0.0f && originalSize.height > 0.0f && cropRect.size.width > 0.0f && cropRect.size.height > 0.0f))
+        return;
+
     CGSize rotatedCropSize = cropRect.size;
     if (orientation == UIImageOrientationLeft || orientation == UIImageOrientationRight)
         rotatedCropSize = CGSizeMake(rotatedCropSize.height, rotatedCropSize.width);

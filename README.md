@@ -104,7 +104,7 @@ git submodule status --recursive
 
 ### Build IPA with GitHub Actions
 
-推送到 `main`，或在 GitHub 的 Actions 页面手动运行 **Build Nextgram IPA**。工作流使用 [`build-system/nextgram-variants.json`](build-system/nextgram-variants.json) 生成四种兼容包。构建前必须在仓库的 **Settings → Secrets and variables → Actions** 中保存各 API ID 配套的 Hash：
+推送到 `main`，或在 GitHub 的 Actions 页面手动运行 **Build Nextgram IPA**。工作流使用 [`build-system/nextgram-variants.json`](build-system/nextgram-variants.json) 生成五种兼容包。构建前必须在仓库的 **Settings → Secrets and variables → Actions** 中保存各 API ID 配套的 Hash：
 
 | 独立安装包 | Bundle ID | API ID | Actions Secret |
 | --- | --- | --- | --- |
@@ -112,18 +112,17 @@ git submodule status --recursive
 | `Nextgram-Nicegram.ipa` | `app.nicegram` | `23697447` | `NICEGRAM_API_HASH` |
 | `Nextgram-OLAI.ipa` | `com.olcorporation.olai` | `2033156` | `OLAI_API_HASH` |
 | `Nextgram-Turrit.ipa` | `com.seastar.turrit` | `27626847` | `TURRIT_API_HASH` |
+| `Nextgram-Telegram.ipa` | `ph.telegra.Telegraph` | `8` | `TELEGRAM_OFFICIAL_API_HASH` |
 
-API ID 已在变体配置中指定，不再读取旧的 `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` Secrets。Hash 仅保存在对应 Secret 中，不写入源码；缺失或格式错误会终止该变体构建，不会回退到其他客户端配置。
+API ID 已在变体配置中指定，不再读取旧的 `TELEGRAM_API_ID` / `TELEGRAM_API_HASH` Secrets。Hash 仅保存在对应 Secret 中，不写入源码；未设置 Secret 的变体会被跳过并在构建日志中给出警告；格式错误会终止该变体构建，不会回退到其他客户端配置。
 
-四种包全部构建并校验成功后，统一上传到一个 **Release**，每种 IPA 均可单独下载。运行页面同时保留 `Nextgram-<variant>-<commit>` artifact，包含该 IPA 和可用时生成的 dSYM 压缩包。
+已配置 Secret 的包全部构建并校验成功后，统一上传到一个 **Release**，每种 IPA 均可单独下载。运行页面同时保留 `Nextgram-<variant>-<commit>` artifact，包含该 IPA 和可用时生成的 dSYM 压缩包。
 
-四种包的功能、名称、图标和 URL Scheme 均为 Nextgram，仅兼容身份不同；App Group 由各 Bundle ID 生成 `group.<bundle_id>`。请选择手机未安装对应原版的包，例如已安装 Nagram 时选择其他三种。安装同包名应用可能覆盖原版或发生冲突，请先备份重要数据。这些包不是旧包名 `jp.foxtea.nextgram` 的原位更新，账号与本地缓存不会自动迁移；不同兼容包也不共享账号和缓存。
+五种包的功能、名称、图标和 URL Scheme 均为 Nextgram，仅兼容身份不同；App Group 由各 Bundle ID 生成 `group.<bundle_id>`。请选择手机未安装对应原版的包，例如已安装 Nagram 时选择其他四种，已安装官方 Telegram 时不要选择 Telegram 包。安装同包名应用可能覆盖原版或发生冲突，请先备份重要数据。这些包不是旧包名 `jp.foxtea.nextgram` 的原位更新，账号与本地缓存不会自动迁移；不同兼容包也不共享账号和缓存。
 
 兼容身份来自维护者指定的配置，不代表相关客户端的授权或背书。企业重签后的通知效果仍需真机验证，不保证通知恢复；详见[通知排查](docs/notifications.md)。
 
-Release 和“关于 Nextgram”使用 **Nagram 基础版本 + Nextgram 修订号**，例如基础版本为 `12.1.0` 时，第 2 个 Nextgram 版本为 `12.1.0.2`。当前代码基础版本为 `12.9.3`，新格式从 `12.9.3.1` 开始。Actions 根据同一基础版本已发布的 Release 自动递增末段；失败构建不占用修订号，四种兼容包共用同一版本号。基础版本变更后，修订号重新从 1 开始。`versions.json` 的 `app` 保存基础版本，`nextgram_revision` 保存修订号的起始值或最低值。
-
-按 [Apple 的版本字段要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)，IPA 的 `CFBundleShortVersionString` 保留三段基础版本，完整四段版本保存为 `NextgramVersion`，系统构建号 `CFBundleVersion` 继续递增。Release 说明会列出上一个发布版本以来的提交、基础版本、Nextgram 版本与安装包选择表。
+版本号与 Telegram 官方一致，保存在 `versions.json` 的 `app` 中（当前为 `13.0`）。每次构建的构建号 `CFBundleVersion` 自动递增，“关于 Nextgram”显示为 `13.0 (构建号)`，Release 名称为 `13.0-构建号`，五种兼容包共用同一版本号与构建号。Release 说明会列出上一个发布版本以来的提交、版本号与安装包选择表。
 
 > [!WARNING]
 > GitHub Actions 产物只包含主应用；打包时会移除临时签名与 provisioning profile，仅用于后续重签，不能直接安装。请使用自己的证书或签名工具重签 IPA。
