@@ -32,6 +32,22 @@ public struct ItemListMultilineInputInlineAction {
     }
 }
 
+// MARK: NAGRAM — ASEditableTextNode's layout manager delegate sets every line fragment to floor(ascender + |descender|) + 2;
+// measure with the same rule, or the item comes out about 2pt per line short and clips the last lines.
+private final class ItemListMultilineInputMeasureDelegate: NSObject, NSLayoutManagerDelegate {
+    private let lineHeight: CGFloat
+
+    init(font: UIFont) {
+        self.lineHeight = floor(font.ascender + abs(font.descender))
+    }
+
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<CGRect>, lineFragmentUsedRect: UnsafeMutablePointer<CGRect>, baselineOffset: UnsafeMutablePointer<CGFloat>, in textContainer: NSTextContainer, forGlyphRange glyphRange: NSRange) -> Bool {
+        lineFragmentRect.pointee.size.height = self.lineHeight + 2.0
+        lineFragmentUsedRect.pointee.size.height = max(self.lineHeight, lineFragmentUsedRect.pointee.size.height)
+        return true
+    }
+}
+
 public class ItemListMultilineInputItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
     let systemStyle: ItemListSystemStyle
@@ -246,12 +262,17 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
             // MARK: NAGRAM — 按实际 EditableTextNode 使用的 TextKit 再测一次，避免长文本累计行高不足。
             let textStorage = NSTextStorage(attributedString: attributedMeasureText)
             let textLayoutManager = NSLayoutManager()
+            let measureDelegate = ItemListMultilineInputMeasureDelegate(font: Font.regular(item.presentationData.fontSize.itemListBaseFontSize))
+            textLayoutManager.delegate = measureDelegate
             let textContainer = NSTextContainer(size: CGSize(width: max(1.0, textWidth), height: 1000000.0))
             textContainer.lineFragmentPadding = 0.0
             textLayoutManager.addTextContainer(textContainer)
             textStorage.addLayoutManager(textLayoutManager)
-            textLayoutManager.ensureLayout(for: textContainer)
-            let textHeight = max(textLayout.size.height, ceil(textLayoutManager.usedRect(for: textContainer).height))
+            let measuredTextHeight: CGFloat = withExtendedLifetime(measureDelegate) {
+                textLayoutManager.ensureLayout(for: textContainer)
+                return ceil(textLayoutManager.usedRect(for: textContainer).height)
+            }
+            let textHeight = max(textLayout.size.height, measuredTextHeight)
             
             let separatorHeight = UIScreenPixel
             let separatorRightInset: CGFloat = item.systemStyle == .glass ? 16.0 : 0.0

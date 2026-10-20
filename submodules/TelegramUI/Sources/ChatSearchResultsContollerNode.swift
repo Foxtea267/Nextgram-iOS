@@ -14,6 +14,7 @@ import ContextUI
 import ChatListSearchItemHeader
 import AnimationCache
 import MultiAnimationRenderer
+import NagramSettings // MARK: NAGRAM
 
 private enum ChatListSearchEntryStableId: Hashable {
     case messageId(MessageId)
@@ -164,7 +165,9 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
     
     private let listNode: ListView
     
-    private var enqueuedTransitions: [(ChatListSearchContainerTransition, Bool)] = []
+    private var enqueuedTransitions: [(ChatListSearchContainerTransition, Bool, Int)] = []
+    // MARK: NAGRAM — 结果从下往上排列：最新结果在最下方，往上滑加载更早的结果。
+    private let nagramBottomUp: Bool
     private var validLayout: (ContainerViewLayout, CGFloat)?
     
     var resultsUpdated: ((SearchMessagesResult, SearchMessagesState) -> Void)?
@@ -198,6 +201,8 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
         self.animationCache = context.animationCache
         self.animationRenderer = context.animationRenderer
         
+        let nagramBottomUp = NagramSettings.shared.bottomUpChatSearchResults
+        self.nagramBottomUp = nagramBottomUp
         self.listNode = ListViewImpl()
         self.listNode.verticalScrollIndicatorColor = self.presentationData.theme.list.scrollIndicatorColor
         self.listNode.accessibilityPageScrolledString = { row, count in
@@ -207,6 +212,8 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
         super.init()
         
         self.backgroundColor = self.presentationData.theme.chatList.backgroundColor
+        // MARK: NAGRAM
+        self.listNode.stackFromBottom = self.nagramBottomUp
         self.isOpaque = false
         self.addSubnode(self.listNode)
         
@@ -222,6 +229,10 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
                     }
                 }
                 entries.append(.message(message, peer, searchResult.readStates[peer.peerId], presentationData))
+            }
+            // MARK: NAGRAM
+            if nagramBottomUp {
+                entries.reverse()
             }
             
             return entries
@@ -310,11 +321,12 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
                 
                 let firstTime = previousEntries == nil
                 let transition = chatListSearchContainerPreparedTransition(from: previousEntries ?? [], to: entries, context: context, interaction: interaction, location: strongSelf.mappedLocation)
-                strongSelf.enqueueTransition(transition, firstTime: firstTime)
+                strongSelf.enqueueTransition(transition, firstTime: firstTime, entryCount: entries.count)
             }
         }))
         
-        self.listNode.visibleBottomContentOffsetChanged = { [weak self] offset in
+        // MARK: NAGRAM — 从下往上排列时，更早的结果在上方，滑到顶部附近才加载更多。
+        let loadMoreOffsetChanged: (ListViewVisibleContentOffset) -> Void = { [weak self] offset in
             guard let strongSelf = self else {
                 return
             }
@@ -328,6 +340,13 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
                 return
             }
             strongSelf.loadMore()
+        }
+        if nagramBottomUp {
+            self.listNode.visibleContentOffsetChanged = { offset, _ in
+                loadMoreOffsetChanged(offset)
+            }
+        } else {
+            self.listNode.visibleBottomContentOffsetChanged = loadMoreOffsetChanged
         }
     }
     
@@ -354,6 +373,7 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
             strongSelf.resultsUpdated?(updatedResult, updatedState)
             
             let context = strongSelf.context
+            let nagramBottomUp = strongSelf.nagramBottomUp // MARK: NAGRAM
             
             let signal = strongSelf.presentationDataPromise.get()
             |> map { presentationData -> [ChatListSearchEntry] in
@@ -368,6 +388,10 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
                     }
                     entries.append(.message(message, peer, nil, presentationData))
                 }
+                // MARK: NAGRAM
+                if nagramBottomUp {
+                    entries.reverse()
+                }
                 
                 return entries
             }
@@ -379,7 +403,7 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
                     
                     let firstTime = previousEntries == nil
                     let transition = chatListSearchContainerPreparedTransition(from: previousEntries ?? [], to: entries, context: context, interaction: interaction, location: strongSelf.mappedLocation)
-                    strongSelf.enqueueTransition(transition, firstTime: firstTime)
+                    strongSelf.enqueueTransition(transition, firstTime: firstTime, entryCount: entries.count)
                 }
             }))
         }))
@@ -396,8 +420,8 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
         })
     }
     
-    private func enqueueTransition(_ transition: ChatListSearchContainerTransition, firstTime: Bool) {
-        self.enqueuedTransitions.append((transition, firstTime))
+    private func enqueueTransition(_ transition: ChatListSearchContainerTransition, firstTime: Bool, entryCount: Int) {
+        self.enqueuedTransitions.append((transition, firstTime, entryCount))
         
         if self.validLayout != nil {
             while !self.enqueuedTransitions.isEmpty {
@@ -407,14 +431,26 @@ class ChatSearchResultsControllerNode: ViewControllerTracingNode, ASScrollViewDe
     }
     
     private func dequeueTransition() {
-        if let (transition, _) = self.enqueuedTransitions.first {
+        if let (transition, firstTime, entryCount) = self.enqueuedTransitions.first {
             self.enqueuedTransitions.remove(at: 0)
-            
+
             var options = ListViewDeleteAndInsertOptions()
             options.insert(.PreferSynchronousDrawing)
             options.insert(.PreferSynchronousResourceLoading)
-            
-            self.listNode.transaction(deleteIndices: transition.deletions, insertIndicesAndItems: transition.insertions, updateIndicesAndItems: transition.updates, options: options, updateSizeAndInsets: nil, updateOpaqueState: nil, completion: { _ in
+
+            // MARK: NAGRAM — 从下往上排列时，首次显示停在最新结果；之后加载的更早结果插在上方，
+            // 已显示的结果保持原位。stackFromBottom 只会把不满一屏的内容贴底，超过一屏要显式滚动。
+            var scrollToItem: ListViewScrollToItem?
+            var stationaryItemRange: (Int, Int)?
+            if self.nagramBottomUp {
+                if firstTime, entryCount > 0 {
+                    scrollToItem = ListViewScrollToItem(index: entryCount - 1, position: .bottom(0.0), animated: false, curve: .Default(duration: nil), directionHint: .Down)
+                } else if let maxInsertedIndex = transition.insertions.map({ $0.index }).max() {
+                    stationaryItemRange = (maxInsertedIndex + 1, Int.max)
+                }
+            }
+
+            self.listNode.transaction(deleteIndices: transition.deletions, insertIndicesAndItems: transition.insertions, updateIndicesAndItems: transition.updates, options: options, scrollToItem: scrollToItem, updateSizeAndInsets: nil, stationaryItemRange: stationaryItemRange, updateOpaqueState: nil, completion: { _ in
             })
         }
     }

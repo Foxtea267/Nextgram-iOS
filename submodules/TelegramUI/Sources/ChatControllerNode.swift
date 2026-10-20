@@ -241,7 +241,24 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
     private var currentListViewLayout: (size: CGSize, insets: UIEdgeInsets, scrollIndicatorInsets: UIEdgeInsets)?
     
     private(set) var searchNavigationNode: ChatSearchNavigationContentNode?
-    
+    // MARK: NAGRAM — 单手模式：聊天内搜索框放在底部搜索面板里。
+    private var nagramSearchFieldIsAtBottom = false
+    private var nagramSearchFieldPendingActivation = false
+
+    /// 只在普通聊天页启用：内嵌在个人资料里的聊天和话题标签搜索页各有自己的搜索框位置，保持原样。
+    private func nagramShouldPlaceSearchFieldAtBottom() -> Bool {
+        guard NagramSettings.shared.chatSearchFieldAtBottom, self.navigationBar != nil else {
+            return false
+        }
+        guard case .standard(.default) = self.chatPresentationInterfaceState.mode else {
+            return false
+        }
+        if case let .customChatContents(contents) = self.chatPresentationInterfaceState.subject, case .hashTagSearch = contents.kind {
+            return false
+        }
+        return true
+    }
+
     private var navigationModalFrame: NavigationModalFrame?
     
     let inputPanelContainerNode: ChatInputPanelContainer
@@ -1952,7 +1969,12 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         }
         
         let inputPanelBottomInset = max(insets.bottom, inputPanelBottomInsetTerm)
-        
+
+        // MARK: NAGRAM — 单手模式：搜索框作为底部搜索面板的第二行，面板因此变高，聊天记录让出空间。
+        if let tagSearchPanelNode = inputPanelNodes.primary as? ChatTagSearchInputPanelNode {
+            tagSearchPanelNode.nagramSearchFieldNode = self.nagramSearchFieldIsAtBottom ? self.searchNavigationNode : nil
+        }
+
         if let inputPanelNode = inputPanelNodes.primary, !previewing {
             if inputPanelNode !== self.inputPanelNode {
                 if let inputTextPanelNode = self.inputPanelNode as? ChatTextInputPanelNode {
@@ -1989,7 +2011,13 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
             dismissedInputPanelNode = self.inputPanelNode
             self.inputPanelNode = nil
         }
-        
+
+        // MARK: NAGRAM — 底部搜索框挂进面板、进入窗口后才能获得焦点（见 updateChatPresentationInterfaceState）。
+        if self.nagramSearchFieldPendingActivation, let searchNavigationNode = self.searchNavigationNode, searchNavigationNode.view.window != nil {
+            self.nagramSearchFieldPendingActivation = false
+            searchNavigationNode.activate()
+        }
+
         if let secondaryInputPanelNode = inputPanelNodes.secondary, !previewing {
             if secondaryInputPanelNode !== self.secondaryInputPanelNode {
                 dismissedSecondaryInputPanelNode = self.secondaryInputPanelNode
@@ -2387,11 +2415,16 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         }
         
         var immediatelyLayoutOverlayContextPanelAndAnimateAppearance = false
-        if let overlayContextPanelNode = chatOverlayContextPanelForChatPresentationIntefaceState(self.chatPresentationInterfaceState, context: self.context, currentPanel: self.overlayContextPanelNode, interfaceInteraction: self.interfaceInteraction, chatPresentationContext: self.controllerInteraction.presentationContext) {
+        if let overlayContextPanelNode = chatOverlayContextPanelForChatPresentationIntefaceState(self.chatPresentationInterfaceState, context: self.context, currentPanel: self.overlayContextPanelNode, interfaceInteraction: self.interfaceInteraction, chatPresentationContext: self.controllerInteraction.presentationContext, nagramSearchFieldAtBottom: self.nagramSearchFieldIsAtBottom) { // MARK: NAGRAM
             if overlayContextPanelNode !== self.overlayContextPanelNode {
                 dismissedOverlayContextPanelNode = self.overlayContextPanelNode
                 self.overlayContextPanelNode = overlayContextPanelNode
-                if let navigationBar = self.navigationBar {
+                // MARK: NAGRAM — 底部搜索框的成员候选列表和输入框的 @ 提及列表放在同一层：排在输入面板之下，
+                // 展开和收起时从面板后面滑进滑出，而不是从搜索面板上方划过。
+                if let mentionPanelNode = overlayContextPanelNode as? MentionChatInputContextPanelNode, mentionPanelNode.nagramAnchoredAtBottom {
+                    overlayContextPanelNode.clipsToBounds = true
+                    self.inputContextPanelContainer.addSubnode(overlayContextPanelNode)
+                } else if let navigationBar = self.navigationBar {
                     self.contentContainerNode.contentNode.insertSubnode(overlayContextPanelNode, belowSubnode: navigationBar)
                 } else {
                     self.contentContainerNode.contentNode.addSubnode(overlayContextPanelNode)
@@ -2951,7 +2984,20 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
             inputContextPanelNode.updateLayout(size: panelFrame.size, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, bottomInset: insets.bottom + inputPanelsHeight + 8.0, transition: transition, interfaceState: self.chatPresentationInterfaceState)
         }
         
-        if let overlayContextPanelNode = self.overlayContextPanelNode {
+        if let overlayContextPanelNode = self.overlayContextPanelNode, let mentionPanelNode = overlayContextPanelNode as? MentionChatInputContextPanelNode, mentionPanelNode.nagramAnchoredAtBottom {
+            // MARK: NAGRAM — 区域止于底部面板上沿附近并裁掉超出部分（见插入处的 clipsToBounds）：搜索面板只有几块玻璃按钮，
+            // 挡不住它后面的东西，列表必须在面板上沿处渐隐消失，滑进滑出和下拉时才像是藏到了面板后面。
+            // 区域再往下多伸出一段渐隐带，藏在面板后面；列表各行停在渐隐带之上。
+            let fadeHeight = MentionChatInputContextPanelNode.nagramBottomFadeHeight
+            let panelFrame = CGRect(origin: CGPoint(x: 0.0, y: insets.top), size: CGSize(width: layout.size.width, height: max(0.0, inputBackgroundFrame.minY + fadeHeight - insets.top)))
+            let bottomInset: CGFloat = fadeHeight + 8.0
+            if immediatelyLayoutOverlayContextPanelAndAnimateAppearance {
+                overlayContextPanelNode.frame = panelFrame
+                overlayContextPanelNode.updateLayout(size: panelFrame.size, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, bottomInset: bottomInset, transition: .immediate, interfaceState: self.chatPresentationInterfaceState)
+            }
+            transition.updateFrame(node: overlayContextPanelNode, frame: panelFrame)
+            overlayContextPanelNode.updateLayout(size: panelFrame.size, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, bottomInset: bottomInset, transition: transition, interfaceState: self.chatPresentationInterfaceState)
+        } else if let overlayContextPanelNode = self.overlayContextPanelNode {
             let panelFrame = overlayContextPanelNode.placement == .overTextInput ? inputContextPanelsOverMainPanelFrame : inputContextPanelsFrame
             if immediatelyLayoutOverlayContextPanelAndAnimateAppearance {
                 overlayContextPanelNode.frame = panelFrame
@@ -3942,21 +3988,36 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                         activate = true
                     }
                     self.searchNavigationNode = ChatSearchNavigationContentNode(context: self.context, theme: self.chatPresentationInterfaceState.theme, strings: self.chatPresentationInterfaceState.strings, chatLocation: self.chatPresentationInterfaceState.chatLocation, interaction: interfaceInteraction, presentationInterfaceState: self.chatPresentationInterfaceState)
+                    // MARK: NAGRAM — 单手模式：本次搜索的搜索框放在底部搜索面板里，搜索结束前不再变动。
+                    self.nagramSearchFieldIsAtBottom = self.nagramShouldPlaceSearchFieldAtBottom()
                 }
-                if let navigationBar = self.navigationBar {
+                if self.nagramSearchFieldIsAtBottom {
+                    // 由 containerLayoutUpdated 交给底部的 ChatTagSearchInputPanelNode，导航栏保持聊天标题。
+                } else if let navigationBar = self.navigationBar {
                     navigationBar.setContentNode(self.searchNavigationNode, animated: transitionIsAnimated)
                 } else {
                     self.controller?.customNavigationBarContentNode = self.searchNavigationNode
                 }
                 self.searchNavigationNode?.update(presentationInterfaceState: self.chatPresentationInterfaceState)
-                
+
                 if case let .customChatContents(contents) = self.chatPresentationInterfaceState.subject, case .hashTagSearch = contents.kind {
                     activate = false
                 }
                 if activate {
-                    self.searchNavigationNode?.activate()
+                    // MARK: NAGRAM — 底部搜索框要等下一次排版挂进面板、进入窗口后才能获得焦点。
+                    if self.nagramSearchFieldIsAtBottom && self.searchNavigationNode?.view.window == nil {
+                        self.nagramSearchFieldPendingActivation = true
+                    } else {
+                        self.searchNavigationNode?.activate()
+                    }
                 }
             } else if let _ = self.searchNavigationNode {
+                // MARK: NAGRAM
+                if self.nagramSearchFieldIsAtBottom {
+                    self.searchNavigationNode?.removeFromSupernode()
+                    self.nagramSearchFieldIsAtBottom = false
+                    self.nagramSearchFieldPendingActivation = false
+                }
                 self.searchNavigationNode = nil
                 self.controller?.customNavigationBarContentNode = nil
                 self.navigationBar?.setContentNode(nil, animated: transitionIsAnimated)

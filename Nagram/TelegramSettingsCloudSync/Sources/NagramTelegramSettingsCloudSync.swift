@@ -15,8 +15,10 @@ public final class NagramTelegramSettingsCloudSync {
 
     private static let cloudPrefix = "nagram.telegramSharedData."
     // Passcode、Proxy、联系人、缓存、日志、Siri/Spotlight 等敏感或设备相关配置不进 iCloud。
+    // 语言（localizationSettings）也不进：它存的是整份已下载的语言包，官方中文就有约 800 KB，自定义语言包还带一份
+    // base 包，会超过 iCloud 键值存储单值和总量各 1 MB 的上限而写不上去；启动时却会用云端的旧值覆盖本地，
+    // 可能把刚切换的第三方语言包换回旧语言（疑为 I0047、I0051 的原因）。语言包可以从服务器重新下载，不需要同步。
     private static let syncedEntries: [SyncedEntry] = [
-        SyncedEntry(name: "localizationSettings", key: SharedDataKeys.localizationSettings),
         SyncedEntry(name: "autodownloadSettings", key: SharedDataKeys.autodownloadSettings),
         SyncedEntry(name: "inAppNotificationSettings", key: ApplicationSpecificSharedDataKeys.inAppNotificationSettings),
         SyncedEntry(name: "automaticMediaDownloadSettings", key: ApplicationSpecificSharedDataKeys.automaticMediaDownloadSettings),

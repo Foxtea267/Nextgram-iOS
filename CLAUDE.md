@@ -257,6 +257,13 @@ build's What to Test text, the GitHub release body and the channel post, and the
 publish notes that are unchanged since the previous release tag. The notes of earlier builds stay in
 their GitHub releases; the notes of an App Store version are gathered from those.
 
+The channel post of a TestFlight build is tagged `#testflight` and goes to the assets channel only. A
+version submitted to the App Store by hand is announced as `#release` by the manual `appstore.yml`
+workflow (inputs: the submitted build number, optionally the version), the one post the official
+channel gets: it builds nothing and posts `docs/nagram/releases/appstore/<app version>.md` (plus an
+optional `.en.md`) without files, headed by a notice that the version is waiting for review. Run it
+once the build is submitted.
+
 ## Code Style Guidelines
 
 - **Naming**: PascalCase for types, camelCase for variables/methods

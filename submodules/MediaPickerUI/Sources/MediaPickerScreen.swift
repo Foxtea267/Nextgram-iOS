@@ -1260,6 +1260,8 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 }
                 
                 let selectionNode = MediaPickerSelectedListNode(context: controller.context, persistentItems: persistentItems, isExternalPreview: false, isObscuredExternalPreview: false)
+                // MARK: NAGRAM
+                selectionNode.fitsContentToVisibleArea = persistentItems
                 selectionNode.alpha = animated ? 0.0 : 1.0
                 selectionNode.layer.allowsGroupOpacity = true
                 selectionNode.isUserInteractionEnabled = false
@@ -1924,8 +1926,13 @@ public final class MediaPickerScreenImpl: ViewController, MediaPickerScreen, Att
                 }
                 
                 let selectedItems = controller.interaction?.selectionState?.selectedItems() as? [TGMediaSelectableItem] ?? []
+                // MARK: NAGRAM - the part of the sheet below the screen edge is not visible
+                var selectionInsets = cleanGridInsets
+                if selectionNode.fitsContentToVisibleArea {
+                    selectionInsets.bottom += layout.additionalInsets.bottom
+                }
                 let updateSelectionNode = {
-                    selectionNode.updateLayout(size: bounds.size, insets: cleanGridInsets, items: selectedItems, grouped: self.controller?.groupedValue ?? true, theme: self.presentationData.theme, wallpaper: self.presentationData.chatWallpaper, bubbleCorners: self.presentationData.chatBubbleCorners, transition: selectionTransition)
+                    selectionNode.updateLayout(size: bounds.size, insets: selectionInsets, items: selectedItems, grouped: self.controller?.groupedValue ?? true, theme: self.presentationData.theme, wallpaper: self.presentationData.chatWallpaper, bubbleCorners: self.presentationData.chatBubbleCorners, transition: selectionTransition)
                 }
                 
                 if selectedItems.count < 1 && self.currentDisplayMode == .selected {

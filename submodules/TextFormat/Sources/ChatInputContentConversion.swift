@@ -235,8 +235,18 @@ public func entityPreservingFallbackAttributedString(
         return result
     }
 
-    func appendParagraph(_ paragraph: NSAttributedString, blockAttribute: ChatTextInputTextQuoteAttribute?) {
-        if paragraph.length == 0 {
+    // MARK: NAGRAM — inside a quote a blank line is part of the quote's text, so it is kept (see `.blockQuote`).
+    var quoteDepth = 0
+
+    func isEmptyParagraph(_ block: ChatInputBlock) -> Bool {
+        if case let .paragraph(paragraph) = block {
+            return attributedRuns(paragraph.runs).length == 0
+        }
+        return false
+    }
+
+    func appendParagraph(_ paragraph: NSAttributedString, blockAttribute: ChatTextInputTextQuoteAttribute?, keepIfEmpty: Bool = false) {
+        if paragraph.length == 0 && !keepIfEmpty {
             return
         }
         appendSeparatorIfNeeded()
@@ -255,7 +265,7 @@ public func entityPreservingFallbackAttributedString(
         for block in content.blocks {
             switch block {
             case let .paragraph(paragraph):
-                appendRuns(paragraph.runs, blockAttribute: inheritedBlockAttribute)
+                appendParagraph(attributedRuns(paragraph.runs), blockAttribute: inheritedBlockAttribute, keepIfEmpty: quoteDepth > 0)
             case let .code(code):
                 let blockAttribute = inheritedBlockAttribute ?? ChatTextInputTextQuoteAttribute(kind: .code(language: code.language), isCollapsed: false)
                 appendParagraph(attributedRuns(code.runs, preserveInlineAttributes: inheritedBlockAttribute != nil), blockAttribute: blockAttribute)
@@ -265,7 +275,33 @@ public func entityPreservingFallbackAttributedString(
                 appendRuns(pullQuote.author, blockAttribute: inheritedBlockAttribute)
             case let .blockQuote(blockQuote):
                 let quoteAttribute = inheritedBlockAttribute ?? ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: blockQuote.collapsed)
-                appendContent(blockQuote.content, inheritedBlockAttribute: quoteAttribute)
+                if inheritedBlockAttribute == nil {
+                    // MARK: NAGRAM — one quote must stay one quote entity. Marking each line on its own left the
+                    // "\n" between lines unmarked, so every line became its own quote, and blank lines were dropped.
+                    // Keep the blank lines between the quote's lines, trim the ones at its edges, and mark the whole
+                    // run, separators included.
+                    var quoteBlocks = blockQuote.content.blocks
+                    while let first = quoteBlocks.first, isEmptyParagraph(first) {
+                        quoteBlocks.removeFirst()
+                    }
+                    while let last = quoteBlocks.last, isEmptyParagraph(last) {
+                        quoteBlocks.removeLast()
+                    }
+                    let wasFirst = isFirst
+                    let quoteStart = result.length
+                    quoteDepth += 1
+                    appendContent(ChatInputContent(blocks: quoteBlocks), inheritedBlockAttribute: quoteAttribute)
+                    quoteDepth -= 1
+                    var start = quoteStart
+                    if !wasFirst && start < result.length && (result.string as NSString).character(at: start) == 0x0A {
+                        start += 1
+                    }
+                    if start < result.length {
+                        result.addAttribute(ChatTextInputAttributes.block, value: quoteAttribute, range: NSRange(location: start, length: result.length - start))
+                    }
+                } else {
+                    appendContent(blockQuote.content, inheritedBlockAttribute: quoteAttribute)
+                }
                 appendRuns(blockQuote.author, blockAttribute: inheritedBlockAttribute)
             case let .details(details):
                 // Defensive entity-path fallback (details normally forces the rich path): flatten the title

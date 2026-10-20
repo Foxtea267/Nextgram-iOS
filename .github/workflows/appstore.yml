@@ -1,0 +1,129 @@
+name: App Store (Nagram)
+
+# Announces a version submitted to App Store review by hand. Nothing is built
+# or uploaded: the run posts the notes of the version, without files, to the
+# assets channel and copies it to the official one, tagged #release
+# (TestFlight builds are #testflight and go to the assets channel only).
+# The post says the version is waiting for review,
+# so run it once the build is submitted, not once it is approved.
+#
+# The notes are docs/nagram/releases/appstore/<app version>.md, the What's New
+# text of the submission, gathered from the GitHub releases of the TestFlight
+# builds since the previous App Store version. English notes in
+# appstore/<app version>.en.md are optional and are folded under the others.
+#
+# Uses the same secret and variables as the channel post of testflight.yml:
+# NAGRAM_CHANNEL_BOT_TOKEN, NAGRAM_CHANNEL_ASSETS_CHAT_ID and
+# NAGRAM_CHANNEL_CHAT_ID, and TELEGRAM_API_ID / TELEGRAM_API_HASH for the
+# Bot API server of the action.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build:
+        description: Build number submitted for review
+        required: true
+        type: string
+      version:
+        description: App version, the one in versions.json when empty
+        required: false
+        type: string
+
+concurrency:
+  group: appstore
+  cancel-in-progress: false
+
+jobs:
+  channel:
+    name: Channel
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      BOT_TOKEN: ${{ secrets.NAGRAM_CHANNEL_BOT_TOKEN }}
+      ASSETS_CHAT_ID: ${{ vars.NAGRAM_CHANNEL_ASSETS_CHAT_ID }}
+      OFFICIAL_CHAT_ID: ${{ vars.NAGRAM_CHANNEL_CHAT_ID }}
+      APPSTORE_ID: "6781000861"
+
+    steps:
+      # Posting is all this workflow does, so a missing channel is an error
+      # here rather than the notice it is in testflight.yml.
+      - name: Check the configuration
+        id: configuration
+        run: |
+          set -euo pipefail
+          if [ -z "$BOT_TOKEN" ] || [ -z "$ASSETS_CHAT_ID$OFFICIAL_CHAT_ID" ]; then
+            echo "::error::NAGRAM_CHANNEL_BOT_TOKEN or both channels are not set, nothing can be posted."
+            exit 1
+          fi
+          # The assets channel gets the post and the official one a copy;
+          # with one set, it gets the post.
+          CHAT_ID="${ASSETS_CHAT_ID:-$OFFICIAL_CHAT_ID}"
+          COPY_TO=""
+          if [ -n "$ASSETS_CHAT_ID" ] && [ "$OFFICIAL_CHAT_ID" != "$ASSETS_CHAT_ID" ]; then
+            COPY_TO="$OFFICIAL_CHAT_ID"
+          fi
+          {
+            echo "chat=$CHAT_ID"
+            echo "copy=$COPY_TO"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Clone
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: docs/nagram/releases
+
+      - name: Describe the post
+        id: post
+        env:
+          BUILD: ${{ inputs.build }}
+          VERSION_INPUT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          VERSION="${VERSION_INPUT:-$(python3 -c 'import json; print(json.load(open("versions.json"))["app"])')}"
+          if ! [[ "$VERSION" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+            echo "::error::'$VERSION' is not an app version."
+            exit 1
+          fi
+          if ! [[ "$BUILD" =~ ^[0-9]+$ ]]; then
+            echo "::error::'$BUILD' is not a build number."
+            exit 1
+          fi
+          SOURCE="docs/nagram/releases/appstore/$VERSION.md"
+          if [ ! -f "$SOURCE" ]; then
+            echo "::error::$SOURCE is missing, write the What's New text of $VERSION before announcing it."
+            exit 1
+          fi
+          # The notice goes first: the version is not in the App Store yet.
+          NOTES="$RUNNER_TEMP/appstore-notes.md"
+          { echo "**已提交 App Store 审核，需等待审核通过后才能在 App Store 更新。**"; echo; cat "$SOURCE"; } > "$NOTES"
+          NOTES_EN=""
+          if [ -f "docs/nagram/releases/appstore/$VERSION.en.md" ]; then
+            NOTES_EN="$RUNNER_TEMP/appstore-notes.en.md"
+            { echo "**Submitted to App Store review. The update is available in the App Store once the review is approved.**"; echo; cat "docs/nagram/releases/appstore/$VERSION.en.md"; } > "$NOTES_EN"
+          fi
+          {
+            echo "version=$VERSION"
+            echo "build=$BUILD"
+            echo "notes=$NOTES"
+            echo "notes_en=$NOTES_EN"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Post to the channels
+        uses: NextAlone/NagramActionRelated/channel-publish@5de594cfb14d39bd21f4bb513ac6fe355aec1b46
+        with:
+          bot-token: ${{ secrets.NAGRAM_CHANNEL_BOT_TOKEN }}
+          api-id: ${{ secrets.TELEGRAM_API_ID }}
+          api-hash: ${{ secrets.TELEGRAM_API_HASH }}
+          chat-id: ${{ steps.configuration.outputs.chat }}
+          copy-to: ${{ steps.configuration.outputs.copy }}
+          title: Nagram iOS
+          version: ${{ steps.post.outputs.version }}
+          build: ${{ steps.post.outputs.build }}
+          hashtags: ios release
+          notes-file: ${{ steps.post.outputs.notes }}
+          notes-en-file: ${{ steps.post.outputs.notes_en }}
+          buttons: |
+            *App Store=https://apps.apple.com/app/id${{ env.APPSTORE_ID }}
+            问题反馈=https://t.me/OrIssuesBot

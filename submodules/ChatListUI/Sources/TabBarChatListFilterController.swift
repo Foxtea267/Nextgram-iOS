@@ -48,27 +48,11 @@ public func chatListFilterItems(context: AccountContext) -> Signal<(Int, [(ChatL
         }
     }
     |> mapToSignal { filters, secretChatsByUserId, userIdBySecretChatId -> Signal<(Int, [(ChatListFilter, Int, Bool)]), NoError> in
-        // Each folder peer followed by the secret chats it carries. A no-op, and allocation-free,
-        // for an account with no secret chats in any folder.
+        // MARK: NAGRAM - The expansion is chatListFilterPeerIdsWithSecretChats, shared with the badge count.
         func expand(_ peerIds: [EnginePeer.Id]) -> [EnginePeer.Id] {
-            if secretChatsByUserId.isEmpty {
-                return peerIds
-            }
-            var result: [EnginePeer.Id] = []
-            var seen = Set<EnginePeer.Id>()
-            for peerId in peerIds {
-                if seen.insert(peerId).inserted {
-                    result.append(peerId)
-                }
-                for secretChatId in secretChatsByUserId[peerId] ?? [] {
-                    if seen.insert(secretChatId).inserted {
-                        result.append(secretChatId)
-                    }
-                }
-            }
-            return result
+            return chatListFilterPeerIdsWithSecretChats(peerIds, secretChatsByUserId: secretChatsByUserId)
         }
-        
+
         var unreadCountItems: [EngineRawUnreadMessageCountsItem] = []
         unreadCountItems.append(.totalInGroup(.root))
         var additionalPeerIds = Set<EnginePeer.Id>()
@@ -181,136 +165,171 @@ public func chatListFilterItems(context: AccountContext) -> Signal<(Int, [(ChatL
             let totalBadge = 0
             
             for filter in filters {
-                var count = 0
-                var unmutedUnreadCount = 0
+                // MARK: NAGRAM - The per-folder count is chatListFilterUnreadCount, so that it can be tested.
                 if case let .filter(_, _, _, data) = filter {
-                    var tags: [EnginePeerSummaryCounterTags] = []
-                    if data.categories.contains(.contacts) {
-                        tags.append(.contact)
-                    }
-                    if data.categories.contains(.nonContacts) {
-                        tags.append(.nonContact)
-                    }
-                    if data.categories.contains(.groups) {
-                        tags.append(.group)
-                    }
-                    if data.categories.contains(.bots) {
-                        tags.append(.bot)
-                    }
-                    if data.categories.contains(.channels) {
-                        tags.append(.channel)
-                    }
-                    
-                    if let totalState = totalStates[.root] {
-                        for tag in tags {
-                            if data.excludeMuted {
-                                if let value = totalState.filteredCounters[tag] {
-                                    if value.chatCount != 0 {
-                                        count += Int(value.chatCount)
-                                        unmutedUnreadCount += Int(value.chatCount)
-                                    }
-                                }
-                            } else {
-                                if let value = totalState.absoluteCounters[tag] {
-                                    count += Int(value.chatCount)
-                                }
-                                if let value = totalState.filteredCounters[tag] {
-                                    if value.chatCount != 0 {
-                                        unmutedUnreadCount += Int(value.chatCount)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    if !data.excludeArchived {
-                        if let totalState = totalStates[Namespaces.PeerGroup.archive] {
-                            for tag in tags {
-                                if data.excludeMuted {
-                                    if let value = totalState.filteredCounters[tag] {
-                                        if value.chatCount != 0 {
-                                            count += Int(value.chatCount)
-                                            unmutedUnreadCount += Int(value.chatCount)
-                                        }
-                                    }
-                                } else {
-                                    if let value = totalState.absoluteCounters[tag] {
-                                        count += Int(value.chatCount)
-                                    }
-                                    if let value = totalState.filteredCounters[tag] {
-                                        if value.chatCount != 0 {
-                                            unmutedUnreadCount += Int(value.chatCount)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    for peerId in expand(data.includePeers.peers + data.includePeers.pinnedPeers) {
-                        if let (tag, peerCount, hasUnmuted, groupIdValue, isMuted) = peerTagAndCount[peerId], peerCount != 0, let groupId = groupIdValue {
-                            var matches = true
-                            if tags.contains(tag) {
-                                if isMuted && data.excludeMuted {
-                                } else {
-                                    matches = false
-                                }
-                            }
-                            if matches {
-                                let matchesGroup: Bool
-                                switch groupId {
-                                case .root:
-                                    matchesGroup = true
-                                case .group:
-                                    if groupId == Namespaces.PeerGroup.archive {
-                                        matchesGroup = !data.excludeArchived
-                                    } else {
-                                        matchesGroup = false
-                                    }
-                                }
-                                if matchesGroup && peerCount != 0 {
-                                    count += 1
-                                    if hasUnmuted {
-                                        unmutedUnreadCount += 1
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    for peerId in expand(data.excludePeers) {
-                        if let (tag, peerCount, _, groupIdValue, isMuted) = peerTagAndCount[peerId], peerCount != 0, let groupId = groupIdValue {
-                            var matches = false
-                            if tags.contains(tag) {
-                                matches = true
-                                if isMuted && data.excludeMuted {
-                                    matches = false
-                                }
-                            }
-                            
-                            if matches {
-                                let matchesGroup: Bool
-                                switch groupId {
-                                case .root:
-                                    matchesGroup = true
-                                case .group:
-                                    if groupId == Namespaces.PeerGroup.archive {
-                                        matchesGroup = !data.excludeArchived
-                                    } else {
-                                        matchesGroup = false
-                                    }
-                                }
-                                if matchesGroup && peerCount != 0 {
-                                    count -= 1
-                                    if !isMuted {
-                                        unmutedUnreadCount -= 1
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    let (count, hasUnmuted) = chatListFilterUnreadCount(data: data, totalStates: totalStates, peerTagAndCount: peerTagAndCount, secretChatsByUserId: secretChatsByUserId)
+                    result.append((filter, count, hasUnmuted))
+                } else {
+                    result.append((filter, 0, false))
                 }
-                result.append((filter, max(0, count), unmutedUnreadCount > 0))
             }
             
             return (totalBadge, result)
         }
     }
+}
+
+// MARK: NAGRAM - Folder unread badge helpers, extracted from chatListFilterItems so they can be tested.
+
+// Each folder peer followed by the secret chats it carries, every peer exactly once. The badge adds
+// one per peer it is handed, so a duplicate here is a chat counted twice. A chat pinned inside a
+// folder is a member as well: ChatListFilterIncludePeers lists it in both `peers` and `pinnedPeers`,
+// and only a local-only secret chat is pinned without being a member. Concatenating the two lists
+// therefore repeats every pinned chat, and the duplicates must be dropped even for an account with no
+// secret chats, which is exactly where skipping this pass doubled the badge.
+func chatListFilterPeerIdsWithSecretChats(_ peerIds: [EnginePeer.Id], secretChatsByUserId: [EnginePeer.Id: [EnginePeer.Id]]) -> [EnginePeer.Id] {
+    var result: [EnginePeer.Id] = []
+    var seen = Set<EnginePeer.Id>()
+    for peerId in peerIds {
+        if seen.insert(peerId).inserted {
+            result.append(peerId)
+        }
+        for secretChatId in secretChatsByUserId[peerId] ?? [] {
+            if seen.insert(secretChatId).inserted {
+                result.append(secretChatId)
+            }
+        }
+    }
+    return result
+}
+
+// One folder's badge: the counter buckets its categories select, corrected by the chats it includes
+// or excludes by name. `peerTagAndCount` holds every unread chat the folder names, as its counter tag,
+// its unread count, whether it has unmuted unread messages, its chat list group and whether it is muted.
+func chatListFilterUnreadCount(data: ChatListFilterData, totalStates: [EnginePeerGroupId: EngineChatListTotalUnreadState], peerTagAndCount: [EnginePeer.Id: (EnginePeerSummaryCounterTags, Int, Bool, EnginePeerGroupId?, Bool)], secretChatsByUserId: [EnginePeer.Id: [EnginePeer.Id]]) -> (count: Int, hasUnmuted: Bool) {
+    var count = 0
+    var unmutedUnreadCount = 0
+    var tags: [EnginePeerSummaryCounterTags] = []
+    if data.categories.contains(.contacts) {
+        tags.append(.contact)
+    }
+    if data.categories.contains(.nonContacts) {
+        tags.append(.nonContact)
+    }
+    if data.categories.contains(.groups) {
+        tags.append(.group)
+    }
+    if data.categories.contains(.bots) {
+        tags.append(.bot)
+    }
+    if data.categories.contains(.channels) {
+        tags.append(.channel)
+    }
+    
+    if let totalState = totalStates[.root] {
+        for tag in tags {
+            if data.excludeMuted {
+                if let value = totalState.filteredCounters[tag] {
+                    if value.chatCount != 0 {
+                        count += Int(value.chatCount)
+                        unmutedUnreadCount += Int(value.chatCount)
+                    }
+                }
+            } else {
+                if let value = totalState.absoluteCounters[tag] {
+                    count += Int(value.chatCount)
+                }
+                if let value = totalState.filteredCounters[tag] {
+                    if value.chatCount != 0 {
+                        unmutedUnreadCount += Int(value.chatCount)
+                    }
+                }
+            }
+        }
+    }
+    if !data.excludeArchived {
+        if let totalState = totalStates[Namespaces.PeerGroup.archive] {
+            for tag in tags {
+                if data.excludeMuted {
+                    if let value = totalState.filteredCounters[tag] {
+                        if value.chatCount != 0 {
+                            count += Int(value.chatCount)
+                            unmutedUnreadCount += Int(value.chatCount)
+                        }
+                    }
+                } else {
+                    if let value = totalState.absoluteCounters[tag] {
+                        count += Int(value.chatCount)
+                    }
+                    if let value = totalState.filteredCounters[tag] {
+                        if value.chatCount != 0 {
+                            unmutedUnreadCount += Int(value.chatCount)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for peerId in chatListFilterPeerIdsWithSecretChats(data.includePeers.peers + data.includePeers.pinnedPeers, secretChatsByUserId: secretChatsByUserId) {
+        if let (tag, peerCount, hasUnmuted, groupIdValue, isMuted) = peerTagAndCount[peerId], peerCount != 0, let groupId = groupIdValue {
+            var matches = true
+            if tags.contains(tag) {
+                if isMuted && data.excludeMuted {
+                } else {
+                    matches = false
+                }
+            }
+            if matches {
+                let matchesGroup: Bool
+                switch groupId {
+                case .root:
+                    matchesGroup = true
+                case .group:
+                    if groupId == Namespaces.PeerGroup.archive {
+                        matchesGroup = !data.excludeArchived
+                    } else {
+                        matchesGroup = false
+                    }
+                }
+                if matchesGroup && peerCount != 0 {
+                    count += 1
+                    if hasUnmuted {
+                        unmutedUnreadCount += 1
+                    }
+                }
+            }
+        }
+    }
+    for peerId in chatListFilterPeerIdsWithSecretChats(data.excludePeers, secretChatsByUserId: secretChatsByUserId) {
+        if let (tag, peerCount, _, groupIdValue, isMuted) = peerTagAndCount[peerId], peerCount != 0, let groupId = groupIdValue {
+            var matches = false
+            if tags.contains(tag) {
+                matches = true
+                if isMuted && data.excludeMuted {
+                    matches = false
+                }
+            }
+            
+            if matches {
+                let matchesGroup: Bool
+                switch groupId {
+                case .root:
+                    matchesGroup = true
+                case .group:
+                    if groupId == Namespaces.PeerGroup.archive {
+                        matchesGroup = !data.excludeArchived
+                    } else {
+                        matchesGroup = false
+                    }
+                }
+                if matchesGroup && peerCount != 0 {
+                    count -= 1
+                    if !isMuted {
+                        unmutedUnreadCount -= 1
+                    }
+                }
+            }
+        }
+    }
+    return (max(0, count), unmutedUnreadCount > 0)
 }

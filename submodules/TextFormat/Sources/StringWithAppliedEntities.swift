@@ -67,7 +67,18 @@ public func chatInputStateStringWithAppliedEntities(_ text: String, entities: [M
         string.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: string.length), using: { value, range, stop in
             if let value = value as? ChatTextInputTextQuoteAttribute, value.isCollapsed {
                 found = true
-                let blockString = string.attributedSubstring(from: range)
+                let blockString = NSMutableAttributedString(attributedString: string.attributedSubstring(from: range))
+                // MARK: NAGRAM — the placeholder already is the quote; drop its quote attribute from the content, as the
+                // composer's collapse does, or the restored draft parses as a collapsed quote inside a collapsed quote.
+                var quoteRanges: [NSRange] = []
+                blockString.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: blockString.length), options: []) { innerValue, innerRange, _ in
+                    if let innerValue = innerValue as? ChatTextInputTextQuoteAttribute, case .quote = innerValue.kind {
+                        quoteRanges.append(innerRange)
+                    }
+                }
+                for quoteRange in quoteRanges {
+                    blockString.removeAttribute(ChatTextInputAttributes.block, range: quoteRange)
+                }
                 string.replaceCharacters(in: range, with: "")
                 string.insert(NSAttributedString(string: " ", attributes: [
                     ChatTextInputAttributes.collapsedBlock: blockString

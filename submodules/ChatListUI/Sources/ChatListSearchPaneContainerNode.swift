@@ -154,9 +154,10 @@ private final class ChatListSearchPendingPane {
         searchOptions: Signal<ChatListSearchOptions?, NoError>,
         globalPeerSearchContext: GlobalPeerSearchContext?,
         key: ChatListSearchPaneKey,
+        nagramBottomUp: Bool, // MARK: NAGRAM
         hasBecomeReady: @escaping (ChatListSearchPaneKey) -> Void
     ) {
-        let paneNode = ChatListSearchListPaneNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, interaction: interaction, key: key, peersFilter: (key == .chats || key == .topics) ? peersFilter : [], requestPeerType: requestPeerType, excludedPeerIds: excludedPeerIds, location: location, communityId: communityId, searchQuery: searchQuery, searchOptions: searchOptions, navigationController: navigationController, parentController: parentController, globalPeerSearchContext: globalPeerSearchContext)
+        let paneNode = ChatListSearchListPaneNode(context: context, animationCache: animationCache, animationRenderer: animationRenderer, updatedPresentationData: updatedPresentationData, interaction: interaction, key: key, peersFilter: (key == .chats || key == .topics) ? peersFilter : [], requestPeerType: requestPeerType, excludedPeerIds: excludedPeerIds, location: location, communityId: communityId, searchQuery: searchQuery, searchOptions: searchOptions, navigationController: navigationController, parentController: parentController, globalPeerSearchContext: globalPeerSearchContext, nagramBottomUp: nagramBottomUp)
         
         self.pane = ChatListSearchPaneWrapper(key: key, node: paneNode)
         self.disposable = (paneNode.isReady
@@ -217,6 +218,8 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
     var requesDismissInput: (() -> Void)?
     
     private var currentAvailablePanes: [ChatListSearchPaneKey]?
+    // MARK: NAGRAM — 底部搜索栏模式，由 ChatListControllerNode 在创建后设置，之后创建的结果页按它决定是否从下往上排列。
+    var nagramBottomUp = false
     
     init(context: AccountContext, animationCache: AnimationCache, animationRenderer: MultiAnimationRenderer, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)? = nil, peersFilter: ChatListNodePeersFilter, requestPeerType: [ReplyMarkupButtonRequestPeerType]?, excludedPeerIds: Set<EnginePeer.Id>, location: ChatListControllerLocation, communityId: EnginePeer.Id? = nil, searchQuery: Signal<String?, NoError>, searchOptions: Signal<ChatListSearchOptions?, NoError>, navigationController: NavigationController?, parentController: ViewController?) {
         self.context = context
@@ -492,6 +495,7 @@ final class ChatListSearchPaneContainerNode: ASDisplayNode, ASGestureRecognizerD
                     searchOptions: self.searchOptions,
                     globalPeerSearchContext: self.globalPeerSearchContext,
                     key: key,
+                    nagramBottomUp: self.nagramBottomUp, // MARK: NAGRAM
                     hasBecomeReady: { [weak self] key in
                         let apply: () -> Void = {
                             guard let strongSelf = self else {

@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Finds an external TestFlight group by its name and, with --build, adds a
-processed build to it, which sends the build to Beta App Review and to the
-testers of the group. With --notes the build first gets the release notes as
-its What to Test text.
+processed build to it and submits the build to Beta App Review, after which
+TestFlight sends it to the testers of the group. With --notes the build first
+gets the release notes as its What to Test text.
+
+Adding a build to a group through the API does not submit it, unlike the web
+page: without the submission the build stays Ready to Submit and no tester
+gets it.
 
 Without --build nothing is changed: the script reports the group and where
 the notes of the latest build are, and fails when the group cannot be found,
@@ -150,6 +154,99 @@ def processed_build(client, app_id, build_number):
     fail(f"Build {build_number} was not processed after 30 minutes.")
 
 
+# externalBuildState values that need no submission: the build is in review,
+# approved, or already testing.
+SUBMITTED_STATES = {
+    "WAITING_FOR_BETA_REVIEW",
+    "IN_BETA_REVIEW",
+    "BETA_APPROVED",
+    "READY_FOR_BETA_TESTING",
+    "IN_BETA_TESTING",
+}
+# Values that the build leaves by itself shortly after processing.
+TRANSIENT_STATES = {"PROCESSING", "IN_EXPORT_COMPLIANCE_REVIEW"}
+
+
+def beta_detail(client, build_id):
+    status, response = client.request("GET", f"/v1/builds/{build_id}/buildBetaDetail")
+    if status != 200:
+        fail(f"Reading the beta state of the build returned {status}: {response.get('_body', '')}")
+    return response["data"]
+
+
+def settled_beta_detail(client, build_id):
+    """The beta detail once the external state no longer moves by itself.
+
+    A build that just reached VALID can still read PROCESSING, or
+    MISSING_EXPORT_COMPLIANCE until the ITSAppUsesNonExemptEncryption of its
+    Info.plist is applied, and a submission made then is refused.
+    """
+    for attempt in range(20):
+        detail = beta_detail(client, build_id)
+        state = detail["attributes"]["externalBuildState"]
+        if state not in TRANSIENT_STATES and state != "MISSING_EXPORT_COMPLIANCE":
+            return detail
+        print(f"External state is {state}, waiting ({attempt + 1}/20)...", flush=True)
+        time.sleep(15)
+    if state == "MISSING_EXPORT_COMPLIANCE":
+        fail(
+            "The build still misses export compliance after 5 minutes: answer it "
+            "in App Store Connect, or check ITSAppUsesNonExemptEncryption in Info.plist."
+        )
+    fail(f"The external state of the build is still {state} after 5 minutes.")
+
+
+def enable_auto_notify(client, detail):
+    """Testers are told about the build as soon as it is approved."""
+    if detail["attributes"].get("autoNotifyEnabled"):
+        return
+    status, response = client.request(
+        "PATCH",
+        f"/v1/buildBetaDetails/{detail['id']}",
+        body={"data": {
+            "type": "buildBetaDetails",
+            "id": detail["id"],
+            "attributes": {"autoNotifyEnabled": True},
+        }},
+    )
+    if status != 200:
+        fail(f"Enabling the tester notification returned {status}: {response.get('_body', '')}")
+    print("Testers are notified automatically")
+
+
+def submit_for_beta_review(client, build_id):
+    detail = settled_beta_detail(client, build_id)
+    state = detail["attributes"]["externalBuildState"]
+    if state in SUBMITTED_STATES:
+        print(f"Beta App Review: nothing to submit, the build is {state}")
+        return
+    if state != "READY_FOR_BETA_SUBMISSION":
+        fail(f"The build cannot be submitted to Beta App Review: it is {state}.")
+    status, response = client.request(
+        "POST",
+        "/v1/betaAppReviewSubmissions",
+        body={"data": {
+            "type": "betaAppReviewSubmissions",
+            "relationships": {"build": {"data": {"type": "builds", "id": build_id}}},
+        }},
+    )
+    if status != 201:
+        # A run started again may find the build submitted in the meantime.
+        state = beta_detail(client, build_id)["attributes"]["externalBuildState"]
+        if state in SUBMITTED_STATES:
+            print(f"Beta App Review: the build is {state}")
+            return
+        fail(f"Submitting to Beta App Review returned {status}: {response.get('_body', '')}")
+    # The state follows the submission with a delay.
+    for attempt in range(6):
+        state = beta_detail(client, build_id)["attributes"]["externalBuildState"]
+        if state in SUBMITTED_STATES:
+            print(f"Submitted to Beta App Review, the build is {state}")
+            return
+        time.sleep(10)
+    fail(f"Beta App Review accepted the submission, but the build is still {state}.")
+
+
 def latest_build(client, app_id):
     status, response = client.request("GET", "/v1/builds", {
         "filter[app]": app_id,
@@ -265,6 +362,7 @@ def main():
     # Before the group: the testers are told about the build as it is added.
     if text is not None:
         set_what_to_test(client, arguments.app, build_id, text)
+    enable_auto_notify(client, beta_detail(client, build_id))
     status, response = client.request(
         "POST",
         f"/v1/betaGroups/{group_id}/relationships/builds",
@@ -273,7 +371,8 @@ def main():
     # 409: the build is in the group already, as when a run is started again.
     if status not in (200, 201, 204, 409):
         fail(f"Adding build {arguments.build} to '{arguments.group}' returned {status}: {response.get('_body', '')}")
-    print(f"Distributed build {arguments.build} to group '{arguments.group}' (status {status})")
+    print(f"Added build {arguments.build} to group '{arguments.group}' (status {status})")
+    submit_for_beta_review(client, build_id)
 
 
 if __name__ == "__main__":

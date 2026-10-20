@@ -120,6 +120,14 @@ import Pasteboard
 import AccountPeerContextItem
 import UrlWhitelist
 
+// MARK: NAGRAM — the expanded avatar is min(width, height - 61) + 60 (98 for other peers) tall, so it only leaves the
+// header's own 61pt below it when width + 98 + 61 <= height. In the landscape iPad detail column (e.g. 807x834) it
+// covered the whole column and left about 1pt of content to drag it closed with (I0052); dragging the photo itself
+// does not scroll. This also covers the plain landscape check it replaces.
+private func peerInfoAllowsInlineAvatarExpansion(layout: ContainerViewLayout) -> Bool {
+    return layout.size.width + 98.0 + 61.0 <= layout.size.height
+}
+
 // MARK: NAGRAM — Map upstream group settings item ids to user-selectable profile items.
 private func nagramGroupProfileSettingItem(peer: EnginePeer, itemId: AnyHashable) -> NagramGroupProfileSettingItem {
     guard let itemId = itemId.base as? Int else {
@@ -1602,6 +1610,13 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 return
             }
             
+            // MARK: NAGRAM — where the avatar cannot expand in place, a tap opens the gallery instead of expanding and
+            // being collapsed again by the next layout pass.
+            if !gallery, let firstEntry = entries.first, let (layout, _) = strongSelf.validLayout, !peerInfoAllowsInlineAvatarExpansion(layout: layout) {
+                strongSelf.openAvatarGallery(peer: peer, entries: entries, centralEntry: centralEntry ?? firstEntry, animateTransition: true)
+                return
+            }
+
             if !gallery {
                 let transition: ContainedViewLayoutTransition = .animated(duration: 0.35, curve: .spring)
                 strongSelf.headerNode.updateIsAvatarExpanded(true, transition: transition)
@@ -5568,7 +5583,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
         
         let navigationHeight = self.updateNavigationHeight(width: layout.size.width, defaultHeight: navigationHeight, insets: UIEdgeInsets(top: 0.0, left: layout.safeInsets.left, bottom: 0.0, right: layout.safeInsets.right), transition: transition)
         
-        if self.headerNode.isAvatarExpanded && layout.size.width > layout.size.height {
+        if self.headerNode.isAvatarExpanded && !peerInfoAllowsInlineAvatarExpansion(layout: layout) { // MARK: NAGRAM
             self.headerNode.updateIsAvatarExpanded(false, transition: transition)
             self.updateNavigationExpansionPresentation(isExpanded: false, animated: true)
         }
@@ -6221,7 +6236,7 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             var shouldBeExpanded: Bool?
             
             var isLandscape = false
-            if let (layout, _) = self.validLayout, layout.size.width > layout.size.height {
+            if let (layout, _) = self.validLayout, !peerInfoAllowsInlineAvatarExpansion(layout: layout) { // MARK: NAGRAM
                 isLandscape = true
             }
             if offsetY <= -32.0 && scrollView.isDragging && scrollView.isTracking {

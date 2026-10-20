@@ -144,6 +144,8 @@ swift_library(
         # MARK: NEXTGRAM
         "//Nagram/ChatListFilters:NagramChatListFilters",
         "//Nagram/Strings:NagramStrings",
+        "//Nagram/SearchLink:NagramSearchLink",
+        "//Nagram/FlippedList:NagramFlippedList",
     ],
     visibility = [
         "//visibility:public",
@@ -163,6 +165,7 @@ swift_library(
         "//submodules/TelegramStringFormatting:TelegramStringFormatting",
         "//submodules/TextFormat:TextFormat",
         "//submodules/AppBundle:AppBundle",
+        "//Nagram/SearchLink:NagramSearchLink", # MARK: NAGRAM
     ],
 )
 

@@ -100,6 +100,15 @@ not (→ structured `.instantPage` path). The `EntityExpressibleOptions` bag nar
 so quote-bearing content routes onto the rich path even though entities could represent it (opted into by the
 send-options preview and the attachment-menu rich-editor send — see §5).
 
+**Nagram divergence — collapsed quotes stay on the entity path.** Upstream (`a34a9623cb`, 2026-07-03) made every
+collapsed `.blockQuote` non-entity-expressible, so a non-Premium user who collapsed a quote hit the "Remove
+Formatting?" Premium gate on send (reports I0050/I0058), the legacy composer latched to the native editor, and
+drafts and edits went rich. A flat collapsed quote is `messageEntityBlockquote` with `collapsed`, which the
+server accepts from any account (Bot API 7.4 `expandable_blockquote`; Android and macOS send it without Premium),
+so Nagram keeps it entity-expressible under the same flat-only rule as an expanded quote. Restoring such an entity
+(`chatInputStateStringWithAppliedEntities`) strips the quote attribute from the collapsed placeholder's content,
+as the composer's own collapse does; otherwise it parsed as a collapsed quote nested in a collapsed quote.
+
 ---
 
 ## 3. Composer ↔ editor wiring

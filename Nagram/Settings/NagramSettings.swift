@@ -343,6 +343,15 @@ public final class NagramSettings {
     /// 刷新消息窗口时，若刷新前位于最新消息边界，则继续保持在最新消息
     @NagramDefault("nagram.stayAtLatestMessageAfterRefresh", false)
     public var stayAtLatestMessageAfterRefresh: Bool
+    /// 底部搜索栏模式下，全局搜索结果从下往上排列（最相关的结果贴近搜索框）
+    @NagramDefault("nagram.bottomUpGlobalSearchResults", false)
+    public var bottomUpGlobalSearchResults: Bool
+    /// 聊天内搜索消息的结果列表从下往上排列（最新的结果在最下方）
+    @NagramDefault("nagram.bottomUpChatSearchResults", false)
+    public var bottomUpChatSearchResults: Bool
+    /// 单手模式：聊天内搜索框放在底部、紧贴键盘上方，而不是顶部导航栏
+    @NagramDefault("nagram.chatSearchFieldAtBottom", false)
+    public var chatSearchFieldAtBottom: Bool
     /// 通话前确认（默认关 = 保持原生无确认）
     @NagramDefault("nagram.confirmCalls", false)
     public var confirmCalls: Bool

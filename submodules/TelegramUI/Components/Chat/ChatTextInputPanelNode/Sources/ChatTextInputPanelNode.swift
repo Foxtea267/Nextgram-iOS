@@ -561,10 +561,19 @@ private final class ChatTextFormattingBarButton: UIControl {
         self.accessibilityLabel = self.action.accessibilityLabel(strings: strings)
         self.accessibilityTraits = isSelected ? [.button, .selected] : [.button]
 
-        let accentColor = theme.chat.inputPanel.panelControlAccentColor
-        let foregroundColor = theme.chat.inputPanel.inputControlColor
-        let color = isEnabled ? (isSelected ? accentColor : foregroundColor) : foregroundColor.withAlphaComponent(0.35)
-        self.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.2 : 0.12) : .clear
+        // The bar is a glass capsule over the chat wallpaper, like the attachment button, so its glyphs use
+        // the same opaque panelControlColor; inputControlColor is half transparent and washes out there.
+        // The selected style is the send button's solid fill, which stays legible on any wallpaper.
+        let foregroundColor = theme.chat.inputPanel.panelControlColor
+        let color: UIColor
+        if !isEnabled {
+            color = foregroundColor.withAlphaComponent(0.45)
+        } else if isSelected {
+            color = theme.list.itemCheckColors.foregroundColor
+        } else {
+            color = foregroundColor
+        }
+        self.backgroundColor = isSelected && isEnabled ? theme.list.itemCheckColors.fillColor : .clear
         self.label.attributedText = self.action.attributedIcon(color: color, fontSize: 17.0)
     }
 
@@ -578,9 +587,14 @@ private final class ChatTextFormattingBarView: UIView {
     static let height: CGFloat = 40.0
 
     let backgroundView: GlassBackgroundView
+    private let buttonsContainer = UIView()
     private var buttons: [ChatTextFormattingToolbarAction: ChatTextFormattingBarButton] = [:]
     private var actions: [ChatTextFormattingToolbarAction] = []
     private(set) var glassTintColor: GlassBackgroundView.TintColor = .init(kind: .panel)
+    private var glassParams: (size: CGSize, isDark: Bool)?
+    // Native glass renders nothing while an ancestor fades in from alpha 0, so the bar never fades
+    // itself: the glass materializes through `isVisible` and only the buttons fade.
+    private var isShown = false
 
     var pressed: ((ChatTextFormattingToolbarAction) -> Void)?
 
@@ -588,6 +602,8 @@ private final class ChatTextFormattingBarView: UIView {
         self.backgroundView = GlassBackgroundView(frame: CGRect())
         super.init(frame: frame)
         self.addSubview(self.backgroundView)
+        self.buttonsContainer.alpha = 0.0
+        self.backgroundView.contentView.addSubview(self.buttonsContainer)
     }
 
     required init?(coder: NSCoder) {
@@ -597,8 +613,10 @@ private final class ChatTextFormattingBarView: UIView {
     func update(size: CGSize, theme: PresentationTheme, strings: PresentationStrings, tintColor: GlassBackgroundView.TintColor, actions: [ChatTextFormattingToolbarAction], enabledActions: Set<ChatTextFormattingToolbarAction>, selectedActions: Set<ChatTextFormattingToolbarAction>, transition: ComponentTransition) {
         self.actions = actions
         self.glassTintColor = tintColor
-        self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: theme.overallDarkAppearance, tintColor: tintColor, isInteractive: true, transition: transition)
+        self.glassParams = (size, theme.overallDarkAppearance)
+        self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: theme.overallDarkAppearance, tintColor: tintColor, isInteractive: true, isVisible: self.isShown, transition: transition)
         transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(), size: size))
+        transition.setFrame(view: self.buttonsContainer, frame: CGRect(origin: CGPoint(), size: size))
 
         let visible = Set(actions)
         for action in actions {
@@ -609,7 +627,7 @@ private final class ChatTextFormattingBarView: UIView {
                 button = ChatTextFormattingBarButton(action: action)
                 button.addTarget(self, action: #selector(self.buttonPressed(_:)), for: .touchUpInside)
                 self.buttons[action] = button
-                self.backgroundView.contentView.addSubview(button)
+                self.buttonsContainer.addSubview(button)
             }
             button.isHidden = false
             button.update(theme: theme, strings: strings, isEnabled: enabledActions.contains(action), isSelected: selectedActions.contains(action))
@@ -630,6 +648,17 @@ private final class ChatTextFormattingBarView: UIView {
             let buttonWidth = min(44.0, step - 2.0)
             button.frame = CGRect(x: floorToScreenPixels(sideInset + step * CGFloat(index) + (step - buttonWidth) * 0.5), y: 6.0, width: buttonWidth, height: size.height - 12.0)
         }
+    }
+
+    func setShown(_ isShown: Bool, transition: ComponentTransition, completion: (() -> Void)? = nil) {
+        self.isShown = isShown
+        self.isUserInteractionEnabled = isShown
+        if let glassParams = self.glassParams {
+            self.backgroundView.update(size: glassParams.size, cornerRadius: glassParams.size.height * 0.5, isDark: glassParams.isDark, tintColor: self.glassTintColor, isInteractive: true, isVisible: isShown, transition: transition)
+        }
+        transition.setAlpha(view: self.buttonsContainer, alpha: isShown ? 1.0 : 0.0, completion: { _ in
+            completion?()
+        })
     }
 
     @objc private func buttonPressed(_ button: ChatTextFormattingBarButton) {
@@ -4760,30 +4789,26 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         guard isVisible else {
             if let barView = self.textFormattingBarView {
                 self.textFormattingBarView = nil
-                transition.updateAlpha(layer: barView.layer, alpha: 0.0, completion: { [weak barView] _ in
+                barView.setShown(false, transition: ComponentTransition(transition), completion: { [weak barView] in
                     barView?.removeFromSuperview()
                 })
             }
             return 0.0
         }
 
-        let barView: ChatTextFormattingBarView
-        var barTransition = ComponentTransition(transition)
-        if let current = self.textFormattingBarView {
-            barView = current
+        if let barView = self.textFormattingBarView {
+            transition.updateFrame(view: barView, frame: frame)
+            self.updateTextFormattingBarContent(size: frame.size, interfaceState: interfaceState, tintColor: tintColor, transition: ComponentTransition(transition))
         } else {
-            barView = ChatTextFormattingBarView(frame: frame)
+            let barView = ChatTextFormattingBarView(frame: frame)
             barView.pressed = { [weak self] action in
                 self?.performTextFormattingToolbarAction(action)
             }
             self.textFormattingBarView = barView
             self.glassBackgroundContainer.contentView.addSubview(barView)
-            barView.alpha = 0.0
-            barTransition = .immediate
+            self.updateTextFormattingBarContent(size: frame.size, interfaceState: interfaceState, tintColor: tintColor, transition: .immediate)
+            barView.setShown(true, transition: ComponentTransition(transition))
         }
-        transition.updateFrame(view: barView, frame: frame)
-        transition.updateAlpha(layer: barView.layer, alpha: 1.0)
-        self.updateTextFormattingBarContent(size: frame.size, interfaceState: interfaceState, tintColor: tintColor, transition: barTransition)
         return frame.height + 6.0
     }
 

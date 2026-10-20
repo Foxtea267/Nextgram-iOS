@@ -1,7 +1,8 @@
 "Nagram.Title" = "Nextgram";
 "Nagram.DeepLink.UnsupportedPlatform" = "This setting is not available on this platform.";
-"Nagram.Tab.General" = "General";
-"Nagram.Tab.Chat" = "Messages";
+"Nagram.Tab.Interface" = "Interface";
+"Nagram.Tab.Chats" = "Chats";
+"Nagram.Tab.Messages" = "Messages";
 "Nagram.Tab.Other" = "Other";
 "Nagram.Section.Experimental" = "Experimental";
 "Nagram.MediaMetadata" = "Show Media Metadata";
@@ -22,7 +23,12 @@
 "Nagram.ChooseFolderAfterJoining" = "Choose Folder After Joining";
 "Nagram.JoinedChatFolderUnavailable" = "Could not add this chat. The folder may have been deleted or reached its chat limit. Free up space in the folder and try again.";
 "Nagram.Section.MessageDisplay" = "Message Display";
-"Nagram.Section.MessageList" = "Message List";
+"Nagram.Section.Appearance" = "Appearance";
+"Nagram.Section.ChatList" = "Chat List";
+"Nagram.Section.Folders" = "Folders";
+"Nagram.Section.ChatNavigation" = "Chat Navigation";
+"Nagram.Section.ChatNavigation.Footer" = "“Disable Swipe to Next Channel/Topic” stops swiping up at the bottom of a channel or topic from jumping to the next chat.";
+"Nagram.Section.Confirmations" = "Confirmations";
 "Nagram.StayAtLatestMessageAfterRefresh" = "Stay at Latest After Refresh";
 "Nagram.StayAtLatestMessageAfterRefresh.Footer" = "Off follows Telegram's native behavior and preserves the current message during refresh. When enabled, a refresh that begins at the latest-message edge continues showing the latest message.";
 "Nagram.HidePrivateChatActivities" = "Hide Activity Status in Private Chats";
@@ -96,7 +102,6 @@
 "Nagram.Section.Filtering" = "Filtering";
 "Nagram.Section.Sending" = "Sending";
 "Nagram.Section.Gesture" = "Gestures";
-"Nagram.Section.Gesture.Footer" = "Configure chat list horizontal swipes and whether swiping up at the bottom of a channel/topic jumps to the next chat.";
 "Nagram.Section.Privacy" = "Privacy";
 "Nagram.Section.Notifications" = "Notifications";
 "Nagram.Section.Sync" = "Sync";
@@ -347,9 +352,7 @@
 "Nagram.DisableContactPhoneSharingByDefault" = "Disable Phone Sharing by Default";
 "Nagram.DisableContactSyncToPhoneByDefault" = "Disable Sync to Phone by Default";
 "Nagram.ContactDefaults.Footer" = "These only change the initial choices when adding a contact. You can still enable either option each time.";
-"Nagram.Section.Calls" = "Calls";
 "Nagram.ConfirmCalls" = "Confirm Before Calling";
-"Nagram.Section.Interface" = "Interface";
 "Nagram.HideTabBarPermissionWarnings" = "Hide Tab Bar Permission Warnings";
 "Nagram.HideStories" = "Hide Stories";
 "Nagram.Section.Stories" = "Stories";
@@ -655,3 +658,12 @@ With iCloud Keychain sync on, backups follow your other devices and appear on th
 "Nagram.MutualContact.Description" = "This contact is a mutual contact.";
 "Nagram.UnpinAllMessagesAlert" = "Would you like to unpin all messages?";
 "Nagram.ConfirmUnpin" = "Confirm Before Unpinning";
+"Nagram.SearchLink.Header" = "Link";
+"Nagram.SearchLink.Open" = "Open Link";
+"Nagram.SearchLink.OpenMessage" = "Go to Message";
+"Nagram.SearchLink.OpenInvite" = "Open Invite Link";
+"Nagram.Section.OneHanded" = "One-Handed Mode";
+"Nagram.Section.OneHanded.Footer" = "Keep searching within reach of your thumb: results start at the bottom of the screen next to the search field, and scrolling up shows more. Search results in the chat list only change when the search bar is in the bottom bar.";
+"Nagram.OneHanded.GlobalSearchResults" = "Search Results from the Bottom";
+"Nagram.OneHanded.ChatSearchResults" = "Chat Search Results from the Bottom";
+"Nagram.OneHanded.ChatSearchFieldAtBottom" = "Chat Search Field at the Bottom";

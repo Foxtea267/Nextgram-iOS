@@ -1,7 +1,8 @@
 "Nagram.Title" = "Nextgram";
 "Nagram.DeepLink.UnsupportedPlatform" = "此設定項目不適用於目前的平台。";
-"Nagram.Tab.General" = "一般";
-"Nagram.Tab.Chat" = "訊息";
+"Nagram.Tab.Interface" = "介面";
+"Nagram.Tab.Chats" = "會話";
+"Nagram.Tab.Messages" = "訊息";
 "Nagram.Tab.Other" = "其他";
 "Nagram.Section.Experimental" = "實驗性功能";
 "Nagram.MediaMetadata" = "顯示媒體 metadata";
@@ -22,7 +23,12 @@
 "Nagram.ChooseFolderAfterJoining" = "加入群組或頻道後選擇資料夾";
 "Nagram.JoinedChatFolderUnavailable" = "無法加入此聊天，資料夾可能已被刪除或達到聊天數量上限。請整理資料夾後重試。";
 "Nagram.Section.MessageDisplay" = "訊息顯示";
-"Nagram.Section.MessageList" = "訊息列表";
+"Nagram.Section.Appearance" = "外觀";
+"Nagram.Section.ChatList" = "會話列表";
+"Nagram.Section.Folders" = "分組";
+"Nagram.Section.ChatNavigation" = "聊天導覽";
+"Nagram.Section.ChatNavigation.Footer" = "「停用上滑至下一頻道/主題」開啟後，在頻道或主題底部繼續上滑不會跳至下一個對話。";
+"Nagram.Section.Confirmations" = "確認";
 "Nagram.StayAtLatestMessageAfterRefresh" = "重新整理後保持最新訊息";
 "Nagram.StayAtLatestMessageAfterRefresh.Footer" = "關閉時遵循 Telegram 原生行為，重新整理會保持目前訊息位置；開啟後，若重新整理前位於最新訊息邊界，則繼續顯示最新訊息。";
 "Nagram.HidePrivateChatActivities" = "隱藏私聊活動狀態";
@@ -96,7 +102,6 @@
 "Nagram.Section.Filtering" = "過濾";
 "Nagram.Section.Sending" = "傳送";
 "Nagram.Section.Gesture" = "手勢";
-"Nagram.Section.Gesture.Footer" = "設定對話列表橫滑，以及在頻道/主題底部上滑時是否跳至下一個對話。";
 "Nagram.Section.Privacy" = "隱私";
 "Nagram.Section.Notifications" = "通知";
 "Nagram.Section.Sync" = "同步";
@@ -347,9 +352,7 @@
 "Nagram.DisableContactPhoneSharingByDefault" = "新增聯絡人時預設關閉分享手機號碼";
 "Nagram.DisableContactSyncToPhoneByDefault" = "新增聯絡人時預設關閉同步到手機";
 "Nagram.ContactDefaults.Footer" = "只變更新增聯絡人頁面的初始選擇；新增時仍可個別開啟。";
-"Nagram.Section.Calls" = "通話";
 "Nagram.ConfirmCalls" = "通話前確認";
-"Nagram.Section.Interface" = "介面";
 "Nagram.HideTabBarPermissionWarnings" = "隱藏標籤列權限警告";
 "Nagram.HideStories" = "隱藏動態";
 "Nagram.Section.Stories" = "動態";
@@ -655,3 +658,12 @@
 "Nagram.MutualContact.Description" = "此聯絡人是雙向聯絡人。";
 "Nagram.UnpinAllMessagesAlert" = "要取消所有訊息的置頂嗎？";
 "Nagram.ConfirmUnpin" = "取消置頂前確認";
+"Nagram.SearchLink.Header" = "連結";
+"Nagram.SearchLink.Open" = "開啟連結";
+"Nagram.SearchLink.OpenMessage" = "跳至訊息";
+"Nagram.SearchLink.OpenInvite" = "開啟邀請連結";
+"Nagram.Section.OneHanded" = "單手模式";
+"Nagram.Section.OneHanded.Footer" = "讓搜尋操作都在拇指搆得到的地方：結果從螢幕底部、緊挨搜尋框開始排列，往上滑查看更多。聊天列表的搜尋結果僅在搜尋列位於底部列時生效。";
+"Nagram.OneHanded.GlobalSearchResults" = "搜尋結果從底部開始";
+"Nagram.OneHanded.ChatSearchResults" = "聊天內搜尋結果從底部開始";
+"Nagram.OneHanded.ChatSearchFieldAtBottom" = "聊天內搜尋框放在底部";

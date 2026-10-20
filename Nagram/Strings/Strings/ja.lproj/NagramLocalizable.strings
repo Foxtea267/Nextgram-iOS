@@ -1,7 +1,8 @@
 "Nagram.Title" = "Nextgram";
 "Nagram.DeepLink.UnsupportedPlatform" = "この設定項目は現在のプラットフォームでは利用できません。";
-"Nagram.Tab.General" = "一般";
-"Nagram.Tab.Chat" = "メッセージ";
+"Nagram.Tab.Interface" = "インターフェース";
+"Nagram.Tab.Chats" = "チャット";
+"Nagram.Tab.Messages" = "メッセージ";
 "Nagram.Tab.Other" = "その他";
 "Nagram.Section.Experimental" = "実験的機能";
 "Nagram.MediaMetadata" = "メディア metadata を表示";
@@ -22,7 +23,12 @@
 "Nagram.ChooseFolderAfterJoining" = "参加後にフォルダを選択";
 "Nagram.JoinedChatFolderUnavailable" = "追加できませんでした。フォルダが削除されたか、チャット数の上限に達しています。フォルダを整理して再試行してください。";
 "Nagram.Section.MessageDisplay" = "メッセージ表示";
-"Nagram.Section.MessageList" = "メッセージ一覧";
+"Nagram.Section.Appearance" = "外観";
+"Nagram.Section.ChatList" = "チャットリスト";
+"Nagram.Section.Folders" = "フォルダ";
+"Nagram.Section.ChatNavigation" = "チャットナビゲーション";
+"Nagram.Section.ChatNavigation.Footer" = "「次のチャンネル/トピックへのスワイプを無効化」をオンにすると、チャンネルやトピックの最下部で上にスワイプしても次のチャットへ移動しません。";
+"Nagram.Section.Confirmations" = "確認";
 "Nagram.StayAtLatestMessageAfterRefresh" = "更新後も最新メッセージを表示";
 "Nagram.StayAtLatestMessageAfterRefresh.Footer" = "オフでは Telegram 標準の動作に従い、更新中も現在のメッセージ位置を維持します。オンでは、最新メッセージ位置で始まった更新後も最新メッセージを表示し続けます。";
 "Nagram.HidePrivateChatActivities" = "個人チャットのアクティビティを非表示";
@@ -96,7 +102,6 @@
 "Nagram.Section.Filtering" = "フィルター";
 "Nagram.Section.Sending" = "送信";
 "Nagram.Section.Gesture" = "ジェスチャ";
-"Nagram.Section.Gesture.Footer" = "チャットリストの横スワイプと、チャンネル/トピック最下部で上にスワイプした際に次のチャットへ移動するかを設定します。";
 "Nagram.Section.Privacy" = "プライバシー";
 "Nagram.Section.Notifications" = "通知";
 "Nagram.Section.Sync" = "同期";
@@ -244,7 +249,7 @@
 "Nagram.MessageMenu.Item.saveGif" = "GIF を保存";
 "Nagram.MessageMenu.Item.editSticker" = "ステッカーを編集";
 "Nagram.MessageMenu.Item.viewStickerPack" = "ステッカーパックを表示";
-"Nagram.MessageMenu.Item.saveToSavedMessages" = "保存済みメッセージに保存";
+"Nagram.MessageMenu.Item.saveToSavedMessages" = "保存用メッセージに保存";
 "Nagram.MessageMenu.Item.forward" = "転送";
 "Nagram.MessageMenu.Item.forwardWithoutQuote" = "引用なしで転送";
 "Nagram.MessageMenu.Item.report" = "報告";
@@ -347,9 +352,7 @@
 "Nagram.DisableContactPhoneSharingByDefault" = "電話番号の共有をデフォルトでオフ";
 "Nagram.DisableContactSyncToPhoneByDefault" = "端末への同期をデフォルトでオフ";
 "Nagram.ContactDefaults.Footer" = "連絡先追加画面の初期値のみを変更します。追加時に個別に有効化できます。";
-"Nagram.Section.Calls" = "通話";
 "Nagram.ConfirmCalls" = "通話前に確認";
-"Nagram.Section.Interface" = "インターフェース";
 "Nagram.HideTabBarPermissionWarnings" = "タブバーの権限警告を非表示";
 "Nagram.HideStories" = "ストーリーズを非表示";
 "Nagram.Section.Stories" = "ストーリーズ";
@@ -655,3 +658,12 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.MutualContact.Description" = "この連絡先は相互連絡先です。";
 "Nagram.UnpinAllMessagesAlert" = "すべてのメッセージのピン留めを解除しますか？";
 "Nagram.ConfirmUnpin" = "ピン留め解除前に確認";
+"Nagram.SearchLink.Header" = "リンク";
+"Nagram.SearchLink.Open" = "リンクを開く";
+"Nagram.SearchLink.OpenMessage" = "メッセージへ移動";
+"Nagram.SearchLink.OpenInvite" = "招待リンクを開く";
+"Nagram.Section.OneHanded" = "片手モード";
+"Nagram.Section.OneHanded.Footer" = "検索を親指の届く範囲で行えるようにします。結果は検索フィールドのそばの画面下部から並び、上にスクロールするとさらに表示されます。チャットリストの検索結果は、検索バーが下部バーにある場合のみ変わります。";
+"Nagram.OneHanded.GlobalSearchResults" = "検索結果を下から表示";
+"Nagram.OneHanded.ChatSearchResults" = "チャット内の検索結果を下から表示";
+"Nagram.OneHanded.ChatSearchFieldAtBottom" = "チャット内の検索フィールドを下部に表示";

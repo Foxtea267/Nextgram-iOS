@@ -302,11 +302,12 @@ public struct ChatInputContent: Equatable {
                 return false
             case let .blockQuote(bq):
                 if !bq.author.isEmpty { return false }
-                // FLAT-ONLY rule: expressible only when the quote is non-collapsed AND every child block is
-                // a plain body paragraph with no list membership (the message-entity blockquote can represent
-                // exactly one level of flat-text quote).
+                // FLAT-ONLY rule: expressible only when every child block is a plain body paragraph with no list
+                // membership (the message-entity blockquote can represent exactly one level of flat-text quote).
                 if options.contains(.quotesRequireRichContent) { return false }
-                guard !bq.collapsed else { return false }
+                // MARK: NAGRAM — a flat collapsed quote is `messageEntityBlockquote` with `collapsed`, which the server
+                // accepts from any account (Android and macOS send it without Premium). Upstream routes it to the
+                // Premium-only rich path, so collapsing a quote blocked sending for non-Premium users.
                 if !bq.content.isEntityExpressible() {
                     return false
                 }

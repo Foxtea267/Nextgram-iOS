@@ -620,6 +620,8 @@ final class MediaPickerSelectedListNode: ASDisplayNode, ASScrollViewDelegate, AS
     private var graphics: PrincipalThemeEssentialGraphics?
     
     var interaction: MediaPickerInteraction?
+    // MARK: NAGRAM - set for the clipboard preview, see updateItems
+    var fitsContentToVisibleArea = false
     
     private var validLayout: (size: CGSize, insets: UIEdgeInsets, items: [TGMediaSelectableItem], grouped: Bool, theme: PresentationTheme, wallpaper: TelegramWallpaper, bubbleCorners: PresentationChatBubbleCorners)?
     
@@ -1094,6 +1096,36 @@ final class MediaPickerSelectedListNode: ASDisplayNode, ASScrollViewDelegate, AS
         }
         
         let spacing: CGFloat = 8.0
+
+        // MARK: NAGRAM - the clipboard sheet keeps the attachment menu's fixed height, so a preview
+        // that is one bubble is enlarged to the visible area and whatever fits is centered in it
+        var contentTopInset = insets.top
+        if self.fitsContentToVisibleArea && !self.isExternalPreview {
+            let headerHeight: CGFloat = 60.0
+            let footerHeight: CGFloat = items.count > 1 ? 60.0 : 32.0
+            let availableHeight = size.height - insets.top - insets.bottom - headerHeight - footerHeight
+            let maxWidth = max(boundingWidth, size.width - insets.left - insets.right - sideInset * 2.0)
+
+            if groupLayouts.count == 1, let firstGroup = groupLayouts.first {
+                if firstGroup.0.count == 1, case let (item, _, position)? = firstGroup.0.first, let itemSize = itemSizes.first, itemSize.width > 0.0, itemSize.height > 0.0 {
+                    let height = min(floorToScreenPixels(maxWidth * itemSize.height / itemSize.width), max(availableHeight, boundingWidth))
+                    let itemRect = CGRect(origin: CGPoint(), size: CGSize(width: maxWidth, height: height))
+                    groupLayouts = [([(item, itemRect, position)], itemRect.size)]
+                } else if firstGroup.0.count > 1 {
+                    let (mosaicLayout, mosaicSize) = chatMessageBubbleMosaicLayout(maxSize: CGSize(width: maxWidth, height: maxWidth), itemSizes: itemSizes, spacing: 1.0, fillWidth: true)
+                    if mosaicSize.height <= availableHeight {
+                        groupLayouts = [(zip(firstGroup.0, mosaicLayout).map { ($0.0, $1.0, $1.1) }, mosaicSize)]
+                    }
+                }
+            }
+
+            var groupsHeight = spacing * CGFloat(max(0, groupLayouts.count - 1))
+            for (_, groupSize) in groupLayouts {
+                groupsHeight += groupSize.height
+            }
+            contentTopInset += max(0.0, floorToScreenPixels((availableHeight - groupsHeight) / 2.0))
+        }
+
         var contentHeight: CGFloat = 0.0
         var contentWidth: CGFloat = 0.0
         if !self.isExternalPreview {
@@ -1101,7 +1133,7 @@ final class MediaPickerSelectedListNode: ASDisplayNode, ASScrollViewDelegate, AS
         }
         
         if let previewNode = self.messageNodes?.first {
-            transition.updateFrame(node: previewNode, frame: CGRect(origin: CGPoint(x: 0.0, y: insets.top + 28.0), size: previewNode.frame.size))
+            transition.updateFrame(node: previewNode, frame: CGRect(origin: CGPoint(x: 0.0, y: contentTopInset + 28.0), size: previewNode.frame.size))
             
             var previewNodeFrame = previewNode.frame
             previewNodeFrame.origin.y = size.height - previewNodeFrame.origin.y - previewNodeFrame.size.height
@@ -1120,7 +1152,7 @@ final class MediaPickerSelectedListNode: ASDisplayNode, ASScrollViewDelegate, AS
                 contentHeight += spacing
             }
             
-            var groupRect = CGRect(origin: CGPoint(x: 0.0, y: insets.top + contentHeight), size: groupSize)
+            var groupRect = CGRect(origin: CGPoint(x: 0.0, y: contentTopInset + contentHeight), size: groupSize)
             if !self.isExternalPreview {
                 groupRect.origin.x = insets.left + floorToScreenPixels((size.width - insets.left - insets.right - groupSize.width) / 2.0)
             }
@@ -1213,7 +1245,7 @@ final class MediaPickerSelectedListNode: ASDisplayNode, ASScrollViewDelegate, AS
         
         if let dragNode = self.messageNodes?.last {
             transition.updateAlpha(node: dragNode, alpha: items.count > 1 ? 1.0 : 0.0)
-            transition.updateFrame(node: dragNode, frame: CGRect(origin: CGPoint(x: 0.0, y: insets.top + contentHeight + 9.0), size: dragNode.frame.size))
+            transition.updateFrame(node: dragNode, frame: CGRect(origin: CGPoint(x: 0.0, y: contentTopInset + contentHeight + 9.0), size: dragNode.frame.size))
             
             var dragNodeFrame = dragNode.frame
             dragNodeFrame.origin.y = size.height - dragNodeFrame.origin.y - dragNodeFrame.size.height
@@ -1222,7 +1254,7 @@ final class MediaPickerSelectedListNode: ASDisplayNode, ASScrollViewDelegate, AS
             contentHeight += 60.0
         }
         
-        contentHeight += insets.top
+        contentHeight += contentTopInset
         contentHeight += insets.bottom
         
         var removeIds: [String] = []

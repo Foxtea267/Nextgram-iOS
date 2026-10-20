@@ -40,6 +40,7 @@ import SectionTitleContextItem
 import EdgeEffect
 import ComponentFlow
 import ComponentDisplayAdapters
+import NagramSettings // MARK: NAGRAM
 
 private enum ChatListTokenId: Int32 {
     case archive
@@ -128,6 +129,15 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     
     public var dismissSearch: (() -> Void)?
     public var dismissSearchImmediately: (() -> Void)?
+    // MARK: NAGRAM — 搜索栏在底部时由创建者设置，结果页据此（再结合设置开关）从下往上排列。
+    public var nagramBottomUp: Bool {
+        get {
+            return self.paneContainerNode.nagramBottomUp
+        }
+        set {
+            self.paneContainerNode.nagramBottomUp = newValue
+        }
+    }
     var openAdInfo: ((ASDisplayNode, AdPeer) -> Void)?
     
     private let edgeEffectView: EdgeEffectView
@@ -247,8 +257,27 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             let _ = context.sharedContext.openUserGeneratedUrl(context: context, peerId: nil, url: url, webpage: nil, concealed: false, forceConcealed: false, skipUrlAuth: false, skipConcealedAlert: false, forceDark: false, present: { c in
                 present(c, nil)
             }, openResolved: { [weak self] resolved in
-                context.sharedContext.openResolvedUrl(resolved, context: context, urlContext: .generic, navigationController: navigationController, forceExternal: false, forceUpdate: false, openPeer: { peerId, navigation in
-                    
+                context.sharedContext.openResolvedUrl(resolved, context: context, urlContext: .generic, navigationController: navigationController, forceExternal: false, forceUpdate: false, openPeer: { peer, navigation in
+                    // MARK: NAGRAM — 搜索框粘贴的链接解析到会话或消息时要真的打开它；上游这里是空实现。
+                    guard let navigationController else {
+                        return
+                    }
+                    switch navigation {
+                    case let .chat(inputState, subject, peekData):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: subject, updateTextInputState: inputState, activateInput: inputState != nil ? .text : nil, peekData: peekData))
+                    case .info:
+                        if peer.restrictionText(platform: "ios", contentSettings: context.currentContentSettings.with { $0 }) == nil, let infoController = context.sharedContext.makePeerInfoController(context: context, updatedPresentationData: nil, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) {
+                            navigationController.pushViewController(infoController)
+                        }
+                    case let .withBotStartPayload(startPayload):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), botStart: startPayload))
+                    case let .withAttachBot(attachBotStart):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), attachBotStart: attachBotStart))
+                    case let .withBotApp(botAppStart):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), botAppStart: botAppStart))
+                    case .default:
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer)))
+                    }
                 },
                 sendFile: nil,
                 sendSticker: nil,
@@ -1045,14 +1074,20 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         }
         
         bottomInset += 44.0
-        
+        // MARK: NAGRAM — 从下往上显示时结果停在列表底端，底部浮着的分类栏和搜索框会挡住最贴近它们的几行，
+        // 留白要到分类栏上沿为止。
+        var paneBottomInset = bottomInset
+        if self.nagramBottomUp && NagramSettings.shared.bottomUpGlobalSearchResults && self.displaySearchFilters {
+            paneBottomInset = max(bottomInset, layout.size.height - self.filterContainerNode.frame.minY + 8.0)
+        }
+
         let edgeEffectHeight: CGFloat = bottomInset + 8.0
         let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - edgeEffectHeight), size: CGSize(width: layout.size.width, height: edgeEffectHeight))
         transition.updateFrame(view: self.edgeEffectView, frame: edgeEffectFrame)
         self.edgeEffectView.update(content: self.presentationData.theme.list.plainBackgroundColor, rect: edgeEffectFrame, edge: .bottom, edgeSize: min(edgeEffectHeight, 50.0), transition: ComponentTransition(transition))
         transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 ? 1.0 : 0.0)
 
-        self.paneContainerNode.update(size: CGSize(width: layout.size.width, height: layout.size.height), sideInset: layout.safeInsets.left, topInset: topInset, bottomInset: bottomInset, visibleHeight: layout.size.height, presentationData: self.presentationData, availablePanes: availablePanes, transition: transition)
+        self.paneContainerNode.update(size: CGSize(width: layout.size.width, height: layout.size.height), sideInset: layout.safeInsets.left, topInset: topInset, bottomInset: paneBottomInset, visibleHeight: layout.size.height, presentationData: self.presentationData, availablePanes: availablePanes, transition: transition)
     }
     
     private var currentMessages: ([EnginePeer.Id: EnginePeer], [EngineMessage.Id: EngineMessage]) {

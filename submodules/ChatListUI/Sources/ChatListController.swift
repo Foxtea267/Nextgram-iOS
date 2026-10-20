@@ -2596,8 +2596,9 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             let suggestedLocalization = self.context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.SuggestedLocalization())
             
             let signal = combineLatest(
-                self.context.sharedContext.accountManager.transaction { transaction -> String in
+                self.context.sharedContext.accountManager.transaction { transaction -> (languageCode: String, isCustomLocalization: Bool) in
                     let languageCode: String
+                    var isCustomLocalization = false
                     if let current = transaction.getSharedData(SharedDataKeys.localizationSettings)?.get(LocalizationSettings.self) {
                         let code = current.primaryComponent.languageCode
                         let rawSuffix = "-raw"
@@ -2606,20 +2607,27 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         } else {
                             languageCode = code
                         }
+                        // MARK: NAGRAM — only a custom language pack carries a base pack as its secondary component.
+                        isCustomLocalization = current.secondaryComponent != nil
                     } else {
                         languageCode = "en"
                     }
-                    return languageCode
+                    return (languageCode, isCustomLocalization)
                 },
                 suggestedLocalization
             )
             |> mapToSignal({ value -> Signal<(String, SuggestedLocalizationInfo)?, NoError> in
-                guard let suggestedLocalization = value.1, !suggestedLocalization.isSeen && suggestedLocalization.languageCode != "en" && suggestedLocalization.languageCode != value.0 else {
+                // MARK: NAGRAM — a user who applied a custom language pack chose it on purpose. The suggestion
+                // preselects the server's language, so its OK button switches them back to it (likely I0047, I0051).
+                guard !value.0.isCustomLocalization else {
+                    return .single(nil)
+                }
+                guard let suggestedLocalization = value.1, !suggestedLocalization.isSeen && suggestedLocalization.languageCode != "en" && suggestedLocalization.languageCode != value.0.languageCode else {
                     return .single(nil)
                 }
                 return context.engine.localization.suggestedLocalizationInfo(languageCode: suggestedLocalization.languageCode, extractKeys: LanguageSuggestionControllerStrings.keys)
                 |> map({ suggestedLocalization -> (String, SuggestedLocalizationInfo)? in
-                    return (value.0, suggestedLocalization)
+                    return (value.0.languageCode, suggestedLocalization)
                 })
             })
         
