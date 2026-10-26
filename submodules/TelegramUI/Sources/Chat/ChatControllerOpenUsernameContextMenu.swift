@@ -11,6 +11,7 @@ import ChatMessageItemView
 import ChatMessageItemCommon
 import AvatarNode
 import ChatControllerInteraction
+import NagramSettings // MARK: NAGRAM
 
 extension ChatControllerImpl {
     func openMentionContextMenu(username: String, peerId: EnginePeer.Id?, params: ChatControllerInteraction.LongTapParams) -> Void {
@@ -100,7 +101,11 @@ extension ChatControllerImpl {
                     self.present(UndoOverlayController(presentationData: self.presentationData, content: .copy(text: presentationData.strings.Conversation_UsernameCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
                 }))
             )
-            
+            // MARK: NAGRAM — 长按 @用户名 / 提及显示成员管理项
+            if let peer, NagramSettings.shared.memberAdminActionsOnUsername {
+                items.append(contentsOf: self.nagramMemberAdminMenuItems(peer: peer))
+            }
+
             items.append(.separator)
             if let peer {
                 let avatarSize = CGSize(width: 28.0, height: 28.0)

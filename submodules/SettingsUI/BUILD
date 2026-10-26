@@ -88,6 +88,7 @@ swift_library(
         "//submodules/UndoUI:UndoUI",
         # MARK: NAGRAM — Nagram 设置项加入设置搜索
         "//Nagram/SettingsUI:NagramSettingsUI",
+        "//Nagram/Strings:NagramStrings",
         "//submodules/DeleteChatPeerActionSheetItem:DeleteChatPeerActionSheetItem",
         "//submodules/PhoneNumberFormat:PhoneNumberFormat",
         "//submodules/OpenInExternalAppUI:OpenInExternalAppUI",

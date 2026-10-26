@@ -106,6 +106,7 @@ swift_library(
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/Strings:NagramStrings",
         "//submodules/ContactListUI", # MARK: NAGRAM — 设置页联系人入口
+        "//submodules/TelegramUI/Components/AdminUserActionsSheet", # MARK: NAGRAM — 成员列表移除时删除全部消息
         "//submodules/ShareController",
         "//submodules/TelegramUI/Components/ShareWithPeersScreen",
         "//submodules/StatisticsUI",

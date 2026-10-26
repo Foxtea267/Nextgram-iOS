@@ -4579,6 +4579,11 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
                 }
             }
         case .remove:
+            // MARK: NAGRAM — 移除成员时可同时删除其全部消息
+            if NagramSettings.shared.memberAdminActionsOnMemberList, case let .channel(channel) = peer, case .group = channel.info, channel.hasPermission(.deleteAllMessages), case let .channelMember(participant, _) = member {
+                self.nagramPresentRemoveMemberActions(chatPeer: peer, participant: participant)
+                return
+            }
             data.members?.membersContext.removeMember(memberId: member.id)
         case let .openStories(sourceView):
             guard let controller = self.controller else {

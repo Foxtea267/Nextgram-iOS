@@ -4800,7 +4800,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         strongSelf.activateSearch(domain: .member(peer._asPeer()))
                     })))
                 }
-                
+                // MARK: NAGRAM — 长按头像显示成员管理项
+                if NagramSettings.shared.memberAdminActionsOnAvatar {
+                    items.append(contentsOf: strongSelf.nagramMemberAdminMenuItems(peer: peer))
+                }
+
                 strongSelf.chatDisplayNode.messageTransitionNode.dismissMessageReactionContexts()
                 
                 strongSelf.canReadHistory.set(false)
@@ -7949,7 +7953,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         if case .standard(.default) = self.presentationInterfaceState.mode, self.raiseToListen == nil {
             self.raiseToListen = RaiseToListenManager(shouldActivate: { [weak self] in
                 if let strongSelf = self, strongSelf.isNodeLoaded && strongSelf.canReadHistoryValue, strongSelf.presentationInterfaceState.interfaceState.editMessage == nil, strongSelf.globalControlPanelsContext?.playlistStateAndType == nil {
-                    if !strongSelf.context.sharedContext.currentMediaInputSettings.with({ $0.enableRaiseToSpeak }) {
+                    // MARK: NAGRAM — 收听与录音各有开关，至少开一个才需要贴耳检测。
+                    let mediaInputSettings = strongSelf.context.sharedContext.currentMediaInputSettings.with({ $0 })
+                    if !mediaInputSettings.enableRaiseToSpeak && !mediaInputSettings.nagramEnableRaiseToRecord {
                         return false
                     }
                     
@@ -7973,7 +7979,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         return false
                     }
                     
-                    if strongSelf.firstLoadedMessageToListen() != nil || strongSelf.chatDisplayNode.isTextInputPanelActive {
+                    // MARK: NAGRAM — 有可收听的消息且开了收听，或输入栏可用且开了录音。
+                    if (mediaInputSettings.enableRaiseToSpeak && strongSelf.firstLoadedMessageToListen() != nil) || (mediaInputSettings.nagramEnableRaiseToRecord && strongSelf.chatDisplayNode.isTextInputPanelActive) {
                         if strongSelf.context.sharedContext.immediateHasOngoingCall {
                             return false
                         }
@@ -9626,9 +9633,11 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     func activateRaiseGesture() {
         self.raiseToListenActivateRecordingTimer?.invalidate()
         self.raiseToListenActivateRecordingTimer = nil
-        if let messageToListen = self.firstLoadedMessageToListen() {
+        // MARK: NAGRAM — 收听与录音分别受各自开关控制。
+        let mediaInputSettings = self.context.sharedContext.currentMediaInputSettings.with({ $0 })
+        if mediaInputSettings.enableRaiseToSpeak, let messageToListen = self.firstLoadedMessageToListen() {
             let _ = self.controllerInteraction?.openMessage(messageToListen, OpenMessageParams(mode: .default))
-        } else {
+        } else if mediaInputSettings.nagramEnableRaiseToRecord {
             let timeout = (self.voicePlaylistDidEndTimestamp + 1.0) - CACurrentMediaTime()
             self.raiseToListenActivateRecordingTimer = SwiftSignalKit.Timer(timeout: max(0.0, timeout), repeat: false, completion: { [weak self] in
                 self?.requestAudioRecorder(beginWithTone: true)

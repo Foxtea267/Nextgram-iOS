@@ -310,6 +310,9 @@ private func adminUserActionsTitle(
     case let .chat(messageCount, deleteAllMessageCount, _):
         if let deleteAllMessageCount, selectedDeleteAllPeers == Set(peers.map { $0.peer.id }) {
             return strings.Chat_AdminActionSheet_DeleteTitle(Int32(deleteAllMessageCount))
+        } else if messageCount == 0, peers.count == 1, let peer = peers.first {
+            // MARK: NAGRAM — 从头像 / username 菜单进入时没有选中的消息，标题显示成员名而不是「删除 0 条消息」
+            return peer.peer.compactDisplayTitle
         } else {
             return strings.Chat_AdminActionSheet_DeleteTitle(Int32(messageCount))
         }

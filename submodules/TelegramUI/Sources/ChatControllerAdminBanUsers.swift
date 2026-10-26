@@ -15,6 +15,8 @@ import StorageUsageScreen
 import SettingsUI
 import DeleteChatPeerActionSheetItem
 import OverlayStatusController
+import NagramStrings // MARK: NAGRAM
+import PeerInfoUI // MARK: NAGRAM
 
 fileprivate struct InitialBannedRights {
     var value: TelegramChatBannedRights?
@@ -38,6 +40,9 @@ extension ChatControllerImpl {
         }
         if !result.deleteAllFromPeers.isEmpty {
             title = self.presentationData.strings.Chat_AdminAction_ToastMessagesDeletedTitleMultiple
+        } else if messageIds.isEmpty && reactionPeerId == nil {
+            // MARK: NAGRAM — 从头像 / username 菜单进入且没有删除消息时，提示里不写「消息已删除」
+            title = nil
         }
         var text: String = ""
         var undoRights: [EnginePeer.Id: InitialBannedRights] = [:]
@@ -76,7 +81,7 @@ extension ChatControllerImpl {
                 if let messageId = messageIds.first {
                     let _ = self.context.engine.messages.deleteReaction(messageId: messageId, authorId: reactionPeerId).startStandalone()
                 }
-            } else {
+            } else if !messageIds.isEmpty { // MARK: NAGRAM — 从头像 / username 菜单进入时没有选中的消息
                 let _ = self.context.engine.messages.deleteMessagesInteractively(messageIds: Array(messageIds), type: .forEveryone).startStandalone()
             }
             
@@ -107,6 +112,10 @@ extension ChatControllerImpl {
             }
         }
         
+        // MARK: NAGRAM — 从头像 / username 菜单进入且什么都没选时不弹「消息已删除」
+        if text.isEmpty && messageIds.isEmpty && reactionPeerId == nil && result.deleteAllFromPeers.isEmpty && result.deleteAllReactionsFromPeers.isEmpty && result.banFromCommunity == nil {
+            return
+        }
         if text.isEmpty {
             if let _ = reactionPeerId {
                 text = self.presentationData.strings.Chat_AdminAction_ToastReactionsDeletedTextSingle
@@ -839,6 +848,71 @@ extension ChatControllerImpl {
                     }
                 })
             ))
+        })
+    }
+}
+
+// MARK: NAGRAM — 头像 / username 长按菜单的成员管理项：对方消息已撤回时也能修改权限，或封禁并删除其全部消息。
+extension ChatControllerImpl {
+    func nagramMemberAdminMenuItems(peer: EnginePeer) -> [ContextMenuItem] {
+        guard case .user = peer, peer.id != self.context.account.peerId else {
+            return []
+        }
+        guard let channel = self.presentationInterfaceState.renderedPeer?.peer as? TelegramChannel, case .group = channel.info, !channel.isMonoForum, channel.hasPermission(.banMembers), self.chatLocation.peerId == channel.id else {
+            return []
+        }
+        let lang = self.presentationData.strings.baseLanguageCode
+        var items: [ContextMenuItem] = [
+            .action(ContextMenuActionItem(text: ngI18n("Nagram.MemberAdminActions.EditPermissions", lang), icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Restrict"), color: theme.contextMenu.primaryColor)
+            }, action: { [weak self] _, f in
+                f(.dismissWithoutContent)
+                self?.nagramOpenMemberPermissions(channel: channel, memberId: peer.id)
+            }))
+        ]
+        // AdminUserActionsSheet 只在有删除消息权限时提供删除全部和封禁
+        guard channel.hasPermission(.deleteAllMessages) else {
+            return items
+        }
+        items.append(
+            .action(ContextMenuActionItem(text: ngI18n("Nagram.MemberAdminActions.BanOrDelete", lang), textColor: .destructive, icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Ban"), color: theme.contextMenu.destructiveColor)
+            }, action: { [weak self] _, f in
+                f(.dismissWithoutContent)
+                guard let self else {
+                    return
+                }
+                self.presentBanMessageOptions(accountPeerId: self.context.account.peerId, author: peer, messageIds: Set(), options: [])
+            }))
+        )
+        return items
+    }
+
+    private func nagramOpenMemberPermissions(channel: TelegramChannel, memberId: EnginePeer.Id) {
+        let _ = (self.context.engine.peers.fetchChannelParticipant(peerId: channel.id, participantId: memberId)
+        |> deliverOnMainQueue).startStandalone(next: { [weak self] participant in
+            guard let self else {
+                return
+            }
+            var canEdit = true
+            if let participant {
+                switch participant {
+                case .creator:
+                    canEdit = false
+                case let .member(_, _, adminInfo, _, _, _):
+                    if let adminInfo, !channel.flags.contains(.isCreator), adminInfo.promotedBy != self.context.account.peerId {
+                        canEdit = false
+                    }
+                }
+            }
+            guard canEdit else {
+                self.present(textAlertController(context: self.context, updatedPresentationData: self.updatedPresentationData, title: nil, text: ngI18n("Nagram.MemberAdminActions.CannotEditAdmin", self.presentationData.strings.baseLanguageCode), actions: [TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})]), in: .window(.root))
+                return
+            }
+            self.push(channelBannedMemberController(context: self.context, updatedPresentationData: self.updatedPresentationData, peerId: channel.id, memberId: memberId, initialParticipant: participant, updated: { _ in
+            }, upgradedToSupergroup: { _, f in
+                f()
+            }))
         })
     }
 }

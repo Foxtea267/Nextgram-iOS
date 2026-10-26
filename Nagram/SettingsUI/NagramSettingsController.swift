@@ -266,6 +266,12 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["AskBeforeCalling", "ConfirmCalls"]
     case "Nagram.ConfirmUnpin":
         return ["ConfirmUnpin", "AskBeforeUnpin", "UnpinConfirmation"]
+    case "Nagram.MemberAdminActionsOnAvatar":
+        return ["AdminActions", "ShowAdminActions", "ChangePermissions", "BanUser", "KickUser", "AvatarLongPress"]
+    case "Nagram.MemberAdminActionsOnUsername":
+        return ["AdminActions", "ShowAdminActions", "ChangePermissions", "BanUser", "KickUser", "MentionLongPress", "UsernameLongPress"]
+    case "Nagram.MemberAdminActionsOnMemberList":
+        return ["AdminActions", "KickUser", "RemoveMember", "DeleteAllMessages", "KickAndDelete"]
     case "Nagram.DisableFiltering":
         return ["DisableFiltering"]
     case "Nagram.SkipSensitiveContentWarning":
@@ -579,6 +585,11 @@ private func nagramGroups(
         NagramGroup(tab: .messages, headerKey: "Nagram.Section.Confirmations", footerKeys: [], rows: [
             .toggle(titleKey: "Nagram.ConfirmUnpin", get: { NagramSettings.shared.confirmUnpin }, set: { NagramSettings.shared.confirmUnpin = $0 }),
             .toggle(titleKey: "Nagram.ConfirmCalls", get: { NagramSettings.shared.confirmCalls }, set: { NagramSettings.shared.confirmCalls = $0 }),
+        ]),
+        NagramGroup(tab: .messages, headerKey: "Nagram.Section.MemberAdminActions", footerKeys: ["Nagram.Section.MemberAdminActions.Footer"], rows: [
+            .toggle(titleKey: "Nagram.MemberAdminActionsOnAvatar", get: { NagramSettings.shared.memberAdminActionsOnAvatar }, set: { NagramSettings.shared.memberAdminActionsOnAvatar = $0 }),
+            .toggle(titleKey: "Nagram.MemberAdminActionsOnUsername", get: { NagramSettings.shared.memberAdminActionsOnUsername }, set: { NagramSettings.shared.memberAdminActionsOnUsername = $0 }),
+            .toggle(titleKey: "Nagram.MemberAdminActionsOnMemberList", get: { NagramSettings.shared.memberAdminActionsOnMemberList }, set: { NagramSettings.shared.memberAdminActionsOnMemberList = $0 }),
         ]),
         NagramGroup(tab: .messages, headerKey: "Nagram.Section.Stickers", footerKeys: [], rows: [
             .slider(titleKey: "Nagram.StickerSize", minValue: 50, maxValue: 200, get: { NagramSettings.shared.stickerSize }, set: { NagramSettings.shared.stickerSize = $0 }, isVisible: { true }),

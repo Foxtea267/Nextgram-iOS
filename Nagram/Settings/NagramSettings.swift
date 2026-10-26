@@ -358,6 +358,15 @@ public final class NagramSettings {
     /// 取消消息置顶前确认，含消息菜单的取消置顶和取消所有置顶（默认关 = 保持原生行为）
     @NagramDefault("nagram.confirmUnpin", false)
     public var confirmUnpin: Bool
+    /// 有封禁权限的群里，长按成员头像显示修改权限 / 封禁并删除消息（默认关 = 保持原生菜单）
+    @NagramDefault("nagram.memberAdminActionsOnAvatar", false)
+    public var memberAdminActionsOnAvatar: Bool
+    /// 有封禁权限的群里，长按消息中的 @用户名 / 提及显示修改权限 / 封禁并删除消息（默认关 = 保持原生菜单）
+    @NagramDefault("nagram.memberAdminActionsOnUsername", false)
+    public var memberAdminActionsOnUsername: Bool
+    /// 群资料成员列表的「移除」改为打开管理面板，可同时删除其全部消息、举报（默认关 = 保持原生直接移除）
+    @NagramDefault("nagram.memberAdminActionsOnMemberList", false)
+    public var memberAdminActionsOnMemberList: Bool
     /// 资料页显示数据中心 DC
     @NagramDefault("nagram.showDC", false)
     public var showDC: Bool

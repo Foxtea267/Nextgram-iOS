@@ -658,6 +658,14 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.MutualContact.Description" = "この連絡先は相互連絡先です。";
 "Nagram.UnpinAllMessagesAlert" = "すべてのメッセージのピン留めを解除しますか？";
 "Nagram.ConfirmUnpin" = "ピン留め解除前に確認";
+"Nagram.Section.MemberAdminActions" = "メンバー管理";
+"Nagram.Section.MemberAdminActions.Footer" = "メンバーをブロックできるグループで、メンバーのアイコンやメッセージ内の @ユーザー名・メンションを長押しすると、権限の変更や、ブロックして全メッセージを削除できます。相手のメッセージが削除済みでも使えます。「削除時にメッセージも削除可能」をオンにすると、グループ情報のメンバー一覧の「削除」でも同じパネルが開きます。";
+"Nagram.MemberAdminActionsOnAvatar" = "アイコン長押しで管理操作";
+"Nagram.MemberAdminActionsOnUsername" = "ユーザー名長押しで管理操作";
+"Nagram.MemberAdminActionsOnMemberList" = "削除時にメッセージも削除可能";
+"Nagram.MemberAdminActions.EditPermissions" = "権限を変更";
+"Nagram.MemberAdminActions.BanOrDelete" = "ブロック・メッセージ削除";
+"Nagram.MemberAdminActions.CannotEditAdmin" = "この管理者は制限できません。";
 "Nagram.SearchLink.Header" = "リンク";
 "Nagram.SearchLink.Open" = "リンクを開く";
 "Nagram.SearchLink.OpenMessage" = "メッセージへ移動";
@@ -667,3 +675,4 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.OneHanded.GlobalSearchResults" = "検索結果を下から表示";
 "Nagram.OneHanded.ChatSearchResults" = "チャット内の検索結果を下から表示";
 "Nagram.OneHanded.ChatSearchFieldAtBottom" = "チャット内の検索フィールドを下部に表示";
+"Nagram.RaiseToRecord" = "耳に当てて録音";
