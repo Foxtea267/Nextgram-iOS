@@ -10,7 +10,6 @@ import NagramSettings
 import NagramStrings
 import PresentationDataUtils
 import SwiftSignalKit
-import TelegramApi
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
@@ -283,7 +282,7 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
     }
 }
 
-private func nagramChatListStartupFolderLabel(accountPeerId: Int64, strings: PresentationStrings, lang: String) -> String {
+private func nagramChatListStartupFolderLabel(accountPeerId: Int64, folderTitles: [Int32: String], strings: PresentationStrings, lang: String) -> String {
     switch NagramSettings.shared.chatListStartupFolderModeValue {
     case .telegramDefault:
         return ngI18n("Nagram.ChatListStartupFolder.telegram", lang)
@@ -295,6 +294,9 @@ private func nagramChatListStartupFolderLabel(accountPeerId: Int64, strings: Pre
         }
         if folderId == NagramSettings.chatListAllChatsFolderId {
             return strings.ChatList_Tabs_AllChats
+        }
+        if let title = folderTitles[folderId] {
+            return title
         }
         return "\(ngI18n("Nagram.ChatListStartupFolder.specific", lang)) #\(folderId)"
     }
@@ -439,6 +441,8 @@ private func nagramGroups(
     exportDeletedMessagesAction: @escaping () -> Void,
     importDeletedMessagesAction: @escaping () -> Void,
     messageMenuAction: @escaping () -> Void,
+    chatToolsAction: @escaping () -> Void,
+    textStyleToolbarAction: @escaping () -> Void,
     textStyleMenuAction: @escaping () -> Void,
     regexFiltersAction: @escaping () -> Void,
     inlineBotRulesAction: @escaping () -> Void,
@@ -532,6 +536,7 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .chats, headerKey: "Nagram.Section.ChatNavigation", footerKeys: ["Nagram.StayAtLatestMessageAfterRefresh.Footer", "Nagram.Section.ChatNavigation.Footer"], rows: [
             .toggle(titleKey: "Nagram.ChatToolsEnabled", get: { NagramSettings.shared.chatToolsEnabled }, set: { NagramSettings.shared.chatToolsEnabled = $0 }),
+            .navigation(titleKey: "Nagram.ChatTools.Settings", action: chatToolsAction),
             .toggle(titleKey: "Nagram.RecentChats", get: { NagramSettings.shared.recentChatsEnabled }, set: { NagramSettings.shared.recentChatsEnabled = $0 }),
             .toggle(titleKey: "Nagram.StayAtLatestMessageAfterRefresh", get: { NagramSettings.shared.stayAtLatestMessageAfterRefresh }, set: { NagramSettings.shared.stayAtLatestMessageAfterRefresh = $0 }),
             .toggle(titleKey: "Nagram.DisableScrollToNextChannel", get: { NagramSettings.shared.disableScrollToNextChannel }, set: { NagramSettings.shared.disableScrollToNextChannel = $0 }),
@@ -571,11 +576,7 @@ private func nagramGroups(
             .choice(titleKey: "Nagram.DefaultMessageFormat", prefix: "Nagram.DefaultMessageFormat", options: NagramDefaultMessageFormat.allCases.map { $0.rawValue }, current: { NagramSettings.shared.defaultMessageFormatValue.rawValue }, set: { NagramSettings.shared.defaultMessageFormat = $0 }),
             .toggle(titleKey: "Nagram.DisableSendAsButton", get: { NagramSettings.shared.disableSendAsButton }, set: { NagramSettings.shared.disableSendAsButton = $0 }),
             .toggle(titleKey: "Nagram.SendWithReturnKey", get: { NagramSettings.shared.sendWithReturnKey }, set: { NagramSettings.shared.sendWithReturnKey = $0 }),
-            .choice(titleKey: "Nagram.TextStyleToolbar", prefix: "Nagram.TextStyleToolbar", options: NagramTextStyleToolbarMode.allCases.map(\.rawValue), current: { NagramSettings.shared.textStyleToolbarMode.rawValue }, set: { value in
-                if let mode = NagramTextStyleToolbarMode(rawValue: value) {
-                    NagramSettings.shared.textStyleToolbarMode = mode
-                }
-            }),
+            .navigation(titleKey: "Nagram.TextStyleToolbar", action: textStyleToolbarAction),
             .navigation(titleKey: "Nagram.TextStyleMenu", action: textStyleMenuAction),
             .toggle(titleKey: "Nagram.HideRecordingButton", get: { NagramSettings.shared.hideRecordingButton }, set: { NagramSettings.shared.hideRecordingButton = $0 }),
         ]),
@@ -628,6 +629,11 @@ private func nagramGroups(
             .choice(titleKey: "Nagram.LocationIndicator", prefix: "Nagram.LocationIndicator", options: ["always", "all", "home", "chat"], current: { NagramSettings.shared.locationIndicatorModeValue.rawValue }, set: { NagramSettings.shared.locationIndicatorMode = $0 }),
             .navigation(titleKey: "Nagram.About", action: aboutAction),
         ]),
+        NagramGroup(tab: .other, headerKey: "Nagram.Section.Experimental", footerKeys: ["Nagram.MediaMetadata.Footer", "Nagram.FixLinkPreviews.Footer", "Nagram.RegisterTelegramLinks.Footer"], rows: [
+            .toggle(titleKey: "Nagram.MediaMetadata", get: { NagramSettings.shared.mediaMetadataEnabled }, set: { NagramSettings.shared.mediaMetadataEnabled = $0 }),
+            .toggle(titleKey: "Nagram.FixLinkPreviews", get: { NagramSettings.shared.fixLinkPreviews }, set: { NagramSettings.shared.fixLinkPreviews = $0 }),
+            .toggle(titleKey: "Nagram.RegisterTelegramLinks", get: { NagramSettings.shared.registerTelegramLinks }, set: { NagramSettings.shared.registerTelegramLinks = $0 }),
+        ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Profile", footerKeys: [], rows: [
             .toggle(titleKey: "Nagram.ShowProfileId", get: { NagramSettings.shared.showProfileId }, set: { NagramSettings.shared.showProfileId = $0 }),
             .toggle(titleKey: "Nagram.ShowDC", get: { NagramSettings.shared.showDC }, set: { NagramSettings.shared.showDC = $0 }),
@@ -670,10 +676,6 @@ private func nagramGroups(
         NagramGroup(tab: .other, headerKey: "Nagram.Section.SessionBackup", footerKeys: ["Nagram.SessionBackup.Footer"], rows: [
             .navigation(titleKey: "Nagram.SessionBackup", action: sessionBackupAction),
             .toggle(titleKey: "Nagram.SessionBackup.ICloud", get: { NagramSettings.shared.sessionBackupICloudSync }, set: { NagramSettings.shared.sessionBackupICloudSync = $0 }),
-        ]),
-        NagramGroup(tab: .other, headerKey: "Nagram.Section.Experimental", footerKeys: ["Nagram.MediaMetadata.Footer", "Nagram.FixLinkPreviews.Footer"], rows: [
-            .toggle(titleKey: "Nagram.MediaMetadata", get: { NagramSettings.shared.mediaMetadataEnabled }, set: { NagramSettings.shared.mediaMetadataEnabled = $0 }),
-            .toggle(titleKey: "Nagram.FixLinkPreviews", get: { NagramSettings.shared.fixLinkPreviews }, set: { NagramSettings.shared.fixLinkPreviews = $0 }),
         ]),
     ].filter { group in
         // 没有 iCloud KVS entitlement 的构建里同步不可用，不显示该分组。
@@ -768,6 +770,8 @@ public func nagramSettingsSearchEntries(lang: String) -> [NagramSettingsSearchEn
         exportDeletedMessagesAction: {},
         importDeletedMessagesAction: {},
         messageMenuAction: {},
+        chatToolsAction: {},
+        textStyleToolbarAction: {},
         textStyleMenuAction: {},
         regexFiltersAction: {},
         inlineBotRulesAction: {},
@@ -1070,15 +1074,15 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         let lang = presentationData.strings.baseLanguageCode
         let startedAt = ProcessInfo.processInfo.systemUptime
-        latencyTestDisposable.set((context.account.network.request(Api.functions.help.test())
+        latencyTestDisposable.set((context.engine.auth.test()
         |> map(Optional.init)
         |> timeout(10.0, queue: .mainQueue(), alternate: .single(nil))
         |> deliverOnMainQueue).start(next: { result in
             switch result {
-            case .some(.boolTrue):
+            case .some(true):
                 let milliseconds = Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000.0)
                 presentArchiveAlert(ngI18n("Nagram.TelegramLatency", lang), String(format: ngI18n("Nagram.TelegramLatency.Result", lang), milliseconds))
-            case .some(.boolFalse), .none:
+            case .some(false), .none:
                 presentArchiveAlert(ngI18n("Nagram.TelegramLatency", lang), ngI18n("Nagram.TelegramLatency.Failed", lang))
             }
         }, error: { _ in
@@ -1114,6 +1118,10 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         importDeletedMessages()
     }, messageMenuAction: {
         pushControllerImpl?(nagramMessageMenuSettingsController(context: context))
+    }, chatToolsAction: {
+        pushControllerImpl?(nagramChatToolsSettingsController(context: context))
+    }, textStyleToolbarAction: {
+        pushControllerImpl?(nagramTextStyleToolbarSettingsController(context: context))
     }, textStyleMenuAction: {
         pushControllerImpl?(nagramTextStyleMenuSettingsController(context: context))
     }, regexFiltersAction: {
@@ -1288,10 +1296,18 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.callListSettings])
         |> map { sharedData -> Bool in
             return sharedData.entries[ApplicationSpecificSharedDataKeys.callListSettings]?.get(CallListSettings.self)?.showTab ?? CallListSettings.defaultSettings.showTab
+        },
+        context.engine.peers.updatedChatListFilters()
+        |> map { filters -> [Int32: String] in
+            var titles: [Int32: String] = [:]
+            for case let .filter(id, title, _, _) in filters {
+                titles[id] = title.text
+            }
+            return titles
         }
     )
     |> deliverOnMainQueue
-    |> map { presentationData, selection, _, contentSettingsConfiguration, showCallsTab -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, selection, _, contentSettingsConfiguration, showCallsTab, folderTitles -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let selectedTab = selection.0
         let searchQuery = selection.1.trimmingCharacters(in: .whitespacesAndNewlines)
         currentShowCallsTab = showCallsTab
@@ -1317,7 +1333,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                     entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, rightAligned: titleKey == "Nagram.DeletedMessageIndicatorColor", index: rowIndex))
                 }
             case let .startupFolder(titleKey):
-                entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: nagramChatListStartupFolderLabel(accountPeerId: context.account.peerId.toInt64(), strings: presentationData.strings, lang: lang), index: rowIndex))
+                entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: nagramChatListStartupFolderLabel(accountPeerId: context.account.peerId.toInt64(), folderTitles: folderTitles, strings: presentationData.strings, lang: lang), index: rowIndex))
             case let .slider(titleKey, minValue, maxValue, get, _, isVisible):
                 if isVisible() {
                     entries.append(.slider(stableId: rowStableId, section: sectionId, title: titleKey.map { ngI18n($0, lang) }, minValue: minValue, maxValue: maxValue, value: get(), index: rowIndex))

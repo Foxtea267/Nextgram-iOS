@@ -319,7 +319,7 @@ jobs:
             echo
             echo
             echo "Version: ${NEXTGRAM_APP_VERSION} (${NEXTGRAM_BUILD_NUMBER})"
-            echo "已同步 Nagram / Telegram 13.0：翻译请求限流与格式保留、设置搜索生命周期、聊天布局及上游修复。"
+            echo "已同步 Nagram / Telegram 13.1.1。"
             echo "保留 Nextgram 聊天筛选、删除消息拦截、编辑历史、音乐搜索及其他自定义功能。"
             echo "构建工具链升级至 Xcode 27 / Bazel 9.2。"
             echo

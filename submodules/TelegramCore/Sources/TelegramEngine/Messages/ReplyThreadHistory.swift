@@ -2,7 +2,7 @@ import Foundation
 import NagramSettings
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 
 private struct DiscussionMessage {
     var messageId: MessageId

@@ -9,6 +9,8 @@
 "Nagram.MediaMetadata.Footer" = "在圖片和影片檢視器選單中顯示解析度、大小、時長、影格率、位元率和編碼等資訊。";
 "Nagram.FixLinkPreviews" = "修復連結預覽";
 "Nagram.FixLinkPreviews.Footer" = "會將移除查詢參數和片段後的連結傳送至經驗證的 Nextgram metadata 規則所指定的第三方預覽服務；訊息仍使用原始連結。";
+"Nagram.RegisterTelegramLinks" = "註冊 Telegram 連結";
+"Nagram.RegisterTelegramLinks.Footer" =  "iOS 在安裝時決定 tg:// 和 telegram:// 連結由誰開啟，關閉本項後連結仍會先開啟 Nextgram。能完整改寫成 https://t.me 形式的連結（使用者名稱、邀請連結、貼紙包、資料夾、語言包、分享連結，以及帶啟動參數或貼文定位的 tg://resolve）會轉交給官方 Telegram；改寫會丟參數的（如 tg://settings、passport 授權連結）以及未安裝官方 Telegram 時由 Nextgram 自行開啟。na:// 和 nagram:// 連結不受影響。";
 "Nagram.Section.AutoInlineBot" = "自動使用連結查詢 Inline 機器人";
 "Nagram.AutoInlineBot.Enabled" = "啟用";
 "Nagram.AutoInlineBot.Footer" = "實驗性功能。輸入符合規則的連結時，自動顯示對應 Inline 機器人的查詢結果。";
@@ -151,6 +153,15 @@
 "Nagram.TextStyleMenu.ItemsFooter" = "開啟的樣式會直接顯示在選取文字選單的第一層。點「編輯」後可拖曳排序。私密聊天不顯示引用、劇透和日期。";
 "Nagram.TextStyleMenu.Reset" = "重設選取文字選單";
 "Nagram.TextStyleMenu.ResetConfirm" = "重設所有選取文字選單的樣式、排序和插入位置？";
+"Nagram.TextStyleToolbar.PreviewHeader" = "預覽";
+"Nagram.TextStyleToolbar.PreviewBar" = "常駐格式列";
+"Nagram.TextStyleToolbar.PreviewPanel" = "鍵盤面板";
+"Nagram.TextStyleToolbar.PreviewEmpty" = "沒有開啟的樣式";
+"Nagram.TextStyleToolbar.ModeHeader" = "顯示方式";
+"Nagram.TextStyleToolbar.ItemsHeader" = "顯示的樣式";
+"Nagram.TextStyleToolbar.ItemsFooter" = "鍵盤面板和常駐列共用這裡的順序和開關。點「編輯」後可拖動排序。私密聊天不顯示引用、劇透、日期和程式碼區塊。";
+"Nagram.TextStyleToolbar.Reset" = "重設樣式和順序";
+"Nagram.TextStyleToolbar.ResetConfirm" = "顯示全部樣式並恢復預設順序？";
 "Nagram.PanguOnSending" = "傳送訊息 Pangu 化";
 "Nagram.PanguOnEditing" = "編輯訊息 Pangu 化";
 "Nagram.HideRecordingButton" = "隱藏語音錄製按鈕";
@@ -642,6 +653,21 @@
 "Nagram.ChatTools.notifications" = "靜音";
 "Nagram.ChatTools.unmute" = "取消靜音";
 "Nagram.ChatTools.cache" = "清除快取";
+"Nagram.ChatTools.latest" = "最新";
+"Nagram.ChatTools.mentions" = "@我";
+"Nagram.ChatTools.select" = "多選";
+"Nagram.ChatTools.translate" = "翻譯";
+"Nagram.ChatTools.translateOff" = "關閉翻譯";
+"Nagram.ChatTools.manage" = "管理";
+"Nagram.ChatTools.Settings" = "工具列按鈕";
+"Nagram.ChatTools.SizeHeader" = "按鈕尺寸";
+"Nagram.ChatTools.Size.compact" = "緊湊（僅圖示）";
+"Nagram.ChatTools.Size.standard" = "標準";
+"Nagram.ChatTools.Size.large" = "大";
+"Nagram.ChatTools.ItemsHeader" = "顯示的按鈕";
+"Nagram.ChatTools.ItemsFooter" = "點「編輯」後可拖動排序。「管理」只在你是管理員的群組和頻道裡顯示，「靜音」不在儲存的訊息裡顯示。";
+"Nagram.ChatTools.Reset" = "重設工具列";
+"Nagram.ChatTools.ResetConfirm" = "恢復預設的按鈕、順序和尺寸？";
 "Nagram.ChatFolderNoneAvailable" = "沒有可加入的資料夾。請先建立資料夾，或檢查此聊天是否已加入所有資料夾。";
 
 "Nagram.InviteLinks.BulkRevoke" = "批次撤銷邀請連結…";

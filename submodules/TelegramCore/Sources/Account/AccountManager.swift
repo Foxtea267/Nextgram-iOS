@@ -2,7 +2,7 @@ import Foundation
 import NagramMessageHistory // MARK: NAGRAM
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 
 // MARK: NEXTGRAM — 注册本地消息保留属性。
 import MtProtoKit

@@ -9,6 +9,8 @@
 "Nagram.MediaMetadata.Footer" = "Shows resolution, size, duration, frame rate, bitrate, codec, and related details in image and video viewer menus.";
 "Nagram.FixLinkPreviews" = "Fix Link Previews";
 "Nagram.FixLinkPreviews.Footer" = "Sends sanitized links without query parameters or fragments to third-party preview services selected by validated Nextgram metadata rules. Messages continue to use the original link.";
+"Nagram.RegisterTelegramLinks" = "Register Telegram Links";
+"Nagram.RegisterTelegramLinks.Footer" =  "iOS decides which app opens tg:// and telegram:// links when the app is installed, so turning this off still opens Nextgram first. Nextgram rewrites links that have a complete https://t.me equivalent (usernames, invite links, sticker sets, chat folders, language packs, share links, and tg://resolve links with start parameters or message paths) and hands them to the official Telegram app; links whose parameters would be lost (like tg://settings or passport authorization), and any link when the official app is not installed, open in Nextgram itself. na:// and nagram:// links are not affected.";
 "Nagram.Section.AutoInlineBot" = "Automatic Inline Bot Link Queries";
 "Nagram.AutoInlineBot.Enabled" = "Enabled";
 "Nagram.AutoInlineBot.Footer" = "Experimental. Automatically shows results from the matching inline bot when a recognized link is entered.";
@@ -151,6 +153,15 @@
 "Nagram.TextStyleMenu.ItemsFooter" = "Enabled styles appear directly on the first level of the text selection menu. Tap Edit to reorder. Quote, Spoiler and Date are hidden in secret chats.";
 "Nagram.TextStyleMenu.Reset" = "Reset Selection Menu";
 "Nagram.TextStyleMenu.ResetConfirm" = "Reset all selection menu styles, order and position?";
+"Nagram.TextStyleToolbar.PreviewHeader" = "Preview";
+"Nagram.TextStyleToolbar.PreviewBar" = "Persistent Bar";
+"Nagram.TextStyleToolbar.PreviewPanel" = "Keyboard Panel";
+"Nagram.TextStyleToolbar.PreviewEmpty" = "No styles enabled";
+"Nagram.TextStyleToolbar.ModeHeader" = "Show In";
+"Nagram.TextStyleToolbar.ItemsHeader" = "Styles";
+"Nagram.TextStyleToolbar.ItemsFooter" = "The keyboard panel and the persistent bar share this order and these switches. Tap Edit to reorder. Quote, Spoiler, Date and Code are hidden in secret chats.";
+"Nagram.TextStyleToolbar.Reset" = "Reset Styles and Order";
+"Nagram.TextStyleToolbar.ResetConfirm" = "Show every style and restore the default order?";
 "Nagram.PanguOnSending" = "Enable Pangu on Sending";
 "Nagram.PanguOnEditing" = "Enable Pangu on Editing";
 "Nagram.HideRecordingButton" = "Hide Voice Recording Button";
@@ -642,6 +653,21 @@ With iCloud Keychain sync on, backups follow your other devices and appear on th
 "Nagram.ChatTools.notifications" = "Mute";
 "Nagram.ChatTools.unmute" = "Unmute";
 "Nagram.ChatTools.cache" = "Clear Cache";
+"Nagram.ChatTools.latest" = "Latest";
+"Nagram.ChatTools.mentions" = "Mentions";
+"Nagram.ChatTools.select" = "Select";
+"Nagram.ChatTools.translate" = "Translate";
+"Nagram.ChatTools.translateOff" = "Stop Translating";
+"Nagram.ChatTools.manage" = "Manage";
+"Nagram.ChatTools.Settings" = "Toolbar Buttons";
+"Nagram.ChatTools.SizeHeader" = "Button Size";
+"Nagram.ChatTools.Size.compact" = "Compact (Icons Only)";
+"Nagram.ChatTools.Size.standard" = "Standard";
+"Nagram.ChatTools.Size.large" = "Large";
+"Nagram.ChatTools.ItemsHeader" = "Buttons Shown";
+"Nagram.ChatTools.ItemsFooter" = "Tap Edit to reorder. Manage appears only in groups and channels you administer, and Mute is not shown in Saved Messages.";
+"Nagram.ChatTools.Reset" = "Reset Toolbar";
+"Nagram.ChatTools.ResetConfirm" = "Restore the default buttons, order and size?";
 "Nagram.ChatFolderNoneAvailable" = "No folders are available. Create a folder first, or check whether this chat is already in every folder.";
 
 "Nagram.InviteLinks.BulkRevoke" = "Revoke Invitation Links…";

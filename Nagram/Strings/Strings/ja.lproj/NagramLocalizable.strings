@@ -9,6 +9,8 @@
 "Nagram.MediaMetadata.Footer" = "画像・動画ビューアのメニューに解像度、サイズ、再生時間、フレームレート、ビットレート、コーデックなどを表示します。";
 "Nagram.FixLinkPreviews" = "リンクプレビューを修正";
 "Nagram.FixLinkPreviews.Footer" = "クエリとフラグメントを除去したリンクを、検証済みの Nextgram metadata ルールが選ぶ外部プレビューサービスへ送信します。メッセージには元のリンクを使用します。";
+"Nagram.RegisterTelegramLinks" = "Telegramリンクを登録";
+"Nagram.RegisterTelegramLinks.Footer" =  "tg:// と telegram:// を開くアプリはインストール時に iOS が決めるため、オフでもまず Nextgram が開きます。https://t.me の形式に完全に書き換えられるリンク（ユーザー名・招待リンク・スタンプセット・フォルダ・言語パック・共有リンク、および起動パラメータや投稿位置付きの tg://resolve）は公式 Telegram アプリに渡します。書き換えるとパラメータが失われるリンク（tg://settings や passport 認証など）や公式 Telegram が未インストールの場合は Nextgram 自身で開きます。na:// と nagram:// は影響を受けません。";
 "Nagram.Section.AutoInlineBot" = "リンクを Inline Bot で自動検索";
 "Nagram.AutoInlineBot.Enabled" = "有効";
 "Nagram.AutoInlineBot.Footer" = "実験的機能です。対応リンクの入力時に Inline Bot の検索結果を自動表示します。";
@@ -151,6 +153,15 @@
 "Nagram.TextStyleMenu.ItemsFooter" = "オンにしたスタイルはテキスト選択メニューの最初の階層に直接表示されます。「編集」で並べ替えできます。シークレットチャットでは引用・スポイラー・日付は表示されません。";
 "Nagram.TextStyleMenu.Reset" = "選択メニューをリセット";
 "Nagram.TextStyleMenu.ResetConfirm" = "選択メニューのスタイル、順序、挿入位置をすべてリセットしますか？";
+"Nagram.TextStyleToolbar.PreviewHeader" = "プレビュー";
+"Nagram.TextStyleToolbar.PreviewBar" = "常時表示バー";
+"Nagram.TextStyleToolbar.PreviewPanel" = "キーボードパネル";
+"Nagram.TextStyleToolbar.PreviewEmpty" = "有効なスタイルはありません";
+"Nagram.TextStyleToolbar.ModeHeader" = "表示方法";
+"Nagram.TextStyleToolbar.ItemsHeader" = "表示するスタイル";
+"Nagram.TextStyleToolbar.ItemsFooter" = "キーボードパネルと常時表示バーはこの順序とスイッチを共有します。「編集」で並べ替えできます。シークレットチャットでは引用、ネタバレ、日付、コードは表示されません。";
+"Nagram.TextStyleToolbar.Reset" = "スタイルと順序をリセット";
+"Nagram.TextStyleToolbar.ResetConfirm" = "すべてのスタイルを表示し、既定の順序に戻しますか？";
 "Nagram.PanguOnSending" = "送信メッセージをPangu化";
 "Nagram.PanguOnEditing" = "編集メッセージをPangu化";
 "Nagram.HideRecordingButton" = "音声録音ボタンを非表示";
@@ -642,6 +653,21 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.ChatTools.notifications" = "ミュート";
 "Nagram.ChatTools.unmute" = "通知オン";
 "Nagram.ChatTools.cache" = "キャッシュ削除";
+"Nagram.ChatTools.latest" = "最新";
+"Nagram.ChatTools.mentions" = "メンション";
+"Nagram.ChatTools.select" = "選択";
+"Nagram.ChatTools.translate" = "翻訳";
+"Nagram.ChatTools.translateOff" = "翻訳をオフ";
+"Nagram.ChatTools.manage" = "管理";
+"Nagram.ChatTools.Settings" = "ツールバーのボタン";
+"Nagram.ChatTools.SizeHeader" = "ボタンのサイズ";
+"Nagram.ChatTools.Size.compact" = "コンパクト（アイコンのみ）";
+"Nagram.ChatTools.Size.standard" = "標準";
+"Nagram.ChatTools.Size.large" = "大";
+"Nagram.ChatTools.ItemsHeader" = "表示するボタン";
+"Nagram.ChatTools.ItemsFooter" = "「編集」で並べ替えできます。「管理」は管理者のグループとチャンネルでのみ表示され、「ミュート」は保存済みメッセージでは表示されません。";
+"Nagram.ChatTools.Reset" = "ツールバーをリセット";
+"Nagram.ChatTools.ResetConfirm" = "既定のボタン、順序、サイズに戻しますか？";
 "Nagram.ChatFolderNoneAvailable" = "追加できるフォルダがありません。フォルダを作成するか、このチャットがすべてのフォルダに追加済みか確認してください。";
 
 "Nagram.InviteLinks.BulkRevoke" = "招待リンクを一括取り消し…";
