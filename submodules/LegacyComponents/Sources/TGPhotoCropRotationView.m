@@ -7,6 +7,13 @@
 
 const CGFloat TGPhotoCropRotationViewMaximumAngle = 45;
 
+// MARK: NAGRAM
+// The wheel artwork draws its ticks and labels between 173pt and 193pt from the wheel's centre and
+// the needle ends at 209pt. Only this ring takes touches; the rest of the view is empty and used to
+// rotate the photo when a finger landed next to the crop frame.
+const CGFloat TGPhotoCropRotationViewInnerHitRadius = 168;
+const CGFloat TGPhotoCropRotationViewOuterHitRadius = 219;
+
 @interface TGPhotoCropRotationView () <UIGestureRecognizerDelegate>
 {
     UIImageView *_wheelView;
@@ -176,13 +183,37 @@ const CGFloat TGPhotoCropRotationViewMaximumAngle = 45;
     }
 }
 
-- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)__unused gestureRecognizer
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer
 {
     bool shouldBegin = true;
     if (self.shouldBeginChanging != nil)
         shouldBegin = self.shouldBeginChanging();
+    
+    // MARK: NAGRAM
+    // The wheel turns only for a drag along it, so a drag across it (towards the crop frame or the
+    // toolbar) does not rotate the photo.
+    if (gestureRecognizer == _panGestureRecognizer)
+    {
+        CGPoint velocity = [_panGestureRecognizer velocityInView:self];
+        bool landscape = UIInterfaceOrientationIsLandscape(self.interfaceOrientation);
+        CGFloat along = landscape ? velocity.y : velocity.x;
+        CGFloat across = landscape ? velocity.x : velocity.y;
+        if (ABS(along) <= ABS(across))
+            return false;
+    }
         
     return !_animating && shouldBegin;
+}
+
+// MARK: NAGRAM
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event
+{
+    if (![super pointInside:point withEvent:event])
+        return false;
+    
+    CGPoint wheelCenter = _wheelView.center;
+    CGFloat distance = (CGFloat)hypot(point.x - wheelCenter.x, point.y - wheelCenter.y);
+    return distance >= TGPhotoCropRotationViewInnerHitRadius && distance <= TGPhotoCropRotationViewOuterHitRadius;
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)__unused gestureRecognizer shouldRecognizeSimultaneouslyWithGestureRecognizer:(UIGestureRecognizer *)__unused otherGestureRecognizer

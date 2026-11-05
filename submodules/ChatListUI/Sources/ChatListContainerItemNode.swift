@@ -15,6 +15,7 @@ import ChatFolderLinkPreviewScreen
 import EdgeEffect
 import ComponentDisplayAdapters
 import NagramChatListFilters // MARK: NEXTGRAM
+import NagramSettings // MARK: NAGRAM
 
 final class ChatListContainerItemNode: ASDisplayNode {
     private final class TopPanelItem {
@@ -309,6 +310,9 @@ final class ChatListContainerItemNode: ASDisplayNode {
         
         var listInsets = insets
         var additionalTopInset: CGFloat = 0.0
+        // The top panel's title and dismiss button keep to the band beside a side strip (iPhone Duo); equal side insets
+        // keep them on the full width.
+        let topPanelSideInsets = insets.left != insets.right ? UIEdgeInsets(top: 0.0, left: insets.left, bottom: 0.0, right: insets.right) : UIEdgeInsets()
         
         if let chatFolderUpdates = self.chatFolderUpdates {
             let topPanel: TopPanelItem
@@ -331,6 +335,7 @@ final class ChatListContainerItemNode: ASDisplayNode {
                     theme: self.presentationData.theme,
                     title: title,
                     color: .accent,
+                    sideInsets: topPanelSideInsets,
                     action: { [weak self] in
                         guard let self, let chatFolderUpdates = self.chatFolderUpdates else {
                             return
@@ -378,6 +383,7 @@ final class ChatListContainerItemNode: ASDisplayNode {
                     theme: self.presentationData.theme,
                     title: title,
                     color: .destructive,
+                    sideInsets: topPanelSideInsets,
                     action: { [weak self] in
                         guard let self, case let .forum(peerId) = self.location else {
                             return
@@ -456,7 +462,9 @@ final class ChatListContainerItemNode: ASDisplayNode {
         let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: size.height - edgeEffectHeight), size: CGSize(width: size.width, height: edgeEffectHeight))
         transition.updateFrame(view: self.edgeEffectView, frame: edgeEffectFrame)
         self.edgeEffectView.update(content: self.presentationData.theme.list.plainBackgroundColor, alpha: 0.6, rect: edgeEffectFrame, edge: .bottom, edgeSize: min(edgeEffectFrame.height, 40.0), transition: ComponentTransition(transition))
-        transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 ? 1.0 : 0.0)
+        // MARK: NAGRAM — a lone search button leaves the rest of this strip over tappable chats.
+        let hidesEdgeEffect = NagramSettings.shared.bottomBarSettings.showsOnlySearchButton
+        transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 && !hidesEdgeEffect ? 1.0 : 0.0)
     }
     
     func updateScrollingOffset(navigationHeight: CGFloat, offset: CGFloat, transition: ContainedViewLayoutTransition) {

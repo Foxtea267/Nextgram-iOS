@@ -32,6 +32,22 @@ public struct ItemListMultilineInputInlineAction {
     }
 }
 
+// MARK: NAGRAM — ASEditableTextNode's layout manager delegate sets every line fragment to floor(ascender + |descender|) + 2;
+// measure with the same rule, or the item comes out about 2pt per line short and clips the last lines.
+private final class ItemListMultilineInputMeasureDelegate: NSObject, NSLayoutManagerDelegate {
+    private let lineHeight: CGFloat
+
+    init(font: UIFont) {
+        self.lineHeight = floor(font.ascender + abs(font.descender))
+    }
+
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<CGRect>, lineFragmentUsedRect: UnsafeMutablePointer<CGRect>, baselineOffset: UnsafeMutablePointer<CGFloat>, in textContainer: NSTextContainer, forGlyphRange glyphRange: NSRange) -> Bool {
+        lineFragmentRect.pointee.size.height = self.lineHeight + 2.0
+        lineFragmentUsedRect.pointee.size.height = max(self.lineHeight, lineFragmentUsedRect.pointee.size.height)
+        return true
+    }
+}
+
 public class ItemListMultilineInputItem: ListViewItem, ItemListItem {
     let presentationData: ItemListPresentationData
     let systemStyle: ItemListSystemStyle
@@ -192,7 +208,7 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
             let itemBackgroundColor: UIColor
             let itemSeparatorColor: UIColor
             
-            let leftInset = 16.0 + params.rightInset
+            let leftInset = 16.0 + params.leftInset
             switch item.style {
                 case .plain:
                     itemBackgroundColor = item.presentationData.theme.list.plainBackgroundColor
@@ -246,12 +262,17 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
             // MARK: NAGRAM — 按实际 EditableTextNode 使用的 TextKit 再测一次，避免长文本累计行高不足。
             let textStorage = NSTextStorage(attributedString: attributedMeasureText)
             let textLayoutManager = NSLayoutManager()
+            let measureDelegate = ItemListMultilineInputMeasureDelegate(font: Font.regular(item.presentationData.fontSize.itemListBaseFontSize))
+            textLayoutManager.delegate = measureDelegate
             let textContainer = NSTextContainer(size: CGSize(width: max(1.0, textWidth), height: 1000000.0))
             textContainer.lineFragmentPadding = 0.0
             textLayoutManager.addTextContainer(textContainer)
             textStorage.addLayoutManager(textLayoutManager)
-            textLayoutManager.ensureLayout(for: textContainer)
-            let textHeight = max(textLayout.size.height, ceil(textLayoutManager.usedRect(for: textContainer).height))
+            let measuredTextHeight: CGFloat = withExtendedLifetime(measureDelegate) {
+                textLayoutManager.ensureLayout(for: textContainer)
+                return ceil(textLayoutManager.usedRect(for: textContainer).height)
+            }
+            let textHeight = max(textLayout.size.height, measuredTextHeight)
             
             let separatorHeight = UIScreenPixel
             let separatorRightInset: CGFloat = item.systemStyle == .glass ? 16.0 : 0.0
@@ -381,7 +402,7 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
                     
                     if strongSelf.animationForKey("apparentHeight") == nil {
                         strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                        strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                        strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                         strongSelf.textClippingNode.frame = CGRect(origin: CGPoint(x: leftInset, y: textTopInset), size: CGSize(width: params.width - leftInset - params.rightInset, height: editorHeight))
                     }
                     strongSelf.textNode.frame = CGRect(origin: CGPoint(), size: CGSize(width: params.width - leftInset - 16.0 - rightInset, height: editorHeight + 1.0))
@@ -441,7 +462,7 @@ public class ItemListMultilineInputItemNode: ListViewItemNode, ASEditableTextNod
         let textBottomInset: CGFloat = 11.0
         
         self.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-        self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+        self.maskNode.frame = self.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
         self.bottomStripeNode.frame = CGRect(origin: CGPoint(x: self.bottomStripeNode.frame.minX, y: contentSize.height), size: CGSize(width: self.bottomStripeNode.frame.size.width, height: separatorHeight))
         
         self.textClippingNode.frame = CGRect(origin: CGPoint(x: leftInset, y: textTopInset), size: CGSize(width: max(0.0, params.width - leftInset - params.rightInset), height: max(0.0, contentSize.height - textTopInset - textBottomInset)))

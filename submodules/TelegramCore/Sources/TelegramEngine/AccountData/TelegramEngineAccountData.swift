@@ -1,7 +1,7 @@
 import Foundation
 import SwiftSignalKit
 import Postbox
-import TelegramApi
+internal import TelegramApi
 
 public extension TelegramEngine {
     final class AccountData {
@@ -9,6 +9,11 @@ public extension TelegramEngine {
 
         init(account: Account) {
             self.account = account
+        }
+
+        // MARK: NAGRAM — 会话备份导出读取主数据中心授权密钥。
+        public func backupData() -> Signal<AccountBackupData?, NoError> {
+            return accountBackupData(postbox: self.account.postbox)
         }
 
         public func acceptTermsOfService(id: String) -> Signal<Void, NoError> {

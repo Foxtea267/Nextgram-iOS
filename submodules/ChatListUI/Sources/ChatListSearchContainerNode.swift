@@ -40,6 +40,7 @@ import SectionTitleContextItem
 import EdgeEffect
 import ComponentFlow
 import ComponentDisplayAdapters
+import NagramSettings // MARK: NAGRAM
 
 private enum ChatListTokenId: Int32 {
     case archive
@@ -100,7 +101,7 @@ private final class ChatListSearchClearRecentReferenceContentSource: ContextRefe
     }
 
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        return ContextControllerReferenceViewInfo(referenceView: self.sourceNode.view, contentAreaInScreenSpace: UIScreen.main.bounds, actionsPosition: .bottom)
+        return ContextControllerReferenceViewInfo(referenceView: self.sourceNode.view, contentAreaInScreenSpace: mainWindowScreenBounds, actionsPosition: .bottom)
     }
 }
 
@@ -128,6 +129,15 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
     
     public var dismissSearch: (() -> Void)?
     public var dismissSearchImmediately: (() -> Void)?
+    // MARK: NAGRAM — 搜索栏在底部时由创建者设置，结果页据此（再结合设置开关）从下往上排列。
+    public var nagramBottomUp: Bool {
+        get {
+            return self.paneContainerNode.nagramBottomUp
+        }
+        set {
+            self.paneContainerNode.nagramBottomUp = newValue
+        }
+    }
     var openAdInfo: ((ASDisplayNode, AdPeer) -> Void)?
     
     private let edgeEffectView: EdgeEffectView
@@ -247,8 +257,27 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
             let _ = context.sharedContext.openUserGeneratedUrl(context: context, peerId: nil, url: url, webpage: nil, concealed: false, forceConcealed: false, skipUrlAuth: false, skipConcealedAlert: false, forceDark: false, present: { c in
                 present(c, nil)
             }, openResolved: { [weak self] resolved in
-                context.sharedContext.openResolvedUrl(resolved, context: context, urlContext: .generic, navigationController: navigationController, forceExternal: false, forceUpdate: false, openPeer: { peerId, navigation in
-                    
+                context.sharedContext.openResolvedUrl(resolved, context: context, urlContext: .generic, navigationController: navigationController, forceExternal: false, forceUpdate: false, openPeer: { peer, navigation in
+                    // MARK: NAGRAM — 搜索框粘贴的链接解析到会话或消息时要真的打开它；上游这里是空实现。
+                    guard let navigationController else {
+                        return
+                    }
+                    switch navigation {
+                    case let .chat(inputState, subject, peekData):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), subject: subject, updateTextInputState: inputState, activateInput: inputState != nil ? .text : nil, peekData: peekData))
+                    case .info:
+                        if peer.restrictionText(platform: "ios", contentSettings: context.currentContentSettings.with { $0 }) == nil, let infoController = context.sharedContext.makePeerInfoController(context: context, updatedPresentationData: nil, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) {
+                            navigationController.pushViewController(infoController)
+                        }
+                    case let .withBotStartPayload(startPayload):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), botStart: startPayload))
+                    case let .withAttachBot(attachBotStart):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), attachBotStart: attachBotStart))
+                    case let .withBotApp(botAppStart):
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer), botAppStart: botAppStart))
+                    case .default:
+                        context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .peer(peer)))
+                    }
                 },
                 sendFile: nil,
                 sendSticker: nil,
@@ -808,38 +837,10 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         }
     }
     
-    private func updateFilterContainerNode(layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
-        var isForum = false
-        if case .forum = self.location {
-            isForum = true
-        }
-        
-        let filters: [ChatListSearchFilter]
-        if let suggestedFilters = self.suggestedFilters, !suggestedFilters.isEmpty {
-            filters = suggestedFilters
-        } else {
-            filters = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: self.hasDownloads, hasPublicPosts: self.showPublicPostsTab).map(\.filter)
-        }
-        
-        var filtersInsets = UIEdgeInsets(top: 0.0, left: 12.0, bottom: layout.insets(options: [.input]).bottom + 34.0, right: 12.0)
-        if layout.insets(options: [.input]).bottom <= 30.0 {
-            filtersInsets = ContainerViewLayout.concentricInsets(bottomInset: layout.insets(options: [.input]).bottom, innerDiameter: 40.0, sideInset: 32.0)
-        } else if layout.insets(options: [.input]).bottom <= 84.0 {
-            filtersInsets.left = 20.0
-            filtersInsets.right = filtersInsets.left
-        }
-        
-        self.filterContainerNode.update(size: CGSize(width: layout.size.width - (layout.safeInsets.left + filtersInsets.left) * 2.0, height: 40.0), sideInset: 0.0, filters: filters.map { .filter($0) }, displayGlobalPostsNewBadge: self.displayGlobalPostsNewBadge, selectedFilter: self.selectedFilter?.id, transitionFraction: self.transitionFraction, presentationData: self.presentationData, transition: .animated(duration: 0.4, curve: .spring))
-    }
-
-    override public func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
-        super.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: transition)
-        
-        let isFirstTime = self.validLayout == nil
-        self.validLayout = (layout, navigationBarHeight)
-        
-        let topInset = navigationBarHeight
-        
+    /// The search filter bar's frame at the bottom (above the keyboard when it is up). Each side keeps clear of a corner
+    /// block level with the bar (iPhone Duo's side strip: the folded screen's bottom-right block in landscape) and of
+    /// any other safe inset; with equal side insets it is centred as before.
+    private func filterContainerFrame(layout: ContainerViewLayout) -> CGRect {
         var filtersInsets = UIEdgeInsets(top: 0.0, left: 12.0, bottom: layout.insets(options: [.input]).bottom, right: 12.0)
         if filtersInsets.bottom == 84.0 {
             filtersInsets.bottom -= 6.0
@@ -858,8 +859,39 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         if self.stateValue.selectedMessageIds != nil {
             filtersInsets.bottom += 48.0
         }
+        let height: CGFloat = 40.0
+        let minY = layout.size.height - filtersInsets.bottom - height
+        let sideInsets = layout.sideInsets(forBandFrom: minY, to: minY + height)
+        let left = sideInsets.left + filtersInsets.left
+        let right = sideInsets.right + filtersInsets.right
+        return CGRect(origin: CGPoint(x: left, y: minY), size: CGSize(width: layout.size.width - left - right, height: height))
+    }
+    
+    private func updateFilterContainerNode(layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        var isForum = false
+        if case .forum = self.location {
+            isForum = true
+        }
         
-        transition.updateFrame(node: self.filterContainerNode, frame: CGRect(origin: CGPoint(x: layout.safeInsets.left + filtersInsets.left, y: layout.size.height - filtersInsets.bottom - 40.0), size: CGSize(width: layout.size.width - (layout.safeInsets.left + filtersInsets.left) * 2.0, height: 40.0)))
+        let filters: [ChatListSearchFilter]
+        if let suggestedFilters = self.suggestedFilters, !suggestedFilters.isEmpty {
+            filters = suggestedFilters
+        } else {
+            filters = defaultAvailableSearchPanes(isForum: isForum, hasDownloads: self.hasDownloads, hasPublicPosts: self.showPublicPostsTab).map(\.filter)
+        }
+        
+        self.filterContainerNode.update(size: self.filterContainerFrame(layout: layout).size, sideInset: 0.0, filters: filters.map { .filter($0) }, displayGlobalPostsNewBadge: self.displayGlobalPostsNewBadge, selectedFilter: self.selectedFilter?.id, transitionFraction: self.transitionFraction, presentationData: self.presentationData, transition: .animated(duration: 0.4, curve: .spring))
+    }
+
+    override public func containerLayoutUpdated(_ layout: ContainerViewLayout, navigationBarHeight: CGFloat, transition: ContainedViewLayoutTransition) {
+        super.containerLayoutUpdated(layout, navigationBarHeight: navigationBarHeight, transition: transition)
+        
+        let isFirstTime = self.validLayout == nil
+        self.validLayout = (layout, navigationBarHeight)
+        
+        let topInset = navigationBarHeight
+        
+        transition.updateFrame(node: self.filterContainerNode, frame: self.filterContainerFrame(layout: layout))
         self.updateFilterContainerNode(layout: layout, transition: transition)
         
         self.filterContainerNode.isHidden = !self.displaySearchFilters
@@ -910,7 +942,7 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
                     }
                     |> deliverOnMainQueue).startStandalone(next: { messages in
                         if let strongSelf = self, !messages.isEmpty {
-                            let shareController = strongSelf.context.sharedContext.makeShareController(context: strongSelf.context, params: ShareControllerParams(subject: .messages(messages.sorted(by: { lhs, rhs in
+                            let shareController = strongSelf.context.sharedContext.makeShareScreen(context: strongSelf.context, params: ShareControllerParams(subject: .messages(messages.sorted(by: { lhs, rhs in
                                 return lhs.index < rhs.index
                             }).map({ $0._asMessage() })), externalShare: true, immediateExternalShare: true))
                             strongSelf.dismissInput()
@@ -1045,14 +1077,22 @@ public final class ChatListSearchContainerNode: SearchDisplayControllerContentNo
         }
         
         bottomInset += 44.0
-        
+        // MARK: NAGRAM — 从下往上显示时结果停在列表底端，底部浮着的分类栏和搜索框会挡住最贴近它们的几行，
+        // 留白要到分类栏上沿为止。
+        var paneBottomInset = bottomInset
+        if self.nagramBottomUp && NagramSettings.shared.bottomUpGlobalSearchResults && self.displaySearchFilters {
+            paneBottomInset = max(bottomInset, layout.size.height - self.filterContainerNode.frame.minY + 8.0)
+        }
+
         let edgeEffectHeight: CGFloat = bottomInset + 8.0
         let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - edgeEffectHeight), size: CGSize(width: layout.size.width, height: edgeEffectHeight))
         transition.updateFrame(view: self.edgeEffectView, frame: edgeEffectFrame)
         self.edgeEffectView.update(content: self.presentationData.theme.list.plainBackgroundColor, rect: edgeEffectFrame, edge: .bottom, edgeSize: min(edgeEffectHeight, 50.0), transition: ComponentTransition(transition))
         transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 ? 1.0 : 0.0)
 
-        self.paneContainerNode.update(size: CGSize(width: layout.size.width, height: layout.size.height), sideInset: layout.safeInsets.left, topInset: topInset, bottomInset: bottomInset, visibleHeight: layout.size.height, presentationData: self.presentationData, availablePanes: availablePanes, transition: transition)
+        // Per side: on iPhone Duo the right (or left) safe inset is the side strip, which the results must not
+        // run under; elsewhere the two are equal and this is the old symmetric inset.
+        self.paneContainerNode.update(size: CGSize(width: layout.size.width, height: layout.size.height), sideInsets: UIEdgeInsets(top: 0.0, left: layout.safeInsets.left, bottom: 0.0, right: layout.safeInsets.right), topInset: topInset, bottomInset: paneBottomInset, visibleHeight: layout.size.height, presentationData: self.presentationData, availablePanes: availablePanes, transition: transition)
     }
     
     private var currentMessages: ([EnginePeer.Id: EnginePeer], [EngineMessage.Id: EngineMessage]) {
@@ -1756,11 +1796,11 @@ private final class MessageContextExtractedContentSource: ContextExtractedConten
     }
     
     func takeView() -> ContextControllerTakeViewInfo? {
-        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: mainWindowScreenBounds)
     }
     
     func putBack() -> ContextControllerPutBackViewInfo? {
-        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }
 

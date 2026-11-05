@@ -108,6 +108,11 @@ public struct NagramBottomBarSettings: Equatable {
         return result
     }
 
+    /// The bar is reduced to the standalone search button: no bottom items and no search bar.
+    public var showsOnlySearchButton: Bool {
+        return self.isBottomBarVisible && self.activeBottomItems.isEmpty && self.externalItem == .search && self.searchMode == .button
+    }
+
     public func isVisible(_ item: NagramBottomBarItemId) -> Bool {
         if item == .search {
             return self.searchMode != .hidden && !self.hiddenItems.contains(.search)

@@ -257,6 +257,14 @@ public func stringForMessageTimestampStatus(
         }
     }
     
+    // MARK: NAGRAM
+    if NagramSettings.shared.showMessageId, message.id.namespace == Namespaces.Message.Cloud, !associatedData.isForwardOptionsPreview {
+        let peerNamespace = message.id.peerId.namespace
+        if peerNamespace == Namespaces.Peer.CloudGroup || peerNamespace == Namespaces.Peer.CloudChannel {
+            dateText = "\(dateText) | \(message.id.id)"
+        }
+    }
+    
     // MARK: NEXTGRAM — Make locally retained deletions visible without altering message content.
     // MARK: NAGRAM
     if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {

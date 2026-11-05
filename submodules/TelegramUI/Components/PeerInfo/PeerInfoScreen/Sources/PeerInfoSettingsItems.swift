@@ -33,7 +33,7 @@ enum SettingsSection: Int, CaseIterable {
     case support
 }
 
-func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
+func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool, nagramShowCallsTab: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
     guard let data = data else {
         return []
     }
@@ -232,9 +232,19 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_SavedMessages, icon: PresentationResourcesSettings.savedMessages, action: {
         interaction.openSettings(.savedMessages)
     }))
-    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
-        interaction.openSettings(.recentCalls)
-    }))
+    // MARK: NAGRAM — 联系人 / 通话记录入口只在对应 tab 不在底栏时显示
+    let nagramBottomBarSettings = NagramSettings.shared.bottomBarSettings
+    let nagramVisibleTabs = nagramBottomBarSettings.isBottomBarVisible ? nagramBottomBarSettings.visibleNavigationItems : []
+    if !nagramVisibleTabs.contains(.contacts) {
+        items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 51, text: presentationData.strings.Contacts_Title, icon: PresentationResourcesSettings.clearSynced, action: {
+            interaction.openSettings(.nagramContacts)
+        }))
+    }
+    if !(nagramShowCallsTab && nagramVisibleTabs.contains(.calls)) {
+        items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
+            interaction.openSettings(.recentCalls)
+        }))
+    }
     
     let devicesLabel: String
     if let settings = data.globalSettings, let otherSessionsCount = settings.otherSessionsCount {

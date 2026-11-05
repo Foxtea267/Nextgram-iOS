@@ -384,7 +384,7 @@ final class ChatInputContentModelTests: XCTestCase {
 
     /// With `.quotesRequireRichContent`, a non-collapsed flat single-paragraph `.blockQuote` is no longer
     /// entity-expressible — so quote-bearing content routes onto the rich (InstantPage) path — while a plain /
-    /// code-only content stays entity-expressible. A collapsed `.blockQuote` is never entity-expressible.
+    /// code-only content stays entity-expressible. Without the option a flat collapsed `.blockQuote` is entity-expressible (Nagram).
     func test_isEntityExpressible_quotesRequireRichContent() {
         func single(_ block: ChatInputBlock) -> ChatInputContent { ChatInputContent(blocks: [block]) }
 
@@ -396,10 +396,10 @@ final class ChatInputContentModelTests: XCTestCase {
             content: ChatInputContent(blocks: [.paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "z")]))]),
             collapsed: true)))
 
-        // Default options: a flat non-collapsed single-paragraph blockQuote stays entity-expressible.
+        // Default options: a flat single-paragraph blockQuote stays entity-expressible.
         XCTAssertTrue(bq.isEntityExpressible())
-        // A collapsed blockQuote is never entity-expressible (regardless of options).
-        XCTAssertFalse(collapsed.isEntityExpressible())
+        // MARK: NAGRAM — collapsed or not (a collapsed quote is a collapsed `messageEntityBlockquote`).
+        XCTAssertTrue(collapsed.isEntityExpressible())
 
         // With the option: a blockquote requires the rich path; non-quote content is unaffected.
         XCTAssertTrue(plain.isEntityExpressible(options: [.quotesRequireRichContent]))

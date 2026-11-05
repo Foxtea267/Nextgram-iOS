@@ -91,6 +91,8 @@ swift_library(
         "//submodules/AnimationUI:AnimationUI",
         "//submodules/PeerInfoUI",
         "//submodules/TelegramUI/Components/ChatListHeaderComponent",
+        "//submodules/TelegramUI/Components/NavigationBarComponent",
+        "//submodules/TelegramUI/Components/SideColumnLayout",
         "//submodules/TelegramUI/Components/ChatListTitleView",
         "//submodules/AvatarNode:AvatarNode",
         "//submodules/AvatarVideoNode:AvatarVideoNode",
@@ -144,6 +146,8 @@ swift_library(
         # MARK: NEXTGRAM
         "//Nagram/ChatListFilters:NagramChatListFilters",
         "//Nagram/Strings:NagramStrings",
+        "//Nagram/SearchLink:NagramSearchLink",
+        "//Nagram/FlippedList:NagramFlippedList",
     ],
     visibility = [
         "//visibility:public",
@@ -163,6 +167,7 @@ swift_library(
         "//submodules/TelegramStringFormatting:TelegramStringFormatting",
         "//submodules/TextFormat:TextFormat",
         "//submodules/AppBundle:AppBundle",
+        "//Nagram/SearchLink:NagramSearchLink", # MARK: NAGRAM
     ],
 )
 

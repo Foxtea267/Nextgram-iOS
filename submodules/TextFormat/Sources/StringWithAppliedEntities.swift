@@ -67,7 +67,18 @@ public func chatInputStateStringWithAppliedEntities(_ text: String, entities: [M
         string.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: string.length), using: { value, range, stop in
             if let value = value as? ChatTextInputTextQuoteAttribute, value.isCollapsed {
                 found = true
-                let blockString = string.attributedSubstring(from: range)
+                let blockString = NSMutableAttributedString(attributedString: string.attributedSubstring(from: range))
+                // MARK: NAGRAM — the placeholder already is the quote; drop its quote attribute from the content, as the
+                // composer's collapse does, or the restored draft parses as a collapsed quote inside a collapsed quote.
+                var quoteRanges: [NSRange] = []
+                blockString.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: blockString.length), options: []) { innerValue, innerRange, _ in
+                    if let innerValue = innerValue as? ChatTextInputTextQuoteAttribute, case .quote = innerValue.kind {
+                        quoteRanges.append(innerRange)
+                    }
+                }
+                for quoteRange in quoteRanges {
+                    blockString.removeAttribute(ChatTextInputAttributes.block, range: quoteRange)
+                }
                 string.replaceCharacters(in: range, with: "")
                 string.insert(NSAttributedString(string: " ", attributes: [
                     ChatTextInputAttributes.collapsedBlock: blockString
@@ -223,7 +234,7 @@ public func stringWithAppliedCustomEmojiEntities(_ string: NSAttributedString, e
     return updatedString
 }
 
-public func stringWithAppliedEntities(_ text: String, entities: [MessageTextEntity], strings: PresentationStrings? = nil, dateTimeFormat: PresentationDateTimeFormat? = nil, baseColor: UIColor, linkColor: UIColor, baseQuoteTintColor: UIColor? = nil, baseQuoteSecondaryTintColor: UIColor? = nil, baseQuoteTertiaryTintColor: UIColor? = nil, codeBlockTitleColor: UIColor? = nil, codeBlockAccentColor: UIColor? = nil, codeBlockBackgroundColor: UIColor? = nil, baseFont: UIFont, linkFont: UIFont, boldFont: UIFont, italicFont: UIFont, boldItalicFont: UIFont, fixedFont: UIFont, blockQuoteFont: UIFont, underlineLinks: Bool = true, external: Bool = false, message: EngineRawMessage?, entityFiles: [EngineMedia.Id: TelegramMediaFile] = [:], adjustQuoteFontSize: Bool = false, cachedMessageSyntaxHighlight: CachedMessageSyntaxHighlight? = nil, paragraphAlignment: NSTextAlignment? = nil) -> NSAttributedString {
+public func stringWithAppliedEntities(_ text: String, entities: [MessageTextEntity], strings: PresentationStrings? = nil, dateTimeFormat: PresentationDateTimeFormat? = nil, baseColor: UIColor, linkColor: UIColor, baseQuoteTintColor: UIColor? = nil, baseQuoteSecondaryTintColor: UIColor? = nil, baseQuoteTertiaryTintColor: UIColor? = nil, codeBlockTitleColor: UIColor? = nil, codeBlockAccentColor: UIColor? = nil, codeBlockBackgroundColor: UIColor? = nil, codeBlockFillColor: UIColor? = nil, baseFont: UIFont, linkFont: UIFont, boldFont: UIFont, italicFont: UIFont, boldItalicFont: UIFont, fixedFont: UIFont, blockQuoteFont: UIFont, underlineLinks: Bool = true, external: Bool = false, message: EngineRawMessage?, entityFiles: [EngineMedia.Id: TelegramMediaFile] = [:], adjustQuoteFontSize: Bool = false, cachedMessageSyntaxHighlight: CachedMessageSyntaxHighlight? = nil, paragraphAlignment: NSTextAlignment? = nil) -> NSAttributedString {
     let baseQuoteTintColor = baseQuoteTintColor ?? baseColor
     
     var nsString: NSString?
@@ -408,7 +419,7 @@ public func stringWithAppliedEntities(_ text: String, entities: [MessageTextEnti
                     if let language, !language.isEmpty {
                         title = NSAttributedString(string: language.capitalized, font: boldFont.withSize(round(boldFont.pointSize * 0.8235294117647058)), textColor: codeBlockTitleColor)
                     }
-                    string.addAttribute(NSAttributedString.Key(rawValue: "Attribute__Blockquote"), value: TextNodeBlockQuoteData(kind: .code(language: language), title: title, color: codeBlockAccentColor, secondaryColor: nil, tertiaryColor: nil, backgroundColor: codeBlockBackgroundColor, isCollapsible: false), range: range)
+                    string.addAttribute(NSAttributedString.Key(rawValue: "Attribute__Blockquote"), value: TextNodeBlockQuoteData(kind: .code(language: language), title: title, color: codeBlockAccentColor, secondaryColor: nil, tertiaryColor: nil, backgroundColor: codeBlockBackgroundColor, fillColor: codeBlockFillColor, isCollapsible: false), range: range)
                 }
             case let .BlockQuote(isCollapsed):
                 addFontAttributes(range, .blockQuote)

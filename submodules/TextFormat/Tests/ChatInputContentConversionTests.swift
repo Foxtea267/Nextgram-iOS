@@ -354,6 +354,61 @@ final class ChatInputContentConversionTests: XCTestCase {
         ])
     }
 
+    /// One EMPTY line between two carved blocks (quotes, code) round-trips through the chat currency.
+    /// The decoder emitted nothing for a gap of exactly one separator, so editing a sent `"A\n\nB"`
+    /// (a quote each side) reopened as `[A] [B]` (composer harness p20). Two lines, a leading line,
+    /// and a line before a paragraph were already right and are pinned beside it.
+    func test_chatCurrencyRoundTrip_oneEmptyLineBetweenCarvedBlocks() {
+        func quote(_ text: String) -> ChatInputBlock {
+            .blockQuote(ChatInputBlockQuote(content: ChatInputContent(blocks: [.paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: text)]))]), collapsed: false))
+        }
+        func code(_ text: String) -> ChatInputBlock { .code(ChatInputCode(language: nil, runs: [ChatInputRun(text: text)])) }
+        let blank = ChatInputBlock.paragraph(ChatInputParagraph(style: .body, runs: []))
+        let paragraph = ChatInputBlock.paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "P")]))
+        let cases: [[ChatInputBlock]] = [
+            [quote("A"), blank, quote("B")],
+            [code("x"), blank, code("y")],
+            [quote("A"), blank, code("y")],
+            [quote("A"), blank, blank, quote("B")],
+            [quote("A"), blank, paragraph],
+            [blank, quote("B")],
+            [quote("A"), quote("B")],
+            [code("x"), code("y")],
+        ]
+        for blocks in cases {
+            let content = ChatInputContent(blocks: blocks)
+            XCTAssertEqual(chatInputContent(from: attributedString(from: content)), content, "\(attributedString(from: content).string.debugDescription)")
+        }
+    }
+
+    /// An EMPTY LAST LINE after a carved block (code, quote) round-trips. The decoder consumed the line
+    /// break after the last block as its separator and then found nothing after it, so `"abc\n"` read
+    /// back as `[code "abc"]`: the legacy composer, which echoes the model back into its text view,
+    /// wrote `"abc"` outside UIKit's undo stack and the next Undo raised `NSRangeException` (composer
+    /// harness, `HarnessLegacyDeleteLineAfterBlockUndoTests`).
+    func test_chatCurrencyRoundTrip_emptyLastLineAfterACarvedBlock() {
+        func quote(_ text: String) -> ChatInputBlock {
+            .blockQuote(ChatInputBlockQuote(content: ChatInputContent(blocks: [.paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: text)]))]), collapsed: false))
+        }
+        func code(_ text: String) -> ChatInputBlock { .code(ChatInputCode(language: nil, runs: [ChatInputRun(text: text)])) }
+        let blank = ChatInputBlock.paragraph(ChatInputParagraph(style: .body, runs: []))
+        let cases: [[ChatInputBlock]] = [
+            [code("abc"), blank],
+            [quote("abc"), blank],
+            [code("abc"), blank, blank],
+            [quote("A"), blank, code("abc"), blank],
+        ]
+        for blocks in cases {
+            let content = ChatInputContent(blocks: blocks)
+            let text = attributedString(from: content)
+            XCTAssertEqual(chatInputContent(from: text), content, "\(text.string.debugDescription)")
+            XCTAssertEqual(content.plainText, text.string)
+        }
+        // Control: a block that ENDS the text is not followed by an empty line.
+        let codeOnly = ChatInputContent(blocks: [code("abc")])
+        XCTAssertEqual(chatInputContent(from: attributedString(from: codeOnly)), codeOnly)
+    }
+
     func test_plainText_matchesAttributedStringString() {
         let content = richFixture()
         XCTAssertEqual(content.plainText, attributedString(from: content).string)
@@ -451,6 +506,77 @@ final class ChatInputContentConversionTests: XCTestCase {
             .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "after")])),
         ])
         XCTAssertEqual(chatInputContent(from: attributedString(from: content)), content)
+    }
+
+    // MARK: NAGRAM — a collapsed quote restored from its message entity (draft restore, editing) must parse as ONE
+    // collapsed quote. With the quote attribute left on the placeholder's content it parsed as a collapsed quote
+    // nested in a collapsed quote, which is not entity-expressible and sent the draft down the rich path.
+    func test_collapsedQuoteEntity_restoresAsSingleEntityExpressibleQuote() {
+        let restored = chatInputStateStringWithAppliedEntities("x\na\nb", entities: [
+            MessageTextEntity(range: 2 ..< 5, type: .BlockQuote(isCollapsed: true))
+        ])
+        let content = chatInputContent(from: restored)
+        XCTAssertEqual(content, ChatInputContent(blocks: [
+            .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "x")])),
+            .blockQuote(ChatInputBlockQuote(content: ChatInputContent(blocks: [
+                .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "a")])),
+                .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "b")])),
+            ]), collapsed: true)),
+        ]))
+        XCTAssertTrue(content.isEntityExpressible())
+
+        let quoteEntities = generateChatInputTextEntities(expandedInputStateAttributedString(attributedString(from: content))).compactMap { entity -> (Range<Int>, Bool)? in
+            if case let .BlockQuote(isCollapsed) = entity.type {
+                return (entity.range, isCollapsed)
+            }
+            return nil
+        }
+        XCTAssertEqual(quoteEntities.count, 1)
+        XCTAssertEqual(quoteEntities.first?.0, 2 ..< 5)
+        XCTAssertEqual(quoteEntities.first?.1, true)
+    }
+
+    // MARK: NAGRAM — Send Without Formatting must send a quote as ONE quote entity, blank lines included. Each line
+    // used to be marked on its own (the "\n" between lines unmarked), so a quote arrived as one quote per line,
+    // and its blank lines were dropped.
+    func test_sendWithoutFormatting_keepsAQuoteWithBlankLinesWhole() {
+        func p(_ text: String) -> ChatInputBlock {
+            return .paragraph(ChatInputParagraph(style: .body, runs: text.isEmpty ? [] : [ChatInputRun(text: text)]))
+        }
+        let content = ChatInputContent(blocks: [
+            .paragraph(ChatInputParagraph(style: .heading1, runs: [ChatInputRun(text: "T")])),
+            .blockQuote(ChatInputBlockQuote(content: ChatInputContent(blocks: [p(""), p("a"), p(""), p("b"), p("")]), collapsed: true)),
+            p("c"),
+        ])
+        let sent = entityPreservingFallbackAttributedString(from: content, preserveCustomEmoji: { _, _ in true })
+        XCTAssertEqual(sent.string, "T\na\n\nb\nc")
+
+        let quoteEntities = generateChatInputTextEntities(sent).compactMap { entity -> (Range<Int>, Bool)? in
+            if case let .BlockQuote(isCollapsed) = entity.type {
+                return (entity.range, isCollapsed)
+            }
+            return nil
+        }
+        XCTAssertEqual(quoteEntities.count, 1)
+        XCTAssertEqual(quoteEntities.first?.0, 2 ..< 6)
+        XCTAssertEqual(quoteEntities.first?.1, true)
+    }
+
+    // MARK: NAGRAM — outside a quote, blank paragraphs are still dropped, and two quotes stay two entities.
+    func test_sendWithoutFormatting_separatesAdjacentQuotes() {
+        func quote(_ text: String) -> ChatInputBlock {
+            return .blockQuote(ChatInputBlockQuote(content: ChatInputContent(blocks: [.paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: text)]))]), collapsed: false))
+        }
+        let content = ChatInputContent(blocks: [quote("a"), .paragraph(ChatInputParagraph(style: .body, runs: [])), quote("b")])
+        let sent = entityPreservingFallbackAttributedString(from: content, preserveCustomEmoji: { _, _ in true })
+        XCTAssertEqual(sent.string, "a\nb")
+        let quoteRanges = generateChatInputTextEntities(sent).compactMap { entity -> Range<Int>? in
+            if case .BlockQuote = entity.type {
+                return entity.range
+            }
+            return nil
+        }
+        XCTAssertEqual(quoteRanges, [0 ..< 1, 2 ..< 3])
     }
 
     /// The chat-currency direction: a hand-built FOLDED `.collapsedBlock` string (exactly what

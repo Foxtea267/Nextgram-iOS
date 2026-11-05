@@ -622,7 +622,7 @@ final class ChatInputContentInstantPageTests: XCTestCase {
         ])
         XCTAssertFalse(nested.isEntityExpressible(), "nested blockQuote → not entity-expressible")
 
-        // Collapsed single-paragraph quote → not entity-expressible.
+        // MARK: NAGRAM — a flat collapsed quote is a collapsed `messageEntityBlockquote`, so it stays entity-expressible.
         let collapsed = ChatInputContent(blocks: [
             .blockQuote(ChatInputBlockQuote(
                 content: ChatInputContent(blocks: [
@@ -630,7 +630,21 @@ final class ChatInputContentInstantPageTests: XCTestCase {
                 ]),
                 collapsed: true))
         ])
-        XCTAssertFalse(collapsed.isEntityExpressible(), "collapsed blockQuote → not entity-expressible")
+        XCTAssertTrue(collapsed.isEntityExpressible(), "flat collapsed blockQuote → entity-expressible")
+
+        // A collapsed quote that nests another quote still needs the rich path (flat-only rule).
+        let collapsedNested = ChatInputContent(blocks: [
+            .blockQuote(ChatInputBlockQuote(
+                content: ChatInputContent(blocks: [
+                    .blockQuote(ChatInputBlockQuote(
+                        content: ChatInputContent(blocks: [
+                            .paragraph(ChatInputParagraph(style: .body, runs: [ChatInputRun(text: "q")]))
+                        ]),
+                        collapsed: false))
+                ]),
+                collapsed: true))
+        ])
+        XCTAssertFalse(collapsedNested.isEntityExpressible(), "collapsed nested blockQuote → not entity-expressible")
     }
 
     // 20. Pull-quote author line round-trips with a PLAIN author, and the emitted InstantPage caption is

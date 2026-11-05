@@ -64,20 +64,27 @@ private enum NagramGroupProfileSettingsEntry: ItemListNodeEntry {
         }
     }
 
+    var tag: ItemListItemTag? {
+        if case let .item(item, _, _) = self {
+            return NagramSettingsFocusTag(item.rawValue)
+        }
+        return nil
+    }
+
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! NagramGroupProfileSettingsArguments
         switch self {
         case let .item(item, title, value):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: self.section, style: .blocks, updated: { value in
                 arguments.update(item, value)
-            })
+            }, tag: self.tag)
         case let .footer(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
         }
     }
 }
 
-public func nagramGroupProfileSettingsController(context: AccountContext) -> ViewController {
+public func nagramGroupProfileSettingsController(context: AccountContext, focusOnRow: String? = nil) -> ViewController {
     let updatePromise = ValuePromise<Int32>(0, ignoreRepeated: false)
     var updateValue: Int32 = 0
     let bump: () -> Void = {
@@ -116,6 +123,7 @@ public func nagramGroupProfileSettingsController(context: AccountContext) -> Vie
             presentationData: ItemListPresentationData(presentationData),
             entries: entries,
             style: .blocks,
+            initialScrollToItem: nagramFocusScrollToItem(entries: entries, focusOnRow: focusOnRow),
             animateChanges: false
         )
         return (controllerState, (listState, arguments))
@@ -123,5 +131,6 @@ public func nagramGroupProfileSettingsController(context: AccountContext) -> Vie
 
     let controller = ItemListController(context: context, state: signal)
     controller.navigationPresentation = .default
+    nagramHighlightFocusedRow(controller: controller, focusOnRow: focusOnRow)
     return controller
 }

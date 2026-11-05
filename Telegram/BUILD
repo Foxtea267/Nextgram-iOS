@@ -1,3 +1,4 @@
+load(":framework_exported_symbols.bzl", "framework_exported_symbols")
 load("@rules_cc//cc:objc_library.bzl", "objc_library")
 
 load("@bazel_skylib//rules:common_settings.bzl",
@@ -61,10 +62,6 @@ load(
 
 load("@build_bazel_rules_apple//apple:resources.bzl",
     "swift_intent_library",
-)
-
-load("//build-system/bazel-utils:spm.bzl",
-    "generate_spm",
 )
 
 config_setting(
@@ -178,6 +175,10 @@ genrule(
         "GeneratedPresentationStrings/Sources/PresentationStrings.m",
         "GeneratedPresentationStrings/Resources/PresentationStrings.data",
     ],
+    # //Tests/ComposerHarness bundles the .data output. `-[_PresentationStrings
+    # initWithPrimaryComponent:…]` asserts when it cannot load it, so a standalone app that builds
+    # a PresentationData dies at launch without it.
+    visibility = ["//Tests:__subpackages__"],
 )
 
 minimum_os_version = "15.0"
@@ -300,6 +301,10 @@ filegroup(
         # MARK: NAGRAM — Nagram 本地化字符串打进 app bundle
         "//Nagram/Strings:NagramLocalizableStrings",
     ],
+    # //Tests/ComposerHarness bundles these. `defaultPresentationStrings` FORCE-UNWRAPS
+    # `getAppBundle().path(forResource: "Localizable" …)`, so any standalone app that builds a
+    # PresentationData traps at launch without them.
+    visibility = ["//Tests:__subpackages__"],
 )
 
 filegroup(
@@ -679,14 +684,12 @@ plist_fragment(
     ])
 )
 
-# MARK: NEXTGRAM — Keep the system version three-part and expose the downstream revision separately.
 genrule(
     name = "VersionInfoPlist",
     srcs = ["//:versions.json"],
     outs = ["VersionInfoPlist.plist"],
     cmd = """
         version=$$(python3 -c "import json; print(json.load(open('$(location //:versions.json)'))['app'])")
-        nextgram_version=$$(python3 -c "import json; v=json.load(open('$(location //:versions.json)')); print(v['app'] + '.' + str(v['nextgram_revision']))")
         cat > $@ <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -694,8 +697,6 @@ genrule(
 <dict>
     <key>CFBundleShortVersionString</key>
     <string>$$version</string>
-    <key>NextgramVersion</key>
-    <string>$$nextgram_version</string>
 </dict>
 </plist>
 PLIST
@@ -886,6 +887,31 @@ plist_fragment(
     )
 )
 
+# TelegramCoreFramework exports only what its clients use: TelegramUI (linked into
+# TelegramUIFramework), the app binary and every extension. See framework_exported_symbols.bzl.
+framework_exported_symbols(
+    name = "TelegramCoreFrameworkExportedSymbols",
+    framework_deps = [
+        "//submodules/TelegramCore:TelegramCore",
+    ],
+    provided_by_frameworks = [
+        "//submodules/MtProtoKit:MtProtoKit",
+        "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
+        "//submodules/Postbox:Postbox",
+    ],
+    clients = [
+        "//submodules/TelegramUI:TelegramUI",
+        ":Main",
+        ":Lib",
+        ":ShareExtensionLib",
+        ":NotificationContentExtensionLib",
+        ":BroadcastUploadExtensionLib",
+        ":WidgetExtensionLib",
+        ":IntentsExtensionLib",
+        "//Telegram/NotificationService:NotificationServiceExtensionLib",
+    ],
+)
+
 ios_framework(
     name = "TelegramCoreFramework",
     bundle_id = "{telegram_bundle_id}.TelegramCore".format(
@@ -909,6 +935,13 @@ ios_framework(
     minimum_os_version = minimum_os_version,
     extension_safe = True,
     ipa_post_processor = strip_framework,
+    # Exports only what TelegramUI, the app binary and the extensions use. TelegramApi, private to
+    # TelegramCore, is therefore never exported (it used to need -unexported_symbol patterns).
+    # Release only: debug keeps every symbol exported (debugger, faster edit-build cycle).
+    exported_symbols_lists = select({
+        ":debug": [],
+        "//conditions:default": [":TelegramCoreFrameworkExportedSymbols"],
+    }),
     deps = [
         "//submodules/TelegramCore:TelegramCore",
     ],
@@ -1014,6 +1047,29 @@ plist_fragment(
     )
 )
 
+# TelegramUIFramework exports only what the app binary and the extensions that link it use:
+# 194 of its 161,496 public symbols at the time of writing. See framework_exported_symbols.bzl.
+framework_exported_symbols(
+    name = "TelegramUIFrameworkExportedSymbols",
+    framework_deps = [
+        "//submodules/TelegramUI:TelegramUI",
+    ],
+    provided_by_frameworks = [
+        "//submodules/MtProtoKit:MtProtoKit",
+        "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
+        "//submodules/Postbox:Postbox",
+        "//submodules/TelegramCore:TelegramCore",
+    ],
+    clients = [
+        ":Main",
+        ":Lib",
+        ":ShareExtensionLib",
+        ":NotificationContentExtensionLib",
+        ":BroadcastUploadExtensionLib",
+        "//Telegram/NotificationService:NotificationServiceExtensionLib",
+    ],
+)
+
 ios_framework(
     name = "TelegramUIFramework",
     additional_linker_inputs = [
@@ -1041,6 +1097,11 @@ ios_framework(
     minimum_os_version = minimum_os_version,
     extension_safe = True,
     ipa_post_processor = strip_framework,
+    # Release only: debug keeps every symbol exported (debugger, faster edit-build cycle).
+    exported_symbols_lists = select({
+        ":debug": [],
+        "//conditions:default": [":TelegramUIFrameworkExportedSymbols"],
+    }),
     linkopts = [
         "$(location //third-party/boringssl:crypto)",
     ],
@@ -1115,8 +1176,20 @@ swift_library(
     ],
 )
 
+plist_fragment(
+    name = "ShareExtensionEntitlements",
+    extension = "entitlements",
+    template = """
+<key>com.apple.security.application-groups</key>
+<array>
+    <string>group.{telegram_bundle_id}</string>
+</array>
+""".format(telegram_bundle_id = telegram_bundle_id),
+)
+
 ios_extension(
     name = "ShareExtension",
+    entitlements = ":ShareExtensionEntitlements.entitlements",
     bundle_id = "{telegram_bundle_id}.Share".format(
         telegram_bundle_id = telegram_bundle_id,
     ),
@@ -1301,7 +1374,6 @@ swift_library(
         "//submodules/WidgetItemsUtils:WidgetItemsUtils",
         "//submodules/AppLockState:AppLockState",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
-        "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/PasscodeCore",
         "//submodules/OpenSSLEncryptionProvider:OpenSSLEncryptionProvider",
@@ -1421,7 +1493,6 @@ swift_library(
     deps = [
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Postbox:Postbox",
-        "//submodules/TelegramApi:TelegramApi",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/BuildConfig:BuildConfig",
         "//submodules/OpenSSLEncryptionProvider:OpenSSLEncryptionProvider",
@@ -2026,49 +2097,6 @@ ios_ui_test_suite(
 )
 
 # Temporary targets used to simplify build tests
-
-ios_application(
-    name = "spm_build_app",
-    bundle_id = "{telegram_bundle_id}".format(
-        telegram_bundle_id = telegram_bundle_id,
-    ),
-    families = ["iphone", "ipad"],
-    minimum_os_version = minimum_os_version,
-    provisioning_profile = select({
-        ":disableProvisioningProfilesSetting": None,
-        "//conditions:default": "@build_configuration//provisioning:Telegram.mobileprovision",
-    }),
-    entitlements = ":TelegramEntitlements.entitlements",
-    infoplists = [
-        ":TelegramInfoPlist",
-        ":BuildNumberInfoPlist",
-        ":VersionInfoPlist",
-        ":RequiredDeviceCapabilitiesPlist",
-        ":UrlTypesInfoPlist",
-    ],
-    deps = [
-        #"//submodules/Display",
-        #"//submodules/TelegramCore",
-        #"//submodules/FFMpegBinding",
-        #"//third-party/webrtc",
-        #"//third-party/webrtc:webrtc_objc",
-        #"//submodules/AsyncDisplayKit",
-        #"//submodules/ObjCRuntimeUtils",
-        #"//submodules/OpusBinding",
-        #"//third-party/boringssl:ssl",
-        #"//third-party/boringssl:crypto",
-        #"//submodules/TelegramVoip",
-        #"//third-party/recaptcha:RecaptchaEnterprise",
-        "//submodules/TelegramUI",
-    ],
-)
-
-generate_spm(
-    name = "spm_build_root",
-    deps = [
-        ":spm_build_app",
-    ]
-)
 
 ios_application(
     name = "webrtc_build_test",

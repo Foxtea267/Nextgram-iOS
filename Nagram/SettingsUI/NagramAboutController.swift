@@ -115,9 +115,9 @@ public func nagramAboutController(context: AccountContext) -> ViewController {
     let state = context.sharedContext.presentationData
     |> map { presentationData -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let lang = presentationData.strings.baseLanguageCode
-        let version = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String
-            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "—"
+        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+        let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+        let version = buildNumber.map { "\(shortVersion) (\($0))" } ?? shortVersion
         let entries: [NagramAboutEntry] = [
             .description(ngI18n("Nagram.About.Description", lang) + "\n\nNextgram " + version),
             .github(ngI18n("Nagram.About.GitHub", lang)),

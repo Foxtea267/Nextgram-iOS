@@ -16,7 +16,6 @@ swift_library(
         "//submodules/LottieSettings:LottieSettings",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/Display:Display",
-        "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/MtProtoKit:MtProtoKit",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
@@ -86,6 +85,9 @@ swift_library(
         "//submodules/ContextUI:ContextUI",
         "//submodules/Markdown:Markdown",
         "//submodules/UndoUI:UndoUI",
+        # MARK: NAGRAM — Nagram 设置项加入设置搜索
+        "//Nagram/SettingsUI:NagramSettingsUI",
+        "//Nagram/Strings:NagramStrings",
         "//submodules/DeleteChatPeerActionSheetItem:DeleteChatPeerActionSheetItem",
         "//submodules/PhoneNumberFormat:PhoneNumberFormat",
         "//submodules/OpenInExternalAppUI:OpenInExternalAppUI",

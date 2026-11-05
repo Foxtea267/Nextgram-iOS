@@ -11,6 +11,9 @@ swift_library(
     ],
     deps = [
         "//submodules/UrlWhitelist",
+        "//submodules/TelegramUI/Components/NavigationBarNode",
+        "//submodules/TelegramUI/Components/NavigationBarComponent",
+        "//submodules/TelegramUI/Components/NavigationExpansionTransition",
         "//submodules/AccountContext",
         "//submodules/LottieSettings:LottieSettings",
         "//submodules/AccountUtils",
@@ -89,7 +92,6 @@ swift_library(
         "//submodules/TelegramUI/Components/PeerReportScreen",
         "//submodules/PhoneNumberFormat",
         "//submodules/PhotoResources",
-        "//submodules/Postbox",
         "//submodules/PremiumUI",
         "//submodules/PresentationDataUtils",
         "//submodules/QrCode",
@@ -105,6 +107,8 @@ swift_library(
         "//Nagram/Settings:NagramSettings",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/Strings:NagramStrings",
+        "//submodules/ContactListUI", # MARK: NAGRAM — 设置页联系人入口
+        "//submodules/TelegramUI/Components/AdminUserActionsSheet", # MARK: NAGRAM — 成员列表移除时删除全部消息
         "//submodules/ShareController",
         "//submodules/TelegramUI/Components/ShareWithPeersScreen",
         "//submodules/StatisticsUI",
@@ -133,6 +137,8 @@ swift_library(
         "//submodules/WebUI",
         "//submodules/WalletContext",
         "//submodules/TelegramUI/Components/Wallet/WalletSendScreen",
+        "//submodules/TelegramUI/Components/Wallet/PeerWalletScreen",
+        "//submodules/TelegramUI/Components/Wallet/WalletGiftStickerMediaComponent",
         "//submodules/TelegramUI/Components/MultiScaleTextNode",
         "//submodules/GridMessageSelectionNode",
         "//submodules/ChatMessageInteractiveMediaBadge",
@@ -181,6 +187,7 @@ swift_library(
         "//submodules/TelegramUI/Components/TextFieldComponent",
         "//submodules/TelegramUI/Components/EdgeEffect",
         "//submodules/TelegramUI/Components/GlassBackgroundComponent",
+        "//submodules/TelegramUI/Components/SideColumnLayout",
         "//submodules/TelegramUI/Components/AlertComponent",
         "//submodules/TelegramUI/Components/AvatarComponent",
         "//submodules/TelegramUI/Components/AlertComponent/AlertTransferHeaderComponent",

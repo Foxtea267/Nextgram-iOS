@@ -153,6 +153,38 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
         return lhs.sortIndex < rhs.sortIndex
     }
 
+    var tag: ItemListItemTag? {
+        switch self {
+        case .format:
+            return NagramSettingsFocusTag("TranslationLLMAPIFormat")
+        case let .input(_, field, _, _, _, _):
+            switch field {
+            case .baseURL:
+                return NagramSettingsFocusTag("TranslationLLMBaseURL")
+            case .endpoint:
+                return NagramSettingsFocusTag("TranslationLLMEndpoint")
+            case .apiKey:
+                return NagramSettingsFocusTag("TranslationLLMAPIKey")
+            case .model:
+                return NagramSettingsFocusTag("TranslationLLMModel")
+            case .prompt:
+                return nil
+            }
+        case .prompt:
+            return NagramSettingsFocusTag("TranslationLLMPrompt")
+        case .useContext:
+            return NagramSettingsFocusTag("TranslationLLMUseContext")
+        case .temperature:
+            return NagramSettingsFocusTag("TranslationLLMTemperature")
+        case .fetchModels:
+            return NagramSettingsFocusTag("TranslationLLMFetchModels")
+        case .testModel:
+            return NagramSettingsFocusTag("TranslationLLMTestModel")
+        case .header, .fetchedModels, .footer:
+            return nil
+        }
+    }
+
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! NagramLLMTranslationArguments
         switch self {
@@ -161,30 +193,30 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
         case let .format(section, title, label):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: label, sectionId: section, style: .blocks, action: {
                 arguments.chooseFormat()
-            })
+            }, tag: self.tag)
         case let .input(section, field, title, text, placeholder, isSecret):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), clearType: .onFocus, sectionId: section, textUpdated: { value in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { value in
                 arguments.inputUpdated(field, value)
             }, action: {
             })
         case let .prompt(section, text, placeholder):
             return ItemListMultilineInputItem(presentationData: presentationData, systemStyle: .glass, text: text, placeholder: placeholder, maxLength: nil, sectionId: section, style: .blocks, capitalization: false, autocorrection: false, returnKeyType: .default, minimalHeight: 240.0, maximalHeight: 240.0, textUpdated: { value in
                 arguments.inputUpdated(.prompt, value)
-            })
+            }, tag: self.tag)
         case let .useContext(section, title, value):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, sectionId: section, style: .blocks, updated: { value in
                 arguments.updateUseContext(value)
-            })
+            }, tag: self.tag)
         case let .temperature(section, title, minValue, maxValue, value):
             return NagramSliderItem(theme: presentationData.theme, minValue: minValue, maxValue: maxValue, value: value, title: title, valueText: { value in
                 return String(format: "%.1f", Double(value) / 10.0)
             }, sectionId: section, updated: { value in
                 arguments.updateTemperature(value)
-            })
+            }, tag: self.tag)
         case let .fetchModels(section, title):
             return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: {
                 arguments.fetchModels()
-            })
+            }, tag: self.tag)
         case let .fetchedModels(section, title, label):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title, label: label, sectionId: section, style: .blocks, action: {
                 arguments.selectFetchedModel()
@@ -192,7 +224,7 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
         case let .testModel(section, title):
             return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: {
                 arguments.testModel()
-            })
+            }, tag: self.tag)
         case let .footer(section, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
@@ -298,7 +330,7 @@ private func nagramLLMTranslationEntries(presentationData: PresentationData, isF
     return entries
 }
 
-public func nagramLLMTranslationSettingsController(context: AccountContext) -> ViewController {
+public func nagramLLMTranslationSettingsController(context: AccountContext, focusOnRow: String? = nil) -> ViewController {
     let updatePromise = ValuePromise<Int32>(0, ignoreRepeated: false)
     var updateValue: Int32 = 0
     let bump: () -> Void = {
@@ -440,7 +472,7 @@ public func nagramLLMTranslationSettingsController(context: AccountContext) -> V
         let lang = presentationData.strings.baseLanguageCode
         let entries = nagramLLMTranslationEntries(presentationData: presentationData, isFetchingModels: isFetchingModels, fetchedModels: fetchedModels, fetchErrorKey: fetchErrorKey, isTestingModel: isTestingModel)
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(ngI18n("Nagram.TranslationLLMSettings", lang)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: true)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, initialScrollToItem: nagramFocusScrollToItem(entries: entries, focusOnRow: focusOnRow), animateChanges: true)
         return (controllerState, (listState, arguments))
     }
     |> afterDisposed {
@@ -450,6 +482,7 @@ public func nagramLLMTranslationSettingsController(context: AccountContext) -> V
 
     let controller = ItemListController(context: context, state: signal)
     controller.navigationPresentation = .default
+    nagramHighlightFocusedRow(controller: controller, focusOnRow: focusOnRow)
     presentControllerImpl = { [weak controller] c, presentationArguments in
         controller?.present(c, in: .window(.root), with: presentationArguments)
     }

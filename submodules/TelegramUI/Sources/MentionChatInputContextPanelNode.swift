@@ -63,6 +63,8 @@ enum MentionChatInputContextPanelMode {
 
 final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
     let mode: MentionChatInputContextPanelMode
+    // MARK: NAGRAM — 单手模式下聊天内搜索框在底部，按成员搜索的候选列表也从输入区上方往上展开，而不是从顶部垂下。
+    let nagramAnchoredAtBottom: Bool
     
     private let backgroundView: GlassBackgroundView
     private let listView: ListView
@@ -74,8 +76,9 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
     private var enqueuedTransitions: [(CommandChatInputContextPanelTransition, Bool)] = []
     private var validLayout: (CGSize, CGFloat, CGFloat, CGFloat)?
     
-    init(context: AccountContext, theme: PresentationTheme, strings: PresentationStrings, fontSize: PresentationFontSize, mode: MentionChatInputContextPanelMode, chatPresentationContext: ChatPresentationContext) {
+    init(context: AccountContext, theme: PresentationTheme, strings: PresentationStrings, fontSize: PresentationFontSize, mode: MentionChatInputContextPanelMode, chatPresentationContext: ChatPresentationContext, nagramAnchoredAtBottom: Bool = false) {
         self.mode = mode
+        self.nagramAnchoredAtBottom = nagramAnchoredAtBottom
         
         self.backgroundView = GlassBackgroundView()
         self.backgroundView.layer.anchorPoint = CGPoint()
@@ -96,7 +99,7 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
         self.view.addSubview(self.backgroundView)
         self.addSubnode(self.listView)
         
-        if mode == .search {
+        if mode == .search && !nagramAnchoredAtBottom { // MARK: NAGRAM
             self.transform = CATransform3DMakeRotation(CGFloat(Double.pi), 0.0, 0.0, 1.0)
         }
         
@@ -118,7 +121,45 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
             self.backgroundView.isHidden = false
             self.backgroundView.layer.position = CGPoint(x: 0.0, y: topOffset)
         }
+
+        // MARK: NAGRAM — 底部搜索框的成员候选列表。
+        if mode == .search && nagramAnchoredAtBottom {
+            // 列表区域比面板上沿多伸出一段，在这段里渐隐，看起来是滑到了面板后面（见 updateLayout）。
+            let fadeMaskLayer = CAGradientLayer()
+            fadeMaskLayer.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
+            self.layer.mask = fadeMaskLayer
+            self.nagramFadeMaskLayer = fadeMaskLayer
+            
+            // 从收起位置往下拉再松手，退出按成员搜索。越界拖动有阻尼，所以往下甩一下也算。
+            self.listView.shouldStopScrolling = { [weak self] velocity in
+                self?.nagramLastDragVelocity = velocity
+                return false
+            }
+            self.listView.endedInteractiveDragging = { [weak self] _ in
+                guard let self else {
+                    return
+                }
+                // 第一行停在列表顶部留白处时偏移为 0，往下拉越过它时为负；速度为负表示手指往下。
+                guard case let .known(offset) = self.listView.visibleContentOffset() else {
+                    return
+                }
+                let isFling = offset < -MentionChatInputContextPanelNode.nagramPullDownFlingDistance && self.nagramLastDragVelocity < -MentionChatInputContextPanelNode.nagramPullDownFlingVelocity
+                if offset < -MentionChatInputContextPanelNode.nagramPullDownToDismissDistance || isFling {
+                    // 停在松手的位置，不让列表先弹回去再被收起。
+                    self.listView.stopScrolling()
+                    self.interfaceInteraction?.toggleMembersSearch(false)
+                }
+            }
+        }
     }
+    
+    static let nagramBottomFadeHeight: CGFloat = 24.0
+    private static let nagramPullDownToDismissDistance: CGFloat = 40.0
+    private static let nagramPullDownFlingDistance: CGFloat = 8.0
+    // UIScrollView 的速度单位是 pt/ms。
+    private static let nagramPullDownFlingVelocity: CGFloat = 0.5
+    private var nagramFadeMaskLayer: CAGradientLayer?
+    private var nagramLastDragVelocity: CGFloat = 0.0
     
     func updateResults(_ results: [EnginePeer]) {
         self.currentResults = results
@@ -141,7 +182,7 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
     private func updateToEntries(entries: [MentionChatInputContextPanelEntry], forceUpdate: Bool) {
         let firstTime = self.currentEntries == nil
         let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
-        let transition = preparedTransition(from: self.currentEntries ?? [], to: entries, context: self.context, presentationData: presentationData, inverted: self.mode == .search, forceUpdate: forceUpdate, setPeerIdRevealed: { [weak self] peerId in
+        let transition = preparedTransition(from: self.currentEntries ?? [], to: entries, context: self.context, presentationData: presentationData, inverted: self.mode == .search && !self.nagramAnchoredAtBottom, forceUpdate: forceUpdate, setPeerIdRevealed: { [weak self] peerId in
             if let strongSelf = self {
                 strongSelf.revealedPeerId = peerId
                 strongSelf.updateResults(strongSelf.currentResults)
@@ -261,6 +302,16 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
             }
         }
         
+        // MARK: NAGRAM — 底部渐隐：最下面 nagramBottomFadeHeight 的区域淡出，这段在面板后面，停住时各行不受影响。
+        if let fadeMaskLayer = self.nagramFadeMaskLayer, size.height > 0.0 {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            fadeMaskLayer.frame = CGRect(origin: CGPoint(), size: size)
+            let fadeStart = max(0.0, size.height - MentionChatInputContextPanelNode.nagramBottomFadeHeight) / size.height
+            fadeMaskLayer.locations = [0.0, NSNumber(value: Double(fadeStart)), 1.0]
+            CATransaction.commit()
+        }
+        
         transition.updateBounds(layer: self.backgroundView.layer, bounds: CGRect(origin: CGPoint(), size: CGSize(width: size.width, height: size.height + 32.0)))
         self.backgroundView.update(
             size: self.backgroundView.bounds.size,
@@ -291,6 +342,10 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
     }
     
     override func animateOut(completion: @escaping () -> Void) {
+        if self.nagramAnchoredAtBottom {
+            // MARK: NAGRAM — 停在当前位置再收起，不让越界拖动的回弹和收起动画叠在一起。
+            self.listView.stopScrolling()
+        }
         var topItemOffset: CGFloat?
         self.listView.forEachItemNode { itemNode in
             if topItemOffset == nil {
@@ -301,10 +356,12 @@ final class MentionChatInputContextPanelNode: ChatInputContextPanelNode {
         if let topItemOffset {
             let offset = (self.listView.bounds.size.height - topItemOffset)
             
-            self.listView.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: offset), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, additive: true, completion: { _ in
+            // MARK: NAGRAM — 底部模式不用弹簧曲线：它会冲过头再回弹。
+            let timingFunction = self.nagramAnchoredAtBottom ? CAMediaTimingFunctionName.easeInEaseOut.rawValue : kCAMediaTimingFunctionSpring
+            self.listView.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: offset), duration: 0.3, timingFunction: timingFunction, removeOnCompletion: false, additive: true, completion: { _ in
                 completion()
             })
-            self.backgroundView.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: offset), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, additive: true)
+            self.backgroundView.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: offset), duration: 0.3, timingFunction: timingFunction, removeOnCompletion: false, additive: true)
         } else {
             completion()
         }

@@ -198,48 +198,103 @@ private enum ChatTextFormattingToolbarAction: Int, CaseIterable, Hashable {
     case underline
     case code
 
+    init(_ id: NagramTextStyleMenuItemId) {
+        switch id {
+        case .quote:
+            self = .quote
+        case .spoiler:
+            self = .spoiler
+        case .bold:
+            self = .bold
+        case .italic:
+            self = .italic
+        case .monospace:
+            self = .monospace
+        case .link:
+            self = .link
+        case .date:
+            self = .date
+        case .strikethrough:
+            self = .strikethrough
+        case .underline:
+            self = .underline
+        case .code:
+            self = .code
+        }
+    }
+
+    var nagramId: NagramTextStyleMenuItemId {
+        switch self {
+        case .quote:
+            return .quote
+        case .spoiler:
+            return .spoiler
+        case .bold:
+            return .bold
+        case .italic:
+            return .italic
+        case .monospace:
+            return .monospace
+        case .link:
+            return .link
+        case .date:
+            return .date
+        case .strikethrough:
+            return .strikethrough
+        case .underline:
+            return .underline
+        case .code:
+            return .code
+        }
+    }
+
+    /// The styles the user shows, in their order, among those the chat allows (a secret chat has no
+    /// spoilers, dates, quotes or code blocks).
     static func visibleActions(hasSpoilers: Bool, hasQuotes: Bool) -> [ChatTextFormattingToolbarAction] {
-        var result: [ChatTextFormattingToolbarAction] = []
-        if hasQuotes {
-            result.append(.quote)
+        return NagramSettings.shared.enabledTextStyleToolbarItems.map(ChatTextFormattingToolbarAction.init).filter { action in
+            switch action {
+            case .spoiler, .date:
+                return hasSpoilers
+            case .quote, .code:
+                return hasQuotes
+            default:
+                return true
+            }
         }
-        if hasSpoilers {
-            result.append(.spoiler)
-        }
-        result.append(contentsOf: [.bold, .italic, .monospace, .link])
-        if hasSpoilers {
-            result.append(.date)
-        }
-        result.append(contentsOf: [.strikethrough, .underline])
-        if hasQuotes {
-            result.append(.code)
-        }
-        return result
     }
 
     var title: String {
+        return self.nagramId.glyph
+    }
+
+    func attributedIcon(color: UIColor, fontSize: CGFloat = 20.0) -> NSAttributedString {
+        let font: UIFont
         switch self {
-        case .quote:
-            return "❝"
-        case .spoiler:
-            return "||"
         case .bold:
-            return "B"
+            font = UIFont.boldSystemFont(ofSize: fontSize)
         case .italic:
-            return "I"
-        case .monospace:
-            return "`"
-        case .link:
-            return "↗"
-        case .date:
-            return "◷"
-        case .strikethrough:
-            return "S"
-        case .underline:
-            return "U"
+            font = UIFont.italicSystemFont(ofSize: fontSize)
         case .code:
-            return "</>"
+            font = UIFont.systemFont(ofSize: fontSize * 0.7, weight: .semibold)
+        case .monospace:
+            font = Font.monospace(fontSize)
+        default:
+            font = UIFont.systemFont(ofSize: fontSize, weight: .semibold)
         }
+
+        var attributes: [NSAttributedString.Key: Any] = [
+            .font: font,
+            .foregroundColor: color
+        ]
+        switch self {
+        case .underline:
+            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        case .strikethrough:
+            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        default:
+            break
+        }
+        return NSAttributedString(string: self.title, attributes: attributes)
     }
 
     func accessibilityLabel(strings: PresentationStrings) -> String {
@@ -325,7 +380,7 @@ private final class ChatTextFormattingActionButton: UIControl {
 
         self.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.16 : 0.10) : UIColor.clear
         self.iconBackgroundView.backgroundColor = isSelected ? accentColor.withAlphaComponent(theme.overallDarkAppearance ? 0.26 : 0.15) : theme.chat.inputPanel.inputBackgroundColor.withAlphaComponent(theme.overallDarkAppearance ? 0.65 : 0.82)
-        self.iconLabel.attributedText = self.attributedIcon(color: effectiveForegroundColor)
+        self.iconLabel.attributedText = self.action.attributedIcon(color: effectiveForegroundColor)
         self.titleLabel.attributedText = NSAttributedString(string: self.action.accessibilityLabel(strings: strings), font: Font.regular(11.0), textColor: effectiveForegroundColor)
         self.alpha = isEnabled ? 1.0 : 0.55
     }
@@ -348,35 +403,6 @@ private final class ChatTextFormattingActionButton: UIControl {
         self.titleLabel.frame = CGRect(x: 4.0, y: titleTop, width: max(1.0, size.width - 8.0), height: max(1.0, size.height - titleTop - 4.0))
     }
 
-    private func attributedIcon(color: UIColor) -> NSAttributedString {
-        let font: UIFont
-        switch self.action {
-        case .bold:
-            font = UIFont.boldSystemFont(ofSize: 20.0)
-        case .italic:
-            font = UIFont.italicSystemFont(ofSize: 20.0)
-        case .code:
-            font = UIFont.systemFont(ofSize: 14.0, weight: .semibold)
-        case .monospace:
-            font = Font.monospace(20.0)
-        default:
-            font = UIFont.systemFont(ofSize: 20.0, weight: .semibold)
-        }
-
-        var attributes: [NSAttributedString.Key: Any] = [
-            .font: font,
-            .foregroundColor: color
-        ]
-        switch self.action {
-        case .underline:
-            attributes[.underlineStyle] = NSUnderlineStyle.single.rawValue
-        case .strikethrough:
-            attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
-        default:
-            break
-        }
-        return NSAttributedString(string: self.action.title, attributes: attributes)
-    }
 }
 
 // MARK: NAGRAM — 键盘区域文本格式面板
@@ -530,6 +556,141 @@ private final class ChatTextFormattingInputView: UIInputView, UIInputViewAudioFe
     }
 }
 
+// MARK: NAGRAM — 输入框下方的常驻格式条，与键盘区格式面板共用动作、选中态和执行逻辑。
+private final class ChatTextFormattingBarButton: UIControl {
+    let action: ChatTextFormattingToolbarAction
+    private let label = UILabel()
+
+    init(action: ChatTextFormattingToolbarAction) {
+        self.action = action
+        super.init(frame: CGRect())
+        self.isAccessibilityElement = true
+        self.layer.cornerRadius = 14.0
+        self.label.textAlignment = .center
+        self.label.isUserInteractionEnabled = false
+        self.addSubview(self.label)
+    }
+
+    required init?(coder: NSCoder) {
+        preconditionFailure()
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            self.label.alpha = self.isHighlighted ? 0.5 : 1.0
+        }
+    }
+
+    func update(theme: PresentationTheme, strings: PresentationStrings, isEnabled: Bool, isSelected: Bool) {
+        self.isEnabled = isEnabled
+        self.accessibilityLabel = self.action.accessibilityLabel(strings: strings)
+        self.accessibilityTraits = isSelected ? [.button, .selected] : [.button]
+
+        // The bar is a glass capsule over the chat wallpaper, like the attachment button, so its glyphs use
+        // the same opaque panelControlColor; inputControlColor is half transparent and washes out there.
+        // The selected style is the send button's solid fill, which stays legible on any wallpaper.
+        let foregroundColor = theme.chat.inputPanel.panelControlColor
+        let color: UIColor
+        if !isEnabled {
+            color = foregroundColor.withAlphaComponent(0.45)
+        } else if isSelected {
+            color = theme.list.itemCheckColors.foregroundColor
+        } else {
+            color = foregroundColor
+        }
+        self.backgroundColor = isSelected && isEnabled ? theme.list.itemCheckColors.fillColor : .clear
+        self.label.attributedText = self.action.attributedIcon(color: color, fontSize: 17.0)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.label.frame = self.bounds
+    }
+}
+
+private final class ChatTextFormattingBarView: UIView {
+    static let height: CGFloat = 40.0
+
+    let backgroundView: GlassBackgroundView
+    private let buttonsContainer = UIView()
+    private var buttons: [ChatTextFormattingToolbarAction: ChatTextFormattingBarButton] = [:]
+    private var actions: [ChatTextFormattingToolbarAction] = []
+    private(set) var glassTintColor: GlassBackgroundView.TintColor = .init(kind: .panel)
+    private var glassParams: (size: CGSize, isDark: Bool)?
+    // Native glass renders nothing while an ancestor fades in from alpha 0, so the bar never fades
+    // itself: the glass materializes through `isVisible` and only the buttons fade.
+    private var isShown = false
+
+    var pressed: ((ChatTextFormattingToolbarAction) -> Void)?
+
+    override init(frame: CGRect) {
+        self.backgroundView = GlassBackgroundView(frame: CGRect())
+        super.init(frame: frame)
+        self.addSubview(self.backgroundView)
+        self.buttonsContainer.alpha = 0.0
+        self.backgroundView.contentView.addSubview(self.buttonsContainer)
+    }
+
+    required init?(coder: NSCoder) {
+        preconditionFailure()
+    }
+
+    func update(size: CGSize, theme: PresentationTheme, strings: PresentationStrings, tintColor: GlassBackgroundView.TintColor, actions: [ChatTextFormattingToolbarAction], enabledActions: Set<ChatTextFormattingToolbarAction>, selectedActions: Set<ChatTextFormattingToolbarAction>, transition: ComponentTransition) {
+        self.actions = actions
+        self.glassTintColor = tintColor
+        self.glassParams = (size, theme.overallDarkAppearance)
+        self.backgroundView.update(size: size, cornerRadius: size.height * 0.5, isDark: theme.overallDarkAppearance, tintColor: tintColor, isInteractive: true, isVisible: self.isShown, transition: transition)
+        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(), size: size))
+        transition.setFrame(view: self.buttonsContainer, frame: CGRect(origin: CGPoint(), size: size))
+
+        let visible = Set(actions)
+        for action in actions {
+            let button: ChatTextFormattingBarButton
+            if let current = self.buttons[action] {
+                button = current
+            } else {
+                button = ChatTextFormattingBarButton(action: action)
+                button.addTarget(self, action: #selector(self.buttonPressed(_:)), for: .touchUpInside)
+                self.buttons[action] = button
+                self.buttonsContainer.addSubview(button)
+            }
+            button.isHidden = false
+            button.update(theme: theme, strings: strings, isEnabled: enabledActions.contains(action), isSelected: selectedActions.contains(action))
+        }
+        for (action, button) in self.buttons where !visible.contains(action) {
+            button.isHidden = true
+        }
+
+        guard !actions.isEmpty else {
+            return
+        }
+        let sideInset: CGFloat = 6.0
+        let step = (size.width - sideInset * 2.0) / CGFloat(actions.count)
+        for (index, action) in actions.enumerated() {
+            guard let button = self.buttons[action] else {
+                continue
+            }
+            let buttonWidth = min(44.0, step - 2.0)
+            button.frame = CGRect(x: floorToScreenPixels(sideInset + step * CGFloat(index) + (step - buttonWidth) * 0.5), y: 6.0, width: buttonWidth, height: size.height - 12.0)
+        }
+    }
+
+    func setShown(_ isShown: Bool, transition: ComponentTransition, completion: (() -> Void)? = nil) {
+        self.isShown = isShown
+        self.isUserInteractionEnabled = isShown
+        if let glassParams = self.glassParams {
+            self.backgroundView.update(size: glassParams.size, cornerRadius: glassParams.size.height * 0.5, isDark: glassParams.isDark, tintColor: self.glassTintColor, isInteractive: true, isVisible: isShown, transition: transition)
+        }
+        transition.setAlpha(view: self.buttonsContainer, alpha: isShown ? 1.0 : 0.0, completion: { _ in
+            completion?()
+        })
+    }
+
+    @objc private func buttonPressed(_ button: ChatTextFormattingBarButton) {
+        self.pressed?(button.action)
+    }
+}
+
 public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDelegate, ChatInputTextNodeDelegate {
     private enum AudioRecordingRemoveAnimationState {
         case recordingToAttachButton
@@ -624,12 +785,20 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     private var enableBounceAnimations: Bool = false
     // Rich-input configuration from the server flag `ios_rich_input_mode` (Double): 0 / absent (default) is the
     // dual-field switch — the composer defaults to the legacy field and latches to native only when content
-    // becomes legacy-non-representable; 1 is always-native; 2 is legacy-only. The `forceNewTextInput` experimental
-    // flag (Debug Settings ▸ "Force Text Field v2") forces always-native regardless of `ios_rich_input_mode`.
+    // becomes legacy-non-representable; 1 is always-native; 2 is legacy-only. The `useInputDecEngine` experimental
+    // flag (Debug Settings ▸ "Input V3") forces always-native regardless of `ios_rich_input_mode`.
     // `enableRichTextInput` = native is permitted at all (false only in legacy-only mode);
-    // `alwaysUseNativeInput` = native from the start (mode 1 or `forceNewTextInput`). See `desiredUseNative(for:)`.
+    // `alwaysUseNativeInput` = native from the start (mode 1 or `useInputDecEngine`). See `desiredUseNative(for:)`.
     private var enableRichTextInput: Bool = false
     private var alwaysUseNativeInput: Bool = false
+    // Which input backend a NATIVE composer is built for — orthogonal to the two flags above, which
+    // decide WHETHER the native composer is used at all. Production stays `.legacy`; Debug Settings ▸
+    // "Text Field v2: InputDec backend" (`inputDecTextBackend`) selects `.inputDecIfSupported`, which
+    // itself falls back to legacy on a runtime the InputDec backend cannot drive.
+    private var richTextInputBackendPreference: RichTextEditorInputBackendPreference = .legacy
+    /// Debug Settings ▸ "Input V3". Selects the engine-backed editor
+    /// rather than a backend of the legacy one — a different type, read once at panel setup.
+    private var useInputDecEngineEditor: Bool = false
     
     public var displayAttachmentMenu: () -> Void = { }
     public var sendMessage: () -> Void = { }
@@ -664,6 +833,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     // MARK: NAGRAM — 键盘区域文本格式面板
     private var textFormattingInputView: ChatTextFormattingInputView?
     private var isTextFormattingPanelExpanded = false
+    // MARK: NAGRAM — 常驻格式条
+    private var textFormattingBarView: ChatTextFormattingBarView?
     
     private var theme: PresentationTheme?
     private var strings: PresentationStrings?
@@ -761,7 +932,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     
     // MARK: NAGRAM — 文本格式面板按钮插在 emoji / stickers 按钮旁边。
     private func effectiveAccessoryItems(_ accessoryItems: [ChatTextInputAccessoryItem]) -> [ChatTextInputAccessoryItem] {
-        guard NagramSettings.shared.showTextStyleToolbar else {
+        guard NagramSettings.shared.textStyleToolbarMode.showsPanel, !NagramSettings.shared.enabledTextStyleToolbarItems.isEmpty else {
             return accessoryItems
         }
         var result = accessoryItems
@@ -1171,8 +1342,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }*/
         
         // `ios_rich_input_mode` (Double): 0 / absent = dual-field switch (legacy default, latch to native on
-        // non-representable content); 1 = always native; 2 = legacy only. The `forceNewTextInput` experimental
-        // flag (Debug Settings ▸ "Force Text Field v2") forces always-native (enableRichTextInput + alwaysUseNativeInput).
+        // non-representable content); 1 = always native; 2 = legacy only. The `useInputDecEngine` experimental
+        // flag, below, forces always-native (enableRichTextInput + alwaysUseNativeInput) with the engine editor.
         self.enableRichTextInput = true
         self.alwaysUseNativeInput = false
         if let data = self.context?.currentAppConfiguration.with({ $0 }).data, let mode = data["ios_rich_input_mode"] as? Double {
@@ -1182,9 +1353,18 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                 self.enableRichTextInput = false
             }
         }
-        if context.sharedContext.immediateExperimentalUISettings.forceNewTextInput {
+        if context.sharedContext.immediateExperimentalUISettings.inputDecTextBackend {
+            self.richTextInputBackendPreference = .inputDecIfSupported
+        }
+        // Below iOS 18.4 the engine editor cannot be built (`RichTextEditorChatInputNode` checks the
+        // same availability), so the flag must change nothing there — not even force the composer
+        // native, which is what setting the two flags below without the check did.
+        if context.sharedContext.immediateExperimentalUISettings.useInputDecEngine, #available(iOS 18.4, *) {
+            // Rich input must be on for the composer to build a rich node at all; the engine editor
+            // is a choice WITHIN that, not an alternative to it.
             self.enableRichTextInput = true
             self.alwaysUseNativeInput = true
+            self.useInputDecEngineEditor = true
         }
         
         self.sendAsAvatarContainerNode.activated = { [weak self] gesture, _ in
@@ -1463,7 +1643,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     /// Decide which backend the given content requires. One-way latch: once the native rich-text backend is
     /// active it stays active for the panel's lifetime (never switches back to legacy). Legacy-only mode
     /// (`ios_rich_input_mode == 2`) always uses legacy; always-native mode (`ios_rich_input_mode == 1` or the
-    /// `forceNewTextInput` experimental flag) always uses native; otherwise (dual-field switch) native is used
+    /// `useInputDecEngine` experimental flag) always uses native; otherwise (dual-field switch) native is used
     /// only once the content is not representable in the legacy backend.
     private func desiredUseNative(for content: ChatInputContent) -> Bool {
         if self.richTextInputNode?.usesNativeRichTextEngine == true {
@@ -1512,7 +1692,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     private func loadTextInputNode(useNative: Bool = false) {
         let richTextInputNode: ChatRichTextInputNode
         if useNative {
-            richTextInputNode = RichTextEditorChatInputNode(strings: self.presentationInterfaceState?.strings ?? defaultPresentationStrings)
+            richTextInputNode = RichTextEditorChatInputNode(strings: self.presentationInterfaceState?.strings ?? defaultPresentationStrings, inputBackend: self.richTextInputBackendPreference, useInputDecEngine: self.useInputDecEngineEditor)
         } else {
             richTextInputNode = makeChatRichTextInputNode()
         }
@@ -1550,12 +1730,20 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             self?.sendButtonPressed()
             return false
         }
+        if let textView = richTextInputNode.inputView as? ChatInputTextView {
+            textView.shouldDeleteBackward = { [weak self] in
+                guard let self else {
+                    return true
+                }
+                return !self.unquoteParagraphOnBackspaceAtBlockStart()
+            }
+        }
         if #available(iOS 16.0, *) {
             richTextInputNode.contextMenuItemsProvider = { [weak self] defaultElements in
                 return self?.buildRichTextContextMenuElements(defaultElements: defaultElements) ?? defaultElements
             }
         }
-        richTextInputNode.canPasteMedia = { [weak self] in self?.handlePastedMedia(perform: false) ?? false }
+        richTextInputNode.canPasteMedia = { Self.pasteboardMayHoldMedia() }
         richTextInputNode.onPasteMedia = { [weak self] in self?.handlePastedMedia(perform: true) ?? false }
         richTextInputNode.pastedMarkdownFragmentParser = { [weak self] text in
             guard let self, let context = self.context, let content = self.pastedMarkdownParser?(context, text) else {
@@ -1648,6 +1836,8 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             richTextInputNode.asNode.frame = CGRect(origin: CGPoint(), size: self.textInputNodeClippingContainer.bounds.size)
             richTextInputNode.textContainerInset = textInputNodeLayout.insets
             richTextInputNode.textFieldFrame = textInputNodeLayout.frame
+            // `.none`, deliberately: this re-applies the layout already committed, so it says nothing
+            // new about the caret. The pass that decides a new field height is the one that asks.
             richTextInputNode.updateLayout(size: textInputNodeLayout.frame.size)
             richTextInputNode.inputView.layoutIfNeeded()
             self.updateSpoiler()
@@ -1714,6 +1904,20 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
                 if strongSelf.richTextInputNode?.isInputFirstResponder == true {
                     Queue.mainQueue().after(0.05) {
                         strongSelf.ensureFocusedOnTap()
+                    }
+                } else if strongSelf.richTextInputNode?.usesNativeRichTextEngine == true {
+                    // The engine editor focuses ITSELF from its own text tap, and that tap must find
+                    // the field unfocused. Focusing here first (this fires from `touchesEnded`, before
+                    // UIKit's text multi-tap action) made that action see a first responder whose
+                    // caret was already under the finger — a draft or seed leaves it at the end, where
+                    // one taps to continue typing — and it could read the focusing tap as a tap ON the
+                    // caret and raise Paste / Select / Select All. Deferring one turn was not enough:
+                    // the multi-tap action arrives in a later event. So this only catches a tap the
+                    // editor did not take.
+                    Queue.mainQueue().after(0.3) {
+                        if strongSelf.richTextInputNode?.isInputFirstResponder != true {
+                            strongSelf.ensureFocusedOnTap()
+                        }
                     }
                 } else {
                     strongSelf.ensureFocusedOnTap()
@@ -2134,7 +2338,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.sendingTextDisabled = sendingTextDisabled
         
         // MARK: NAGRAM — 禁用发送、录音或关闭设置时收起格式面板。
-        if self.isTextFormattingPanelExpanded && (sendingTextDisabled || interfaceState.inputTextPanelState.mediaRecordingState != nil || !NagramSettings.shared.showTextStyleToolbar) {
+        if self.isTextFormattingPanelExpanded && (sendingTextDisabled || interfaceState.inputTextPanelState.mediaRecordingState != nil || !NagramSettings.shared.textStyleToolbarMode.showsPanel) {
             self.collapseTextFormattingPanel(switchToKeyboard: false, requestLayout: false)
         }
 
@@ -3561,7 +3765,12 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         if let richTextInputNode = self.richTextInputNode {
             richTextInputNode.textContainerInset = textInputViewRealInsets
             richTextInputNode.textFieldFrame = actualTextFieldFrame
-            richTextInputNode.updateLayout(size: textFieldFrame.size)
+            // THE pass that applies the field's new height, so it is the one the caret's visibility
+            // depends on: the editor no longer scrolls on its own when the content grows, and the
+            // reveal here is computed against the height being applied rather than the one on screen.
+            // `.immediate` because the panel is already animating that height — animating the offset
+            // inside it would animate the text twice.
+            richTextInputNode.updateLayout(size: textFieldFrame.size, caretReveal: .ifNeeded(.immediate))
             self.updateInputField(textInputFrame: textFieldFrame, transition: ComponentTransition(transition))
             if shouldUpdateLayout {
                 richTextInputNode.layoutInputField()
@@ -4252,6 +4461,9 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             }
         }
 
+        // MARK: NAGRAM — 常驻格式条排在输入框下方，高度计入面板。
+        contentHeight += self.updateTextFormattingBar(frame: CGRect(x: hideOffset.x + leftInset + 8.0, y: textInputContainerBackgroundFrame.maxY + 6.0, width: max(0.0, width - leftInset - rightInset - 16.0), height: ChatTextFormattingBarView.height), interfaceState: interfaceState, tintColor: defaultGlassTintColor, transition: transition)
+
         let containerFrame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: contentHeight + 64.0))
         transition.updateFrame(view: self.glassBackgroundContainer, frame: containerFrame)
         self.glassBackgroundContainer.update(size: containerFrame.size, isDark: interfaceState.theme.overallDarkAppearance, transition: ComponentTransition(transition))
@@ -4443,7 +4655,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     }
 
     private func expandTextFormattingPanel() {
-        guard NagramSettings.shared.showTextStyleToolbar, !self.sendingTextDisabled else {
+        guard NagramSettings.shared.textStyleToolbarMode.showsPanel, !self.sendingTextDisabled else {
             return
         }
         if self.richTextInputNode == nil {
@@ -4634,6 +4846,57 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
         let toolbarState = self.textFormattingToolbarState(selectedRange: richTextInputNode.selectedRange, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes)
         self.ensureTextFormattingInputView().update(theme: presentationInterfaceState.theme, strings: presentationInterfaceState.strings, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes, enabledActions: toolbarState.enabledActions, selectedActions: toolbarState.selectedActions)
+    }
+
+    // MARK: NAGRAM — 常驻格式条：返回它在面板中占用的高度（不显示时为 0）。
+    private func updateTextFormattingBar(frame: CGRect, interfaceState: ChatPresentationInterfaceState, tintColor: GlassBackgroundView.TintColor, transition: ContainedViewLayoutTransition) -> CGFloat {
+        let isSecretChat = interfaceState.chatLocation.peerId?.namespace == Namespaces.Peer.SecretChat
+        let isVisible = NagramSettings.shared.textStyleToolbarMode.showsBar
+            && !ChatTextFormattingToolbarAction.visibleActions(hasSpoilers: !isSecretChat, hasQuotes: !isSecretChat).isEmpty
+            && !self.sendingTextDisabled
+            && !self.extendedSearchLayout
+            && interfaceState.inputTextPanelState.mediaRecordingState == nil
+            && interfaceState.interfaceState.mediaDraftState == nil
+            && self.richTextInputNode?.isInputFirstResponder == true
+
+        guard isVisible else {
+            if let barView = self.textFormattingBarView {
+                self.textFormattingBarView = nil
+                barView.setShown(false, transition: ComponentTransition(transition), completion: { [weak barView] in
+                    barView?.removeFromSuperview()
+                })
+            }
+            return 0.0
+        }
+
+        if let barView = self.textFormattingBarView {
+            transition.updateFrame(view: barView, frame: frame)
+            self.updateTextFormattingBarContent(size: frame.size, interfaceState: interfaceState, tintColor: tintColor, transition: ComponentTransition(transition))
+        } else {
+            let barView = ChatTextFormattingBarView(frame: frame)
+            barView.pressed = { [weak self] action in
+                self?.performTextFormattingToolbarAction(action)
+            }
+            self.textFormattingBarView = barView
+            self.glassBackgroundContainer.contentView.addSubview(barView)
+            self.updateTextFormattingBarContent(size: frame.size, interfaceState: interfaceState, tintColor: tintColor, transition: .immediate)
+            barView.setShown(true, transition: ComponentTransition(transition))
+        }
+        return frame.height + 6.0
+    }
+
+    private func updateTextFormattingBarContent(size: CGSize, interfaceState: ChatPresentationInterfaceState, tintColor: GlassBackgroundView.TintColor, transition: ComponentTransition) {
+        guard let barView = self.textFormattingBarView, let richTextInputNode = self.richTextInputNode else {
+            return
+        }
+        var hasSpoilers = true
+        var hasQuotes = true
+        if interfaceState.chatLocation.peerId?.namespace == Namespaces.Peer.SecretChat {
+            hasSpoilers = false
+            hasQuotes = false
+        }
+        let toolbarState = self.textFormattingToolbarState(selectedRange: richTextInputNode.selectedRange, hasSpoilers: hasSpoilers, hasQuotes: hasQuotes)
+        barView.update(size: size, theme: interfaceState.theme, strings: interfaceState.strings, tintColor: tintColor, actions: ChatTextFormattingToolbarAction.visibleActions(hasSpoilers: hasSpoilers, hasQuotes: hasQuotes), enabledActions: toolbarState.enabledActions, selectedActions: toolbarState.selectedActions, transition: transition)
     }
 
     // MARK: NAGRAM — 可视化文本样式工具栏
@@ -5590,6 +5853,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             if self.isTextFormattingPanelExpanded {
                 self.updateTextFormattingInputView()
             }
+            // MARK: NAGRAM — 常驻格式条跟随选区刷新按钮状态
+            if let barView = self.textFormattingBarView {
+                self.updateTextFormattingBarContent(size: barView.bounds.size, interfaceState: presentationInterfaceState, tintColor: barView.glassTintColor, transition: .immediate)
+            }
             self.updateInputField(textInputFrame: richTextInputNode.textFieldFrame, transition: .immediate)
         }
     }
@@ -5617,6 +5884,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
         
         self.inputMenu.activate()
+        // MARK: NAGRAM — 常驻格式条随输入框焦点出现
+        if NagramSettings.shared.textStyleToolbarMode.showsBar {
+            self.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
+        }
         
         if let touchDownGestureRecognizer = self.touchDownGestureRecognizer {
             self.richTextInputNode?.inputView.addGestureRecognizer(touchDownGestureRecognizer)
@@ -5638,6 +5909,10 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         self.dismissedEmojiSuggestionPosition = nil
         // MARK: NAGRAM — 键盘区域文本格式面板
         self.collapseTextFormattingPanel(switchToKeyboard: false)
+        // MARK: NAGRAM — 常驻格式条随输入框失焦收起
+        if self.textFormattingBarView != nil {
+            self.requestLayout(transition: .animated(duration: 0.2, curve: .easeInOut))
+        }
         
         if let presentationInterfaceState = self.presentationInterfaceState, !self.skipPresentationInterfaceStateUpdate {
             if let peer = presentationInterfaceState.renderedPeer?.peer as? TelegramUser, peer.botInfo != nil, let keyboardButtonsMessage = presentationInterfaceState.keyboardButtonsMessage, let keyboardMarkup = keyboardButtonsMessage.visibleButtonKeyboardMarkup, keyboardMarkup.flags.contains(.persistent) {
@@ -5851,8 +6126,94 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             
             let formatMenu = UIMenu(title: self.strings?.TextFormat_Format ?? "Format", image: nil, children: children)
             actions.insert(formatMenu, at: 1)
+            // MARK: NAGRAM — 选中文字菜单平铺样式
+            actions = self.nagramInsertingFlatTextStyles(into: actions, formatMenuIndex: 1, hasSpoilers: hasSpoilers, perform: { [weak self] id in
+                guard let self else {
+                    return
+                }
+                switch id {
+                case .quote:
+                    self.formatAttributesQuote(self)
+                case .spoiler:
+                    self.formatAttributesSpoiler(self)
+                case .bold:
+                    self.formatAttributesBold(self)
+                case .italic:
+                    self.formatAttributesItalic(self)
+                case .monospace:
+                    self.formatAttributesMonospace(self)
+                case .link:
+                    self.formatAttributesLink(self)
+                case .date:
+                    self.formatAttributesDate(self)
+                case .strikethrough:
+                    self.formatAttributesStrikethrough(self)
+                case .underline:
+                    self.formatAttributesUnderline(self)
+                case .code:
+                    self.formatAttributesCodeBlock(self)
+                }
+            })
         }
         return UIMenu(children: actions)
+    }
+
+    // MARK: NAGRAM — 选中文字菜单：把设置里开启的样式按顺序平铺到菜单第一层。
+    // 完整的「格式」子菜单保持在 formatMenuIndex 不动；私密聊天沿用上游规则隐藏引用、剧透和日期。
+    private func nagramInsertingFlatTextStyles(into elements: [UIMenuElement], formatMenuIndex: Int, hasSpoilers: Bool, perform: @escaping (NagramTextStyleMenuItemId) -> Void) -> [UIMenuElement] {
+        let ids = NagramSettings.shared.enabledTextStyleMenuItems.filter { id in
+            switch id {
+            case .quote, .spoiler, .date:
+                return hasSpoilers
+            default:
+                return true
+            }
+        }
+        guard !ids.isEmpty else {
+            return elements
+        }
+        let flatActions: [UIMenuElement] = ids.map { id in
+            let title: String
+            switch id {
+            case .quote:
+                title = self.strings?.TextFormat_Quote ?? "Quote"
+            case .spoiler:
+                title = self.strings?.TextFormat_Spoiler ?? "Spoiler"
+            case .bold:
+                title = self.strings?.TextFormat_Bold ?? "Bold"
+            case .italic:
+                title = self.strings?.TextFormat_Italic ?? "Italic"
+            case .monospace:
+                title = self.strings?.TextFormat_Monospace ?? "Monospace"
+            case .link:
+                title = self.strings?.TextFormat_Link ?? "Link"
+            case .date:
+                title = self.strings?.TextFormat_Date ?? "Date"
+            case .strikethrough:
+                title = self.strings?.TextFormat_Strikethrough ?? "Strikethrough"
+            case .underline:
+                title = self.strings?.TextFormat_Underline ?? "Underline"
+            case .code:
+                title = self.strings?.TextFormat_Code ?? "Code"
+            }
+            return UIAction(title: title, image: nil) { _ in
+                perform(id)
+            }
+        }
+        let index: Int
+        switch NagramSettings.shared.textStyleMenuPosition {
+        case .first:
+            index = 0
+        case .beforeFormat:
+            index = formatMenuIndex
+        case .afterFormat:
+            index = formatMenuIndex + 1
+        case .last:
+            index = elements.count
+        }
+        var result = elements
+        result.insert(UIMenu(title: "", options: .displayInline, children: flatActions), at: min(index, result.count))
+        return result
     }
 
     /// Transforms the editor's default edit-menu elements for the NEW (native) rich-text editor backend.
@@ -5880,21 +6241,31 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             children.append(UIAction(title: self.strings?.RichText_MenuPullquote ?? "Pull Quote", image: nil) { [weak richTextInputNode] _ in
                 richTextInputNode?.performFormatAction(.pullQuote)
             })
-            children.append(UIAction(title: self.strings?.TextFormat_Spoiler ?? "Spoiler", image: nil) { [weak richTextInputNode] _ in
+            children.append(UIAction(title: self.strings?.TextFormat_Spoiler ?? "Spoiler", image: nil,
+                                     attributes: richTextInputNode.canPerformFormatAction(.spoiler) ? [] : .disabled) { [weak richTextInputNode] _ in
                 richTextInputNode?.performFormatAction(.spoiler)
             })
         }
+        // Inline formats are disabled where they cannot apply — a selection wholly in code, whose
+        // model is plain text (a `Pre` entity holds no other entity) — rather than offered as no-ops.
         children.append(contentsOf: [
-            UIAction(title: self.strings?.TextFormat_Bold ?? "Bold", image: nil) { [weak richTextInputNode] _ in
+            UIAction(title: self.strings?.TextFormat_Bold ?? "Bold", image: nil,
+                     attributes: richTextInputNode.canPerformFormatAction(.bold) ? [] : .disabled) { [weak richTextInputNode] _ in
                 richTextInputNode?.performFormatAction(.bold)
             },
-            UIAction(title: self.strings?.TextFormat_Italic ?? "Italic", image: nil) { [weak richTextInputNode] _ in
+            // Disabled where italic cannot apply (a pull quote's body is italic by role and the
+            // model cannot carry it there), rather than offered as a silent no-op.
+            UIAction(title: self.strings?.TextFormat_Italic ?? "Italic", image: nil,
+                     attributes: richTextInputNode.canPerformFormatAction(.italic) ? [] : .disabled) { [weak richTextInputNode] _ in
                 richTextInputNode?.performFormatAction(.italic)
             },
-            UIAction(title: self.strings?.TextFormat_Monospace ?? "Monospace", image: nil) { [weak richTextInputNode] _ in
+            UIAction(title: self.strings?.TextFormat_Monospace ?? "Monospace", image: nil,
+                     attributes: richTextInputNode.canPerformFormatAction(.monospace) ? [] : .disabled) { [weak richTextInputNode] _ in
                 richTextInputNode?.performFormatAction(.monospace)
             },
-            UIAction(title: self.strings?.TextFormat_Link ?? "Link", image: nil) { [weak self] _ in
+            // A link is an inline format: it reaches exactly the text Bold reaches.
+            UIAction(title: self.strings?.TextFormat_Link ?? "Link", image: nil,
+                     attributes: richTextInputNode.canPerformFormatAction(.bold) ? [] : .disabled) { [weak self] _ in
                 self?.interfaceInteraction?.openLinkEditing()
             }
         ])
@@ -5904,10 +6275,12 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             })
         }
         children.append(contentsOf: [
-            UIAction(title: self.strings?.TextFormat_Strikethrough ?? "Strikethrough", image: nil) { [weak richTextInputNode] _ in
+            UIAction(title: self.strings?.TextFormat_Strikethrough ?? "Strikethrough", image: nil,
+                     attributes: richTextInputNode.canPerformFormatAction(.strikethrough) ? [] : .disabled) { [weak richTextInputNode] _ in
                 richTextInputNode?.performFormatAction(.strikethrough)
             },
-            UIAction(title: self.strings?.TextFormat_Underline ?? "Underline", image: nil) { [weak richTextInputNode] _ in
+            UIAction(title: self.strings?.TextFormat_Underline ?? "Underline", image: nil,
+                     attributes: richTextInputNode.canPerformFormatAction(.underline) ? [] : .disabled) { [weak richTextInputNode] _ in
                 richTextInputNode?.performFormatAction(.underline)
             }
         ])
@@ -5922,6 +6295,31 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         var elements = defaultElements.filter { ($0 as? UIMenu)?.identifier != UIMenu.Identifier("org.telegram.RichTextEditor.format") }
         let insertIndex = min(1, elements.count)
         elements.insert(formatMenu, at: insertIndex)
+        // MARK: NAGRAM — 选中文字菜单平铺样式
+        elements = self.nagramInsertingFlatTextStyles(into: elements, formatMenuIndex: insertIndex, hasSpoilers: hasSpoilers, perform: { [weak self, weak richTextInputNode] id in
+            switch id {
+            case .quote:
+                richTextInputNode?.performFormatAction(.quote)
+            case .spoiler:
+                richTextInputNode?.performFormatAction(.spoiler)
+            case .bold:
+                richTextInputNode?.performFormatAction(.bold)
+            case .italic:
+                richTextInputNode?.performFormatAction(.italic)
+            case .monospace:
+                richTextInputNode?.performFormatAction(.monospace)
+            case .link:
+                self?.interfaceInteraction?.openLinkEditing()
+            case .date:
+                richTextInputNode?.performFormatAction(.date)
+            case .strikethrough:
+                richTextInputNode?.performFormatAction(.strikethrough)
+            case .underline:
+                richTextInputNode?.performFormatAction(.underline)
+            case .code:
+                richTextInputNode?.performFormatAction(.code)
+            }
+        })
         return elements
     }
 
@@ -5983,25 +6381,74 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
     }
     
+    /// The chat's hardware-keyboard format shortcuts (⌘B, ⌘I, ⌘U, ⇧⌘M, ⇧⌘X, ⇧⌘P, and ⇧⌘N as
+    /// `.clearFormatting`, `ChatControllerKeyShortcuts.swift`). On the native engine the shortcut runs
+    /// the editor's own command — the one the Format menu runs — and returns true; on the legacy
+    /// backend it does nothing and returns false, and the caller keeps its input-state path.
+    ///
+    /// The engine must not take the input-state path: `chatTextInputAddFormattingAttribute` rebuilds the
+    /// whole composer from `state.inputText`, whose `NSAttributedString` has no vocabulary for tables,
+    /// details, headings, lists or a pull quote's author, so ⌘B deleted or demoted them, and the result
+    /// arrived as a host document set, not an undo step of its own (`HarnessChatFormatShortcutTests`).
+    public func performNativeFormatShortcut(_ action: ChatRichTextFormatAction) -> Bool {
+        guard let richTextInputNode = self.richTextInputNode, richTextInputNode.usesNativeRichTextEngine else {
+            return false
+        }
+        richTextInputNode.performFormatAction(action)
+        return true
+    }
+
+    /// The legacy text view's half of a hardware format shortcut (⌘B, ⌘I, ⌘U, ⇧⌘M, ⇧⌘X, ⇧⌘P,
+    /// ⇧⌘N): the chat's input-state transform, applied as ONE undoable step on the text view — the
+    /// Format menu's `applyFormattingAttribute` rule. Run bare, the echo was an attribute-only
+    /// write, which keeps UIKit's typing steps and records nothing, so undo after ⌘B took back the
+    /// typing and left the bold on nothing (`HarnessLegacyFormatShortcutUndoTests`). Returns false
+    /// when the input is not the legacy text view, and the caller keeps its own path.
+    public func performLegacyFormatShortcut(_ transform: @escaping (ChatTextInputState) -> ChatTextInputState) -> Bool {
+        guard let textView = self.richTextInputNode?.inputView as? ChatInputTextView else {
+            return false
+        }
+        textView.performUndoableTextChange {
+            self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
+                return (transform(current), inputMode)
+            }
+        }
+        return true
+    }
+
+    /// A Format command. On the legacy backend the new state comes back through
+    /// `updateInputTextState`, a programmatic text set that would clear the text view's undo stack;
+    /// `performUndoableTextChange` makes the command one undoable step instead. (The native editor
+    /// records its own steps; its input view is not a `ChatInputTextView`.)
+    private final func applyFormattingAttribute(_ attribute: NSAttributedString.Key, value: Any?) {
+        if let textView = self.richTextInputNode?.inputView as? ChatInputTextView {
+            textView.performUndoableTextChange {
+                self.updateFormattingAttribute(attribute, value: value)
+            }
+        } else {
+            self.updateFormattingAttribute(attribute, value: value)
+        }
+    }
+    
+    private final func updateFormattingAttribute(_ attribute: NSAttributedString.Key, value: Any?) {
+        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
+            return (chatTextInputAddFormattingAttribute(current, attribute: attribute, value: value), inputMode)
+        }
+    }
+    
     @objc public func formatAttributesBold(_ sender: Any) {
         self.inputMenu.back()
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.bold, value: nil), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.bold, value: nil)
     }
     
     @objc public func formatAttributesItalic(_ sender: Any) {
         self.inputMenu.back()
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.italic, value: nil), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.italic, value: nil)
     }
     
     @objc public func formatAttributesMonospace(_ sender: Any) {
         self.inputMenu.back()
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.monospace, value: nil), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.monospace, value: nil)
     }
     
     @objc public func formatAttributesLink(_ sender: Any) {
@@ -6016,32 +6463,24 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
     
     @objc public func formatAttributesStrikethrough(_ sender: Any) {
         self.inputMenu.back()
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.strikethrough, value: nil), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.strikethrough, value: nil)
     }
     
     @objc public func formatAttributesUnderline(_ sender: Any) {
         self.inputMenu.back()
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.underline, value: nil), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.underline, value: nil)
     }
     
     @objc public func formatAttributesQuote(_ sender: Any) {
         self.inputMenu.back()
         
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false)), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: false))
     }
     
     @objc public func formatAttributesCodeBlock(_ sender: Any) {
         self.inputMenu.back()
         
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .code(language: nil), isCollapsed: false)), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.block, value: ChatTextInputTextQuoteAttribute(kind: .code(language: nil), isCollapsed: false))
     }
     
     @objc public func formatAttributesSpoiler(_ sender: Any) {
@@ -6056,9 +6495,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             })
         }
         
-        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-            return (chatTextInputAddFormattingAttribute(current, attribute: ChatTextInputAttributes.spoiler, value: nil), inputMode)
-        }
+        self.applyFormattingAttribute(ChatTextInputAttributes.spoiler, value: nil)
 
         // The node owns the spoiler-reveal flow now; the panel just hands it the live theme inputs.
         if let richTextInputNode = self.richTextInputNode, let presentationInterfaceState = self.presentationInterfaceState, let context = self.context {
@@ -6072,6 +6509,7 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
 
         self.updateActivity()
+        
         // MARK: NAGRAM — 回车发送：输入换行符时直接发送，不插入换行
         if NagramSettings.shared.sendWithReturnKey && text == "\n" {
             self.sendButtonPressed()
@@ -6124,6 +6562,52 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
             self.richTextInputNode?.selectedRange = NSMakeRange(range.lowerBound + cleanReplacementString.length, 0)
             self.updateTextNodeText(animated: true)
             return false
+        }
+        return true
+    }
+    
+    /// Backspace with the caret at the very start of a quote / code block removes the block from
+    /// that paragraph instead of joining the paragraph above into the block (the engine's rule).
+    /// Without it UIKit deletes the line break, the joined line is partly block-attributed, and the
+    /// state read back from it quotes the whole line. Called from the text view's `deleteBackward`
+    /// (`shouldDeleteBackward`), which both the keyboard and a programmatic delete reach; returns
+    /// whether it handled the key (as one undoable step).
+    private final func unquoteParagraphOnBackspaceAtBlockStart() -> Bool {
+        guard let richTextInputNode = self.richTextInputNode, let textView = richTextInputNode.inputView as? ChatInputTextView, let attributedText = richTextInputNode.attributedText else {
+            return false
+        }
+        let selection = textView.selectedRange
+        guard selection.length == 0, textView.markedTextRange == nil else {
+            return false
+        }
+        let string = attributedText.string as NSString
+        let blockStart = selection.location
+        // A block starts either the document or a line. At the document's start there is no line
+        // break before it and Backspace would otherwise do nothing, leaving a quote that opens the
+        // message impossible to leave from its first line (composer harness, 2026-09-23,
+        // `HarnessLegacyQuoteBackspaceAtDocumentStartTests`; the engine unquotes there too).
+        guard blockStart < attributedText.length, blockStart == 0 || string.character(at: blockStart - 1) == 0x0a else {
+            return false
+        }
+        var blockRange = NSRange()
+        guard attributedText.attribute(ChatTextInputAttributes.block, at: blockStart, longestEffectiveRange: &blockRange, in: NSRange(location: 0, length: attributedText.length)) != nil, blockRange.location == blockStart else {
+            // Not a block, or the break is a line break inside the block.
+            return false
+        }
+        // Only the first paragraph of the block leaves it; its own line break goes with it so the
+        // rest of the block starts cleanly on the next line.
+        var paragraphEnd = blockRange.upperBound
+        let lineBreak = string.range(of: "\n", options: [], range: NSRange(location: blockStart, length: blockRange.upperBound - blockStart))
+        if lineBreak.location != NSNotFound {
+            paragraphEnd = lineBreak.upperBound
+        }
+        let updated = NSMutableAttributedString(attributedString: attributedText)
+        updated.removeAttribute(ChatTextInputAttributes.block, range: NSRange(location: blockStart, length: paragraphEnd - blockStart))
+        
+        textView.performUndoableTextChange {
+            richTextInputNode.attributedText = updated
+            richTextInputNode.selectedRange = NSRange(location: blockStart, length: 0)
+            self.chatInputTextNodeDidUpdateText()
         }
         return true
     }
@@ -6263,12 +6747,17 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         }
 
         if let attributedString = attributedString {
-            self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
-                // An empty selection is an insertion at the caret, which is what a paste with no
-                // selection means — so this needs no separate branch (the old `else` was unreachable
-                // anyway: `mutableCopy()` of an `NSAttributedString` never fails).
-                let range = NSRange(location: current.selectionRange.lowerBound, length: current.selectionRange.count)
-                return (current.replacingFlatRange(range, with: attributedString), inputMode)
+            if let textView = self.richTextInputNode?.inputView as? ChatInputTextView {
+                // Undoable, and without wiping what was typed before it (composer harness,
+                // 2026-09-23, `HarnessLegacyRichPasteUndoTests`): the state push below comes back as
+                // a programmatic text set, which clears the text view's undo stack.
+                if !self.pasteThroughTextInput(attributedString, textView: textView) {
+                    textView.performUndoableTextChange {
+                        self.applyPastedAttributedString(attributedString)
+                    }
+                }
+            } else {
+                self.applyPastedAttributedString(attributedString)
             }
             return false
         }
@@ -6279,10 +6768,80 @@ public class ChatTextInputPanelNode: ChatInputPanelNode, ASEditableTextNodeDeleg
         return true
     }
 
+    private final func applyPastedAttributedString(_ attributedString: NSAttributedString) {
+        self.interfaceInteraction?.updateTextInputStateAndMode { current, inputMode in
+            // An empty selection is an insertion at the caret, which is what a paste with no
+            // selection means — so this needs no separate branch (the old `else` was unreachable
+            // anyway: `mutableCopy()` of an `NSAttributedString` never fails).
+            let range = NSRange(location: current.selectionRange.lowerBound, length: current.selectionRange.count)
+            return (current.replacingFlatRange(range, with: attributedString), inputMode)
+        }
+    }
+
+    /// A formatted paste as the text view's own REPLACE plus an attribute-only restyle: the
+    /// characters go in through `replace(_:withText:)`, which the input controller records as one
+    /// undo step and which leaves the steps before it alone, and the pasted formatting follows as
+    /// the state push, whose echo keeps the characters and is therefore written in place
+    /// (`ChatInputTextView.attributedText`). Undo removes the pasted text, formatting and all.
+    ///
+    /// `false` — nothing was changed — when the view's characters are not the state's (a collapsed
+    /// quote is drawn as an attachment), the selection disagrees, a composition is open, or the
+    /// panel's own `shouldChangeTextIn` would rewrite the text (it strips direction marks and, when
+    /// consecutive newlines are not allowed, collapses them — through a full set that clears the
+    /// stack anyway). The caller then applies the paste as one `performUndoableTextChange` step,
+    /// which is undoable but drops the typing steps before it.
+    private final func pasteThroughTextInput(_ pasted: NSAttributedString, textView: ChatInputTextView) -> Bool {
+        let state = self.inputTextState
+        let range = NSRange(location: state.selectionRange.lowerBound, length: state.selectionRange.count)
+        let updated = state.replacingFlatRange(range, with: pasted)
+        let pastedString = pasted.string
+        guard textView.markedTextRange == nil,
+              textView.text == state.inputText.string,
+              textView.selectedRange == range,
+              !pastedString.contains("\u{202d}"), !pastedString.contains("\u{202c}"),
+              self.allowConsecutiveNewlines || !updated.inputText.string.contains("\n\n"),
+              let start = textView.position(from: textView.beginningOfDocument, offset: range.location),
+              let end = textView.position(from: start, offset: range.length),
+              let textRange = textView.textRange(from: start, to: end) else {
+            return false
+        }
+        textView.replace(textRange, withText: pastedString)
+        guard textView.text == updated.inputText.string else {
+            // The characters landed differently; the view's own edit stands and the state follows
+            // it through the usual text-change path.
+            return true
+        }
+        self.interfaceInteraction?.updateTextInputStateAndMode { _, inputMode in
+            return (updated, inputMode)
+        }
+        return true
+    }
+
+    /// Whether the clipboard MAY hold media `handlePastedMedia` would take, answered from the item
+    /// types alone. This is what `canPerformAction(paste:)` asks, and UIKit asks that every time it
+    /// builds the edit menu or the keyboard's paste affordances — so it must not read the contents:
+    /// reading another app's clipboard without a paste gesture raises the system "Allow Paste"
+    /// prompt, which also takes the keyboard down. `hasImages` and `contains(pasteboardTypes:)` do
+    /// not. A false positive only offers Paste; the paste itself still decides from the contents.
+    public static func pasteboardMayHoldMedia() -> Bool {
+        let pasteboard = UIPasteboard.general
+        return pasteboard.hasImages || pasteboard.contains(pasteboardTypes: [
+            "com.compuserve.gif",
+            "public.mpeg-4",
+            "public.heics",
+            "com.apple.png-sticker",
+            "com.apple.uikit.image",
+            UTType.png.identifier,
+            UTType.jpeg.identifier,
+            UTType.gif.identifier
+        ])
+    }
+
     /// Detects pasteboard media (gif/video/animated-sticker/sticker/images) and, when `perform` is true,
     /// routes it to the chat send flow via `self.paste(...)`. Returns true when the clipboard holds
     /// handleable media. Shared by the legacy `chatInputTextNodeShouldPaste` and the native editor's
-    /// `onPasteMedia`/`canPasteMedia` hooks so detection can't drift.
+    /// `onPasteMedia` hook so detection can't drift. It READS the clipboard, so it may only run for a
+    /// paste the user asked for; `canPasteMedia` answers from `pasteboardMayHoldMedia()` instead.
     public func handlePastedMedia(perform: Bool) -> Bool {
         let pasteboard = UIPasteboard.general
         if let data = pasteboard.data(forPasteboardType: "com.compuserve.gif") {

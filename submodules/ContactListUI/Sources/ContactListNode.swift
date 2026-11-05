@@ -64,6 +64,8 @@ private final class ContactListNodeInteraction {
     fileprivate let deselectAll: () -> Void
     fileprivate let toggleSelection: ([EnginePeer], Bool) -> Void
     fileprivate let openContactAccessPicker: () -> Void
+    // MARK: NAGRAM — 双向联系人图标点击
+    fileprivate var displayMutualContactInfo: ((ContactListPeer) -> Void)?
     
     let itemHighlighting = ContactItemHighlighting()
     
@@ -235,6 +237,11 @@ private enum ContactListNodeEntry: Comparable, Identifiable {
                         interaction.openPeer(peer, .voiceCall, sourceNode, gesture)
                     }), ContactsPeerItemAction(icon: .videoCall, action: { _, sourceNode, gesture in
                         interaction.openPeer(peer, .videoCall, sourceNode, gesture)
+                    })]
+                } else if case let .peer(.user(user), _, _) = peer, user.flags.contains(.mutualContact) {
+                    // MARK: NAGRAM — 双向联系人标记
+                    additionalActions = [ContactsPeerItemAction(icon: .mutualContact, action: { _, _, _ in
+                        interaction.displayMutualContactInfo?(peer)
                     })]
                 }
                 
@@ -1186,6 +1193,8 @@ public final class ContactListNode: ASDisplayNode {
     private let contextAction: ((EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?, Bool) -> Void)?
     public var openStories: ((EnginePeer, ASDisplayNode) -> Void)?
     public var openContactAccessPicker: (() -> Void)?
+    // MARK: NAGRAM — 未设置时，点击双向联系人图标等同于点击该行
+    public var displayMutualContactInfo: (() -> Void)?
     
     private let previousEntries = Atomic<[ContactListNodeEntry]?>(value: nil)
     private let disposable = MetaDisposable()
@@ -1374,6 +1383,18 @@ public final class ContactListNode: ASDisplayNode {
         }, openContactAccessPicker: { [weak self] in
             self?.openContactAccessPicker?()
         })
+        
+        // MARK: NAGRAM
+        interaction.displayMutualContactInfo = { [weak self, weak interaction] peer in
+            guard let self else {
+                return
+            }
+            if let displayMutualContactInfo = self.displayMutualContactInfo {
+                displayMutualContactInfo()
+            } else {
+                interaction?.openPeer(peer, .generic, nil, nil)
+            }
+        }
         
         self.indexNode.indexSelected = { [weak self] section in
             guard let strongSelf = self, let layout = strongSelf.validLayout, let entries = previousEntries.with({ $0 }) else {
