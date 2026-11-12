@@ -426,6 +426,7 @@ private func nagramGroups(
     sttSettingsAction: @escaping () -> Void,
     groupProfileSettingsAction: @escaping () -> Void,
     sessionBackupAction: @escaping () -> Void,
+    appUpdateAction: @escaping () -> Void,
     aboutAction: @escaping () -> Void
 ) -> [NagramGroup] {
     let sensitiveContentEnabled: () -> Bool = {
@@ -588,6 +589,7 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.LocalPremium", get: { NagramSettings.shared.localPremiumEnabled }, set: { NagramSettings.shared.localPremiumEnabled = $0 }),
             .toggle(titleKey: "Nagram.UnlimitedAccounts", get: { NagramSettings.shared.unlimitedAccountsEnabled }, set: { NagramSettings.shared.unlimitedAccountsEnabled = $0 }),
             .choice(titleKey: "Nagram.LocationIndicator", prefix: "Nagram.LocationIndicator", options: ["always", "all", "home", "chat"], current: { NagramSettings.shared.locationIndicatorModeValue.rawValue }, set: { NagramSettings.shared.locationIndicatorMode = $0 }),
+            .navigation(titleKey: "Nagram.Update.Title", action: appUpdateAction),
             .navigation(titleKey: "Nagram.About", action: aboutAction),
         ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Experimental", footerKey: "Nagram.MediaMetadata.Footer", rows: [
@@ -939,6 +941,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nagramGroupProfileSettingsController(context: context))
     }, sessionBackupAction: {
         pushControllerImpl?(nagramSessionBackupController(context: context))
+    }, appUpdateAction: {
+        pushControllerImpl?(nextgramUpdateController(context: context))
     }, aboutAction: {
         pushControllerImpl?(nagramAboutController(context: context))
     })

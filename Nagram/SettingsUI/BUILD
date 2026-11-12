@@ -28,6 +28,7 @@ swift_library(
         "//Nagram/SessionBackupUI:NagramSessionBackupUI",
         "//Nagram/LinkMetadata:NagramLinkMetadata",
         "//Nagram/Strings:NagramStrings",
+        "//Nagram/Update:NextgramUpdate",
         "//Nagram/SettingsSignal:NagramSettingsSignal",
         "//Nagram/Translate:NagramTranslate",
         "//Nagram/Transcription:NagramTranscription",
