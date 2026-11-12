@@ -161,16 +161,25 @@ jobs:
           CODESIGNING_PATH="build-input/nextgram-codesigning"
           PROFILE_PLIST="${RUNNER_TEMP}/nextgram-profile.plist"
           SIGNING_PEM="${RUNNER_TEMP}/nextgram-signing.pem"
+          PROFILE_VALID_DAYS=7
           mkdir -p "${CODESIGNING_PATH}/certs" "${CODESIGNING_PATH}/profiles"
           cp build-system/fake-codesigning/certs/* "${CODESIGNING_PATH}/certs/"
+          openssl pkcs12 -in build-system/fake-codesigning/certs/SelfSigned.p12 \
+            -passin pass: -nodes -legacy -out "${SIGNING_PEM}"
+          if ! openssl x509 -in "${SIGNING_PEM}" -noout -checkend "$((PROFILE_VALID_DAYS * 86400 + 60))"; then
+            echo "::error::The disposable CI signing certificate expires before the new profile would."
+            exit 1
+          fi
           openssl smime -inform der -verify -noverify \
             -in build-system/fake-codesigning/profiles/Telegram.mobileprovision \
             -out "${PROFILE_PLIST}"
-          python3 - "${PROFILE_PLIST}" "${BUNDLE_ID}" <<'PY'
+          python3 - "${PROFILE_PLIST}" "${BUNDLE_ID}" "${PROFILE_VALID_DAYS}" <<'PY'
           import plistlib
           import sys
+          import uuid
+          from datetime import datetime, timedelta, timezone
 
-          path, bundle_id = sys.argv[1:]
+          path, bundle_id, valid_days = sys.argv[1:]
           old_bundle_id = "ph.telegra.Telegraph"
 
           def replace(value):
@@ -185,11 +194,15 @@ jobs:
           with open(path, "rb") as source:
               profile = plistlib.load(source)
           profile.pop("DER-Encoded-Profile", None)
+          # The checked-in profile is a template, including its expired dates.
+          now = datetime.now(timezone.utc).replace(tzinfo=None)
+          profile["CreationDate"] = now
+          profile["ExpirationDate"] = now + timedelta(days=int(valid_days))
+          profile["TimeToLive"] = int(valid_days)
+          profile["UUID"] = str(uuid.uuid4()).upper()
           with open(path, "wb") as destination:
               plistlib.dump(replace(profile), destination)
           PY
-          openssl pkcs12 -in build-system/fake-codesigning/certs/SelfSigned.p12 \
-            -passin pass: -nodes -legacy -out "${SIGNING_PEM}"
           openssl smime -sign -binary -nodetach -outform der \
             -in "${PROFILE_PLIST}" \
             -signer "${SIGNING_PEM}" \
