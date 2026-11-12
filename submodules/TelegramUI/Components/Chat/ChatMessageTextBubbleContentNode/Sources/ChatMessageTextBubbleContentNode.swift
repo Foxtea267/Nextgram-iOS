@@ -754,7 +754,7 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                     cutout: nil,
                     insets: textInsets,
                     lineColor: messageTheme.accentControlColor,
-                    displayContentsUnderSpoilers: displayContentsUnderSpoilers.value,
+                    displayContentsUnderSpoilers: displayContentsUnderSpoilers.value || NagramSettings.shared.autoRevealSpoilers, // MARK: NEXTGRAM
                     customTruncationToken: customTruncationToken,
                     expandedBlocks: expandedBlockIds,
                     computeCharacterRects: true
@@ -1269,7 +1269,7 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
             }
             
             
-            if let _ = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.Spoiler)], !self.displayContentsUnderSpoilers.value {
+            if let _ = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.Spoiler)], !self.displayContentsUnderSpoilers.value, !NagramSettings.shared.autoRevealSpoilers { // MARK: NEXTGRAM
                 return ChatMessageBubbleContentTapAction(content: .none)
             } else if let tonAddress = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.TonAddress)] as? TelegramTonAddress {
                 guard tonAddress.range.length == 48, tonAddress.address.utf8.count == 48,
@@ -1450,7 +1450,7 @@ public class ChatMessageTextBubbleContentNode: ChatMessageBubbleContentNode {
                 }
             }
             
-            if let spoilerRects = spoilerRects, !spoilerRects.isEmpty, !self.displayContentsUnderSpoilers.value {
+            if let spoilerRects = spoilerRects, !spoilerRects.isEmpty, !self.displayContentsUnderSpoilers.value, !NagramSettings.shared.autoRevealSpoilers { // MARK: NEXTGRAM
             } else if let rects = rects {
                 let linkHighlightingNode: LinkHighlightingNode
                 if let current = self.linkHighlightingNode {

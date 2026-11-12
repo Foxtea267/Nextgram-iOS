@@ -195,6 +195,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
     let context: AccountContext
     let peerMode: ContactsPeerItemPeerMode
     let aliasHandling: ContactsPeerItemAliasHandling
+    let titleOverride: String? // MARK: NEXTGRAM
     public let peer: ContactsPeerItemPeer
     let status: ContactsPeerItemStatus
     let badge: ContactsPeerItemBadge?
@@ -255,6 +256,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
         peerMode: ContactsPeerItemPeerMode,
         aliasHandling: ContactsPeerItemAliasHandling = .treatSelfAsSaved,
         peer: ContactsPeerItemPeer,
+        titleOverride: String? = nil, // MARK: NEXTGRAM
         status: ContactsPeerItemStatus,
         badge: ContactsPeerItemBadge? = nil,
         rightLabelText: LabelText? = nil,
@@ -295,6 +297,7 @@ public class ContactsPeerItem: ItemListItem, ListViewItemWithHeader {
         self.context = context
         self.peerMode = peerMode
         self.aliasHandling = aliasHandling
+        self.titleOverride = titleOverride // MARK: NEXTGRAM
         self.peer = peer
         self.status = status
         self.badge = badge
@@ -988,9 +991,9 @@ public class ContactsPeerItemNode: ItemListRevealOptionsItemNode {
                             titleAttributedString = NSAttributedString(string: item.presentationData.strings.User_DeletedAccount, font: titleBoldFont, textColor: textColor)
                         }
                     } else if case let .legacyGroup(group) = peer {
-                        titleAttributedString = NSAttributedString(string: group.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor)
+                        titleAttributedString = NSAttributedString(string: item.titleOverride ?? group.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor) // MARK: NEXTGRAM
                     } else if case let .channel(channel) = peer {
-                        titleAttributedString = NSAttributedString(string: channel.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor)
+                        titleAttributedString = NSAttributedString(string: item.titleOverride ?? channel.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor) // MARK: NEXTGRAM
                     } else if case let .community(community) = peer {
                         titleAttributedString = NSAttributedString(string: community.title, font: titleBoldFont, textColor: item.presentationData.theme.list.itemPrimaryTextColor)
                     }

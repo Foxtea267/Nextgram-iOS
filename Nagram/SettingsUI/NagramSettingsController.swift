@@ -426,7 +426,9 @@ private func nagramGroups(
     sttSettingsAction: @escaping () -> Void,
     groupProfileSettingsAction: @escaping () -> Void,
     sessionBackupAction: @escaping () -> Void,
+    pluginsAction: @escaping () -> Void,
     appUpdateAction: @escaping () -> Void,
+    channelFeedAction: @escaping () -> Void,
     aboutAction: @escaping () -> Void
 ) -> [NagramGroup] {
     let sensitiveContentEnabled: () -> Bool = {
@@ -507,6 +509,7 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.ChatToolsEnabled", get: { NagramSettings.shared.chatToolsEnabled }, set: { NagramSettings.shared.chatToolsEnabled = $0 }),
             .toggle(titleKey: "Nagram.SecondsInMessages", get: { NagramSettings.shared.secondsInMessages }, set: { NagramSettings.shared.secondsInMessages = $0 }),
             .toggle(titleKey: "Nagram.ShowForwardedMessageDate", get: { NagramSettings.shared.showForwardedMessageDate }, set: { NagramSettings.shared.showForwardedMessageDate = $0 }),
+            .toggle(titleKey: "Nagram.AutoRevealSpoilers", get: { NagramSettings.shared.autoRevealSpoilers }, set: { NagramSettings.shared.autoRevealSpoilers = $0 }),
             .toggle(titleKey: "Nagram.HideReactions", get: { NagramSettings.shared.hideReactions }, set: { NagramSettings.shared.hideReactions = $0 }),
             .toggle(titleKey: "Nagram.HideChannelBottomButton", get: { NagramSettings.shared.hideChannelBottomButton }, set: { NagramSettings.shared.hideChannelBottomButton = $0 }),
             .toggle(titleKey: "Nagram.HideSponsoredMessages", get: { NagramSettings.shared.hideSponsoredMessages }, set: { NagramSettings.shared.hideSponsoredMessages = $0 }),
@@ -547,6 +550,9 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.MessageMenu", footerKey: nil, rows: [
             .navigation(titleKey: "Nagram.MessageMenu", action: messageMenuAction),
+            .toggle(titleKey: "Nagram.HideQuickForwardButton", get: { NagramSettings.shared.hideQuickForwardButton }, set: { NagramSettings.shared.hideQuickForwardButton = $0 }),
+            .toggle(titleKey: "Nagram.ConfirmUnpinMessages", get: { NagramSettings.shared.confirmUnpinMessages }, set: { NagramSettings.shared.confirmUnpinMessages = $0 }),
+            .toggle(titleKey: "Nagram.PreselectMessageModerationActions", get: { NagramSettings.shared.preselectMessageModerationActions }, set: { NagramSettings.shared.preselectMessageModerationActions = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Filtering", footerKey: "Nagram.RegexFilters.Main.Footer", rows: [
             .toggle(titleKey: "Nagram.RegexFilters.GlobalEnabled", get: { NagramSettings.shared.regexFiltersEnabled }, set: { NagramSettings.shared.regexFiltersEnabled = $0 }),
@@ -589,7 +595,11 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.LocalPremium", get: { NagramSettings.shared.localPremiumEnabled }, set: { NagramSettings.shared.localPremiumEnabled = $0 }),
             .toggle(titleKey: "Nagram.UnlimitedAccounts", get: { NagramSettings.shared.unlimitedAccountsEnabled }, set: { NagramSettings.shared.unlimitedAccountsEnabled = $0 }),
             .choice(titleKey: "Nagram.LocationIndicator", prefix: "Nagram.LocationIndicator", options: ["always", "all", "home", "chat"], current: { NagramSettings.shared.locationIndicatorModeValue.rawValue }, set: { NagramSettings.shared.locationIndicatorMode = $0 }),
+            .choice(titleKey: "Nagram.ScreenshotBadge", prefix: "Nagram.LocationIndicator", options: ["always", "all", "home", "chat"], current: { NagramLocationIndicatorMode(rawValue: NagramSettings.shared.screenshotBadgeMode)?.rawValue ?? "always" }, set: { NagramSettings.shared.screenshotBadgeMode = $0 }),
+            .choice(titleKey: "Nagram.ScreenshotBadgeVerticalOffset", prefix: "Nagram.ScreenshotBadgeVerticalOffset", options: ["-8", "-4", "0", "4", "8"], current: { NagramSettings.shared.screenshotBadgeVerticalOffset }, set: { NagramSettings.shared.screenshotBadgeVerticalOffset = $0 }),
+            .navigation(titleKey: "Nagram.ExteraPlugins", action: pluginsAction),
             .navigation(titleKey: "Nagram.Update.Title", action: appUpdateAction),
+            .navigation(titleKey: "Nagram.ChannelFeed", action: channelFeedAction),
             .navigation(titleKey: "Nagram.About", action: aboutAction),
         ]),
         NagramGroup(tab: .other, headerKey: "Nagram.Section.Experimental", footerKey: "Nagram.MediaMetadata.Footer", rows: [
@@ -941,8 +951,14 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nagramGroupProfileSettingsController(context: context))
     }, sessionBackupAction: {
         pushControllerImpl?(nagramSessionBackupController(context: context))
+    }, pluginsAction: {
+        pushControllerImpl?(nagramExteraPluginsController(context: context))
     }, appUpdateAction: {
-        pushControllerImpl?(nextgramUpdateController(context: context))
+        Task { @MainActor in
+            pushControllerImpl?(nextgramUpdateController(context: context))
+        }
+    }, channelFeedAction: {
+        pushControllerImpl?(nextgramChannelFeedController(context: context))
     }, aboutAction: {
         pushControllerImpl?(nagramAboutController(context: context))
     })
@@ -1143,18 +1159,23 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         }
 
         if isRoot {
-            entries.append(.input(stableId: -10, section: 0, title: "", text: selection.1, placeholder: ngI18n("Nagram.Settings.Search", lang), isSecret: false, rightAligned: false, index: -1))
+            entries.append(.input(stableId: -100, section: 0, title: "", text: selection.1, placeholder: ngI18n("Nagram.Settings.Search", lang), isSecret: false, rightAligned: false, index: -1))
             if searchQuery.isEmpty {
-                entries.append(.header(stableId: -9, section: 1, text: ngI18n("Nagram.Settings.Sections", lang)))
+                let shortcutKeys = ["Nagram.ChannelFeed", "Nagram.Update.Title", "Nagram.ExteraPlugins", "Nagram.BottomBarLayout", "Nagram.ScreenshotBadge", "Nagram.LocalPremium"]
+                for (offset, key) in shortcutKeys.enumerated() {
+                    if let index = flatRows.firstIndex(where: { nagramRowTitleKey($0) == key }) {
+                        appendRow(flatRows[index], index, -20 + Int32(offset), 1)
+                    }
+                }
                 for tab in NagramTab.allCases {
-                    entries.append(.disclosure(stableId: -8 + tab.rawValue, section: 1, title: ngI18n(tab.titleKey, lang), label: "", index: -100 - Int(tab.rawValue)))
+                    entries.append(.disclosure(stableId: -8 + tab.rawValue, section: 2, title: ngI18n(tab.titleKey, lang), label: "", index: -100 - Int(tab.rawValue)))
                 }
             }
         }
 
         let normalizedSearchQuery = normalizedNagramDeepLinkToken(searchQuery)
         for (groupIndex, group) in groups.enumerated() {
-            let sectionId = Int32(groupIndex + (isRoot ? 2 : 0))
+            let sectionId = Int32(groupIndex + (isRoot ? 3 : 0))
             let headerStableId = stableId
             stableId += 1
             let groupTitle = group.headerKey.map { ngI18n($0, lang) } ?? ngI18n(group.tab.titleKey, lang)

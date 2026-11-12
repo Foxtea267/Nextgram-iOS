@@ -15,6 +15,7 @@ import PeerNameColorItem
 import WalletContext
 // MARK: NAGRAM
 import NagramSettings
+import NagramStrings // MARK: NEXTGRAM
 
 // MARK: NAGRAM — nagram 为独立设置分组，排在「我的资料」之后
 enum SettingsSection: Int, CaseIterable {
@@ -231,6 +232,10 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_SavedMessages, icon: PresentationResourcesSettings.savedMessages, action: {
         interaction.openSettings(.savedMessages)
+    }))
+    // MARK: NEXTGRAM
+    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 51, text: ngI18n("Nagram.Bookmarks", presentationData.strings.baseLanguageCode), icon: PresentationResourcesSettings.savedMessages, action: {
+        interaction.openSettings(.nextgramBookmarks)
     }))
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
         interaction.openSettings(.recentCalls)

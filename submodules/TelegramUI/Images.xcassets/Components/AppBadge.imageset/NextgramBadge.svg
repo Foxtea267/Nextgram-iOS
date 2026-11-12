@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="93" height="22" viewBox="0 0 93 22">
+  <!-- MARK: NEXTGRAM -->
+  <rect width="93" height="22" rx="11" fill="#007aff"/>
+  <g transform="translate(-2.5 0)" fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 15V7l6 8V7"/>
+    <path d="M27 7h-6v8h6m-6-4h5"/>
+    <path d="m31 7 6 8m0-8-6 8"/>
+    <path d="M41 7h7m-3.5 0v8"/>
+    <path d="M58 7h-3a3 3 0 0 0-3 3v2a3 3 0 0 0 3 3h3v-4h-2.5"/>
+    <path d="M62 15V7h3.5a2 2 0 0 1 0 4H62m3 0 3 4"/>
+    <path d="m71 15 3.5-8 3.5 8m-6-2.5h5"/>
+    <path d="M81 15V7l3 4 3-4v8"/>
+  </g>
+</svg>

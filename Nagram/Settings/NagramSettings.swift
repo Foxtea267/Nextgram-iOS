@@ -224,13 +224,20 @@ public final class NagramSettings {
     // MARK: NEXTGRAM — 消息保留与隐私增强。默认关闭，保持 Telegram 原生行为。
     @NagramDefault("nagram.antiRecallEnabled", false)
     public var antiRecallEnabled: Bool
-    /// 仅放宽客户端 Premium 界面和本地额度判断；服务端权益仍取决于真实订阅。
+    /// Only displays a Premium badge on the local account's profile.
     @NagramDefault("nagram.localPremiumEnabled", false)
     public var localPremiumEnabled: Bool
     @NagramDefault("nagram.unlimitedAccountsEnabled", false)
     public var unlimitedAccountsEnabled: Bool
     @NagramDefault("nagram.locationIndicatorMode", NagramLocationIndicatorMode.always.rawValue)
     public var locationIndicatorMode: String
+
+    @NagramDefault("nagram.screenshotBadgeMode", NagramLocationIndicatorMode.always.rawValue)
+    public var screenshotBadgeMode: String
+    @NagramDefault("nagram.screenshotBadgeVerticalOffset", "0")
+    public var screenshotBadgeVerticalOffset: String
+    @NagramDefault("nagram.autoCheckForUpdates", false)
+    public var autoCheckForUpdates: Bool
     @NagramDefault("nagram.usageAgreementAcceptedVersion", Int32(0))
     public var usageAgreementAcceptedVersion: Int32
     @NagramDefault("nagram.antiRecallWhitelist", "")
@@ -328,6 +335,18 @@ public final class NagramSettings {
     /// 在转发来源后显示原始消息时间
     @NagramDefault("nagram.showForwardedMessageDate", false)
     public var showForwardedMessageDate: Bool
+
+    @NagramDefault("nagram.autoRevealSpoilers", false)
+    public var autoRevealSpoilers: Bool
+
+    @NagramDefault("nagram.hideQuickForwardButton", false)
+    public var hideQuickForwardButton: Bool
+
+    @NagramDefault("nagram.confirmUnpinMessages", false)
+    public var confirmUnpinMessages: Bool
+
+    @NagramDefault("nagram.preselectMessageModerationActions", false)
+    public var preselectMessageModerationActions: Bool
     /// 隐藏频道底部面板按钮
     @NagramDefault("nagram.hideChannelBottomButton", false)
     public var hideChannelBottomButton: Bool

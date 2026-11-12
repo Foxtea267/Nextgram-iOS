@@ -699,6 +699,14 @@ public final class TabBarComponent: Component {
             return self.convert(itemView.bounds, from: itemView)
         }
 
+        // MARK: NEXTGRAM — Use the actual slot when reordering items in the layout preview.
+        public func frameForSearchButton() -> CGRect? {
+            guard let search = self.component?.search, search.showsButton, !search.isActive, let searchView = self.searchView else {
+                return nil
+            }
+            return self.convert(searchView.bounds, from: searchView)
+        }
+
         private func item(at point: CGPoint) -> AnyHashable? {
             var closestItem: (AnyHashable, CGFloat)?
             for (id, itemView) in self.itemViews {
@@ -759,11 +767,11 @@ public final class TabBarComponent: Component {
             let hasSearchButton = component.search?.showsButton == true
             let hasExternalItem = component.externalItem != nil
             let hasStandaloneSlot = hasSearchButton || hasExternalItem
-            var availableItemsWidth: CGFloat = availableSize.width - innerInset * 2.0
-            // MARK: NAGRAM — reserve the right-side slot for search or a custom external item.
-            if hasStandaloneSlot {
-                availableItemsWidth -= barHeight + 8.0
-            }
+            // MARK: NEXTGRAM — Reserve the standalone slot before measuring or placing the main capsule.
+            let standaloneWidth = hasStandaloneSlot ? min(barHeight, availableSize.width) : 0.0
+            let standaloneGap: CGFloat = hasStandaloneSlot && !component.items.isEmpty ? 8.0 : 0.0
+            let availableTabsWidth = max(0.0, availableSize.width - standaloneWidth - standaloneGap)
+            let availableItemsWidth = max(0.0, availableTabsWidth - innerInset * 2.0)
             
             var unboundItemWidths: [CGFloat] = []
             
@@ -800,50 +808,57 @@ public final class TabBarComponent: Component {
                 unboundItemWidthSum += itemSize.width
             }
             
-            let itemWidths: [CGFloat]
-            let totalItemsWidth: CGFloat
+            let preferredItemWidths: [CGFloat]
 
             let layoutItemCount = max(component.items.count, component.layoutItemCount ?? component.items.count)
             let equalWidth = floorToScreenPixels(availableItemsWidth / CGFloat(max(1, layoutItemCount)))
             // MARK: NAGRAM — support adaptive content width instead of forced equal-width slots.
             if let buttonWidthFillRatio = component.buttonWidthFillRatio {
-                let minLayoutItemCount = max(component.items.count, component.layoutItemCount ?? component.items.count)
-                let minWidth = floorToScreenPixels(availableItemsWidth / CGFloat(max(1, minLayoutItemCount)))
+                // MARK: NEXTGRAM — The narrow end of the slider must leave room for alignment even with all buttons visible.
+                let minWidth = min(48.0, equalWidth)
                 let maxWidth = floorToScreenPixels(availableItemsWidth / CGFloat(max(1, component.items.count)))
                 let clampedRatio = max(0.0, min(1.0, buttonWidthFillRatio))
                 let buttonWidth = floorToScreenPixels(minWidth + (maxWidth - minWidth) * clampedRatio)
-                itemWidths = unboundItemWidths.map { max(buttonWidth, $0) }
-                totalItemsWidth = itemWidths.reduce(0.0, +)
+                preferredItemWidths = unboundItemWidths.map { max(buttonWidth, $0) }
             } else if component.isAdaptiveWidth {
-                itemWidths = unboundItemWidths.map { max(48.0, $0) }
-                totalItemsWidth = itemWidths.reduce(0.0, +)
+                preferredItemWidths = unboundItemWidths.map { max(48.0, $0) }
             } else if unboundItemWidths.allSatisfy({ $0 <= equalWidth }) {
                 // All items fit in equal width — use equal widths for optical alignment
-                itemWidths = Array(repeating: equalWidth, count: component.items.count)
-                totalItemsWidth = equalWidth * CGFloat(component.items.count)
+                preferredItemWidths = Array(repeating: equalWidth, count: component.items.count)
             } else if component.layoutItemCount != nil {
                 // MARK: NAGRAM
                 // Keep hidden-tab layouts on the original slot width instead of expanding remaining items.
-                itemWidths = unboundItemWidths.map { max(equalWidth, $0) }
-                totalItemsWidth = itemWidths.reduce(0.0, +)
+                preferredItemWidths = unboundItemWidths.map { max(equalWidth, $0) }
             } else {
                 // Some items need more space — use weighted fit
                 let itemWeightNorm: CGFloat = availableItemsWidth / unboundItemWidthSum
                 var widths: [CGFloat] = []
-                var total: CGFloat = 0.0
                 for index in 0 ..< component.items.count {
                     let itemWidth = floorToScreenPixels(unboundItemWidths[index] * itemWeightNorm)
                     widths.append(itemWidth)
-                    total += itemWidth
                 }
-                itemWidths = widths
-                totalItemsWidth = total
+                preferredItemWidths = widths
             }
 
+            // MARK: NEXTGRAM — Long localized titles must fit inside the actual capsule.
+            let preferredWidth = preferredItemWidths.reduce(0.0, +)
+            let itemWidths = preferredWidth > availableItemsWidth
+                ? preferredItemWidths.map { floorToScreenPixels($0 * (availableItemsWidth / preferredWidth)) }
+                : preferredItemWidths
+            let totalItemsWidth = itemWidths.reduce(0.0, +)
             let itemHeight: CGFloat = 56.0
             let contentWidth: CGFloat = innerInset * 2.0 + totalItemsWidth
-            let tabsSize = CGSize(width: min(availableSize.width, contentWidth), height: itemHeight + innerInset * 2.0)
+            let tabsSize = CGSize(width: min(availableTabsWidth, contentWidth), height: itemHeight + innerInset * 2.0)
             let hasItems = !component.items.isEmpty
+            // MARK: NEXTGRAM — Center both capsules together, or align the main one within the left region.
+            let freeWidth = max(0.0, availableTabsWidth - tabsSize.width)
+            let centerGroup = hasItems && hasStandaloneSlot && component.centerItemsInAvailableWidth
+            let tabsOriginX = hasStandaloneSlot && (component.isAdaptiveWidth || component.buttonWidthFillRatio != nil) && !component.alignItemsToLeft
+                ? floorToScreenPixels(freeWidth * 0.5)
+                : 0.0
+            let standaloneX = centerGroup
+                ? tabsOriginX + tabsSize.width + standaloneGap
+                : availableSize.width - standaloneWidth
             // MARK: NAGRAM — an external item remains tappable even when all bottom items are hidden.
             let hasInteractiveItems = hasItems || hasExternalItem
 
@@ -982,8 +997,9 @@ public final class TabBarComponent: Component {
             if let externalItem = component.externalItem {
                 validIds.append(externalItem.id)
 
-                let externalSize = CGSize(width: barHeight, height: barHeight)
-                let externalFrame = CGRect(origin: CGPoint(x: availableSize.width - externalSize.width, y: 0.0), size: externalSize)
+                // MARK: NEXTGRAM
+                let externalSize = CGSize(width: standaloneWidth, height: barHeight)
+                let externalFrame = CGRect(origin: CGPoint(x: standaloneX, y: 0.0), size: externalSize)
 
                 let itemView: ComponentView<Empty>
                 var itemTransition = transition
@@ -1071,22 +1087,8 @@ public final class TabBarComponent: Component {
                 self.measureItemViews.removeValue(forKey: id)
             }
             
-            var tabsFrame = CGRect(origin: CGPoint(), size: tabsSize)
-            // MARK: NAGRAM — align adaptive bottom items inside the area left of the standalone slot.
-            if component.isAdaptiveWidth || component.buttonWidthFillRatio != nil {
-                if hasStandaloneSlot {
-                    let availableTabsWidth = max(0.0, availableSize.width - (barHeight + 8.0))
-                    if component.alignItemsToLeft {
-                        tabsFrame.origin.x = 0.0
-                    } else if component.centerItemsInAvailableWidth {
-                        tabsFrame.origin.x = floor((availableSize.width - tabsFrame.width) * 0.5)
-                    } else {
-                        tabsFrame.origin.x = floor((availableTabsWidth - tabsFrame.width) * 0.5)
-                    }
-                } else {
-                    tabsFrame.origin.x = 0.0
-                }
-            }
+            // MARK: NEXTGRAM
+            var tabsFrame = CGRect(origin: CGPoint(x: tabsOriginX, y: 0.0), size: tabsSize)
             if let search = component.search, search.isActive {
                 tabsFrame.size = CGSize(width: 48.0, height: 48.0)
                 tabsFrame.origin.y = tabsSize.height - 48.0
@@ -1153,7 +1155,7 @@ public final class TabBarComponent: Component {
                     searchSize = CGSize(width: availableSize.width, height: 48.0)
                     searchFrame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: searchSize)
                 } else if onlySearchButton {
-                    size = CGSize(width: barHeight, height: barHeight)
+                    size = CGSize(width: standaloneWidth, height: barHeight) // MARK: NEXTGRAM
                     searchSize = size
                     searchFrame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: searchSize)
                 // MARK: NAGRAM — bottom-embedded search should not render a second right-side button.
@@ -1161,13 +1163,14 @@ public final class TabBarComponent: Component {
                     searchSize = CGSize(width: 0.0, height: 0.0)
                     searchFrame = CGRect(origin: CGPoint(x: availableSize.width + 50.0, y: 0.0), size: searchSize)
                 } else {
-                    searchSize = CGSize(width: barHeight, height: barHeight)
-                    if component.layoutItemCount != nil {
-                        size.width = availableSize.width // MARK: NAGRAM — keep right-side search anchored.
+                    searchSize = CGSize(width: standaloneWidth, height: barHeight) // MARK: NEXTGRAM
+                    if component.layoutItemCount != nil || component.externalItem != nil {
+                        size.width = availableSize.width
+                        searchFrame = CGRect(origin: CGPoint(x: standaloneX, y: 0.0), size: searchSize)
                     } else {
-                        size.width += barHeight + 8.0
+                        size.width += standaloneWidth + standaloneGap
+                        searchFrame = CGRect(origin: CGPoint(x: size.width - searchSize.width, y: 0.0), size: searchSize)
                     }
-                    searchFrame = CGRect(origin: CGPoint(x: availableSize.width - searchSize.width, y: 0.0), size: searchSize)
                 }
 
                 let searchView: NavigationSearchView

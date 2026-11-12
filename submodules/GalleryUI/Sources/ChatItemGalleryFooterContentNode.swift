@@ -1,4 +1,5 @@
 import Foundation
+import NagramSettings // MARK: NEXTGRAM
 import LottieSettings
 import UIKit
 import AsyncDisplayKit
@@ -603,7 +604,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             if let (index, attributes) = textNode.attributesAtPoint(CGPoint(x: location.x - titleFrame.minX, y: location.y - titleFrame.minY)) {
                 let _ = index
                 
-                if let _ = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.Spoiler)] {
+                if let _ = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.Spoiler)], !NagramSettings.shared.autoRevealSpoilers { // MARK: NEXTGRAM
                     return false
                 } else if let _ = attributes[NSAttributedString.Key(rawValue: TelegramTextAttributes.URL)] as? String {
                     return false
@@ -1112,7 +1113,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
     }
     
     private func updateSpoilers(textFrame: CGRect) {
-        if let textLayout = self.textNode.cachedLayout, !textLayout.spoilers.isEmpty {
+        if !NagramSettings.shared.autoRevealSpoilers, let textLayout = self.textNode.cachedLayout, !textLayout.spoilers.isEmpty { // MARK: NEXTGRAM
             if self.spoilerTextNode == nil {
                 let spoilerTextNode = ImmediateTextNodeWithEntities()
                 spoilerTextNode.displaySpoilerEffect = false
@@ -1210,6 +1211,7 @@ final class ChatItemGalleryFooterContentNode: GalleryFooterContentNode, ASScroll
             let textBottomInset: CGFloat = 8.0 + 14.0
             
             let constrainSize = CGSize(width: width - sideInset * 2.0, height: CGFloat.greatestFiniteMagnitude)
+            self.textNode.displaySpoilers = NagramSettings.shared.autoRevealSpoilers // MARK: NEXTGRAM
             let textSize = self.textNode.updateLayout(constrainSize)
             
             var textOffset: CGFloat = 0.0

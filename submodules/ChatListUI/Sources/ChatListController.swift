@@ -2449,6 +2449,10 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        // MARK: NEXTGRAM — Folder subpages keep the badge unless all scenes are disabled.
+        if case .chatList(.root) = self.location {
+            self.context.sharedContext.mainWindow?.setScreenshotBadgePage(.chatList)
+        }
                 
         if self.powerSavingMonitoringDisposable == nil {
             self.powerSavingMonitoringDisposable = (self.context.sharedContext.automaticMediaDownloadSettings
@@ -2934,6 +2938,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        // MARK: NEXTGRAM
+        self.context.sharedContext.mainWindow?.setScreenshotBadgePage(.other)
 
         // MARK: NEXTGRAM
         self.context.sharedContext.locationManager?.setLocationIndicatorContext(.other)
@@ -6596,12 +6602,24 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 fallback()
                 return
             }
+            items.insert(self.nextgramChannelFeedMenuItem(), at: 0) // MARK: NEXTGRAM
             
             let controller = makeContextController(context: self.context, presentationData: self.presentationData, source: .reference(ChatListTabBarContextReferenceContentSource(controller: self, sourceView: sourceView)), items: .single(ContextController.Items(content: .list(items))), recognizer: nil, gesture: gesture)
             self.context.sharedContext.mainWindow?.presentInGlobalOverlay(controller)
         })
     }
     
+    // MARK: NEXTGRAM — Keep the channel feed accessible in both chats-tab menus.
+    private func nextgramChannelFeedMenuItem() -> ContextMenuItem {
+        return .action(ContextMenuActionItem(text: ngI18n("Nagram.ChannelFeed", self.presentationData.strings.baseLanguageCode), icon: { theme in
+            return generateTintedImage(image: UIImage(systemName: "rectangle.stack"), color: theme.contextMenu.primaryColor)
+        }, action: { [weak self] _, dismiss in
+            dismiss(.dismissWithoutContent)
+            guard let self else { return }
+            self.push(nextgramChannelFeedController(context: self.context))
+        }))
+    }
+
     private func displayChatListTabBarContextMenu(sourceView: ContextExtractedContentContainingView, gesture: ContextGesture) {
         let _ = (combineLatest(queue: .mainQueue(),
             self.context.engine.peers.currentChatListFilters(),
@@ -6624,7 +6642,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             let _ = strongSelf.context.engine.peers.markChatListFeaturedFiltersAsSeen().startStandalone()
             let (_, filterItems) = filterItemsAndTotalCount
             
-            var items: [ContextMenuItem] = []
+            var items: [ContextMenuItem] = [strongSelf.nextgramChannelFeedMenuItem()] // MARK: NEXTGRAM
             items.append(.action(ContextMenuActionItem(text: presetList.isEmpty ? strongSelf.presentationData.strings.ChatList_AddFolder : strongSelf.presentationData.strings.ChatList_EditFolders, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: presetList.isEmpty ? "Chat/Context Menu/Add" : "Chat/Context Menu/EditFolder"), color: theme.contextMenu.primaryColor)
             }, action: { c, f in

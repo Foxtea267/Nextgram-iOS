@@ -2011,6 +2011,10 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
 
         // MARK: NAGRAM — Hide the channel forward button to free horizontal space for posts.
         var useWideChannelPostLayout = false
+        // MARK: NEXTGRAM
+        if needsShareButton && nextgramShouldHideQuickForwardButton(item: item, preserveComments: !self.disablesComments) {
+            needsShareButton = false
+        }
         if NagramSettings.shared.wideChannelPosts, !isPreview, !isAd, let channel = firstMessage.peers[firstMessage.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
             useWideChannelPostLayout = true
             needsShareButton = false

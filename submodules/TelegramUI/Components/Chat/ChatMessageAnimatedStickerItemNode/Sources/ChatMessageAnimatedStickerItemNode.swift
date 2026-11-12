@@ -1010,6 +1010,10 @@ public class ChatMessageAnimatedStickerItemNode: ChatMessageItemView {
             if Namespaces.Message.allEphemeral.contains(item.message.id.namespace) || Namespaces.Message.allWelcomeMessages.contains(item.message.id.namespace) {
                 needsShareButton = false
             }
+            // MARK: NEXTGRAM
+            if needsShareButton && nextgramShouldHideQuickForwardButton(item: item) {
+                needsShareButton = false
+            }
             
             var isEmoji = false
             if let _ = telegramDice {

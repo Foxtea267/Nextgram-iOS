@@ -41,6 +41,7 @@ import BundleIconComponent
 import AnimatedTextComponent
 import TextFormat
 import NagramSettings // MARK: NAGRAM
+import NagramSettingsUI // MARK: NEXTGRAM
 
 private func isIncludedCommunityContainer(_ peer: EnginePeer?, filter: ChatListNodePeersFilter) -> Bool {
     if filter.contains(.includeCommunities), case .community = peer {
@@ -1000,7 +1001,9 @@ public enum ChatListSearchEntry: Comparable, Identifiable {
                     )
                 }
 
-                return ContactsPeerItem(presentationData: ItemListPresentationData(presentationData), sortOrder: nameSortOrder, displayOrder: nameDisplayOrder, context: context, peerMode: .generalSearch(isSavedMessages: isSavedMessages), aliasHandling: isSelf ? .standard : .treatSelfAsSaved, peer: .peer(peer: primaryPeer, chatPeer: chatPeer), status: status, badge: badge, requiresPremiumForMessaging: requiresPremiumForMessaging, enabled: enabled, selection: .none, editing: ContactsPeerItemEditing(editable: false, editing: false, revealed: false), buttonAction: buttonAction, index: nil, header: header, action: { contactPeer in
+                // MARK: NEXTGRAM
+                let titleOverride = NextgramChatAliases.name(accountPeerId: context.account.peerId.toInt64(), peerId: primaryPeer.id.toInt64())
+                return ContactsPeerItem(presentationData: ItemListPresentationData(presentationData), sortOrder: nameSortOrder, displayOrder: nameDisplayOrder, context: context, peerMode: .generalSearch(isSavedMessages: isSavedMessages), aliasHandling: isSelf ? .standard : .treatSelfAsSaved, peer: .peer(peer: primaryPeer, chatPeer: chatPeer), titleOverride: titleOverride, status: status, badge: badge, requiresPremiumForMessaging: requiresPremiumForMessaging, enabled: enabled, selection: .none, editing: ContactsPeerItemEditing(editable: false, editing: false, revealed: false), buttonAction: buttonAction, index: nil, header: header, action: { contactPeer in
                     if case let .peer(maybePeer, maybeChatPeer) = contactPeer, let peer = maybePeer, let chatPeer = maybeChatPeer {
                         interaction.peerSelected(chatPeer, peer, nil, nil, false)
                     } else {
@@ -2389,6 +2392,10 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                     }
 
                     let updatedLocalPeers = predicate |> mapToSignal { predicate in
+                        // MARK: NEXTGRAM — Include aliases in account-wide search.
+                        if predicate == nil {
+                            return nextgramSearchLocalPeers(context: context, query: query.lowercased())
+                        }
                         return context.engine.contacts.searchLocalPeers(query: query.lowercased(), predicate: predicate)
                     }
                     |> mapToSignal { peers -> Signal<[EngineRenderedPeer], NoError> in
@@ -2489,7 +2496,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                 }
             } else if let query = query, key == .channels {
                 foundLocalPeers = combineLatest(
-                    context.engine.contacts.searchLocalPeers(query: query.lowercased(), scope: .channels),
+                    nextgramSearchLocalPeers(context: context, query: query.lowercased(), scope: .channels), // MARK: NEXTGRAM
                     context.engine.peers.recommendedChannelPeerIds(peerId: nil)
                 )
                 |> mapToSignal { local, recommended -> Signal<(peers: [EngineRenderedPeer], unread: [EnginePeer.Id: (Int32, Bool)], recentlySearchedPeerIds: Set<EnginePeer.Id>), NoError> in
@@ -3302,6 +3309,9 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                                     matches = true
                                 }
                             } else if peer.displayTitle(strings: presentationData.strings, displayOrder: presentationData.nameDisplayOrder).lowercased().hasPrefix(lowercasedQuery) {
+                                matches = true
+                            } else if let alias = NextgramChatAliases.name(accountPeerId: context.account.peerId.toInt64(), peerId: peer.id.toInt64()),
+                                      alias.localizedStandardContains(lowercasedQuery) { // MARK: NEXTGRAM
                                 matches = true
                             }
 

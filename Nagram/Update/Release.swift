@@ -8,7 +8,7 @@ public enum NextgramUpdateError: Error {
     case invalidPackage
 }
 
-struct NextgramReleaseVersion: Comparable, Sendable {
+struct NextgramReleaseVersion: Comparable, Codable, Sendable {
     let value: String
     private let components: [UInt32]
 
@@ -39,7 +39,7 @@ struct NextgramReleaseVersion: Comparable, Sendable {
     }
 }
 
-public struct NextgramUpdateRelease: Equatable, Sendable {
+public struct NextgramUpdateRelease: Equatable, Codable, Sendable {
     static let repository = "Foxtea267/Nextgram-iOS"
     public static let releasesPage = URL(string: "https://github.com/\(repository)/releases")!
     static let latestEndpoint = URL(string: "https://api.github.com/repos/\(repository)/releases/latest")!
@@ -115,6 +115,16 @@ public struct NextgramUpdateRelease: Equatable, Sendable {
 
     static func supports(bundleIdentifier: String, version: String) -> Bool {
         return assetNames[bundleIdentifier] != nil && NextgramReleaseVersion(version) != nil
+    }
+
+    func isApplicable(bundleIdentifier: String, installedVersion: String) -> Bool {
+        guard let installed = NextgramReleaseVersion(installedVersion) else { return false }
+        return self.bundleIdentifier == bundleIdentifier && Self.assetNames[bundleIdentifier] == assetName
+            && NextgramReleaseVersion(version.value) == version && version > installed
+            && size > 0 && size <= 1024 * 1024 * 1024
+            && sha256.utf8.count == 64 && sha256.utf8.allSatisfy({ (48...57).contains($0) || (97...102).contains($0) })
+            && downloadURL == Self.releasesPage.appendingPathComponent("download")
+                .appendingPathComponent(version.value).appendingPathComponent(assetName)
     }
 
     func matchesPackageInfo(_ info: [String: Any]) -> Bool {

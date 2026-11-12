@@ -22,6 +22,9 @@ import MultiAnimationRenderer
 import ComponentDisplayAdapters
 import GlassBackgroundComponent
 import AnimatedTextComponent
+// MARK: NEXTGRAM
+import NagramSettings
+import NagramSettingsSignal
 
 private let titleFont = Font.with(size: 17.0, design: .regular, weight: .semibold, traits: [.monospacedNumbers])
 private let subtitleFont = Font.regular(13.0)
@@ -257,6 +260,7 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
     
     public var pressed: (() -> Void)?
     public var longPressed: (() -> Void)?
+    private let chatAliasDisposable = MetaDisposable() // MARK: NEXTGRAM
     
     public var titleContent: ChatTitleContent? {
         didSet {
@@ -299,7 +303,9 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
                                     if !peerView.isContact, let user = peer as? TelegramUser, !user.flags.contains(.isSupport), user.botInfo == nil, let phone = user.phone, !phone.isEmpty {
                                         segments = [.text(0, NSAttributedString(string: formatPhoneNumber(context: self.context, number: phone), font: titleFont, textColor: titleTheme.rootController.navigationBar.primaryTextColor))]
                                     } else {
-                                        segments = [.text(0, NSAttributedString(string: EnginePeer(peer).displayTitle(strings: self.strings, displayOrder: self.nameDisplayOrder), font: titleFont, textColor: titleTheme.rootController.navigationBar.primaryTextColor))]
+                                        // MARK: NEXTGRAM
+                                        let alias = NextgramChatAliases.name(accountPeerId: self.context.account.peerId.toInt64(), peerId: peerView.peerId.toInt64())
+                                        segments = [.text(0, NSAttributedString(string: alias ?? EnginePeer(peer).displayTitle(strings: self.strings, displayOrder: self.nameDisplayOrder), font: titleFont, textColor: titleTheme.rootController.navigationBar.primaryTextColor))]
                                     }
                                 }
                                 if peer.id != self.context.account.peerId {
@@ -838,6 +844,16 @@ public final class ChatTitleView: UIView, NavigationBarTitleView {
             }
         }
         self.button.view.addGestureRecognizer(UILongPressGestureRecognizer(target: self, action: #selector(self.longPressGesture(_:))))
+        // MARK: NEXTGRAM
+        self.chatAliasDisposable.set((nextgramChatAliasesSignal(accountPeerId: context.account.peerId.toInt64())
+        |> deliverOnMainQueue).start(next: { [weak self] _ in
+            guard let self, let titleContent = self.titleContent else { return }
+            self.titleContent = titleContent
+        }))
+    }
+
+    deinit {
+        self.chatAliasDisposable.dispose() // MARK: NEXTGRAM
     }
     
     required public init?(coder aDecoder: NSCoder) {

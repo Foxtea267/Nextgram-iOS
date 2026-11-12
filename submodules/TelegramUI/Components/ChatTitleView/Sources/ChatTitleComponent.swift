@@ -13,6 +13,10 @@ import PhoneNumberFormat
 import TelegramStringFormatting
 import EmojiStatusComponent
 import GlassBackgroundComponent
+// MARK: NEXTGRAM
+import NagramSettings
+import NagramSettingsSignal
+import SwiftSignalKit
 
 public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
     private final class ContentData: Equatable {
@@ -71,6 +75,9 @@ public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
     private var contentData: ContentData?
     private var activities: ChatTitleComponent.Activities?
     private var networkState: AccountNetworkState?
+    // MARK: NEXTGRAM
+    private let chatAliasDisposable = MetaDisposable()
+    private var chatAliasAccountId: Int64?
     
     private var ignoreParentTransitionRequests: Bool = false
     public var requestUpdate: ((ContainedViewLayoutTransition) -> Void)?
@@ -84,6 +91,10 @@ public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
     
     required public init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        self.chatAliasDisposable.dispose() // MARK: NEXTGRAM
     }
     
     public func animateLayoutTransition() {
@@ -127,6 +138,15 @@ public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
         )
         let isUpdated = self.contentData != contentData
         self.contentData = contentData
+        // MARK: NEXTGRAM — Update the visible title after a local alias edit.
+        let accountId = context.account.peerId.toInt64()
+        if self.chatAliasAccountId != accountId {
+            self.chatAliasAccountId = accountId
+            self.chatAliasDisposable.set((nextgramChatAliasesSignal(accountPeerId: accountId)
+            |> deliverOnMainQueue).start(next: { [weak self] _ in
+                self?.update(transition: .immediate)
+            }))
+        }
         self.update(transition: transition)
         self.ignoreParentTransitionRequests = false
         
@@ -237,6 +257,7 @@ public final class ChatTitleComponent: Component {
     public let nameDisplayOrder: PresentationPersonNameOrder
     public let displayBackground: Bool
     public let content: ChatTitleContent
+    private let localChatAlias: String? // MARK: NEXTGRAM
     public let activities: Activities?
     public let networkState: AccountNetworkState?
     public let tapped: () -> Void
@@ -264,6 +285,12 @@ public final class ChatTitleComponent: Component {
         self.nameDisplayOrder = nameDisplayOrder
         self.displayBackground = displayBackground
         self.content = content
+        // MARK: NEXTGRAM
+        if case let .peer(data, _, _, _, _, _, _, _, _) = content {
+            self.localChatAlias = NextgramChatAliases.name(accountPeerId: context.account.peerId.toInt64(), peerId: data.peerId.toInt64())
+        } else {
+            self.localChatAlias = nil
+        }
         self.activities = activities
         self.networkState = networkState
         self.tapped = tapped
@@ -292,7 +319,7 @@ public final class ChatTitleComponent: Component {
         if lhs.displayBackground != rhs.displayBackground {
             return false
         }
-        if lhs.content != rhs.content {
+        if lhs.content != rhs.content || lhs.localChatAlias != rhs.localChatAlias { // MARK: NEXTGRAM
             return false
         }
         if lhs.activities != rhs.activities {
@@ -437,7 +464,7 @@ public final class ChatTitleComponent: Component {
                                 titleSegments = [AnimatedTextComponent.Item(
                                     id: AnyHashable(0),
                                     isUnbreakable: true,
-                                    content: .text(EnginePeer(peer).displayTitle(strings: component.strings, displayOrder: component.nameDisplayOrder))
+                                    content: .text(component.localChatAlias ?? EnginePeer(peer).displayTitle(strings: component.strings, displayOrder: component.nameDisplayOrder)) // MARK: NEXTGRAM
                                 )]
                             }
                         }

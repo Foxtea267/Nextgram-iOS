@@ -18,6 +18,9 @@ import TopMessageReactions
 import TelegramNotices
 import PresentationDataUtils
 import ChatPresentationInterfaceState
+import NagramPlugins // MARK: NEXTGRAM
+import NagramSettingsUI // MARK: NEXTGRAM
+import NagramStrings // MARK: NEXTGRAM
 
 extension ChatControllerImpl {
     func openMessageContextMenu(message: EngineMessage, selectAll: Bool, node: ASDisplayNode, frame: CGRect, anyRecognizer: UIGestureRecognizer?, location: CGPoint?) -> Void {
@@ -80,6 +83,48 @@ extension ChatControllerImpl {
                     }
                 case .custom, .twoLists:
                     break
+                }
+
+                // MARK: NEXTGRAM — Bookmark cloud messages by location without retaining their content.
+                if case let .list(items) = actions.content, message.id.namespace == Namespaces.Message.Cloud,
+                   message.id.peerId.namespace != Namespaces.Peer.SecretChat, message.adAttribute == nil,
+                   !topMessage.isCopyProtected(), !self.presentationInterfaceState.copyProtectionEnabled,
+                   !self.presentationInterfaceState.myCopyProtectionEnabled {
+                    let title = ngI18n("Nagram.Bookmarks.Action", self.presentationData.strings.baseLanguageCode)
+                    let forumThreadId = (self.presentationInterfaceState.renderedPeer?.peer as? TelegramChannel)?.isForum == true
+                        ? message.threadId
+                        : nil
+                    actions.content = .list(items + [
+                        .action(ContextMenuActionItem(text: title, icon: { _ in nil }, action: { [weak self] _, dismiss in
+                            dismiss(.default)
+                            if let self {
+                                nextgramPresentBookmarkEditor(context: self.context, messageId: message.id, forumThreadId: forumThreadId)
+                            }
+                        }))
+                    ])
+                }
+
+                // MARK: NEXTGRAM — Message context actions expose only the supported value snapshot.
+                let pluginItems = NagramExteraPlugins.shared.menuItems
+                if !pluginItems.isEmpty, case let .list(items) = actions.content,
+                   message.id.peerId.namespace != Namespaces.Peer.SecretChat,
+                   !self.presentationInterfaceState.copyProtectionEnabled,
+                   !self.presentationInterfaceState.myCopyProtectionEnabled {
+                    actions.content = .list(items + [.separator] + pluginItems.map { item in
+                        .action(ContextMenuActionItem(text: item.title, icon: { _ in nil }, action: { [weak self] _, dismiss in
+                            dismiss(.default)
+                            guard let self else { return }
+                            NagramExteraPlugins.shared.invoke(item, context: [
+                                "account": self.context.account.peerId.toInt64(),
+                                "dialog_id": message.id.peerId.toInt64(),
+                                "message": ["id": message.id.id, "messageText": message.text],
+                            ]) { [weak self] result in
+                                if case let .failure(error) = result {
+                                    self?.nextgramPresentPluginError(error.localizedDescription)
+                                }
+                            }
+                        }))
+                    })
                 }
                 
                 if allowedReactions != nil, case let .customChatContents(customChatContents) = self.presentationInterfaceState.subject {

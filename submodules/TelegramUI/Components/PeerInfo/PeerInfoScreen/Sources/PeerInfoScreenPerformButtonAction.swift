@@ -450,6 +450,17 @@ extension PeerInfoScreenNode {
                         })
                     })))
                 }
+                // MARK: NEXTGRAM — Group and channel aliases are local to the active account.
+                if canChooseFolder, data.threadData == nil {
+                    let title = nextgramChatAliasEditorTitle(language: presentationData.strings.baseLanguageCode)
+                    items.append(.action(ContextMenuActionItem(text: title, icon: { theme in
+                        generateTintedImage(image: UIImage(systemName: "pencil"), color: theme.contextMenu.primaryColor)
+                    }, action: { [weak self] _, dismiss in
+                        dismiss(.dismissWithoutContent)
+                        guard let self else { return }
+                        nextgramPresentChatAliasEditor(context: self.context, peer: chatPeer)
+                    })))
+                }
                 
                 if case let .secretChat(secretChat) = chatPeer {
                     currentAutoremoveTimeout = secretChat.messageAutoremoveTimeout

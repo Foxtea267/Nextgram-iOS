@@ -17,8 +17,10 @@ import TextFormat
 import TelegramBaseController
 import AccountContext
 import NagramMessageFormatting // MARK: NEXTGRAM
+import NagramPlugins // MARK: NEXTGRAM
 import WalletContext
 import NagramSettings // MARK: NAGRAM
+import NagramStrings // MARK: NEXTGRAM
 import NagramSettingsUI // MARK: NAGRAM
 import TelegramStringFormatting
 import OverlayStatusController
@@ -311,6 +313,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     var moreInfoNavigationButton: ChatNavigationButton?
     
     var historyStateDisposable: Disposable?
+    var nextgramMessageDisplayOptionsDisposable: Disposable? // MARK: NEXTGRAM
     
     let galleryHiddenMesageAndMediaDisposable = MetaDisposable()
     let temporaryHiddenGalleryMediaDisposable = MetaDisposable()
@@ -7149,6 +7152,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
 
         self.historyStateDisposable?.dispose()
+        self.nextgramMessageDisplayOptionsDisposable?.dispose() // MARK: NEXTGRAM
         self.messageIndexDisposable.dispose()
         self.navigationActionDisposable.dispose()
         self.galleryHiddenMesageAndMediaDisposable.dispose()
@@ -7929,6 +7933,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
 
     override public func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
+        // MARK: NEXTGRAM
+        self.context.sharedContext.mainWindow?.setScreenshotBadgePage(.chat)
         
         self.didAppear = true
         
@@ -8364,6 +8370,8 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     
     override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        // MARK: NEXTGRAM
+        self.context.sharedContext.mainWindow?.setScreenshotBadgePage(.other)
 
         // MARK: NEXTGRAM
         self.context.sharedContext.locationManager?.setLocationIndicatorContext(.other)
@@ -9246,27 +9254,28 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             }
             
             if commit || !isScheduledMessages {
-                self.commitPurposefulAction()
-                
-                let _ = (enqueueMessages(account: self.context.account, peerId: peerId, messages: self.transformEnqueueMessages(messages, postpone: postpone))
-                |> deliverOnMainQueue).startStandalone(next: { [weak self] _ in
-                    if let strongSelf = self, strongSelf.presentationInterfaceState.subject != .scheduledMessages {
-                        strongSelf.chatDisplayNode.historyNode.scrollToEndOfHistory()
+                // MARK: NEXTGRAM — Run plugin hooks once, before committing or enqueuing a chat send.
+                self.nextgramPreparePluginSend(messages, peerId: peerId) { [weak self] messages in
+                    guard let self, !messages.isEmpty else {
+                        return
                     }
-                })
-                
-                donateSendMessageIntent(account: self.context.account, sharedContext: self.context.sharedContext, intentContext: .chat, peerIds: [peerId])
-                
-                self.updateChatPresentationInterfaceState(interactive: true, { $0.updatedShowCommands(false) })
-                
-                if !isScheduledMessages && shouldOpenScheduledMessages {
-                    if let layoutActionOnViewTransitionAction = self.layoutActionOnViewTransitionAction {
-                        self.layoutActionOnViewTransitionAction = nil
-                        layoutActionOnViewTransitionAction()
-                    }
-                    
-                    self.openScheduledMessages(force: true, completion: { _ in
+                    self.commitPurposefulAction()
+                    let _ = (enqueueMessages(account: self.context.account, peerId: peerId, messages: self.transformEnqueueMessages(messages, postpone: postpone))
+                    |> deliverOnMainQueue).startStandalone(next: { [weak self] _ in
+                        if let strongSelf = self, strongSelf.presentationInterfaceState.subject != .scheduledMessages {
+                            strongSelf.chatDisplayNode.historyNode.scrollToEndOfHistory()
+                        }
                     })
+                    donateSendMessageIntent(account: self.context.account, sharedContext: self.context.sharedContext, intentContext: .chat, peerIds: [peerId])
+                    self.updateChatPresentationInterfaceState(interactive: true, { $0.updatedShowCommands(false) })
+                    if !isScheduledMessages && shouldOpenScheduledMessages {
+                        if let layoutActionOnViewTransitionAction = self.layoutActionOnViewTransitionAction {
+                            self.layoutActionOnViewTransitionAction = nil
+                            layoutActionOnViewTransitionAction()
+                        }
+                        self.openScheduledMessages(force: true, completion: { _ in
+                        })
+                    }
                 }
             } else {
                 self.presentScheduleTimePicker(style: media ? .media : .default, dismissByTapOutside: false, completion: { [weak self] result in
@@ -9278,6 +9287,51 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         })
     }
     
+    // MARK: NEXTGRAM — Restrict the initial plugin API to unformatted text, preserving media and entity offsets.
+    private func nextgramPreparePluginSend(_ messages: [EnqueueMessage], peerId: EnginePeer.Id, completion: @escaping ([EnqueueMessage]) -> Void) {
+        let engine = NagramExteraPlugins.shared
+        guard engine.hasSendHook, peerId.namespace != Namespaces.Peer.SecretChat else {
+            completion(messages)
+            return
+        }
+        let texts = messages.map { message -> String? in
+            guard case let .message(text, attributes, inlineStickers, media, _, _, _, _, _, _) = message,
+                  media == nil, inlineStickers.isEmpty, !text.isEmpty,
+                  !attributes.contains(where: { ($0 as? TextEntitiesMessageAttribute)?.entities.isEmpty == false }) else {
+                return nil
+            }
+            return text
+        }
+        guard texts.contains(where: { $0 != nil }) else {
+            completion(messages)
+            return
+        }
+        engine.transformOutgoing(account: self.context.account.peerId.toInt64(), dialogId: peerId.toInt64(), messages: texts) { [weak self] result in
+            switch result {
+            case let .success(transformed) where transformed.count == messages.count:
+                completion(messages.enumerated().compactMap { index, message in
+                    guard texts[index] != nil else { return message }
+                    guard let text = transformed[index] else { return nil }
+                    guard case let .message(_, attributes, inlineStickers, media, thread, reply, story, grouping, correlation, emoji) = message else {
+                        return message
+                    }
+                    return .message(text: text, attributes: attributes, inlineStickers: inlineStickers, mediaReference: media, threadId: thread, replyToMessageId: reply, replyToStoryId: story, localGroupingKey: grouping, correlationId: correlation, bubbleUpEmojiOrStickersets: emoji)
+                })
+            case let .failure(error):
+                self?.nextgramPresentPluginError(error.localizedDescription)
+            case .success:
+                self?.nextgramPresentPluginError("Invalid response from the extera plugin engine.")
+            }
+        }
+    }
+
+    // MARK: NEXTGRAM — Report a failed hook without sending the unmodified message.
+    func nextgramPresentPluginError(_ text: String) {
+        self.present(textAlertController(context: self.context, title: "Extera", text: text, actions: [
+            TextAlertAction(type: .defaultAction, title: self.presentationData.strings.Common_OK, action: {})
+        ]), in: .window(.root))
+    }
+
     func enqueueMediaMessages(
         fromGallery: Bool = false,
         signals: [Any]?,
@@ -10833,8 +10887,20 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         )
     }
     
-    func performRequestedUnpinAllMessages(count: Int, pinnedMessageId: MessageId) {
+    // MARK: NEXTGRAM — Reuse the native undo flow after explicit confirmation.
+    func performRequestedUnpinAllMessages(count: Int, pinnedMessageId: MessageId, confirmed: Bool = false) {
         guard let peerId = self.chatLocation.peerId else {
+            return
+        }
+        if NagramSettings.shared.confirmUnpinMessages && !confirmed {
+            let strings = self.presentationData.strings
+            self.present(textAlertController(context: self.context, updatedPresentationData: self.updatedPresentationData, title: nil,
+                text: ngI18n("Nagram.ConfirmUnpinAllPrompt", strings.baseLanguageCode), actions: [
+                    TextAlertAction(type: .genericAction, title: strings.Common_Cancel, action: {}),
+                    TextAlertAction(type: .defaultAction, title: strings.Conversation_Unpin, action: { [weak self] in
+                        self?.performRequestedUnpinAllMessages(count: count, pinnedMessageId: pinnedMessageId, confirmed: true)
+                    })
+                ]), in: .window(.root))
             return
         }
         self.chatDisplayNode.historyNode.pendingUnpinnedAllMessages = true

@@ -113,6 +113,12 @@ openssl_libs = [
     "libssl.a",
 ]
 
+# MARK: NEXTGRAM — Reuse the pinned source and build inputs for isolated IPA signing.
+exports_files(
+    ["build-openssl-bazel.sh", "openssl-1.1.1d.tar.gz", "patch-conf.patch", "patch-include.patch"],
+    visibility = ["//Nagram/UpdateSigner:__pkg__"],
+)
+
 genrule(
     name = "openssl_build",
     srcs = [

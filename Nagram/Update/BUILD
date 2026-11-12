@@ -14,8 +14,8 @@ objc_library(
 swift_library(
     name = "NextgramUpdate",
     module_name = "NextgramUpdate",
-    srcs = ["Release.swift", "ReleaseDownload.swift"],
+    srcs = ["Release.swift", "ReleaseDownload.swift", "SigningFiles.swift", "InstallManifest.swift", "LoopbackPackageServer.swift"],
     copts = ["-warnings-as-errors"],
-    deps = [":NextgramUpdateArchive"],
+    deps = [":NextgramUpdateArchive", "//Nagram/UpdateSigner:NextgramUpdateSigner"],
     visibility = ["//Nagram/SettingsUI:__pkg__"],
 )

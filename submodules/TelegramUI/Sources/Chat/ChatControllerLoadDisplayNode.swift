@@ -3524,7 +3524,7 @@ extension ChatControllerImpl {
                             }
                         }
                     }
-                    if askForConfirmation {
+                    if askForConfirmation || NagramSettings.shared.confirmUnpinMessages { // MARK: NEXTGRAM
                         strongSelf.present(textAlertController(context: strongSelf.context, updatedPresentationData: strongSelf.updatedPresentationData, title: nil, text: strongSelf.presentationData.strings.Conversation_UnpinMessageAlert, actions: [TextAlertAction(type: .genericAction, title: strongSelf.presentationData.strings.Conversation_Unpin, action: {
                             action()
                         }), TextAlertAction(type: .defaultAction, title: strongSelf.presentationData.strings.Common_Cancel, action: {})], actionLayout: .vertical), in: .window(.root))
@@ -4918,6 +4918,25 @@ extension ChatControllerImpl {
         }
         
         self.chatDisplayNode.interfaceInteraction = interfaceInteraction
+
+        // MARK: NEXTGRAM — Re-layout loaded messages after a display preference changes.
+        self.nextgramMessageDisplayOptionsDisposable = (combineLatest(
+            nagramBoolSignal("nagram.hideQuickForwardButton", defaultValue: false),
+            nagramBoolSignal("nagram.autoRevealSpoilers", defaultValue: false)
+        )
+        |> deliverOnMainQueue).startStrict(next: { [weak self] _, _ in
+            guard let self else { return }
+            let history = self.chatDisplayNode.historyNode
+            var ids: [EngineMessage.Id] = []
+            history.forEachItemNode { node in
+                if let id = (node as? ChatMessageItemView)?.item?.message.id {
+                    ids.append(id)
+                }
+            }
+            for id in ids {
+                history.requestMessageUpdate(id)
+            }
+        })
         
         self.context.sharedContext.mediaManager.galleryHiddenMediaManager.addTarget(self)
         self.galleryHiddenMesageAndMediaDisposable.set(self.context.sharedContext.mediaManager.galleryHiddenMediaManager.hiddenIds().startStrict(next: { [weak self] ids in

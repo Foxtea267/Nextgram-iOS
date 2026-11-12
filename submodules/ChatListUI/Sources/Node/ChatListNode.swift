@@ -1342,6 +1342,7 @@ public final class ChatListNode: ListViewImpl {
     }
     private let chatListLocation = ValuePromise<ChatListNodeLocation>()
     private let chatListDisposable = MetaDisposable()
+    private let chatAliasDisposable = MetaDisposable() // MARK: NEXTGRAM
     private var activityStatusesDisposable: Disposable?
     
     private let scrollToTopOptionPromise = Promise<ChatListGlobalScrollOption>(.none)
@@ -3312,9 +3313,23 @@ public final class ChatListNode: ListViewImpl {
             return strongSelf.isSelectionGestureEnabled
         }
         self.view.addGestureRecognizer(selectionRecognizer)
+
+        // MARK: NEXTGRAM — Rebuild existing rows when an account's aliases change.
+        self.chatAliasDisposable.set((nextgramChatAliasesSignal(accountPeerId: context.account.peerId.toInt64())
+        |> deliverOnMainQueue).start(next: { [weak self] _ in
+            self?.updateState { state in
+                var state = state
+                let data = state.presentationData
+                state.presentationData = ChatListPresentationData(theme: data.theme, fontSize: data.fontSize, strings: data.strings,
+                    dateTimeFormat: data.dateTimeFormat, nameSortOrder: data.nameSortOrder, nameDisplayOrder: data.nameDisplayOrder,
+                    disableAnimations: data.disableAnimations)
+                return state
+            }
+        }))
     }
     
     deinit {
+        self.chatAliasDisposable.dispose() // MARK: NEXTGRAM
         self.chatListDisposable.dispose()
         self.activityStatusesDisposable?.dispose()
         self.updatedFilterDisposable.dispose()

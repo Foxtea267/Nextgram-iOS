@@ -33,6 +33,12 @@ import NagramSettingsSignal // MARK: NAGRAM
 import NagramStrings // MARK: NAGRAM
 import GlassBackgroundComponent
 
+// MARK: NEXTGRAM
+private func nextgramChatTitle(peer: EnginePeer, item: ChatListItem) -> String {
+    return NextgramChatAliases.name(accountPeerId: item.context.account.peerId.toInt64(), peerId: peer.id.toInt64())
+        ?? peer.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
+}
+
 public enum ChatListItemContent {
     public final class ThreadInfo: Equatable {
         public let id: Int64
@@ -1572,7 +1578,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     if item.context.account.peerId == chatMainPeer.id {
                         result += item.presentationData.strings.DialogList_SavedMessages
                     } else {
-                        result += chatMainPeer.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
+                        // MARK: NEXTGRAM
+                        result += nextgramChatTitle(peer: chatMainPeer, item: item)
                     }
                     if let combinedReadState = peerData.combinedReadState, combinedReadState.count > 0 {
                         result += "\n\(item.presentationData.strings.VoiceOver_Chat_UnreadMessages(combinedReadState.count))"
@@ -3437,7 +3444,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                         if customMessageListData.commandPrefix != nil {
                             titleAttributedString = nil
                         } else {
-                            if let displayTitle = itemPeer.chatOrMonoforumMainPeer?.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder) {
+                            if let peer = itemPeer.chatOrMonoforumMainPeer { // MARK: NEXTGRAM
+                                let displayTitle = nextgramChatTitle(peer: peer, item: item)
                                 let textColor: UIColor
                                 if case let .chatList(index) = item.index, index.messageIndex.id.peerId.namespace == Namespaces.Peer.SecretChat {
                                     textColor = theme.secretTitleColor
@@ -3467,7 +3475,8 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                          titleAttributedString = NSAttributedString(string: item.presentationData.strings.DialogList_Replies, font: titleFont, textColor: theme.titleColor)
                     } else if let id = itemPeer.chatMainPeer?.id, id.isAnonymousSavedMessages {
                         titleAttributedString = NSAttributedString(string: item.presentationData.strings.ChatList_AuthorHidden, font: titleFont, textColor: theme.titleColor)
-                    } else if let displayTitle = itemPeer.chatOrMonoforumMainPeer?.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder) {
+                    } else if let peer = itemPeer.chatOrMonoforumMainPeer { // MARK: NEXTGRAM
+                        let displayTitle = nextgramChatTitle(peer: peer, item: item)
                         let textColor: UIColor
                         if case let .chatList(index) = item.index, index.messageIndex.id.peerId.namespace == Namespaces.Peer.SecretChat {
                             textColor = theme.secretTitleColor

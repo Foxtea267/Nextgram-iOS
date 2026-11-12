@@ -279,6 +279,7 @@ enum PeerInfoSettingsSection {
     case nagram
     // MARK: NAGRAM — Debug fallback when the bottom tab bar is hidden.
     case nagramDebug
+    case nextgramBookmarks // MARK: NEXTGRAM
 }
 
 enum PeerInfoReportType {
@@ -2602,13 +2603,14 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             strongSelf.cachedDataPromise.set(.single(data.cachedData))
         })
         
-        // MARK: NAGRAM — 资料页增强开关变化后重建 infoItems。
+        // MARK: NEXTGRAM — Refresh profile display settings, including the local Premium badge.
         self.nagramProfileSettingsDisposable.set(combineLatest(
             queue: Queue.mainQueue(),
             nagramBoolSignal("nagram.showProfileId", defaultValue: false),
             nagramBoolSignal("nagram.showDC", defaultValue: false),
-            nagramBoolSignal("nagram.showRegDate", defaultValue: false)
-        ).startStrict(next: { [weak self] _, _, _ in
+            nagramBoolSignal("nagram.showRegDate", defaultValue: false),
+            nagramBoolSignal("nagram.localPremiumEnabled", defaultValue: false)
+        ).startStrict(next: { [weak self] _, _, _, _ in
             self?.requestLayout(animated: false)
         }))
         

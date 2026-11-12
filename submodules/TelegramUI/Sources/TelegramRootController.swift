@@ -33,6 +33,7 @@ import ChatEmptyNode
 // MARK: NAGRAM
 import NagramSettings
 import NagramSettingsSignal
+import NagramSettingsUI // MARK: NEXTGRAM
 
 // MARK: NAGRAM
 private func updateNagramGlassOverlayTransparencySettings() {
@@ -157,10 +158,24 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         })
         
         if context.sharedContext.applicationBindings.isMainApp {
-            self.applicationInFocusDisposable = (context.sharedContext.applicationBindings.applicationIsActive
-            |> distinctUntilChanged
-            |> deliverOn(Queue.mainQueue())).startStrict(next: { value in
-                context.sharedContext.mainWindow?.setForceBadgeHidden(!value)
+            // MARK: NEXTGRAM — Apply the badge preference immediately while the app is active.
+            self.applicationInFocusDisposable = (combineLatest(
+                context.sharedContext.applicationBindings.applicationIsActive |> distinctUntilChanged,
+                nagramStringSignal("nagram.screenshotBadgeMode", defaultValue: "always"),
+                nagramStringSignal("nagram.screenshotBadgeVerticalOffset", defaultValue: "0")
+            )
+            |> deliverOnMainQueue).startStrict(next: { [weak self] active, badgeMode, badgeOffset in
+                context.sharedContext.mainWindow?.setScreenshotBadgeMode(badgeMode)
+                context.sharedContext.mainWindow?.setScreenshotBadgeVerticalOffset(Int(badgeOffset) ?? 0)
+                context.sharedContext.mainWindow?.setForceBadgeHidden(!active)
+                if active {
+                    Task { @MainActor [weak self] in
+                        guard self != nil else { return }
+                        nextgramCheckForUpdateOnForeground(context: context, openUpdater: { [weak self] in
+                            self?.pushViewController(nextgramUpdateController(context: context))
+                        })
+                    }
+                }
             })
             
             self.storyUploadEventsDisposable = (context.engine.messages.allStoriesUploadEvents()

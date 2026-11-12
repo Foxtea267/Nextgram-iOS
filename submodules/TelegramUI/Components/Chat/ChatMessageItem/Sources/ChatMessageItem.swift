@@ -9,6 +9,7 @@ import ChatHistoryEntry
 import ChatControllerInteraction
 import TelegramPresentationData
 import ChatMessageItemCommon
+import NagramSettings // MARK: NEXTGRAM
 
 public enum ChatMessageItemContent: Sequence {
     case message(message: EngineRawMessage, read: Bool, selection: ChatHistoryMessageSelection, attributes: ChatMessageEntryAttributes, location: EngineMessageHistoryEntryLocation?)
@@ -139,6 +140,31 @@ public protocol ChatMessageItem: ListViewItem, ChatHistoryItemWithHeaders {
     var failed: Bool { get }
     
     func merged(with neighbors: ChatHistoryItemNeighbors, isRotated: Bool) -> (top: ChatMessageMerge, bottom: ChatMessageMerge, dateAtBottom: ChatMessageHeaderSpec)
+}
+
+// MARK: NEXTGRAM — The same side button can represent forward, comments, or navigation.
+public func nextgramShouldHideQuickForwardButton(item: ChatMessageItem, preserveComments: Bool = true) -> Bool {
+    guard NagramSettings.shared.hideQuickForwardButton else { return false }
+    if case .pinnedMessages = item.associatedData.subject {
+        return false
+    }
+    if case let .customChatContents(contents) = item.associatedData.subject, case .hashTagSearch = contents.kind {
+        return false
+    }
+    let message = item.message
+    if message.adAttribute != nil || message.id.peerId.isRepliesOrSavedMessages(accountPeerId: item.context.account.peerId) {
+        return false
+    }
+    if let channel = message.peers[message.id.peerId] as? TelegramChannel {
+        if channel.isMonoForum, case .peer = item.chatLocation {
+            return false
+        }
+        if preserveComments, case .broadcast = channel.info,
+           message.attributes.contains(where: { $0 is ReplyThreadMessageAttribute }) {
+            return false
+        }
+    }
+    return true
 }
 
 public func hasCommentButton(item: ChatMessageItem) -> Bool {

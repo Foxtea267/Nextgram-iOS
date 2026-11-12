@@ -2,6 +2,14 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
+# MARK: NEXTGRAM — Python for Extera source plugins.
+http_archive(
+    name = "nextgram_python_ios",
+    build_file = "//Nagram/Plugins:PythonIOS.BUILD",
+    sha256 = "56810335d2b73558f7a16b6b2f7ad855b88c3007b200cbaecae9d6a25a2d1ecc",
+    urls = ["https://github.com/beeware/Python-Apple-support/releases/download/3.11-b9/Python-3.11-iOS-support.b9.tar.gz"],
+)
+
 _WASI_SDK_BUILD = """
 exports_files(["bin/clang++"])
 filegroup(

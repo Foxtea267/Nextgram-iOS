@@ -945,7 +945,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                 }
             }
             
-            let hasSpoiler = message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute })
+            let hasSpoiler = !NagramSettings.shared.autoRevealSpoilers && message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) // MARK: NEXTGRAM
             var isExtendedMediaPreview = false
             var isInlinePlayableVideo = false
             var isSticker = false
@@ -2141,7 +2141,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                                 }
                             }
                             
-                            if message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }), strongSelf.extendedMediaOverlayNode == nil {
+                            if hasSpoiler, strongSelf.extendedMediaOverlayNode == nil { // MARK: NEXTGRAM
                                 strongSelf.internallyVisible = false
                             }
                                                         
@@ -3076,7 +3076,7 @@ public final class ChatMessageInteractiveMediaNode: ASDisplayNode, GalleryItemTr
                 icon = .lock
             }
             displaySpoiler = true
-        } else if message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) {
+        } else if !NagramSettings.shared.autoRevealSpoilers && message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) { // MARK: NEXTGRAM
             displaySpoiler = true
         } else if isSecretMedia {
             displaySpoiler = true

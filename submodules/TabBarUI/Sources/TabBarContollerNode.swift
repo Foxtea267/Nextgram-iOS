@@ -386,16 +386,10 @@ final class TabBarControllerNode: ASDisplayNode {
         )
         let tabBarOriginX: CGFloat
         let onlySearchButton = hasVisibleSearch && bottomBarSettings.searchMode != .bar && visibleComponentItems.isEmpty && externalComponentItem == nil && tabBarSearchState?.isActive != true
-        let fillsAvailableWidth = !onlySearchButton && (bottomBarSettings.buttonWidthFillRatio >= 100 || externalComponentItem != nil || hasVisibleSearch)
+        // MARK: NEXTGRAM — Apply edge alignment when the component is narrower than its container.
         if onlySearchButton {
             tabBarOriginX = params.layout.size.width - sideInset - tabBarSize.width
-        } else if !fillsAvailableWidth && tabBarSearchState?.isActive != true {
-            if bottomBarSettings.alignment == .spaceBetween { // MARK: NAGRAM
-                tabBarOriginX = sideInset
-            } else {
-                tabBarOriginX = floor((params.layout.size.width - tabBarSize.width) * 0.5)
-            }
-        } else if bottomBarSettings.buttonWidthFillRatio < 100 && tabBarSearchState == nil {
+        } else if bottomBarSettings.alignment == .spaceBetween && tabBarSearchState?.isActive != true {
             tabBarOriginX = sideInset
         } else {
             tabBarOriginX = floor((params.layout.size.width - tabBarSize.width) * 0.5)

@@ -19,6 +19,7 @@ import BundleIconComponent
 import Markdown
 import AlertPeerComponent
 import AlertComponent
+import NagramSettings // MARK: NEXTGRAM
 
 struct MediaRight: OptionSet, Hashable {
     var rawValue: Int
@@ -1318,35 +1319,22 @@ private final class AdminUserActionsSheetComponent: Component {
             }
             
             if self.component == nil {
-                let _ = (component.context.account.postbox.peerView(id: component.chatPeer.id)
-                |> take(1)).start(next: { [weak self] peerView in
-                    guard let self else {
-                        return
-                    }
-                    
-                    var selectAll = false
-                    if let cachedData = peerView.cachedData as? CachedChannelData {
-                        if let memberCount = cachedData.participantsSummary.memberCount, memberCount >= 1000 {
-                            selectAll = true
-                        } else if case let .known(peerId) = cachedData.linkedDiscussionPeerId, let _ = peerId {
-                            selectAll = true
+                // MARK: NEXTGRAM — Select only actions shown by the native permission check.
+                if case .chat = component.mode, NagramSettings.shared.preselectMessageModerationActions {
+                    let accountId = component.context.account.peerId
+                    let selectedPeers = Set(component.peers.map(\.peer.id).filter { $0 != accountId })
+                    for option in availableAdminUserActionOptionSections(accountPeerId: accountId, chatPeer: component.chatPeer, peers: component.peers, mode: component.mode) {
+                        switch option {
+                        case .report:
+                            self.optionReportSelectedPeers = selectedPeers
+                        case .deleteAll:
+                            self.optionDeleteAllSelectedPeers = selectedPeers
+                            self.optionDeleteAllReactionsSelectedPeers = selectedPeers
+                        case .ban:
+                            self.optionBanSelectedPeers = selectedPeers
                         }
                     }
-                    
-                    if selectAll && !"".isEmpty {
-                        var selectedPeers = Set<EnginePeer.Id>()
-                        for peer in component.peers {
-                            selectedPeers.insert(peer.peer.id)
-                        }
-                        self.optionReportSelectedPeers = selectedPeers
-                        self.optionDeleteAllSelectedPeers = selectedPeers
-                        self.optionBanSelectedPeers = selectedPeers
-                    }
-                    
-                    if !self.isUpdating {
-                        self.state?.updated()
-                    }
-                })
+                }
                 
                 var (allowedParticipantRights, allowedMediaRights) = rightsFromBannedRights([])
                 if case let .channel(channel) = component.chatPeer {

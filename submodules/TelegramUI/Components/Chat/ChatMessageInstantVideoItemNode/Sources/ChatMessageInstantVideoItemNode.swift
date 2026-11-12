@@ -389,6 +389,10 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
             if let subject = item.associatedData.subject, case .messageOptions = subject {
                 needsShareButton = false
             }
+            // MARK: NEXTGRAM
+            if needsShareButton && nextgramShouldHideQuickForwardButton(item: item) {
+                needsShareButton = false
+            }
             
             var layoutInsets = layoutConstants.instantVideo.insets
             if dateHeaderAtBottom.hasDate && dateHeaderAtBottom.hasTopic {

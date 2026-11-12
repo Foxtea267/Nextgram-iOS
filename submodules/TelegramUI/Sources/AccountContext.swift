@@ -595,16 +595,10 @@ public final class AccountContextImpl: AccountContext {
             strongSelf.tonGiftStickersPromise.set(.single(stickers))
         })
         
-        // MARK: NEXTGRAM — Local Premium affects client-side gates and limits only; server authorization is unchanged.
-        self.userLimitsConfigurationDisposable = (combineLatest(
-            self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: account.peerId))
-            |> map { peer in
-                return peer?.isPremium ?? false
-            },
-            nagramBoolSignal("nagram.localPremiumEnabled", defaultValue: false)
-        )
-        |> map { isPremium, localPremiumEnabled in
-            return isPremium || localPremiumEnabled
+        // MARK: NEXTGRAM — Account authorization and quotas use Telegram's subscription state.
+        self.userLimitsConfigurationDisposable = (self.engine.data.subscribe(TelegramEngine.EngineData.Item.Peer.Peer(id: account.peerId))
+        |> map { peer in
+            return peer?.isPremium ?? false
         }
         |> distinctUntilChanged
         |> mapToSignal { isPremium -> Signal<(Bool, EngineConfiguration.UserLimits), NoError> in

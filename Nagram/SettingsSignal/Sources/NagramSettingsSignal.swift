@@ -40,6 +40,22 @@ public func nagramStringSignal(_ key: String, defaultValue: String) -> Signal<St
     return (initial |> then(changes)) |> distinctUntilChanged
 }
 
+public func nextgramChatAliasesSignal(accountPeerId: Int64) -> Signal<[String: String], NoError> {
+    return Signal<[String: String], NoError> { subscriber in
+        let publish = {
+            subscriber.putNext(NextgramChatAliases.all(accountPeerId: accountPeerId))
+        }
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: NagramDemoMode.userDefaults, queue: .main
+        ) { _ in
+            publish()
+        }
+        publish()
+        return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
+    }
+    |> distinctUntilChanged
+}
+
 public func nagramSTTSettingsSignal() -> Signal<Int32, NoError> {
     return Signal { subscriber in
         let version = Atomic<Int32>(value: 0)

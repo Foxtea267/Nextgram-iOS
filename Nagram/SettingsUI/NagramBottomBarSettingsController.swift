@@ -31,9 +31,10 @@ private enum NagramBottomBarSwitchOption: Int32 {
     case labels
 }
 
-private enum NagramBottomBarOption: Int32 {
+private enum NagramBottomBarOption: Equatable {
     case alignment
     case searchMode
+    case position(NagramBottomBarItemId)
 }
 
 private enum NagramBottomBarEntry: ItemListNodeEntry {
@@ -286,6 +287,12 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             ] + (nagramBottomBarSettingsCanUseSearchBar(settings) ? [
                 ("Nagram.BottomBarLayout.SearchStyle.bar", { $0.setSearchMode(.bar) })
             ] : [])
+        case let .position(item):
+            titleKey = "Nagram.BottomBarLayout.Order"
+            let visibleItems = nagramBottomBarSettings(NagramSettings.shared.bottomBarSettings, applyingShowCallsTab: currentShowCallsTab).visibleBottomItems
+            items = visibleItems.indices.map { index in
+                (String(index + 1), { $0.moveToBottom(item, at: index) })
+            }
         }
 
         var actionItems: [ActionSheetItem] = [ActionSheetTextItem(title: ngI18n(titleKey, lang))]
@@ -348,7 +355,7 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             alignmentLabel = ngI18n("Nagram.BottomBarLayout.Alignment.center", lang)
         }
 
-        let entries: [NagramBottomBarEntry] = [
+        var entries: [NagramBottomBarEntry] = [
             .preview(
                 section: 0,
                 settings: settings,
@@ -363,14 +370,23 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             .header(stableId: 1, section: 1, text: ngI18n("Nagram.BottomBarLayout.State", lang)),
             .toggle(stableId: 2, section: 1, title: ngI18n("Nagram.BottomBarLayout.TopSearch", lang), value: settings.topSearchVisible, option: .topSearch),
             .visibility(stableId: 3, section: 1, title: ngI18n("Nagram.BottomBarLayout.Visibility", lang), settings: settings, itemTitles: itemTitles),
-            .header(stableId: 4, section: 2, text: ngI18n("Nagram.BottomBarLayout.Options", lang)),
-            .disclosure(stableId: 5, section: 2, title: ngI18n("Nagram.BottomBarLayout.SearchStyle", lang), label: settings.searchMode == .bar ? ngI18n("Nagram.BottomBarLayout.SearchStyle.bar", lang) : ngI18n("Nagram.BottomBarLayout.SearchStyle.button", lang), option: .searchMode),
-            .toggle(stableId: 6, section: 2, title: ngI18n("Nagram.BottomBarLayout.ShowLabels", lang), value: settings.showLabels, option: .labels),
-            .slider(stableId: 7, section: 2, title: ngI18n("Nagram.BottomBarLayout.ButtonWidth", lang), value: settings.buttonWidthFillRatio),
-            .disclosure(stableId: 8, section: 2, title: ngI18n("Nagram.BottomBarLayout.Alignment", lang), label: settings.buttonWidthFillRatio >= 100 ? ngI18n("Nagram.BottomBarLayout.Alignment.disabled", lang) : alignmentLabel, option: .alignment),
-            .reset(stableId: 9, section: 3, title: ngI18n("Nagram.BottomBarLayout.Reset", lang)),
-            .footer(stableId: 10, section: 3, text: ngI18n("Nagram.BottomBarLayout.Footer", lang))
+            .header(stableId: 40, section: 3, text: ngI18n("Nagram.BottomBarLayout.Options", lang)),
+            .disclosure(stableId: 41, section: 3, title: ngI18n("Nagram.BottomBarLayout.SearchStyle", lang), label: settings.searchMode == .bar ? ngI18n("Nagram.BottomBarLayout.SearchStyle.bar", lang) : ngI18n("Nagram.BottomBarLayout.SearchStyle.button", lang), option: .searchMode),
+            .toggle(stableId: 42, section: 3, title: ngI18n("Nagram.BottomBarLayout.ShowLabels", lang), value: settings.showLabels, option: .labels),
+            .slider(stableId: 43, section: 3, title: ngI18n("Nagram.BottomBarLayout.ButtonWidth", lang), value: settings.buttonWidthFillRatio),
+            .disclosure(stableId: 44, section: 3, title: ngI18n("Nagram.BottomBarLayout.Alignment", lang), label: alignmentLabel, option: .alignment),
+            .reset(stableId: 45, section: 4, title: ngI18n("Nagram.BottomBarLayout.Reset", lang)),
+            .footer(stableId: 46, section: 4, text: ngI18n("Nagram.BottomBarLayout.Footer", lang))
         ]
+        if settings.visibleBottomItems.count > 1 {
+            var orderEntries: [NagramBottomBarEntry] = [
+                .header(stableId: 30, section: 2, text: ngI18n("Nagram.BottomBarLayout.Order", lang))
+            ]
+            orderEntries += settings.visibleBottomItems.enumerated().map { index, item in
+                .disclosure(stableId: 31 + Int32(index), section: 2, title: itemTitles[item] ?? item.rawValue, label: String(index + 1), option: .position(item))
+            }
+            entries.insert(contentsOf: orderEntries, at: 4)
+        }
 
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(ngI18n("Nagram.BottomBarLayout", lang)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
@@ -748,10 +764,10 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
         self.emptyBottomLabel.layer.cornerRadius = 16.0
         self.emptyBottomLabel.layer.masksToBounds = true
 
-        self.updateTabBarPreview(theme: theme, contentWidth: params.width)
+        self.updateTabBarPreview(theme: theme, originX: params.leftInset, contentWidth: params.width - params.leftInset - params.rightInset)
     }
 
-    private func updateTabBarPreview(theme: PresentationTheme, contentWidth: CGFloat) {
+    private func updateTabBarPreview(theme: PresentationTheme, originX: CGFloat, contentWidth: CGFloat) {
         guard let item = self.item else {
             return
         }
@@ -809,15 +825,16 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
 
         let selectedId = self.componentIdsByItemId[.chats] ?? visibleBottomItems.compactMap { self.componentIdsByItemId[$0] }.first ?? previewSettings.externalItem.flatMap { self.componentIdsByItemId[$0] }
         let layoutItemCount = max(visibleComponentItems.count, NagramBottomBarSettings.defaultBottomItems.count)
-        let previewSideInset: CGFloat = 12.0
-        let availableWidth = max(120.0, contentWidth - previewSideInset * 2.0)
+        let sideInset: CGFloat = 12.0
+        let previewOriginX = originX + sideInset
+        let availableWidth = max(0.0, contentWidth - sideInset * 2.0)
         let allButtonsHidden = visibleComponentItems.isEmpty && externalComponentItem == nil && !searchIsVisible
         if allButtonsHidden {
             self.emptyBottomLabel.isHidden = false
-            self.emptyBottomLabel.frame = CGRect(x: previewSideInset, y: 130.0, width: availableWidth, height: 64.0)
+            self.emptyBottomLabel.frame = CGRect(x: previewOriginX, y: 130.0, width: availableWidth, height: 64.0)
             self.tabBarComponentView.view?.isHidden = true
             self.bottomFrame = self.emptyBottomLabel.frame
-            self.externalFrame = CGRect(x: previewSideInset + availableWidth - 64.0, y: 130.0, width: 64.0, height: 64.0)
+            self.externalFrame = CGRect(x: previewOriginX + max(0.0, availableWidth - 64.0), y: 130.0, width: min(64.0, availableWidth), height: 64.0)
             self.externalDropView.isHidden = true
             return
         } else {
@@ -851,14 +868,13 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
             tabBarView.isHidden = false
 
             let onlySearchButton = searchIsVisible && previewSettings.searchMode != .bar && visibleComponentItems.isEmpty && externalComponentItem == nil
-            let fillsAvailableWidth = !onlySearchButton && (previewSettings.buttonWidthFillRatio >= 100 || externalComponentItem != nil || searchIsVisible)
             let tabBarX: CGFloat
             if onlySearchButton {
-                tabBarX = previewSideInset + availableWidth - tabBarSize.width
-            } else if previewSettings.alignment == .spaceBetween && !fillsAvailableWidth {
-                tabBarX = previewSideInset
+                tabBarX = previewOriginX + max(0.0, availableWidth - tabBarSize.width)
+            } else if previewSettings.alignment == .spaceBetween {
+                tabBarX = previewOriginX
             } else {
-                tabBarX = previewSideInset + floor((availableWidth - tabBarSize.width) * 0.5)
+                tabBarX = previewOriginX + floor(max(0.0, availableWidth - tabBarSize.width) * 0.5)
             }
             let tabBarFrame = CGRect(origin: CGPoint(x: tabBarX, y: 130.0), size: tabBarSize)
             tabBarView.frame = tabBarFrame
@@ -879,11 +895,11 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
                 self.bottomFrame = CGRect(x: tabBarFrame.minX, y: tabBarFrame.minY, width: max(48.0, tabBarFrame.width - 72.0), height: 64.0)
             }
 
-            let fixedExternalFrame = CGRect(x: previewSideInset + availableWidth - 64.0, y: tabBarFrame.minY, width: 64.0, height: 64.0)
+            let fixedExternalFrame = CGRect(x: previewOriginX + max(0.0, availableWidth - 64.0), y: tabBarFrame.minY, width: min(64.0, availableWidth), height: 64.0)
             if let externalItem = previewSettings.externalItem, externalItem != .search, let frame = self.itemFrames[externalItem] {
                 self.externalFrame = frame
-            } else if searchIsVisible {
-                self.externalFrame = fixedExternalFrame
+            } else if let componentView = tabBarView as? TabBarComponent.View, let frame = componentView.frameForSearchButton() {
+                self.externalFrame = self.backgroundView.convert(frame, from: componentView)
             } else {
                 self.externalFrame = fixedExternalFrame
             }
@@ -906,7 +922,7 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
         switch gesture.state {
         case .began:
             self.draggingItem = self.itemId(at: point)
-        case .ended, .cancelled:
+        case .ended:
             guard let draggingItem = self.draggingItem else {
                 return
             }
@@ -925,6 +941,8 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
                     settings.moveToBottom(draggingItem, at: targetIndex)
                 }
             }
+        case .cancelled, .failed:
+            self.draggingItem = nil
         default:
             break
         }

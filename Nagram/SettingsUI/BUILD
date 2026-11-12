@@ -24,6 +24,7 @@ swift_library(
         "//submodules/TelegramUIPreferences:TelegramUIPreferences",
         "//submodules/UndoUI:UndoUI",
         "//Nagram/Settings:NagramSettings",
+        "//Nagram/Plugins:NagramPlugins",
         "//Nagram/MessageHistory:NagramMessageHistory",
         "//Nagram/SessionBackupUI:NagramSessionBackupUI",
         "//Nagram/LinkMetadata:NagramLinkMetadata",

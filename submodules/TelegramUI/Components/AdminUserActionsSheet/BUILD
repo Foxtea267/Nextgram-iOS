@@ -10,6 +10,7 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//Nagram/Settings:NagramSettings",  # MARK: NEXTGRAM
         "//submodules/AsyncDisplayKit",
         "//submodules/Display",
         "//submodules/Markdown",

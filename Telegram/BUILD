@@ -1930,6 +1930,10 @@ ios_application(
     ],
     resources = [
         ":LaunchScreen",
+        # MARK: NEXTGRAM — Python plugin resources are used by the main app.
+        "//Nagram/Plugins:ExteraRuntimeResources",
+        # MARK: NEXTGRAM — Include the local signing libraries' licenses.
+        "//Nagram/UpdateSigner:Notices",
         #":DefaultAppIcon",
     ],
     frameworks = [
@@ -1968,6 +1972,8 @@ ios_application(
     deps = [
         ":Main",
         ":Lib",
+        # MARK: NEXTGRAM — Link the interpreter into the main app.
+        "//Nagram/Plugins:NagramExteraPython",
     ],
     visibility = ["//visibility:public"],
 )

@@ -449,7 +449,7 @@ public class Window1 {
     public init(hostView: WindowHostView, statusBarHost: StatusBarHost?) {
         self.hostView = hostView
         self.badgeView = UIImageView()
-        // MARK: NAGRAM - Use the Nagram status badge artwork.
+        // MARK: NEXTGRAM — Use the branded screenshot badge artwork.
         self.badgeView.image = UIImage(bundleImageName: "Components/AppBadge")
         self.badgeView.isHidden = true
         
@@ -876,6 +876,54 @@ public class Window1 {
         self.forceBadgeHidden = hidden
         self.updateBadgeVisibility()
     }
+
+    // MARK: NEXTGRAM — Screenshot badge visibility is independent of Core Location.
+    public enum ScreenshotBadgePage {
+        case other
+        case chatList
+        case chat
+    }
+
+    private var screenshotBadgePage: ScreenshotBadgePage = .other
+    private var screenshotBadgeMode = "always"
+    private var screenshotBadgeVerticalOffset: CGFloat = 0
+
+    // MARK: NEXTGRAM
+    public func setScreenshotBadgeVerticalOffset(_ value: Int) {
+        let offset = CGFloat(max(-8, min(8, value)))
+        if self.screenshotBadgeVerticalOffset != offset {
+            self.screenshotBadgeVerticalOffset = offset
+            self.updateScreenshotBadgeFrame()
+        }
+    }
+
+    private func updateScreenshotBadgeFrame() {
+        if let image = self.badgeView.image {
+            self.badgeView.frame = CGRect(origin: CGPoint(
+                x: floorToScreenPixels((self.windowLayout.size.width - image.size.width) / 2.0),
+                y: max(0.0, self.deviceMetrics.appBadgeOffset + self.screenshotBadgeVerticalOffset)
+            ), size: image.size)
+        }
+    }
+
+    public func setScreenshotBadgePage(_ page: ScreenshotBadgePage) {
+        self.screenshotBadgePage = page
+        self.updateBadgeVisibility()
+    }
+
+    public func setScreenshotBadgeMode(_ mode: String) {
+        self.screenshotBadgeMode = mode
+        self.updateBadgeVisibility()
+    }
+
+    private var screenshotBadgeIsHidden: Bool {
+        switch (self.screenshotBadgeMode, self.screenshotBadgePage) {
+        case ("all", _), ("home", .chatList), ("chat", .chat):
+            return true
+        default:
+            return !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height
+        }
+    }
     
     private var proximityDimController: CustomDimController?
     public func setProximityDimHidden(_ hidden: Bool) {
@@ -892,11 +940,11 @@ public class Window1 {
     }
     
     private func updateBadgeVisibility() {
-        let badgeIsHidden = !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height
+        // MARK: NEXTGRAM
+        let badgeIsHidden = self.screenshotBadgeIsHidden
         if badgeIsHidden != self.badgeView.isHidden && !badgeIsHidden {
-            Queue.mainQueue().after(0.4) {
-                let badgeShouldBeHidden = !self.deviceMetrics.showAppBadge || self.forceBadgeHidden || self.windowLayout.size.width > self.windowLayout.size.height
-                if badgeShouldBeHidden == badgeIsHidden {
+            Queue.mainQueue().after(0.4) { [weak self] in
+                if let self, self.screenshotBadgeIsHidden == badgeIsHidden {
                     self.badgeView.isHidden = badgeIsHidden
                 }
             }
@@ -1428,10 +1476,9 @@ public class Window1 {
                     coveringView.updateLayout(self.windowLayout.size)
                 }
                 
-                if let image = self.badgeView.image {
+                if self.badgeView.image != nil {
                     self.updateBadgeVisibility()
-                    // MARK: NAGRAM - Match Swiftgram's per-device vertical placement.
-                    self.badgeView.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((self.windowLayout.size.width - image.size.width) / 2.0), y: self.deviceMetrics.appBadgeOffset), size: image.size)
+                    self.updateScreenshotBadgeFrame() // MARK: NEXTGRAM
                 }
             }
         }
