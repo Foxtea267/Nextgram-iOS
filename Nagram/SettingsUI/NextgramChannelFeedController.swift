@@ -301,7 +301,7 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
     formatter.dateStyle = .medium
     formatter.timeStyle = .short
     var openSources: (() -> Void)?
-    var openPost: ((EngineMessage.Id) -> Void)?
+    var openPost: ((EngineMessage.Id, EnginePeer) -> Void)?
 
     let state = combineLatest(context.sharedContext.presentationData, feed.updates.get())
     |> deliverOnMainQueue
@@ -361,7 +361,10 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
             case .sources: openSources?()
             case .more: feed.loadMore()
             case .failure: feed.retryFailedChannels()
-            case let .post(id): openPost?(id)
+            case let .post(id):
+                if let channel = channels.first(where: { $0.peer.id == id.peerId }) {
+                    openPost?(id, channel.peer)
+                }
             case .unread, .status: break
             }
         }, unreadOnly: { value in
@@ -392,10 +395,10 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
     openSources = { [weak controller] in
         controller?.push(channelFeedSourcesController(feed: feed))
     }
-    openPost = { [weak controller] id in
+    openPost = { [weak controller] id, peer in
         guard let navigationController = controller?.navigationController as? NavigationController else { return }
         context.sharedContext.navigateToChatController(NavigateToChatControllerParams(
-            navigationController: navigationController, context: context, chatLocation: .peer(id.peerId),
+            navigationController: navigationController, context: context, chatLocation: .peer(peer),
             subject: .message(id: .id(id), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false),
             keepStack: .always
         ))

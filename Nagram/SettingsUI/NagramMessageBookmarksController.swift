@@ -118,7 +118,7 @@ public func nextgramMessageBookmarksController(context: AccountContext) -> ViewC
             return (values, Dictionary(uniqueKeysWithValues: peers.compactMap { peer in peer.map { ($0.id, $0) } }))
         }
     }
-    var openBookmark: ((NagramMessageBookmark) -> Void)?
+    var openBookmark: ((NagramMessageBookmark, EnginePeer?) -> Void)?
     let state = combineLatest(context.sharedContext.presentationData, bookmarkPeers, selectedTag.get())
     |> deliverOnMainQueue
     |> map { presentationData, result, selected -> (ItemListControllerState, (ItemListNodeState, Any)) in
@@ -165,7 +165,7 @@ public func nextgramMessageBookmarksController(context: AccountContext) -> ViewC
                 let messageId = EngineMessage.Id(peerId: EnginePeer.Id(location.peerId), namespace: location.namespace, id: location.messageId)
                 let alert = UIAlertController(title: ngI18n("Nagram.Bookmarks.Message", language), message: nil, preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: ngI18n("Nagram.Bookmarks.Open", language), style: .default) { _ in
-                    openBookmark?(bookmark)
+                    openBookmark?(bookmark, peers[messageId.peerId])
                 })
                 alert.addAction(UIAlertAction(title: ngI18n("Nagram.Bookmarks.Edit", language), style: .default) { _ in
                     nextgramPresentBookmarkEditor(context: context, messageId: messageId, forumThreadId: bookmark.threadId, changed: refresh)
@@ -183,7 +183,7 @@ public func nextgramMessageBookmarksController(context: AccountContext) -> ViewC
     }
     let controller = ItemListController(context: context, state: state)
     controller.navigationPresentation = .default
-    openBookmark = { [weak controller] bookmark in
+    openBookmark = { [weak controller] bookmark, peer in
         guard let navigationController = controller?.navigationController as? NavigationController else { return }
         let peerId = EnginePeer.Id(bookmark.location.peerId)
         let messageId = EngineMessage.Id(peerId: peerId, namespace: bookmark.location.namespace, id: bookmark.location.messageId)
@@ -191,8 +191,15 @@ public func nextgramMessageBookmarksController(context: AccountContext) -> ViewC
             let _ = context.sharedContext.navigateToForumThread(context: context, peerId: peerId, threadId: threadId, messageId: messageId,
                 navigationController: navigationController, activateInput: nil, scrollToEndIfExists: false, keepStack: .always, animated: true).startStandalone()
         } else {
+            guard let peer else {
+                let strings = context.sharedContext.currentPresentationData.with { $0.strings }
+                let alert = UIAlertController(title: strings.Login_UnknownError, message: nil, preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: strings.Common_OK, style: .default))
+                context.sharedContext.applicationBindings.presentNativeController(alert)
+                return
+            }
             context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context,
-                chatLocation: .peer(peerId), subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false),
+                chatLocation: .peer(peer), subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false),
                 keepStack: .always))
         }
     }
