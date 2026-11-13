@@ -70,6 +70,9 @@ Nextgram-iOS 是一个基于 Telegram 官方 iOS 客户端与 Nagram-iOS 开发�
 - 后台定位胶囊可选择始终显示、所有场景关闭、仅主页关闭或仅聊天页面关闭。
 - 翻译增强与 LLM / AI 集成。
 - 音乐播放列表支持搜索，并可配置文件大小和封面右下角下载状态提示。
+- Music Player 3.0：参考 Apple Music 的全屏播放布局，支持卡片、宽屏、全屏、唱片、完整显示和裁剪铺满六种封面方案；可调整封面尺寸／圆角、标题对齐／字号、按钮大小、唱片旋转和滑动切歌。背景使用 iOS 原生渐进式模糊，可调强度。
+- 歌词支持本地导入 LRC／纯文本、读取音频内嵌歌词、按行同步高亮和点选歌词跳转；手动滚动后会暂停跟随。可选开启 LRCLIB 在线歌词匹配，开启后会向该服务发送曲名、歌手和时长，默认关闭。目前不包含逐字卡拉 OK、TTML／QRC／KRC／YRC 解析。
+- 新播放器在“Nextgram 设置 → 媒体 → 播放”启用和自定义；保留原有播放列表、搜索与消息操作，播放器设置包含在配置备份和 iCloud 同步中。
 - 盘古之白。
 - 更多功能持续开发中。
 
@@ -139,6 +142,9 @@ Nextgram 使用 Telegram-iOS 的 Bazel 构建系统，统一通过 `build-system
 
 - [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS)
 - [Nagram-iOS](https://github.com/NextAlone/Nagram-iOS)
+- [Exteraless](https://github.com/exteraless/exteraless)：播放器界面与自定义行为参考。
+- [Lyricify Mobile](https://docs.lyricify.app/lyricify-mobile/)：歌词交互参考；Nextgram 使用独立实现，并非 Lyricify 移植版本。
+- [LRCLIB](https://lrclib.net/)：可选在线歌词服务。
 
 感谢上述项目的开发者与贡献者。
 

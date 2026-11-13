@@ -580,6 +580,35 @@ public final class NagramSettings {
     public var musicPlaylistShowDownloadStatus: Bool
     @NagramDefault("nagram.musicPlayerModernUI", false)
     public var musicPlayerModernUI: Bool
+    @NagramDefault("nagram.musicPlayerCoverLayout", "card")
+    public var musicPlayerCoverLayout: String
+    @NagramDefault("nagram.musicPlayerCoverSize", Int32(88))
+    public var musicPlayerCoverSize: Int32
+    @NagramDefault("nagram.musicPlayerCoverCornerRadius", Int32(16))
+    public var musicPlayerCoverCornerRadius: Int32
+    @NagramDefault("nagram.musicPlayerLyricsEnabled", true)
+    public var musicPlayerLyricsEnabled: Bool
+    /// When enabled, only the song title, artist, and duration are sent to LRCLIB.
+    @NagramDefault("nagram.musicPlayerOnlineLyricsEnabled", false)
+    public var musicPlayerOnlineLyricsEnabled: Bool
+    @NagramDefault("nagram.musicPlayerShowVolume", true)
+    public var musicPlayerShowVolume: Bool
+    @NagramDefault("nagram.musicPlayerShowRemainingTime", true)
+    public var musicPlayerShowRemainingTime: Bool
+    @NagramDefault("nagram.musicPlayerLyricsFontSize", Int32(28))
+    public var musicPlayerLyricsFontSize: Int32
+    @NagramDefault("nagram.musicPlayerBlurIntensity", Int32(36))
+    public var musicPlayerBlurIntensity: Int32
+    @NagramDefault("nagram.musicPlayerTitleAlignment", "left")
+    public var musicPlayerTitleAlignment: String
+    @NagramDefault("nagram.musicPlayerTitleFontSize", Int32(25))
+    public var musicPlayerTitleFontSize: Int32
+    @NagramDefault("nagram.musicPlayerControlScale", Int32(100))
+    public var musicPlayerControlScale: Int32
+    @NagramDefault("nagram.musicPlayerDiscRotation", true)
+    public var musicPlayerDiscRotation: Bool
+    @NagramDefault("nagram.musicPlayerSwipeToSkip", true)
+    public var musicPlayerSwipeToSkip: Bool
     /// 将已启用的自动删除时长显示在聊天头像右下角，不占用输入框。
     @NagramDefault("nagram.chatAutoremoveBadgeEnabled", true)
     public var chatAutoremoveBadgeEnabled: Bool

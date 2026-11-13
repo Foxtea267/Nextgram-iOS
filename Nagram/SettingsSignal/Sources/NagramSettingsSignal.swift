@@ -53,6 +53,23 @@ public func nagramSettingsRestoredSignal() -> Signal<Int32, NoError> {
     }
 }
 
+public func nagramMusicPlayerSettingsSignal() -> Signal<NagramMusicPlayerSettings, NoError> {
+    return Signal { subscriber in
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: NagramDemoMode.userDefaults, queue: .main
+        ) { _ in
+            // Read after the setting's setter returns to avoid overlapping property access.
+            Queue.mainQueue().async {
+                subscriber.putNext(NagramMusicPlayerSettings())
+            }
+        }
+        subscriber.putNext(NagramMusicPlayerSettings())
+        return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
+    }
+    |> distinctUntilChanged
+    |> deliverOnMainQueue
+}
+
 public func nagramChatHeaderEffectsSignal(global: Bool = false) -> Signal<(Bool, Bool, Int32, Int32), NoError> {
     let settings = NagramSettings.shared
     return Signal<(Bool, Bool, Int32, Int32), NoError> { subscriber in

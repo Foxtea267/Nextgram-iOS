@@ -21,6 +21,9 @@ import NagramStrings // MARK: NAGRAM // MARK: NEXTGRAM
 // MARK: NEXTGRAM
 import NagramSettings
 import NagramSettingsSignal
+// MARK: NEXTGRAM
+import NagramSettingsUI
+import NextgramMusicUI
 import InstantPageUI
 
 final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestureRecognizerDelegate, UISearchBarDelegate {
@@ -80,6 +83,12 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     
     private var presentationDataDisposable: Disposable?
     private var nextgramPlayerStyleDisposable: Disposable? // MARK: NEXTGRAM
+    // MARK: NEXTGRAM — Keep the original queue beneath the full-screen player.
+    private var nextgramMusicPlayerView: NextgramMusicPlayerView?
+    private let nextgramNowPlayingButton = UIButton(type: .system)
+    private var nextgramMusicPlayerEnabled = false
+    private var nextgramShowsQueue = false
+    private var nextgramIsDismissing = false
     private let replacementHistoryNodeReadyDisposable = MetaDisposable()
     
     private let getParentController: () -> ViewController?
@@ -392,19 +401,6 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         
         super.init()
 
-        // MARK: NEXTGRAM — Music-only and reactive so an open player can be restyled in place.
-        if self.supportsPlaylistSearch {
-            self.controlsNode.usesModernMusicLayout = NagramSettings.shared.musicPlayerModernUI
-            self.nextgramPlayerStyleDisposable = (nagramBoolSignal("nagram.musicPlayerModernUI", defaultValue: false)
-            |> deliverOnMainQueue).startStrict(next: { [weak self] enabled in
-                guard let self, self.controlsNode.usesModernMusicLayout != enabled else { return }
-                self.controlsNode.usesModernMusicLayout = enabled
-                if let layout = self.validLayout {
-                    self.containerLayoutUpdated(layout, transition: .immediate)
-                }
-            })
-        }
-
         // MARK: NAGRAM
         // MARK: NEXTGRAM — Every music queue exposes an inline playlist search field.
         self.playlistSearchBar.delegate = self
@@ -649,6 +645,21 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.setupReordering()
         
         self.albumArtBackground.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.albumArtTapped(_:))))
+
+        // MARK: NEXTGRAM — Reuse the existing playback, queue, search, and sharing callbacks.
+        self.nextgramNowPlayingButton.titleLabel?.font = Font.semibold(15.0)
+        self.nextgramNowPlayingButton.layer.cornerRadius = 12.0
+        self.nextgramNowPlayingButton.setImage(UIImage(systemName: "waveform"), for: .normal)
+        self.nextgramNowPlayingButton.addTarget(self, action: #selector(self.nextgramShowNowPlaying), for: .touchUpInside)
+        self.nextgramNowPlayingButton.isHidden = true
+        self.historyFrameNode.view.addSubview(self.nextgramNowPlayingButton)
+        self.updateNextgramNowPlayingAppearance()
+        if self.supportsPlaylistSearch {
+            self.nextgramPlayerStyleDisposable = (nagramBoolSignal("nagram.musicPlayerModernUI", defaultValue: false)
+            |> deliverOnMainQueue).startStrict(next: { [weak self] enabled in
+                self?.updateNextgramMusicPlayer(enabled: enabled)
+            })
+        }
     }
     
     deinit {
@@ -670,6 +681,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         panRecognizer.cancelsTouchesInView = true
         panRecognizer.shouldBegin = { [weak self] point in
             guard let self else {
+                return false
+            }
+            // MARK: NEXTGRAM — The full-screen player's sliders and lyrics own their gestures.
+            if self.isNextgramMusicPlayerVisible {
                 return false
             }
             if self.historyFrameTopOverlayNode.bounds.contains(self.view.convert(point, to: self.historyFrameTopOverlayNode.view)) {
@@ -780,6 +795,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     func updatePresentationData(_ presentationData: PresentationData) {
         self.presentationData = presentationData
         self.updatePlaylistSearchAppearance() // MARK: NEXTGRAM
+        self.updateNextgramNowPlayingAppearance() // MARK: NEXTGRAM
         
         self.historyBackgroundContentNode.backgroundColor = self.hasAnyHistoryMessages == true ? self.presentationData.theme.list.itemModalBlocksBackgroundColor : self.presentationData.theme.list.modalPlainBackgroundColor
         self.historyFrameLeftOverlayNode.backgroundColor = self.hasAnyHistoryMessages == true ? self.presentationData.theme.list.modalBlocksBackgroundColor : self.presentationData.theme.list.modalPlainBackgroundColor
@@ -1013,7 +1029,84 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         } else if self.supportsPlaylistSearch {
             headerHeight = 86.0
         }
-        return headerHeight
+        // MARK: NEXTGRAM — Returning to Now Playing must remain available above every queue.
+        return headerHeight + (self.nextgramMusicPlayerEnabled ? 44.0 : 0.0)
+    }
+
+    // MARK: NEXTGRAM
+    private var isNextgramMusicPlayerVisible: Bool {
+        return self.nextgramMusicPlayerEnabled && !self.nextgramShowsQueue
+    }
+
+    private func updateNextgramNowPlayingAppearance() {
+        let title = ngI18n("Nagram.MusicPlayer.NowPlaying", self.presentationData.strings.baseLanguageCode)
+        self.nextgramNowPlayingButton.setTitle("  " + title, for: .normal)
+        self.nextgramNowPlayingButton.accessibilityLabel = title
+        self.nextgramNowPlayingButton.tintColor = self.presentationData.theme.list.itemAccentColor
+        self.nextgramNowPlayingButton.backgroundColor = self.presentationData.theme.list.itemModalBlocksBackgroundColor
+    }
+
+    private func updateNextgramMusicPlayer(enabled: Bool) {
+        guard self.supportsPlaylistSearch, self.nextgramMusicPlayerEnabled != enabled else {
+            return
+        }
+        self.nextgramMusicPlayerEnabled = enabled
+        self.nextgramShowsQueue = false
+        self.controlsNode.usesModernMusicLayout = false
+        if enabled {
+            let playerView = NextgramMusicPlayerView(context: self.context)
+            playerView.dismiss = { [weak self] in
+                self?.requestDismiss()
+            }
+            playerView.showQueue = { [weak self] in
+                guard let self else {
+                    return
+                }
+                self.nextgramShowsQueue = true
+                self.nextgramMusicPlayerView?.setActive(false)
+                self.nextgramMusicPlayerView?.isHidden = true
+                if let layout = self.validLayout {
+                    self.containerLayoutUpdated(layout, transition: .immediate)
+                }
+            }
+            playerView.openSettings = { [weak self] in
+                guard let self else {
+                    return
+                }
+                let controller = nagramSettingsController(context: self.context, deepLinkPath: "media?r=MusicPlayerModernUI")
+                if let navigationController = (self.getParentController() as? OverlayAudioPlayerControllerImpl)?.parentNavigationController {
+                    self.requestDismiss()
+                    navigationController.pushViewController(controller)
+                } else {
+                    self.getParentController()?.present(controller, in: .window(.root))
+                }
+            }
+            playerView.presentController = { [weak self] controller in
+                self?.getParentController()?.present(controller, in: .window(.root))
+            }
+            self.nextgramMusicPlayerView = playerView
+            self.view.addSubview(playerView)
+        } else {
+            self.nextgramMusicPlayerView?.setActive(false)
+            self.nextgramMusicPlayerView?.removeFromSuperview()
+            self.nextgramMusicPlayerView = nil
+        }
+        self.view.endEditing(true)
+        if let layout = self.validLayout {
+            self.containerLayoutUpdated(layout, transition: .immediate)
+        }
+    }
+
+    @objc private func nextgramShowNowPlaying() {
+        guard self.nextgramMusicPlayerEnabled else {
+            return
+        }
+        self.view.endEditing(true)
+        self.nextgramShowsQueue = false
+        self.currentAlbumArt = nil
+        if let layout = self.validLayout {
+            self.containerLayoutUpdated(layout, transition: .immediate)
+        }
     }
 
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
@@ -1181,6 +1274,11 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         }
         
         transition.updateFrame(node: self.collapseNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -7.0), size: CGSize(width: layout.size.width, height: 30.0)))
+
+        // MARK: NEXTGRAM — Queue search remains native, with an explicit return to the player.
+        self.nextgramNowPlayingButton.isHidden = !self.nextgramMusicPlayerEnabled
+        self.nextgramNowPlayingButton.frame = CGRect(x: max(16.0, layout.safeInsets.left), y: headerHeight - 44.0,
+            width: max(0.0, layout.size.width - max(16.0, layout.safeInsets.left) - max(16.0, layout.safeInsets.right)), height: 36.0)
         
         self.updateHistoryContentOffset(self.historyNode.visibleContentOffset(), transition: transition)
         // MARK: NEXTGRAM — Search and its backing view use the same height after rotation or a style change.
@@ -1231,18 +1329,37 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             }
         }
         
+        // MARK: NEXTGRAM — The full-screen player uses screen coordinates, independent of queue scaling.
+        if let playerView = self.nextgramMusicPlayerView {
+            playerView.frame = CGRect(origin: .zero, size: layout.size)
+            var playerInsets = layout.safeInsets
+            playerInsets.top = max(playerInsets.top, layout.statusBarHeight ?? 0.0)
+            playerInsets.bottom = max(playerInsets.bottom, layout.intrinsicInsets.bottom)
+            playerView.updateLayout(size: layout.size, safeInsets: playerInsets)
+            playerView.isHidden = !self.isNextgramMusicPlayerVisible
+            playerView.setActive(self.isNextgramMusicPlayerVisible && !self.nextgramIsDismissing)
+            if self.isNextgramMusicPlayerVisible {
+                self.view.bringSubviewToFront(playerView)
+            }
+        }
+
         var layout = layout
         layout.intrinsicInsets.bottom = controlsHeight + (self.historyNode.hasAnyMessages ? 0.0 : 8.0)
         self.getParentController()?.presentationContext.containerLayoutUpdated(layout, transition: transition)
     }
     
     func animateIn() {
+        // MARK: NEXTGRAM
+        self.nextgramMusicPlayerView?.setActive(self.isNextgramMusicPlayerVisible)
         self.layer.animateBoundsOriginYAdditive(from: -self.bounds.size.height, to: 0.0, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
         self.dimNode.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
         self.dimNode.layer.animatePosition(from: CGPoint(x: 0.0, y: -self.bounds.size.height), to: CGPoint(), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: true, additive: true)
     }
     
     func animateOut(completion: (() -> Void)?) {
+        // MARK: NEXTGRAM — Stop lyric clocks and metadata requests while dismissing.
+        self.nextgramIsDismissing = true
+        self.nextgramMusicPlayerView?.setActive(false)
         self.dismissAllTooltips()
         
         self.layer.animateBoundsOriginYAdditive(from: self.bounds.origin.y, to: -self.bounds.size.height, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false, completion: { _ in
@@ -1256,6 +1373,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         let result = super.hitTest(point, with: event)
         if !self.bounds.contains(point) {
             return nil
+        }
+        // MARK: NEXTGRAM — Do not replace full-screen player touches with the legacy dim node.
+        if self.isNextgramMusicPlayerVisible {
+            return result
         }
         if self.albumArtBackground.superview == nil &&  point.y < self.historyFrameNode.frame.minY {
             return self.dimNode.view
@@ -1277,6 +1398,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     }
             
     override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        // MARK: NEXTGRAM
+        if self.isNextgramMusicPlayerVisible, gestureRecognizer is UIPanGestureRecognizer {
+            return false
+        }
         if let recognizer = gestureRecognizer as? UIPanGestureRecognizer {
             let location = recognizer.location(in: self.view)
             if let view = super.hitTest(location, with: nil) {

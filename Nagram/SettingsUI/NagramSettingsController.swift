@@ -527,6 +527,22 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.MusicPlayerModernUI", get: { NagramSettings.shared.musicPlayerModernUI }, set: { NagramSettings.shared.musicPlayerModernUI = $0 }),
             .toggle(titleKey: "Nagram.VideoPIPSwipeUp", get: { NagramSettings.shared.videoPIPSwipeDirection == "up" }, set: { NagramSettings.shared.videoPIPSwipeDirection = $0 ? "up" : "none" }),
         ]),
+        NagramGroup(tab: .media, headerKey: "Nagram.MusicPlayerModernUI", footerKey: "Nagram.MusicPlayer.OnlineLyricsPrivacy", rows: [
+            .choice(titleKey: "Nagram.MusicPlayer.CoverLayout", prefix: "Nagram.MusicPlayer.CoverLayout", options: NagramMusicPlayerCoverLayout.allCases.map { $0.rawValue }, current: { NagramSettings.shared.musicPlayerCoverLayoutValue.rawValue }, set: { NagramSettings.shared.musicPlayerCoverLayout = $0 }),
+            .slider(titleKey: "Nagram.MusicPlayer.CoverSize", minValue: 60, maxValue: 100, get: { NagramSettings.shared.musicPlayerCoverSizeValue }, set: { NagramSettings.shared.musicPlayerCoverSize = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .slider(titleKey: "Nagram.MusicPlayer.CoverCornerRadius", minValue: 0, maxValue: 48, get: { NagramSettings.shared.musicPlayerCoverCornerRadiusValue }, set: { NagramSettings.shared.musicPlayerCoverCornerRadius = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .choice(titleKey: "Nagram.MusicPlayer.TitleAlignment", prefix: "Nagram.MusicPlayer.TitleAlignment", options: ["left", "center"], current: { NagramSettings.shared.musicPlayerTitleAlignmentValue }, set: { NagramSettings.shared.musicPlayerTitleAlignment = $0 }),
+            .slider(titleKey: "Nagram.MusicPlayer.TitleFontSize", minValue: 20, maxValue: 32, get: { NagramSettings.shared.musicPlayerTitleFontSizeValue }, set: { NagramSettings.shared.musicPlayerTitleFontSize = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .slider(titleKey: "Nagram.MusicPlayer.ControlScale", minValue: 80, maxValue: 120, get: { NagramSettings.shared.musicPlayerControlScaleValue }, set: { NagramSettings.shared.musicPlayerControlScale = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .toggle(titleKey: "Nagram.MusicPlayer.DiscRotation", get: { NagramSettings.shared.musicPlayerDiscRotation }, set: { NagramSettings.shared.musicPlayerDiscRotation = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerCoverLayoutValue == .disc }),
+            .toggle(titleKey: "Nagram.MusicPlayer.SwipeToSkip", get: { NagramSettings.shared.musicPlayerSwipeToSkip }, set: { NagramSettings.shared.musicPlayerSwipeToSkip = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .toggle(titleKey: "Nagram.MusicPlayer.Lyrics", get: { NagramSettings.shared.musicPlayerLyricsEnabled }, set: { NagramSettings.shared.musicPlayerLyricsEnabled = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .toggle(titleKey: "Nagram.MusicPlayer.OnlineLyrics", get: { NagramSettings.shared.musicPlayerOnlineLyricsEnabled }, set: { NagramSettings.shared.musicPlayerOnlineLyricsEnabled = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.ShowVolume", get: { NagramSettings.shared.musicPlayerShowVolume }, set: { NagramSettings.shared.musicPlayerShowVolume = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .toggle(titleKey: "Nagram.MusicPlayer.ShowRemainingTime", get: { NagramSettings.shared.musicPlayerShowRemainingTime }, set: { NagramSettings.shared.musicPlayerShowRemainingTime = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .slider(titleKey: "Nagram.MusicPlayer.LyricsFontSize", minValue: 20, maxValue: 40, get: { NagramSettings.shared.musicPlayerLyricsFontSizeValue }, set: { NagramSettings.shared.musicPlayerLyricsFontSize = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .slider(titleKey: "Nagram.MusicPlayer.BlurIntensity", minValue: 0, maxValue: 60, get: { NagramSettings.shared.musicPlayerBlurIntensityValue }, set: { NagramSettings.shared.musicPlayerBlurIntensity = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+        ]),
         NagramGroup(tab: .appearance, headerKey: "Nagram.Section.Interface", footerKey: "Nagram.GlassTransparency.Footer", rows: [
             .navigation(titleKey: "Nagram.Settings.AppIcons", action: appIconsAction),
             .navigation(titleKey: "Nagram.BottomBarLayout", action: bottomBarLayoutAction),
@@ -862,7 +878,13 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
             }, action: {
             })
         case let .slider(_, section, title, minValue, maxValue, value, index):
-            return NagramSliderItem(theme: presentationData.theme, minValue: minValue, maxValue: maxValue, value: value, title: title, sectionId: section, updated: { newValue in
+            let valueText: (Int32) -> String = { value in
+                if ["Nagram.MusicPlayer.LyricsFontSize", "Nagram.MusicPlayer.CoverCornerRadius", "Nagram.MusicPlayer.BlurIntensity", "Nagram.MusicPlayer.TitleFontSize"].contains(where: { title == ngI18n($0, presentationData.strings.baseLanguageCode) }) {
+                    return String(value)
+                }
+                return "\(value)%"
+            }
+            return NagramSliderItem(theme: presentationData.theme, minValue: minValue, maxValue: maxValue, value: value, title: title, valueText: valueText, sectionId: section, updated: { newValue in
                 arguments.sliderUpdated(index, newValue)
             }, longTapAction: {
                 arguments.copyDeepLink(index)

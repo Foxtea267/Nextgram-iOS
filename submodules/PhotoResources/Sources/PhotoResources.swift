@@ -3102,7 +3102,8 @@ private func drawAlbumArtPlaceholder(into c: CGContext, arguments: TransformImag
     }
 }
 
-public func playerAlbumArt(engine: TelegramEngine, fileReference: FileMediaReference?, albumArt: SharedMediaPlaybackAlbumArt?, thumbnail: Bool, overlayColor: UIColor? = nil, emptyColor: UIColor? = nil, drawPlaceholderWhenEmpty: Bool = true, attemptSynchronously: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
+// MARK: NEXTGRAM — Fitting preserves the complete artwork for configurable music covers.
+public func playerAlbumArt(engine: TelegramEngine, fileReference: FileMediaReference?, albumArt: SharedMediaPlaybackAlbumArt?, thumbnail: Bool, overlayColor: UIColor? = nil, emptyColor: UIColor? = nil, drawPlaceholderWhenEmpty: Bool = true, attemptSynchronously: Bool = false, aspectFit: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
     let postbox = engine.account.postbox
     var fileArtworkData: Signal<Data?, NoError> = .single(nil)
     if let fileReference = fileReference {
@@ -3211,7 +3212,8 @@ public func playerAlbumArt(engine: TelegramEngine, fileReference: FileMediaRefer
             }
             
             if let sourceImage = sourceImage, let cgImage = sourceImage.cgImage {
-                let imageSize = sourceImage.size.aspectFilled(arguments.drawingRect.size)
+                // MARK: NEXTGRAM — Existing callers retain the cropped fill layout by default.
+                let imageSize = aspectFit ? sourceImage.size.aspectFitted(arguments.drawingRect.size) : sourceImage.size.aspectFilled(arguments.drawingRect.size)
                 context.withFlippedContext { c in
                     c.draw(cgImage, in: CGRect(origin: CGPoint(x: floor((arguments.drawingRect.size.width - imageSize.width) / 2.0), y: floor((arguments.drawingRect.size.height - imageSize.height) / 2.0)), size: imageSize))
                     if let overlayColor = overlayColor {

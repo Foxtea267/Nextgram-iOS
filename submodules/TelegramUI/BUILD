@@ -100,6 +100,7 @@ swift_library(
         "//Nagram/TelegramSettingsCloudSync:NagramTelegramSettingsCloudSync",
         "//Nagram/Strings:NagramStrings",
         "//Nagram/SettingsUI:NagramSettingsUI",
+        "//Nagram/MusicUI:NextgramMusicUI", # MARK: NEXTGRAM — Full-screen music player and lyrics.
         "//Nagram/Translate:NagramTranslate",  # MARK: NAGRAM
         "//Nagram/Transcription:NagramTranscription",  # MARK: NAGRAM
         "//submodules/MediaPlayer:UniversalMediaPlayer",

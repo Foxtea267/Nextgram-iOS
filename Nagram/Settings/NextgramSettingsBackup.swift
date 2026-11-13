@@ -175,6 +175,20 @@ public struct NextgramSettingsBackup {
         "nagram.musicPlaylistShowFileSize": (.media, .boolean),
         "nagram.musicPlaylistShowDownloadStatus": (.media, .boolean),
         "nagram.musicPlayerModernUI": (.media, .boolean),
+        "nagram.musicPlayerCoverLayout": (.media, .string),
+        "nagram.musicPlayerCoverSize": (.media, .integer),
+        "nagram.musicPlayerCoverCornerRadius": (.media, .integer),
+        "nagram.musicPlayerLyricsEnabled": (.media, .boolean),
+        "nagram.musicPlayerOnlineLyricsEnabled": (.media, .boolean),
+        "nagram.musicPlayerShowVolume": (.media, .boolean),
+        "nagram.musicPlayerShowRemainingTime": (.media, .boolean),
+        "nagram.musicPlayerLyricsFontSize": (.media, .integer),
+        "nagram.musicPlayerBlurIntensity": (.media, .integer),
+        "nagram.musicPlayerTitleAlignment": (.media, .string),
+        "nagram.musicPlayerTitleFontSize": (.media, .integer),
+        "nagram.musicPlayerControlScale": (.media, .integer),
+        "nagram.musicPlayerDiscRotation": (.media, .boolean),
+        "nagram.musicPlayerSwipeToSkip": (.media, .boolean),
         "nagram.mediaMetadataEnabled": (.media, .boolean),
         "nagram.fixLinkPreviews": (.media, .boolean),
         "nagram.locationIndicatorMode": (.appearance, .string),
@@ -357,6 +371,18 @@ public struct NextgramSettingsBackup {
             return min(200, max(50, value))
         case "nagram.translationLLMTemperatureTenths":
             return min(20, max(0, value))
+        case "nagram.musicPlayerLyricsFontSize":
+            return min(40, max(20, value))
+        case "nagram.musicPlayerCoverSize":
+            return min(100, max(60, value))
+        case "nagram.musicPlayerCoverCornerRadius":
+            return min(48, max(0, value))
+        case "nagram.musicPlayerBlurIntensity":
+            return min(60, max(0, value))
+        case "nagram.musicPlayerTitleFontSize":
+            return min(32, max(20, value))
+        case "nagram.musicPlayerControlScale":
+            return min(120, max(80, value))
         case "nagram.chatListQuickFilterPeerTypes":
             return value & 31
         default:
