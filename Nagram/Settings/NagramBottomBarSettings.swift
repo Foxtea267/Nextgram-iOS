@@ -1,6 +1,6 @@
 import Foundation
 
-public enum NagramBottomBarItemId: String, CaseIterable, Hashable {
+public enum NagramBottomBarItemId: String, CaseIterable, Codable, Hashable {
     case contacts
     case calls
     case chats
@@ -21,17 +21,17 @@ public enum NagramBottomBarItemId: String, CaseIterable, Hashable {
     }
 }
 
-public enum NagramBottomBarWidthMode: String {
+public enum NagramBottomBarWidthMode: String, Codable {
     case full
     case adaptive
 }
 
-public enum NagramBottomBarSlotMode: String {
+public enum NagramBottomBarSlotMode: String, Codable {
     case visibleOnly
     case preserveHidden
 }
 
-public enum NagramBottomBarAlignment: String {
+public enum NagramBottomBarAlignment: String, Codable {
     case spaceBetween
     case leftCenter
     case center = "overallCenter"
@@ -48,13 +48,13 @@ public enum NagramBottomBarAlignment: String {
     }
 }
 
-public enum NagramBottomBarSearchMode: String {
+public enum NagramBottomBarSearchMode: String, Codable {
     case button
     case bar
     case hidden
 }
 
-public struct NagramBottomBarSettings: Equatable {
+public struct NagramBottomBarSettings: Codable, Equatable {
     public static let defaultBottomItems: [NagramBottomBarItemId] = [.contacts, .calls, .chats, .settings]
     public static let minimumVisibleNonSearchBottomItems = 2
 

@@ -10,6 +10,9 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//Nagram/Settings:NagramSettings", # MARK: NEXTGRAM
+        "//Nagram/SettingsSignal:NagramSettingsSignal", # MARK: NEXTGRAM
+        "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit", # MARK: NEXTGRAM
         "//submodules/Display",
         "//submodules/ComponentFlow",
         "//submodules/Components/ComponentDisplayAdapters",

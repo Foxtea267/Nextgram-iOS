@@ -16,6 +16,7 @@ import WalletContext
 // MARK: NAGRAM
 import NagramSettings
 import NagramStrings // MARK: NEXTGRAM
+import NagramSettingsUI // MARK: NEXTGRAM
 
 // MARK: NAGRAM — nagram 为独立设置分组，排在「我的资料」之后
 enum SettingsSection: Int, CaseIterable {
@@ -260,7 +261,8 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     }))
 
     // MARK: NAGRAM — Nextgram 设置入口；内部保留 Nagram 命名以便同步上游。
-    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: "Nextgram", icon: PresentationResourcesSettings.settings, longPressAction: {
+    // MARK: NEXTGRAM
+    items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 50, text: ngI18n("Nagram.Settings.Title", presentationData.strings.baseLanguageCode), icon: nextgramSettingsLogo, longPressAction: {
         interaction.openSettings(.nagramDebug)
     }, action: {
         interaction.openSettings(.nagram)

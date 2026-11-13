@@ -811,7 +811,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
         let editingEdgeEffectHeight: CGFloat = 40.0
         let editingEdgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: width, height: navigationHeight + 10.0))
         transition.updateFrame(view: self.editingEdgeEffectView, frame: editingEdgeEffectFrame)
-        self.editingEdgeEffectView.update(content: presentationData.theme.list.blocksBackgroundColor, blur: true, rect: editingEdgeEffectFrame, edge: .top, edgeSize: editingEdgeEffectHeight, transition: ComponentTransition(transition))
+        self.editingEdgeEffectView.update(content: presentationData.theme.list.blocksBackgroundColor, blur: true, rect: editingEdgeEffectFrame, edge: .top, edgeSize: editingEdgeEffectHeight,
+            globalHeaderIsDark: presentationData.theme.overallDarkAppearance, transition: ComponentTransition(transition)) // MARK: NEXTGRAM
         let editingBackgroundAlpha: CGFloat
         if state.isEditing {
             editingBackgroundAlpha = max(0.0, min(1.0, contentOffset / 20.0))
@@ -846,7 +847,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             }
             
             transition.updateFrame(view: searchEdgeEffectView, frame: searchEdgeEffectFrame)
-            searchEdgeEffectView.update(content: presentationData.theme.list.plainBackgroundColor, blur: true, rect: searchEdgeEffectFrame, edge: .top, edgeSize: searchEdgeEffectHeight, transition: searchEdgeEffectTransition)
+            searchEdgeEffectView.update(content: presentationData.theme.list.plainBackgroundColor, blur: true, rect: searchEdgeEffectFrame, edge: .top, edgeSize: searchEdgeEffectHeight,
+                globalHeaderIsDark: presentationData.theme.overallDarkAppearance, transition: searchEdgeEffectTransition) // MARK: NEXTGRAM
         } else if let searchEdgeEffectView = self.searchEdgeEffectView {
             self.searchEdgeEffectView = nil
             transition.updateAlpha(layer: searchEdgeEffectView.layer, alpha: 0.0, completion: { [weak searchEdgeEffectView] _ in
@@ -2707,7 +2709,8 @@ final class PeerInfoHeaderNode: ASDisplayNode {
             self.updateUnderHeaderContentsAlpha?(1.0 - realAreaExpansionFraction, transition)
         }
         
-        self.headerEdgeEffectView.update(content: presentationData.theme.list.plainBackgroundColor, blur: true, rect: edgeEffectFrame, edge: .top, edgeSize: edgeEffectHeight, transition: ComponentTransition(transition))
+        self.headerEdgeEffectView.update(content: presentationData.theme.list.plainBackgroundColor, blur: true, rect: edgeEffectFrame, edge: .top, edgeSize: edgeEffectHeight,
+            globalHeaderIsDark: presentationData.theme.overallDarkAppearance, transition: ComponentTransition(transition)) // MARK: NEXTGRAM
         
         navigationTransition.updateAlpha(layer: self.headerEdgeEffectView.layer, alpha: state.isEditing ? 0.0 : 1.0)
         

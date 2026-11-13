@@ -229,7 +229,7 @@ Before committing:
 - For docs-only changes, at minimum inspect the Markdown and run `jj diff --git`.
 - Do not modify tests to fit a broken implementation.
 
-Commit messages in recent history use `type: summary`, especially `feat:`, `fix:`, `chore:`, and `docs:`. Prefer one focused change per commit:
+Write commit messages, push summaries, and GitHub Release notes in English. Use `type: summary`, especially `feat:`, `fix:`, `chore:`, and `docs:`. Prefer one focused change per commit:
 
 ```sh
 jj commit -m "docs: improve agent guide"

@@ -227,6 +227,16 @@ public final class NagramSettings {
     /// Only displays a Premium badge on the local account's profile.
     @NagramDefault("nagram.localPremiumEnabled", false)
     public var localPremiumEnabled: Bool
+    @NagramDefault("nextgram.showLocalProfileCard", false)
+    public var showLocalProfileCard: Bool
+    @NagramDefault("nextgram.localProfileStars", "")
+    public var localProfileStars: String
+    @NagramDefault("nextgram.localProfileTon", "")
+    public var localProfileTon: String
+    @NagramDefault("nextgram.localProfilePhone", "")
+    public var localProfilePhone: String
+    @NagramDefault("nextgram.localProfileRating", "")
+    public var localProfileRating: String
     @NagramDefault("nagram.unlimitedAccountsEnabled", false)
     public var unlimitedAccountsEnabled: Bool
     @NagramDefault("nagram.locationIndicatorMode", NagramLocationIndicatorMode.always.rawValue)
@@ -236,6 +246,8 @@ public final class NagramSettings {
     public var screenshotBadgeMode: String
     @NagramDefault("nagram.screenshotBadgeVerticalOffset", "0")
     public var screenshotBadgeVerticalOffset: String
+    @NagramDefault("nagram.screenshotBadgeStyle", "classic")
+    public var screenshotBadgeStyle: String
     @NagramDefault("nagram.autoCheckForUpdates", false)
     public var autoCheckForUpdates: Bool
     @NagramDefault("nagram.usageAgreementAcceptedVersion", Int32(0))
@@ -378,6 +390,18 @@ public final class NagramSettings {
     public var hideChatBackUnreadCount: Bool
     @NagramDefault("nagram.hideChatTitleGlass", false)
     public var hideChatTitleGlass: Bool
+    @NagramDefault("nagram.chatHeaderBlurEnabled", true)
+    public var chatHeaderBlurEnabled: Bool
+    @NagramDefault("nagram.chatHeaderShadeEnabled", false)
+    public var chatHeaderShadeEnabled: Bool
+    @NagramDefault("nagram.chatHeaderLightShadeOpacity", Int32(12))
+    public var chatHeaderLightShadeOpacity: Int32
+    @NagramDefault("nagram.chatHeaderDarkShadeOpacity", Int32(30))
+    public var chatHeaderDarkShadeOpacity: Int32
+    @NagramDefault("nagram.globalHeaderBlurEnabled", false)
+    public var globalHeaderBlurEnabled: Bool
+    @NagramDefault("nagram.globalHeaderShadeEnabled", false)
+    public var globalHeaderShadeEnabled: Bool
 
     // MARK: 波次 3 批 B — UI 中改
     /// 底栏布局完整配置。新逻辑只读写这一份模型。

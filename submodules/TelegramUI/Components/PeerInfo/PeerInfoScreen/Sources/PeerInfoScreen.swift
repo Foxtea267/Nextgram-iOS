@@ -2609,8 +2609,13 @@ final class PeerInfoScreenNode: ViewControllerTracingNode, PeerInfoScreenNodePro
             nagramBoolSignal("nagram.showProfileId", defaultValue: false),
             nagramBoolSignal("nagram.showDC", defaultValue: false),
             nagramBoolSignal("nagram.showRegDate", defaultValue: false),
-            nagramBoolSignal("nagram.localPremiumEnabled", defaultValue: false)
-        ).startStrict(next: { [weak self] _, _, _, _ in
+            nagramBoolSignal("nagram.localPremiumEnabled", defaultValue: false),
+            nagramBoolSignal("nextgram.showLocalProfileCard", defaultValue: false), // MARK: NEXTGRAM
+            nagramStringSignal("nextgram.localProfileStars", defaultValue: ""), // MARK: NEXTGRAM
+            nagramStringSignal("nextgram.localProfileTon", defaultValue: ""), // MARK: NEXTGRAM
+            nagramStringSignal("nextgram.localProfilePhone", defaultValue: ""), // MARK: NEXTGRAM
+            nagramStringSignal("nextgram.localProfileRating", defaultValue: "") // MARK: NEXTGRAM
+        ).startStrict(next: { [weak self] _, _, _, _, _, _, _, _, _ in // MARK: NEXTGRAM
             self?.requestLayout(animated: false)
         }))
         

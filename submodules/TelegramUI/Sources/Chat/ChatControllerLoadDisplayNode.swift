@@ -701,9 +701,10 @@ extension ChatControllerImpl {
         // MARK: NEXTGRAM — Apply chat header preferences to active and already loaded chats.
         self.nextgramChatHeaderOptionsDisposable = (combineLatest(
             nagramBoolSignal("nagram.hideChatBackUnreadCount", defaultValue: false),
-            nagramBoolSignal("nagram.hideChatTitleGlass", defaultValue: false)
+            nagramBoolSignal("nagram.hideChatTitleGlass", defaultValue: false),
+            nagramChatHeaderEffectsSignal()
         )
-        |> deliverOnMainQueue).startStrict(next: { [weak self] hideUnread, hideGlass in
+        |> deliverOnMainQueue).startStrict(next: { [weak self] hideUnread, hideGlass, _ in
             guard let self else { return }
             self.chatTitleView?.prefersCenteredNavigationTitle = hideUnread
             self.chatTitleView?.displaysGlassBackground = !hideGlass

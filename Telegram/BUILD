@@ -347,6 +347,7 @@ filegroup(
 # MARK: NAGRAM
 # MARK: NEXTGRAM — Keep Nextgram primary while preserving every official Telegram icon.
 alternate_icon_folders = [
+    "NextgramClassic", # MARK: NEXTGRAM
     "BlackIcon",
     "BlackClassicIcon",
     "BlackFilledIcon",

@@ -1077,6 +1077,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                 // MARK: NEXTGRAM — Nextgram stays default while all official Telegram icons remain available.
                 var icons = [
                     PresentationAppIcon(name: "Nextgram", imageName: "NextgramPreview", isDefault: true),
+                    PresentationAppIcon(name: "NextgramClassic", imageName: "NextgramClassicPreview"), // MARK: NEXTGRAM
                     PresentationAppIcon(name: "Telegram", imageName: "BlueIcon"),
                     PresentationAppIcon(name: "BlueIcon", imageName: "BlueIcon"),
                     PresentationAppIcon(name: "New2", imageName: "New2"),

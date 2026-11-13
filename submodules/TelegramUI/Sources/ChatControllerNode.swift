@@ -28,6 +28,7 @@ import ChatAvatarNavigationNode
 import AccessoryPanelNode
 import ForwardAccessoryPanelNode
 import ChatOverscrollControl
+import EdgeEffect // MARK: NEXTGRAM
 import ChatInputPanelNode
 import ChatInputContextPanelNode
 import ChatSendMessageActionUI
@@ -274,6 +275,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
     private var footerPanelsView: ComponentView<Empty>?
     
     private var topBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
+    private var chatHeaderShadeView: EdgeEffectView? // MARK: NEXTGRAM
     private var bottomBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
     
     private(set) var inputPanelNode: ChatInputPanelNode?
@@ -2743,9 +2745,12 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         })
         
         var topBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
-        // MARK: NEXTGRAM — Extend the native gradient under the title and status bar in the glass-free mode.
-        let usesProgressiveHeaderBlur = self.navigationBar != nil && navigationBarHeight > 0.0 && NagramSettings.shared.hideChatTitleGlass
-        if !isOverlay && (self.historyNode.rotated || usesProgressiveHeaderBlur) {
+        // MARK: NEXTGRAM — Keep the title container, blur, and shade independent.
+        let settings = NagramSettings.shared
+        let hasChatHeader = !isOverlay && self.navigationBar != nil && navigationBarHeight > 0.0
+        let extendsHeaderBlur = hasChatHeader && settings.hideChatTitleGlass
+        let showsTopBlur = hasChatHeader ? settings.chatHeaderBlurEnabled : self.historyNode.rotated
+        if !isOverlay && showsTopBlur && (self.historyNode.rotated || extendsHeaderBlur) {
             if let current = self.topBackgroundEdgeEffectNode {
                 topBackgroundEdgeEffectNode = current
             } else {
@@ -2753,7 +2758,14 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                     topBackgroundEdgeEffectNode = value
                     self.topBackgroundEdgeEffectNode = value
                     value.isUserInteractionEnabled = false
-                    self.historyNodeContainer.view.superview?.insertSubview(value.view, aboveSubview: self.messageTransitionNode.view)
+                    // MARK: NEXTGRAM — Keep the shade above a newly enabled blur.
+                    if let parentView = self.messageTransitionNode.view.superview {
+                        if let shade = self.chatHeaderShadeView, shade.superview === parentView {
+                            parentView.insertSubview(value.view, belowSubview: shade)
+                        } else {
+                            parentView.insertSubview(value.view, aboveSubview: self.messageTransitionNode.view)
+                        }
+                    }
                 }
             }
         } else {
@@ -2769,7 +2781,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
             let effectBottom = topListInset + topExtent
             let effectHeight = max(100.0, effectBottom)
             let blurFrame = CGRect(x: 0.0, y: effectBottom - effectHeight, width: layout.size.width, height: effectHeight)
-            let edgeSize = usesProgressiveHeaderBlur ? max(80.0, navigationBarHeight + 12.0) : 80.0
+            let edgeSize = extendsHeaderBlur ? max(80.0, navigationBarHeight + 12.0) : 80.0
             transition.updateFrame(node: topBackgroundEdgeEffectNode, frame: blurFrame)
             topBackgroundEdgeEffectNode.update(
                 rect: blurFrame,
@@ -2779,6 +2791,38 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                 containerSize: wallpaperBounds.size,
                 transition: transition
             )
+        }
+        // MARK: NEXTGRAM — Use the active chat theme, including scheduled and system theme changes.
+        let isDark = self.chatPresentationInterfaceState.theme.overallDarkAppearance
+        let shadeOpacity = isDark ? settings.chatHeaderDarkShadeOpacity : settings.chatHeaderLightShadeOpacity
+        if hasChatHeader, settings.chatHeaderShadeEnabled, shadeOpacity > 0,
+           let parentView = self.messageTransitionNode.view.superview {
+            let shade: EdgeEffectView
+            if let current = self.chatHeaderShadeView {
+                shade = current
+            } else {
+                shade = EdgeEffectView()
+                shade.isUserInteractionEnabled = false
+                shade.accessibilityElementsHidden = true
+                self.chatHeaderShadeView = shade
+            }
+            if shade.superview !== parentView {
+                let blurView = self.topBackgroundEdgeEffectNode?.view
+                if let blurView, blurView.superview === parentView {
+                    parentView.insertSubview(shade, aboveSubview: blurView)
+                } else {
+                    parentView.insertSubview(shade, aboveSubview: self.messageTransitionNode.view)
+                }
+            }
+            let height = navigationBarHeight + 28.0
+            let frame = CGRect(x: 0.0, y: 0.0, width: layout.size.width, height: height)
+            transition.updateFrame(view: shade, frame: frame)
+            shade.update(content: .black, alpha: CGFloat(min(100, shadeOpacity)) / 100.0,
+                rect: CGRect(origin: .zero, size: frame.size), edge: .top, edgeSize: height,
+                transition: ComponentTransition(transition))
+        } else if let shade = self.chatHeaderShadeView {
+            shade.removeFromSuperview()
+            self.chatHeaderShadeView = nil
         }
         
         if self.isScrollingLockedAtTop {

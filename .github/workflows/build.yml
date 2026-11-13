@@ -321,7 +321,7 @@ jobs:
           PREVIOUS_TAG="$(git describe --tags --abbrev=0 "${GITHUB_SHA}^" 2>/dev/null || true)"
           mkdir -p build
           {
-            echo "## 本次更新 / What's Changed"
+            echo "## What's Changed"
             echo
             if [[ -n "${PREVIOUS_TAG}" ]]; then
               git log --no-merges --pretty=format:'- %s (`%h`)' "${PREVIOUS_TAG}..${GITHUB_SHA}"
@@ -332,26 +332,23 @@ jobs:
             echo
             echo "Nextgram version: ${NEXTGRAM_RELEASE_VERSION}"
             echo "Nagram base version: ${NEXTGRAM_APP_VERSION}"
-            echo "已同步 Nagram / Telegram 13.0：翻译请求限流与格式保留、设置搜索生命周期、聊天布局及上游修复。"
-            echo "保留 Nextgram 聊天筛选、删除消息拦截、编辑历史、音乐搜索及其他自定义功能。"
-            echo "构建工具链升级至 Xcode 27 / Bazel 9.2。"
             echo
-            echo "## 选择安装包 / Choose a compatibility IPA"
+            echo "## Choose a compatibility IPA"
             echo
             python3 - <<'PY'
           import json
           with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
               variants = json.load(source)
-          print("| IPA | Bundle ID | 避免同时安装的原版 |")
+          print("| IPA | Bundle ID | App with the same bundle ID |")
           print("| --- | --- | --- |")
           for entry in variants:
               print(f"| Nextgram-{entry['variant']}.ipa | `{entry['bundle_id']}` | {entry['variant']} |")
           PY
             echo
             echo "Standalone re-signable IPA. Re-sign before installation."
-            echo "四种包的功能、Nextgram 名称和图标相同；请选择手机未安装对应原版的兼容包。"
-            echo "这些兼容包不是 jp.foxtea.nextgram 的原位更新，不会自动迁移其账号和本地缓存。"
-            echo "推送兼容性仍需在企业重签后实测，不保证通知恢复。"
+            echo "All variants share the same Nextgram features and branding. Choose a variant whose bundle ID is available on your device."
+            echo "Account data and caches from jp.foxtea.nextgram do not transfer to compatibility variants."
+            echo "Push notification delivery depends on the entitlements and provisioning profile used to re-sign the IPA."
           } > build/release-notes.md
           if gh release view "${VERSION}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
             gh release edit "${VERSION}" --notes-file build/release-notes.md --repo "${GITHUB_REPOSITORY}"

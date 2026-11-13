@@ -4,6 +4,9 @@ import Display
 import ComponentFlow
 import ComponentDisplayAdapters
 import GlassBackgroundComponent
+import NagramSettings // MARK: NEXTGRAM
+import NagramSettingsSignal // MARK: NEXTGRAM
+import SwiftSignalKit // MARK: NEXTGRAM
 
 public class EdgeEffectView: UIView {
     public enum Edge {
@@ -14,6 +17,10 @@ public class EdgeEffectView: UIView {
     private let contentView: UIView
     private let contentMaskView: UIImageView
     private var blurView: VariableBlurView?
+    // MARK: NEXTGRAM
+    private var globalHeaderEffectsDisposable: Disposable?
+    private var globalHeaderLayout: (bounds: CGRect, edgeSize: CGFloat, blur: Bool, isDark: Bool)?
+    private var globalHeaderShade: UIImageView?
     
     public override init(frame: CGRect) {
         self.contentView = UIView()
@@ -28,12 +35,18 @@ public class EdgeEffectView: UIView {
     required public init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    deinit {
+        self.globalHeaderEffectsDisposable?.dispose() // MARK: NEXTGRAM
+    }
     
     public func updateColor(color: UIColor, transition: ComponentTransition) {
         transition.setBackgroundColor(view: self.contentView, color: color)
     }
     
-    public func update(content: UIColor?, blur: Bool = false, alpha: CGFloat = 0.75, rect: CGRect, edge: Edge, edgeSize: CGFloat, transition: ComponentTransition) {
+    // MARK: NEXTGRAM — Opt in only on page headers, leaving standalone chat effects and bottom edges alone.
+    public func update(content: UIColor?, blur: Bool = false, alpha: CGFloat = 0.75, rect: CGRect, edge: Edge, edgeSize: CGFloat,
+                       globalHeaderIsDark: Bool? = nil, transition: ComponentTransition) {
         #if DEBUG && false
         let content: UIColor = .blue
         //let blur: Bool = !"".isEmpty
@@ -56,7 +69,58 @@ public class EdgeEffectView: UIView {
             }
         }
         
-        if blur {
+        if let isDark = globalHeaderIsDark {
+            self.globalHeaderLayout = (bounds, edgeSize, blur, isDark)
+            if self.globalHeaderEffectsDisposable == nil {
+                self.globalHeaderEffectsDisposable = (nagramChatHeaderEffectsSignal(global: true)
+                |> deliverOnMainQueue).startStrict(next: { [weak self] _ in
+                    self?.updateGlobalHeaderEffects(transition: .immediate)
+                })
+            }
+            self.updateGlobalHeaderEffects(transition: transition)
+        } else {
+            self.globalHeaderLayout = nil
+            self.globalHeaderShade?.removeFromSuperview()
+            self.globalHeaderShade = nil
+            self.updateBlur(blur, bounds: bounds, edge: edge, edgeSize: edgeSize, transition: transition)
+        }
+    }
+
+    private func updateGlobalHeaderEffects(transition: ComponentTransition) {
+        guard let layout = self.globalHeaderLayout else { return }
+        let settings = NagramSettings.shared
+        let bounds = layout.bounds
+        let globalBlur = settings.globalHeaderBlurEnabled
+        let edgeSize = globalBlur ? min(bounds.height, max(layout.edgeSize, bounds.height - 8.0)) : layout.edgeSize
+        self.updateBlur(layout.blur || globalBlur, bounds: bounds, edge: .top, edgeSize: edgeSize,
+            maxBlurRadius: globalBlur ? 16.0 : 1.0, transition: transition)
+
+        let opacity = layout.isDark ? settings.chatHeaderDarkShadeOpacity : settings.chatHeaderLightShadeOpacity
+        guard settings.globalHeaderShadeEnabled, opacity > 0, !bounds.isEmpty else {
+            self.globalHeaderShade?.removeFromSuperview()
+            self.globalHeaderShade = nil
+            return
+        }
+        let shade: UIImageView
+        if let current = self.globalHeaderShade {
+            shade = current
+        } else {
+            shade = UIImageView()
+            shade.isUserInteractionEnabled = false
+            shade.accessibilityElementsHidden = true
+            self.addSubview(shade)
+            self.globalHeaderShade = shade
+        }
+        if shade.image?.size.height != bounds.height {
+            shade.image = EdgeEffectView.generateEdgeGradient(baseHeight: bounds.height, isInverted: false)
+        }
+        transition.setFrame(view: shade, frame: bounds)
+        transition.setAlpha(view: shade, alpha: CGFloat(min(100, opacity)) / 100.0)
+    }
+
+    // MARK: NEXTGRAM
+    private func updateBlur(_ blur: Bool, bounds: CGRect, edge: Edge, edgeSize: CGFloat, maxBlurRadius: CGFloat = 1.0, transition: ComponentTransition) {
+        if blur && bounds.width > 0.0 && bounds.height > 0.0 {
             // Clamp to the effect's own bounds: the `max(edgeSize, ...)` floor below would
             // otherwise let the blur spill past `rect` whenever the caller asks for a gradient
             // longer than the region it is painting into, blurring unrelated content underneath.
@@ -64,10 +128,11 @@ public class EdgeEffectView: UIView {
             let blurFrame = CGRect(origin: CGPoint(x: 0.0, y: edge == .bottom ? (bounds.height - blurHeight) : 0.0), size: CGSize(width: bounds.width, height: blurHeight))
             
             let blurView: VariableBlurView
-            if let current = self.blurView {
+            if let current = self.blurView, current.maxBlurRadius == maxBlurRadius {
                 blurView = current
             } else {
-                blurView = VariableBlurView(maxBlurRadius: 1.0)
+                self.blurView?.removeFromSuperview()
+                blurView = VariableBlurView(maxBlurRadius: maxBlurRadius)
                 self.insertSubview(blurView, at: 0)
                 self.blurView = blurView
             }

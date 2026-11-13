@@ -40,6 +40,38 @@ public func nagramStringSignal(_ key: String, defaultValue: String) -> Signal<St
     return (initial |> then(changes)) |> distinctUntilChanged
 }
 
+public func nagramSettingsRestoredSignal() -> Signal<Int32, NoError> {
+    return Signal { subscriber in
+        let revision = Atomic<Int32>(value: 0)
+        let observer = NotificationCenter.default.addObserver(
+            forName: NextgramSettingsBackup.didRestoreNotification, object: nil, queue: .main
+        ) { _ in
+            subscriber.putNext(revision.modify { $0 &+ 1 })
+        }
+        subscriber.putNext(0)
+        return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
+    }
+}
+
+public func nagramChatHeaderEffectsSignal(global: Bool = false) -> Signal<(Bool, Bool, Int32, Int32), NoError> {
+    let settings = NagramSettings.shared
+    return Signal<(Bool, Bool, Int32, Int32), NoError> { subscriber in
+        let publish = {
+            subscriber.putNext((global ? settings.globalHeaderBlurEnabled : settings.chatHeaderBlurEnabled,
+                global ? settings.globalHeaderShadeEnabled : settings.chatHeaderShadeEnabled,
+                settings.chatHeaderLightShadeOpacity, settings.chatHeaderDarkShadeOpacity))
+        }
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: NagramDemoMode.userDefaults, queue: nil
+        ) { _ in
+            publish()
+        }
+        publish()
+        return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
+    }
+    |> distinctUntilChanged(isEqual: { $0 == $1 })
+}
+
 public func nextgramChatAliasesSignal(accountPeerId: Int64) -> Signal<[String: String], NoError> {
     return Signal<[String: String], NoError> { subscriber in
         let publish = {

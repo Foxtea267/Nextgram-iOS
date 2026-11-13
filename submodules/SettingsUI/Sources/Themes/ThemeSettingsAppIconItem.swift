@@ -40,6 +40,8 @@ private func nextgramAppIconTitle(_ iconName: String, strings: PresentationStrin
     switch iconName {
         case "Nextgram":
             return isChinese ? "默认" : "Default"
+        case "NextgramClassic": // MARK: NEXTGRAM
+            return isChinese ? "旧版 Nextgram" : "Nextgram Classic"
         case "Telegram":
             return "Telegram"
         default:

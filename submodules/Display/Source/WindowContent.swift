@@ -889,6 +889,13 @@ public class Window1 {
     private var screenshotBadgeVerticalOffset: CGFloat = 0
 
     // MARK: NEXTGRAM
+    public func setScreenshotBadgeImage(_ image: UIImage) {
+        guard self.badgeView.image !== image else { return }
+        self.badgeView.image = image
+        self.updateScreenshotBadgeFrame()
+    }
+
+    // MARK: NEXTGRAM
     public func setScreenshotBadgeVerticalOffset(_ value: Int) {
         let offset = CGFloat(max(-8, min(8, value)))
         if self.screenshotBadgeVerticalOffset != offset {

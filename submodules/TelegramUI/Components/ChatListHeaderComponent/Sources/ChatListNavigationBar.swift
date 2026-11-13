@@ -464,7 +464,8 @@ public final class ChatListNavigationBar: Component {
             edgeEffectHeight = max(0.0, edgeEffectHeight)
             let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: currentLayout.size.width, height: edgeEffectHeight))
             transition.setFrame(view: self.edgeEffectView, frame: edgeEffectFrame)
-            self.edgeEffectView.update(content: nil, blur: true, alpha: 0.85, rect: edgeEffectFrame, edge: .top, edgeSize: min(54.0, edgeEffectHeight), transition: transition)
+            self.edgeEffectView.update(content: nil, blur: true, alpha: 0.85, rect: edgeEffectFrame, edge: .top, edgeSize: min(54.0, edgeEffectHeight),
+                globalHeaderIsDark: component.theme.overallDarkAppearance, transition: transition) // MARK: NEXTGRAM
             
             let headerTransition = transition
             

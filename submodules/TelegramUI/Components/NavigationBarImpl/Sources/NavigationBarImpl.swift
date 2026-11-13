@@ -830,7 +830,8 @@ public final class NavigationBarImpl: ASDisplayNode, NavigationBar {
                 let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: -20.0), size: CGSize(width: size.width, height: 20.0 + edgeEffectHeight))
                 transition.updatePosition(layer: edgeEffectView.layer, position: edgeEffectFrame.center)
                 transition.updateBounds(layer: edgeEffectView.layer, bounds: CGRect(origin: CGPoint(), size: edgeEffectFrame.size))
-                edgeEffectView.update(content: self.presentationData.theme.edgeEffectColor ?? .white, blur: true, rect: CGRect(origin: CGPoint(), size: edgeEffectFrame.size), edge: .top, edgeSize: min(64.0, edgeEffectHeight), transition: ComponentTransition(transition))
+                edgeEffectView.update(content: self.presentationData.theme.edgeEffectColor ?? .white, blur: true, rect: CGRect(origin: CGPoint(), size: edgeEffectFrame.size), edge: .top, edgeSize: min(64.0, edgeEffectHeight),
+                    globalHeaderIsDark: self.presentationData.theme.overallDarkAppearance, transition: ComponentTransition(transition)) // MARK: NEXTGRAM
             }
         }
         

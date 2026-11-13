@@ -108,6 +108,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     private var detailsPlaceholderNode: DetailsChatPlaceholderNode?
     
     private var applicationInFocusDisposable: Disposable?
+    private var nextgramBadgeStyleDisposable: Disposable? // MARK: NEXTGRAM
     private var storyUploadEventsDisposable: Disposable?
     
     override public var minimizedContainer: MinimizedContainer? {
@@ -165,6 +166,13 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         })
         
         if context.sharedContext.applicationBindings.isMainApp {
+            // MARK: NEXTGRAM
+            self.nextgramBadgeStyleDisposable = (nagramStringSignal("nagram.screenshotBadgeStyle", defaultValue: "classic")
+            |> deliverOnMainQueue).startStrict(next: { style in
+                if let image = nextgramScreenshotBadgeImage(style: style) {
+                    context.sharedContext.mainWindow?.setScreenshotBadgeImage(image)
+                }
+            })
             // MARK: NEXTGRAM — Apply the badge preference immediately while the app is active.
             self.applicationInFocusDisposable = (combineLatest(
                 context.sharedContext.applicationBindings.applicationIsActive |> distinctUntilChanged,
@@ -201,6 +209,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     }
     
     deinit {
+        self.nextgramBadgeStyleDisposable?.dispose() // MARK: NEXTGRAM
         self.permissionsDisposable?.dispose()
         self.presentationDataDisposable?.dispose()
         self.nagramTabBarSettingsDisposable?.dispose() // MARK: NAGRAM
