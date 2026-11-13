@@ -16,7 +16,8 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.configuration.outputs.matrix }}
+      baseline_matrix: ${{ steps.configuration.outputs.baseline_matrix }}
+      compatibility_matrix: ${{ steps.configuration.outputs.compatibility_matrix }}
       app_version: ${{ steps.configuration.outputs.app_version }}
       release_version: ${{ steps.configuration.outputs.release_version }}
     steps:
@@ -54,21 +55,23 @@ jobs:
           with open("build/nextgram-release-tags.txt", encoding="utf-8") as source:
               published_revisions = [int(match.group(1)) for tag in source for match in [pattern.fullmatch(tag.strip())] if match]
           revision = max(minimum_revision, max(published_revisions, default=0) + 1)
-          print("matrix=" + json.dumps({"include": variants}, separators=(",", ":")))
+          baseline = [entry for entry in variants if entry["variant"] == "Nagram"]
+          compatibility = [entry for entry in variants if entry["variant"] != "Nagram"]
+          assert len(baseline) == 1 and compatibility, "Expected a Nagram baseline and compatibility variants"
+          print("baseline_matrix=" + json.dumps({"include": baseline}, separators=(",", ":")))
+          print("compatibility_matrix=" + json.dumps({"include": compatibility}, separators=(",", ":")))
           print(f"app_version={base_version}")
           print(f"release_version={base_version}.{revision}")
           PY
 
-  build:
+  build_baseline:
     name: Build ${{ matrix.variant }} compatibility IPA
     needs: prepare
-    runs-on: xcode-27
-    timeout-minutes: 180
+    runs-on: &build_runner xcode-27
+    timeout-minutes: &build_timeout 180
     strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
-    env:
+      matrix: ${{ fromJSON(needs.prepare.outputs.baseline_matrix) }}
+    env: &build_env
       LANG: en_US.UTF-8
       LC_ALL: en_US.UTF-8
       VARIANT: ${{ matrix.variant }}
@@ -79,7 +82,7 @@ jobs:
       NEXTGRAM_APP_VERSION: ${{ needs.prepare.outputs.app_version }}
       NEXTGRAM_RELEASE_VERSION: ${{ needs.prepare.outputs.release_version }}
 
-    steps:
+    steps: &build_steps
       - name: Validate variant credentials
         run: |
           set -euo pipefail
@@ -232,7 +235,8 @@ jobs:
             --configurationPath build-input/nextgram-ci.json \
             --codesigningInformationPath build-input/nextgram-codesigning \
             --buildNumber "$BUILD_NUMBER" \
-            --configuration release_arm64
+            --configuration release_arm64 \
+            --continueOnError
 
       - name: Prepare artifacts
         run: |
@@ -268,9 +272,21 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build_compatibility:
+    name: Build ${{ matrix.variant }} compatibility IPA
+    needs: [prepare, build_baseline]
+    runs-on: *build_runner
+    timeout-minutes: *build_timeout
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix: ${{ fromJSON(needs.prepare.outputs.compatibility_matrix) }}
+    env: *build_env
+    steps: *build_steps
+
   publish:
     name: Publish all compatibility IPAs
-    needs: [prepare, build]
+    needs: [prepare, build_baseline, build_compatibility]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:

@@ -2009,10 +2009,17 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             needsShareButton = false
         }
 
+        // MARK: NEXTGRAM — Use the current layout's content for both comments and bubble width.
+        let widthConstrainedContent = contentNodeMessagesAndClasses.first { content in
+            return content.1 == ChatMessageJoinedChannelBubbleContentNode.self
+                || content.1 == ChatMessageGiveawayBubbleContentNode.self
+                || (content.1 == ChatMessageInstantVideoBubbleContentNode.self && !content.3.isAttachment)
+        }
+        let hasInstantVideo = widthConstrainedContent.map { $0.1 == ChatMessageInstantVideoBubbleContentNode.self } ?? false
+
         // MARK: NAGRAM — Hide the channel forward button to free horizontal space for posts.
         var useWideChannelPostLayout = false
-        // MARK: NEXTGRAM
-        if needsShareButton && nextgramShouldHideQuickForwardButton(item: item, preserveComments: !self.disablesComments) {
+        if needsShareButton && nextgramShouldHideQuickForwardButton(item: item, preserveComments: hasInstantVideo) {
             needsShareButton = false
         }
         if NagramSettings.shared.wideChannelPosts, !isPreview, !isAd, let channel = firstMessage.peers[firstMessage.id.peerId] as? TelegramChannel, case .broadcast = channel.info {
@@ -2060,21 +2067,14 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             maximumContentWidth -= 10.0
         }
         
-        var hasInstantVideo = false
-        for contentNodeItemValue in contentNodeMessagesAndClasses {
-            let contentNodeItem = contentNodeItemValue as (message: Message, type: AnyClass, attributes: ChatMessageEntryAttributes, bubbleAttributes: BubbleItemAttributes)
-            if contentNodeItem.type == ChatMessageJoinedChannelBubbleContentNode.self {
+        // MARK: NEXTGRAM — Preserve upstream's first matching content width rule.
+        if let widthConstrainedContent {
+            if widthConstrainedContent.1 == ChatMessageJoinedChannelBubbleContentNode.self {
                 maximumContentWidth = baseWidth
-                break
-            }
-            if contentNodeItem.type == ChatMessageGiveawayBubbleContentNode.self {
+            } else if widthConstrainedContent.1 == ChatMessageGiveawayBubbleContentNode.self {
                 maximumContentWidth = min(305.0, maximumContentWidth)
-                break
-            }
-            if contentNodeItem.type == ChatMessageInstantVideoBubbleContentNode.self, !contentNodeItem.bubbleAttributes.isAttachment {
+            } else if hasInstantVideo {
                 maximumContentWidth = baseWidth - 20.0
-                hasInstantVideo = true
-                break
             }
         }
         maximumContentWidth = max(0.0, maximumContentWidth)
