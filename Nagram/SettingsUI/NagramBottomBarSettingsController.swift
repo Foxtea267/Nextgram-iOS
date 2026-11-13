@@ -29,6 +29,7 @@ private final class NagramBottomBarArguments {
 private enum NagramBottomBarSwitchOption: Int32 {
     case topSearch
     case labels
+    case settingsAvatar
 }
 
 private enum NagramBottomBarOption: Equatable {
@@ -165,6 +166,8 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                         settings.topSearchVisible = value
                     case .labels:
                         settings.showLabels = value
+                    case .settingsAvatar:
+                        settings.settingsUseAvatar = value
                     }
                 }
             })
@@ -324,9 +327,14 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
         context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.callListSettings])
         |> map { sharedData -> Bool in
             return sharedData.entries[ApplicationSpecificSharedDataKeys.callListSettings]?.get(CallListSettings.self)?.showTab ?? CallListSettings.defaultSettings.showTab
+        },
+        context.sharedContext.activeAccountContexts
+        |> map { accounts in
+            return accounts.accounts.contains { $0.0 != context.account.id }
         }
+        |> distinctUntilChanged
     )
-    |> map { presentationData, _, showCallsTab -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, _, showCallsTab, hasOtherAccounts -> (ItemListControllerState, (ItemListNodeState, Any)) in
         if let pendingShowCallsTabValue = pendingShowCallsTab {
             if showCallsTab == pendingShowCallsTabValue {
                 pendingShowCallsTab = nil
@@ -342,6 +350,7 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             .calls: ngI18n("Nagram.BottomBarLayout.Item.calls", lang),
             .chats: ngI18n("Nagram.BottomBarLayout.Item.chats", lang),
             .settings: ngI18n("Nagram.BottomBarLayout.Item.settings", lang),
+            .profile: ngI18n("Nagram.BottomBarLayout.Item.profile", lang),
             .search: ngI18n("Nagram.BottomBarLayout.Item.search", lang)
         ]
 
@@ -375,8 +384,9 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             .toggle(stableId: 42, section: 3, title: ngI18n("Nagram.BottomBarLayout.ShowLabels", lang), value: settings.showLabels, option: .labels),
             .slider(stableId: 43, section: 3, title: ngI18n("Nagram.BottomBarLayout.ButtonWidth", lang), value: settings.buttonWidthFillRatio),
             .disclosure(stableId: 44, section: 3, title: ngI18n("Nagram.BottomBarLayout.Alignment", lang), label: alignmentLabel, option: .alignment),
-            .reset(stableId: 45, section: 4, title: ngI18n("Nagram.BottomBarLayout.Reset", lang)),
-            .footer(stableId: 46, section: 4, text: ngI18n("Nagram.BottomBarLayout.Footer", lang))
+            .toggle(stableId: 45, section: 3, title: ngI18n("Nagram.BottomBarLayout.SettingsAvatar", lang), value: settings.settingsUseAvatar ?? hasOtherAccounts, option: .settingsAvatar),
+            .reset(stableId: 46, section: 4, title: ngI18n("Nagram.BottomBarLayout.Reset", lang)),
+            .footer(stableId: 47, section: 4, text: ngI18n("Nagram.BottomBarLayout.Footer", lang))
         ]
         if settings.visibleBottomItems.count > 1 {
             var orderEntries: [NagramBottomBarEntry] = [
@@ -794,6 +804,8 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
                 icon = .animation(name: "TabChats", offset: .zero)
             case .settings:
                 icon = .animation(name: "TabSettings", offset: .zero)
+            case .profile:
+                icon = .bundleIcon(name: "Item List/Icons/Profile")
             case .search:
                 icon = .bundleIcon(name: "Navigation/Search")
             }

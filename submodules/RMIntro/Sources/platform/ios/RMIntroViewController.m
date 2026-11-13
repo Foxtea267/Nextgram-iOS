@@ -282,7 +282,7 @@ static bool RMIntroUseStaticLogoFallback() {
     } completion:nil];
 }
 
-- (void)loadStaticLogoFallback
+- (void)loadStaticLogoFallbackWithImage:(UIImage *)logoImage
 {
     if (_fallbackLogoView != nil) {
         return;
@@ -311,19 +311,6 @@ static bool RMIntroUseStaticLogoFallback() {
     shadowView.layer.shadowOpacity = 0.12;
     shadowView.layer.shadowRadius = 16.0;
     shadowView.layer.shadowOffset = CGSizeMake(0.0, 8.0);
-    
-    // MARK: NAGRAM
-    // MARK: NEXTGRAM
-    UIImage *logoImage = nil;
-    for (NSString *fileName in @[@"NextgramBuild76x76@2x~ipad", @"NextgramBuild60x60@2x"]) {
-        NSString *path = [[NSBundle mainBundle] pathForResource:fileName ofType:@"png"];
-        if (path != nil) {
-            logoImage = [UIImage imageWithContentsOfFile:path];
-            if (logoImage != nil) {
-                break;
-            }
-        }
-    }
     
     UIView *iconView = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, logoFrame.size.width, logoFrame.size.height)];
     iconView.layer.cornerRadius = 34.0;
@@ -359,8 +346,10 @@ static bool RMIntroUseStaticLogoFallback() {
 
 - (void)loadGL
 {
-    if (RMIntroUseStaticLogoFallback()) { // MARK: NAGRAM
-        [self loadStaticLogoFallback];
+    // MARK: NEXTGRAM — Use the bundled logo on devices as well as in the simulator.
+    UIImage *logoImage = [UIImage imageNamed:@"NextgramPreview"];
+    if (logoImage != nil || RMIntroUseStaticLogoFallback()) {
+        [self loadStaticLogoFallbackWithImage:logoImage];
         return;
     }
     

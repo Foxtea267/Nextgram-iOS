@@ -6766,6 +6766,7 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             })
             
             self.tabBarItemContextActionType = .always
+            self.tabBarItem.tag = NagramBottomBarItemId.settingsTabBarTag // MARK: NEXTGRAM
             
             let notificationsFromAllAccounts = self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.inAppNotificationSettings])
             |> map { sharedData -> Bool in
@@ -6790,15 +6791,19 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             }
             |> distinctUntilChanged
             
-            let accountTabBarAvatar: Signal<(UIImage, UIImage)?, NoError> = combineLatest(self.accountsAndPeers.get(), context.sharedContext.presentationData)
-            |> map { primaryAndOther, presentationData -> (Account, EnginePeer, PresentationTheme)? in
-                if let primary = primaryAndOther.0, !primaryAndOther.1.isEmpty {
-                    return (primary.0.account, primary.1, presentationData.theme)
+            // MARK: NEXTGRAM — Allow the avatar with a single account and keep the native default for existing layouts.
+            let settingsAvatarPreference = nagramBottomBarSettingsSignal()
+            |> map { $0.settingsUseAvatar }
+            |> distinctUntilChanged
+            let accountTabBarAvatar: Signal<(UIImage, UIImage)?, NoError> = combineLatest(self.accountsAndPeers.get(), settingsAvatarPreference)
+            |> map { primaryAndOther, preference -> (Account, EnginePeer)? in
+                if let primary = primaryAndOther.0, preference ?? !primaryAndOther.1.isEmpty {
+                    return (primary.0.account, primary.1)
                 } else {
                     return nil
                 }
             }
-            |> distinctUntilChanged(isEqual: { $0?.0 === $1?.0 && $0?.1 == $1?.1 && $0?.2 === $1?.2 })
+            |> distinctUntilChanged(isEqual: { $0?.0 === $1?.0 && $0?.1 == $1?.1 })
             |> mapToSignal { primary -> Signal<(UIImage, UIImage)?, NoError> in
                 if let primary = primary {
                     let size = CGSize(width: 31.0, height: 31.0)
@@ -6906,10 +6911,11 @@ public final class PeerInfoScreenImpl: ViewController, PeerInfoScreen, KeyShortc
             self.tabBarItemDisposable = (tabBarItem |> deliverOnMainQueue).startStrict(next: { [weak self] title, image, selectedImage, badgeValue, isAvatar, reduceMotion in
                 if let strongSelf = self {
                     strongSelf.tabBarItem.title = title
-                    strongSelf.tabBarItem.image = image
-                    strongSelf.tabBarItem.selectedImage = selectedImage
+                    // MARK: NEXTGRAM — Publish icon metadata before the image listeners invalidate the tab.
                     strongSelf.tabBarItem.animationName = isAvatar || reduceMotion ? nil : "TabSettings"
                     strongSelf.tabBarItem.ringSelection = isAvatar
+                    strongSelf.tabBarItem.image = image
+                    strongSelf.tabBarItem.selectedImage = selectedImage
                     strongSelf.tabBarItem.badgeValue = badgeValue
                 }
             })

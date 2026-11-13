@@ -18,6 +18,9 @@ import MultilineTextComponent
 import GlassControls
 import PhotoResources
 import NagramStrings // MARK: NAGRAM // MARK: NEXTGRAM
+// MARK: NEXTGRAM
+import NagramSettings
+import NagramSettingsSignal
 import InstantPageUI
 
 final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestureRecognizerDelegate, UISearchBarDelegate {
@@ -76,6 +79,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     private var validLayout: ContainerViewLayout?
     
     private var presentationDataDisposable: Disposable?
+    private var nextgramPlayerStyleDisposable: Disposable? // MARK: NEXTGRAM
     private let replacementHistoryNodeReadyDisposable = MetaDisposable()
     
     private let getParentController: () -> ViewController?
@@ -388,6 +392,19 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         
         super.init()
 
+        // MARK: NEXTGRAM — Music-only and reactive so an open player can be restyled in place.
+        if self.supportsPlaylistSearch {
+            self.controlsNode.usesModernMusicLayout = NagramSettings.shared.musicPlayerModernUI
+            self.nextgramPlayerStyleDisposable = (nagramBoolSignal("nagram.musicPlayerModernUI", defaultValue: false)
+            |> deliverOnMainQueue).startStrict(next: { [weak self] enabled in
+                guard let self, self.controlsNode.usesModernMusicLayout != enabled else { return }
+                self.controlsNode.usesModernMusicLayout = enabled
+                if let layout = self.validLayout {
+                    self.containerLayoutUpdated(layout, transition: .immediate)
+                }
+            })
+        }
+
         // MARK: NAGRAM
         // MARK: NEXTGRAM — Every music queue exposes an inline playlist search field.
         self.playlistSearchBar.delegate = self
@@ -441,6 +458,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         
         self.controlsNode.requestAlbumArtDisplay = { [weak self] fileReferenceAndAlbumArt in
             guard let self, let layout = self.validLayout else {
+                return
+            }
+            // MARK: NEXTGRAM — Artwork size changes need no overlay relayout when it is closed.
+            if fileReferenceAndAlbumArt == nil && self.currentAlbumArt == nil {
                 return
             }
             self.currentAlbumArt = fileReferenceAndAlbumArt
@@ -632,6 +653,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     
     deinit {
         self.presentationDataDisposable?.dispose()
+        self.nextgramPlayerStyleDisposable?.dispose() // MARK: NEXTGRAM
         self.replacementHistoryNodeReadyDisposable.dispose()
         self.dataDisposable?.dispose()
         self.saveMediaDisposable?.dispose()
@@ -976,7 +998,15 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         transition.updateCornerRadius(node: self.containerContainingNode, cornerRadius: containerCornerRadius)
     }
     
+    // MARK: NEXTGRAM
+    private var usesCompactMusicHeader: Bool {
+        return self.controlsNode.usesModernMusicLayout && (self.validLayout?.size.height ?? 0.0) < 480.0
+    }
+
     private var effectiveHeaderHeight: CGFloat {
+        if self.controlsNode.usesModernMusicLayout {
+            return self.usesCompactMusicHeader ? 72.0 : 124.0 // MARK: NEXTGRAM
+        }
         var headerHeight: CGFloat = 38.0
         if let playlistLocation = self.playlistLocation as? PeerMessagesPlaylistLocation, case .savedMusic = playlistLocation {
             headerHeight = self.supportsPlaylistSearch ? 124.0 : 78.0
@@ -1002,22 +1032,27 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         transition.updateFrameAsPositionAndBounds(node: self.containerContainingNode, frame: CGRect(origin: CGPoint(), size: layout.size))
         transition.updateFrame(node: self.contentNode, frame: CGRect(origin: CGPoint(), size: layout.size))
         
-        let controlsHeight = self.controlsNode.updateLayout(width: layout.size.width, leftInset: 0.0, rightInset: 0.0, bottomInset: layout.intrinsicInsets.bottom, maxHeight: layout.size.height, savedMusic: self.isSaved, transition: transition)
+        // MARK: NEXTGRAM — Keep space for the playlist even with a large cover.
+        let layoutTopInset = max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top)
+        let headerHeight = self.effectiveHeaderHeight
+        let listTopInset = layoutTopInset + headerHeight
+        let usesModernLayout = self.controlsNode.usesModernMusicLayout
+        let minimumQueueHeight: CGFloat = self.usesCompactMusicHeader ? 68.0 : 120.0
+        let controlsMaxHeight = usesModernLayout ? max(0.0, layout.size.height - listTopInset - minimumQueueHeight) : layout.size.height
+        let controlsHeight = self.controlsNode.updateLayout(width: layout.size.width,
+            leftInset: usesModernLayout ? layout.safeInsets.left : 0.0, rightInset: usesModernLayout ? layout.safeInsets.right : 0.0,
+            bottomInset: layout.intrinsicInsets.bottom, maxHeight: controlsMaxHeight, savedMusic: self.isSaved, transition: transition)
         
         let controlsFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - controlsHeight), size: CGSize(width: layout.size.width, height: controlsHeight))
         let controlsTransition = self.controlsNode.frame.width > 0.0 ? transition : .immediate
         controlsTransition.updateFrame(node: self.controlsNode, frame: controlsFrame)
         
-        let layoutTopInset: CGFloat = max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top)
         var insets = UIEdgeInsets()
         insets.left = 16.0
         insets.right = 16.0
         insets.bottom = 0.0
                         
-        let headerHeight = self.effectiveHeaderHeight
-
-        let listTopInset = layoutTopInset + headerHeight
-        let listNodeSize = CGSize(width: layout.size.width, height: layout.size.height - listTopInset - controlsHeight)
+        let listNodeSize = CGSize(width: layout.size.width, height: max(0.0, layout.size.height - listTopInset - controlsHeight)) // MARK: NEXTGRAM
         
         insets.top = max(0.0, listNodeSize.height - floor(62.0 * 3.5))
         
@@ -1038,7 +1073,15 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             replacementHistoryNode.updateLayout(transition: transition, updateSizeAndInsets: updateSizeAndInsets)
         }
         
+        // MARK: NEXTGRAM — Give music queues a consistent close button and search header.
+        let isSavedMusicPlaylist: Bool
         if let playlistLocation = self.playlistLocation as? PeerMessagesPlaylistLocation, case .savedMusic = playlistLocation {
+            isSavedMusicPlaylist = true
+        } else {
+            isSavedMusicPlaylist = false
+        }
+        if isSavedMusicPlaylist || usesModernLayout {
+            let compactHeader = self.usesCompactMusicHeader
             let leftControlItems: [GlassControlGroupComponent.Item] = [
                 GlassControlGroupComponent.Item(
                     id: AnyHashable("close"),
@@ -1067,7 +1110,8 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 )
             }
             
-            let headerInset: CGFloat = 16.0
+            // MARK: NEXTGRAM
+            let headerInset: CGFloat = usesModernLayout ? max(16.0, layout.safeInsets.left, layout.safeInsets.right) : 16.0
             let headerButtonsSize = self.headerButtons.update(
                 transition: ComponentTransition(transition),
                 component: AnyComponent(
@@ -1097,7 +1141,9 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             }
             
             let titleString: String
-            if let peer = self.peer {
+            if !isSavedMusicPlaylist {
+                titleString = ngI18n("Nagram.MusicPlayerTitle", self.presentationData.strings.baseLanguageCode)
+            } else if let peer = self.peer {
                 if peer.id == self.context.account.peerId {
                     titleString = self.presentationData.strings.MediaPlayer_PlaylistYourTitle
                 } else {
@@ -1120,15 +1166,27 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                     self.historyFrameNode.view.addSubview(titleView)
                 }
                 titleView.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - titleSize.width) / 2.0), y: 29.0), size: titleSize)
+                titleView.isHidden = compactHeader // MARK: NEXTGRAM
             }
-            self.playlistSearchBar.frame = CGRect(x: 12.0, y: 66.0, width: layout.size.width - 24.0, height: 48.0)
+            self.headerButtons.view?.isHidden = false // MARK: NEXTGRAM
+            // MARK: NEXTGRAM
+            let searchInset = compactHeader ? headerInset + 48.0 : headerInset - 4.0
+            self.playlistSearchBar.frame = CGRect(x: searchInset, y: compactHeader ? 14.0 : 66.0,
+                width: max(0.0, layout.size.width - searchInset * 2.0), height: 48.0)
         } else if self.supportsPlaylistSearch {
+            // MARK: NEXTGRAM
+            self.title.view?.isHidden = true
+            self.headerButtons.view?.isHidden = true
             self.playlistSearchBar.frame = CGRect(x: 12.0, y: 28.0, width: layout.size.width - 24.0, height: 48.0)
         }
         
         transition.updateFrame(node: self.collapseNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -7.0), size: CGSize(width: layout.size.width, height: 30.0)))
         
         self.updateHistoryContentOffset(self.historyNode.visibleContentOffset(), transition: transition)
+        // MARK: NEXTGRAM — Search and its backing view use the same height after rotation or a style change.
+        if let offset = self.floatingHeaderOffset {
+            self.updateFloatingHeaderOffset(offset: offset, transition: transition)
+        }
         
         self.albumArtBackground.frame = CGRect(origin: .zero, size: layout.size)
         
@@ -1312,7 +1370,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         
         transition.updateFrame(node: self.historyFrameNode, frame: frameFrame)
         self.historyFrameTopOverlayClipNode.frame = topOverlayFrame
-        self.historyFrameTopOverlayNode.frame = CGRect(origin: .zero, size: CGSize(width: topOverlayFrame.width, height: 78.0))
+        self.historyFrameTopOverlayNode.frame = CGRect(origin: .zero, size: topOverlayFrame.size) // MARK: NEXTGRAM — Back the full search header.
         self.historyFrameLeftOverlayNode.frame = leftOverlayFrame
         self.historyFrameRightOverlayNode.frame = rightOverlayFrame
         if let image = self.historyFrameTopMaskNode.image {
@@ -1385,7 +1443,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
 
             let headerHeight = self.effectiveHeaderHeight
             let listTopInset = layoutTopInset + headerHeight
-            let listNodeSize = CGSize(width: layout.size.width, height: layout.size.height - listTopInset - controlsHeight)
+            let listNodeSize = CGSize(width: layout.size.width, height: max(0.0, layout.size.height - listTopInset - controlsHeight)) // MARK: NEXTGRAM
             
             insets.top = max(0.0, listNodeSize.height - floor(62.0 * 3.5))
             
@@ -1483,7 +1541,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 
                 let headerHeight = self.effectiveHeaderHeight
                 let listTopInset = layoutTopInset + headerHeight
-                let listNodeSize = CGSize(width: layout.size.width, height: layout.size.height - listTopInset - controlsHeight)
+                let listNodeSize = CGSize(width: layout.size.width, height: max(0.0, layout.size.height - listTopInset - controlsHeight)) // MARK: NEXTGRAM
                 
                 insets.top = max(0.0, listNodeSize.height - floor(62.0 * 3.5))
                 

@@ -34,6 +34,7 @@ import ChatEmptyNode
 import NagramSettings
 import NagramSettingsSignal
 import NagramSettingsUI // MARK: NEXTGRAM
+import NagramStrings // MARK: NEXTGRAM
 
 // MARK: NAGRAM
 private func updateNagramGlassOverlayTransparencySettings() {
@@ -93,6 +94,7 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public var callListController: CallListController?
     public var chatListController: ChatListController?
     public var accountSettingsController: PeerInfoScreen?
+    private var nextgramProfileController: PeerInfoScreenImpl? // MARK: NEXTGRAM
     
     private var permissionsDisposable: Disposable?
     private var presentationDataDisposable: Disposable?
@@ -131,7 +133,12 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
                 strongSelf.detailsPlaceholderNode?.updatePresentationData(presentationData)
                 
                 let previousTheme = strongSelf.presentationData.theme
+                let previousStrings = strongSelf.presentationData.strings // MARK: NEXTGRAM
                 strongSelf.presentationData = presentationData
+                // MARK: NEXTGRAM
+                if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings {
+                    strongSelf.updateNextgramProfileTabItem()
+                }
                 if previousTheme !== presentationData.theme {
                     (strongSelf.rootTabController as? TabBarControllerImpl)?.updateTheme(theme: presentationData.theme)
                     strongSelf.rootTabController?.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
@@ -249,6 +256,17 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     }
     
     // MARK: NAGRAM
+    // MARK: NEXTGRAM — Use the current account's native profile as its own tab.
+    private func updateNextgramProfileTabItem() {
+        guard let controller = self.nextgramProfileController else { return }
+        let tabBarTheme = self.presentationData.theme.rootController.tabBar
+        let image = UIImage(bundleImageName: "Item List/Icons/Profile")
+        controller.tabBarItem.tag = NagramBottomBarItemId.profileTabBarTag
+        controller.tabBarItem.title = ngI18n("Nagram.BottomBarLayout.Item.profile", self.presentationData.strings.baseLanguageCode)
+        controller.tabBarItem.image = generateTintedImage(image: image, color: tabBarTheme.iconColor)
+        controller.tabBarItem.selectedImage = generateTintedImage(image: image, color: tabBarTheme.selectedIconColor)
+    }
+
     private func nagramRootControllers(showCallsTab: Bool) -> [ViewController] {
         guard let contactsController = self.contactsController, let callListController = self.callListController, let chatListController = self.chatListController, let accountSettingsController = self.accountSettingsController else {
             return []
@@ -267,6 +285,18 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         }
         if !bottomBarSettings.isBottomBarVisible || bottomBarSettings.visibleNavigationItems.contains(.settings) {
             controllers.append(accountSettingsController)
+        }
+        // MARK: NEXTGRAM
+        if bottomBarSettings.visibleNavigationItems.contains(.profile) {
+            if self.nextgramProfileController == nil {
+                self.nextgramProfileController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil,
+                    peerId: self.context.account.peerId, avatarInitiallyExpanded: false, isOpenedFromChat: false,
+                    reactionSourceMessageId: nil, callMessages: [], isMyProfile: true)
+                self.updateNextgramProfileTabItem()
+            }
+            if let profileController = self.nextgramProfileController {
+                controllers.append(profileController)
+            }
         }
         if controllers.isEmpty {
             controllers.append(chatListController)

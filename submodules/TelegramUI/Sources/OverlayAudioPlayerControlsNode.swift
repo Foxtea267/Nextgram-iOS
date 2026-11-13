@@ -191,6 +191,15 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
     }
         
     var isExpanded = false
+    // MARK: NEXTGRAM — Keep the existing playback, seeking and queue actions in both layouts.
+    var usesModernMusicLayout = false {
+        didSet {
+            if oldValue != self.usesModernMusicLayout {
+                self.updatePlaybackAccent()
+            }
+        }
+    }
+    private let modernPlayButtonBackground = ASDisplayNode() // MARK: NEXTGRAM
     var updateIsExpanded: (() -> Void)?
     var requestAlbumArtDisplay: (((FileMediaReference, SharedMediaPlaybackAlbumArt)?) -> Void)?
     
@@ -211,6 +220,7 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
     private(set) var currentItemId: SharedMediaPlaylistItemId?
     private var displayData: SharedMediaPlaybackDisplayData?
     private var currentAlbumArtInitialized = false
+    private var nextgramAlbumArtThumbnail = true // MARK: NEXTGRAM
     private var currentAlbumArt: SharedMediaPlaybackAlbumArt?
     private(set) var currentFileReference: FileMediaReference?
     private var statusDisposable: Disposable?
@@ -325,6 +335,10 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
         self.addSubnode(self.backwardButton)
         self.addSubnode(self.forwardButton)
         self.addSubnode(self.playPauseButton)
+        // MARK: NEXTGRAM
+        self.modernPlayButtonBackground.isUserInteractionEnabled = false
+        self.modernPlayButtonBackground.isHidden = true
+        self.playPauseButton.addSubnode(self.modernPlayButtonBackground)
         self.playPauseButton.addSubnode(self.playPauseIconNode)
         self.addSubnode(self.rateButton)
         
@@ -675,6 +689,7 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
         self.scrubberNode.updateColors(backgroundColor: presentationData.theme.list.controlSecondaryColor.withMultipliedAlpha(0.5), foregroundColor: presentationData.theme.list.itemPrimaryTextColor)
         self.leftDurationLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
         self.rightDurationLabel.textColor = presentationData.theme.list.itemSecondaryTextColor
+        self.updatePlaybackAccent() // MARK: NEXTGRAM
         self.backwardButton.icon = generateTintedImage(image: UIImage(bundleImageName: "GlobalMusicPlayer/Previous"), color: presentationData.theme.list.itemPrimaryTextColor)
         self.forwardButton.icon = generateTintedImage(image: UIImage(bundleImageName: "GlobalMusicPlayer/Next"), color: presentationData.theme.list.itemPrimaryTextColor)
         if let isPaused = self.currentIsPaused {
@@ -695,18 +710,29 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
     }
     
     private func updateLabels(transition: ContainedViewLayoutTransition) {
-        guard let (width, leftInset, rightInset, _, _, _) = self.validLayout else {
+        guard let (width, leftInset, rightInset, bottomInset, maxHeight, savedMusic) = self.validLayout else {
             return
         }
         
         let sideInset: CGFloat = 20.0
         
-        let infoLabelsLeftInset: CGFloat = 53.0
+        // MARK: NEXTGRAM
+        let coverSide = self.modernCoverSide(width: width - leftInset - rightInset, maxHeight: maxHeight, bottomInset: bottomInset, savedMusic: savedMusic)
+        let centerLabels = self.isExpanded || coverSide > 0.0
+        let infoLabelsLeftInset: CGFloat = coverSide > 0.0 ? 32.0 : 53.0
         let infoLabelsRightInset: CGFloat = 32.0
         
-        let infoVerticalOrigin: CGFloat = 21.0
+        let compactLayout = self.usesCompactMusicLayout(maxHeight: maxHeight, bottomInset: bottomInset, savedMusic: savedMusic)
+        let infoVerticalOrigin: CGFloat = (compactLayout ? 10.0 : 21.0) + coverSide
+        let textWidth = max(1.0, width - sideInset * 2.0 - leftInset - rightInset - infoLabelsLeftInset - infoLabelsRightInset)
         
-        let (titleString, descriptionString, hasArtist, caption) = stringsForDisplayData(self.displayData, presentationData: self.presentationData)
+        let (originalTitle, descriptionString, hasArtist, caption) = stringsForDisplayData(self.displayData, presentationData: self.presentationData)
+        let titleString: NSAttributedString?
+        if self.usesModernMusicLayout, let originalTitle {
+            titleString = NSAttributedString(string: originalTitle.string, font: Font.semibold(21.0), textColor: self.presentationData.theme.list.itemPrimaryTextColor)
+        } else {
+            titleString = originalTitle
+        }
         
         if self.previousCaption?.string != caption?.string {
             self.previousCaption = caption
@@ -718,7 +744,7 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
         self.artistButton.isUserInteractionEnabled = hasArtist
         
         let makeTitleLayout = TextNode.asyncLayout(self.titleNode)
-        let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: titleString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width - sideInset * 2.0 - leftInset - rightInset - infoLabelsLeftInset - infoLabelsRightInset, height: CGFloat.greatestFiniteMagnitude), alignment: .left, lineSpacing: 0.0, cutout: nil, insets: UIEdgeInsets()))
+        let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: titleString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude), alignment: .left, lineSpacing: 0.0, cutout: nil, insets: UIEdgeInsets())) // MARK: NEXTGRAM
         
         let titleSize = self.title.update(
             transition: .immediate,
@@ -726,22 +752,23 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
                 MarqueeComponent(attributedText: titleString ?? NSAttributedString())
             ),
             environment: {},
-            containerSize: CGSize(width: width - sideInset * 2.0 - leftInset - rightInset - infoLabelsLeftInset - infoLabelsRightInset, height: CGFloat.greatestFiniteMagnitude)
+            containerSize: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude) // MARK: NEXTGRAM
         )
         if let titleView = self.title.view {
             if titleView.superview == nil {
                 self.view.addSubview(titleView)
             }
-            transition.updateFrame(view: titleView, frame: CGRect(origin: CGPoint(x: self.isExpanded ? floor((width - titleSize.width) / 2.0) : (leftInset + sideInset + infoLabelsLeftInset), y: infoVerticalOrigin), size: titleSize))
+            transition.updateFrame(view: titleView, frame: CGRect(origin: CGPoint(x: centerLabels ? floor((width + leftInset - rightInset - titleSize.width) / 2.0) : (leftInset + sideInset + infoLabelsLeftInset), y: infoVerticalOrigin), size: titleSize)) // MARK: NEXTGRAM
         }
         
         let makeDescriptionLayout = TextNode.asyncLayout(self.descriptionNode)
-        let (descriptionLayout, descriptionApply) = makeDescriptionLayout(TextNodeLayoutArguments(attributedString: descriptionString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: width - sideInset * 2.0 - leftInset - rightInset - infoLabelsLeftInset - infoLabelsRightInset, height: CGFloat.greatestFiniteMagnitude), alignment: .left, lineSpacing: 0.0, cutout: nil, insets: UIEdgeInsets()))
+        let (descriptionLayout, descriptionApply) = makeDescriptionLayout(TextNodeLayoutArguments(attributedString: descriptionString, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: textWidth, height: CGFloat.greatestFiniteMagnitude), alignment: .left, lineSpacing: 0.0, cutout: nil, insets: UIEdgeInsets())) // MARK: NEXTGRAM
         
-        transition.updateFrame(node: self.titleNode, frame: CGRect(origin: CGPoint(x: self.isExpanded ? floor((width - titleLayout.size.width) / 2.0) : (leftInset + sideInset + infoLabelsLeftInset), y: infoVerticalOrigin + 1.0), size: titleLayout.size))
+        transition.updateFrame(node: self.titleNode, frame: CGRect(origin: CGPoint(x: centerLabels ? floor((width + leftInset - rightInset - titleLayout.size.width) / 2.0) : (leftInset + sideInset + infoLabelsLeftInset), y: infoVerticalOrigin + 1.0), size: titleLayout.size)) // MARK: NEXTGRAM
         let _ = titleApply()
         
-        let descriptionFrame = CGRect(origin: CGPoint(x: self.isExpanded ? floor((width - descriptionLayout.size.width) / 2.0) : (leftInset + sideInset + infoLabelsLeftInset), y: infoVerticalOrigin + 24.0), size: descriptionLayout.size)
+        let descriptionOffset: CGFloat = self.usesModernMusicLayout ? 28.0 : 24.0
+        let descriptionFrame = CGRect(origin: CGPoint(x: centerLabels ? floor((width + leftInset - rightInset - descriptionLayout.size.width) / 2.0) : (leftInset + sideInset + infoLabelsLeftInset), y: infoVerticalOrigin + descriptionOffset), size: descriptionLayout.size) // MARK: NEXTGRAM
         transition.updateFrame(node: self.descriptionNode, frame: descriptionFrame)
         let _ = descriptionApply()
         
@@ -756,16 +783,27 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
                     break
             }
         }
-        if self.currentAlbumArt != albumArt || !self.currentAlbumArtInitialized {
+        // MARK: NEXTGRAM — Request high-resolution artwork only when the layout uses it.
+        let thumbnail = coverSide == 0.0
+        if self.currentAlbumArt != albumArt || !self.currentAlbumArtInitialized || self.nextgramAlbumArtThumbnail != thumbnail {
             self.currentAlbumArtInitialized = true
             self.currentAlbumArt = albumArt
-            self.albumArtNode.setSignal(playerAlbumArt(engine: self.engine, fileReference: self.currentFileReference, albumArt: albumArt, thumbnail: true))
+            self.nextgramAlbumArtThumbnail = thumbnail
+            self.albumArtNode.setSignal(playerAlbumArt(engine: self.engine, fileReference: self.currentFileReference, albumArt: albumArt, thumbnail: thumbnail))
             self.requestAlbumArtDisplay?(nil)
         }
     }
     
+    // MARK: NEXTGRAM
+    private func updatePlaybackAccent() {
+        let theme = self.presentationData.theme.list
+        self.modernPlayButtonBackground.isHidden = !self.usesModernMusicLayout
+        self.modernPlayButtonBackground.backgroundColor = theme.itemCheckColors.fillColor
+        self.playPauseIconNode.customColor = self.usesModernMusicLayout ? theme.itemCheckColors.foregroundColor : theme.itemPrimaryTextColor
+    }
+
     private func updatePlayPauseButton(paused: Bool, animated: Bool) {
-        self.playPauseIconNode.customColor = self.presentationData.theme.list.itemPrimaryTextColor
+        self.updatePlaybackAccent() // MARK: NEXTGRAM
         if paused {
             self.playPauseIconNode.enqueueState(.play, animated: animated)
         } else {
@@ -803,6 +841,25 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
     }
     
     static let basePanelHeight: CGFloat = 190.0
+
+    // MARK: NEXTGRAM — Drop to compact artwork when the available height cannot fit a square cover.
+    private func modernCoverSide(width: CGFloat, maxHeight: CGFloat, bottomInset: CGFloat, savedMusic: Bool?) -> CGFloat {
+        guard self.usesModernMusicLayout else { return 0.0 }
+        let footerHeight = self.modernFooterHeight(bottomInset: bottomInset, savedMusic: savedMusic)
+        let side = floor(min(280.0, width - 64.0, maxHeight - Self.basePanelHeight - footerHeight))
+        return side >= 80.0 ? side : 0.0
+    }
+
+    private func modernFooterHeight(bottomInset: CGFloat, savedMusic: Bool?) -> CGFloat {
+        if savedMusic == nil {
+            return max(8.0, bottomInset)
+        }
+        return 52.0 + ContainerViewLayout.concentricInsets(bottomInset: bottomInset, innerDiameter: 52.0, sideInset: 30.0).bottom
+    }
+
+    private func usesCompactMusicLayout(maxHeight: CGFloat, bottomInset: CGFloat, savedMusic: Bool?) -> Bool {
+        return self.usesModernMusicLayout && maxHeight < Self.basePanelHeight + self.modernFooterHeight(bottomInset: bottomInset, savedMusic: savedMusic)
+    }
     
     static func heightForLayout(width: CGFloat, leftInset: CGFloat, rightInset: CGFloat, bottomInset: CGFloat, maxHeight: CGFloat, isExpanded: Bool, savedMusic: Bool?) -> CGFloat {
         var panelHeight: CGFloat = OverlayAudioPlayerControlsNode.basePanelHeight
@@ -837,31 +894,41 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
             transition = .immediate
         }
         
-        let finalPanelHeight = OverlayAudioPlayerControlsNode.heightForLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, maxHeight: maxHeight, isExpanded: self.isExpanded, savedMusic: savedMusic)
-        let panelHeight = OverlayAudioPlayerControlsNode.heightForLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, maxHeight: maxHeight, isExpanded: self.isExpanded, savedMusic: nil)
+        // MARK: NEXTGRAM
+        let coverSide = self.modernCoverSide(width: width - leftInset - rightInset, maxHeight: maxHeight, bottomInset: bottomInset, savedMusic: savedMusic)
+        let compactLayout = self.usesCompactMusicLayout(maxHeight: maxHeight, bottomInset: bottomInset, savedMusic: savedMusic)
+        let panelMaxHeight = self.usesModernMusicLayout ? (compactLayout ? 160.0 : Self.basePanelHeight) : maxHeight
+        let panelHeight = Self.heightForLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, maxHeight: panelMaxHeight, isExpanded: self.isExpanded, savedMusic: nil) + coverSide
+        let finalPanelHeight = Self.heightForLayout(width: width, leftInset: leftInset, rightInset: rightInset, bottomInset: bottomInset, maxHeight: panelMaxHeight, isExpanded: self.isExpanded, savedMusic: savedMusic) + coverSide
+            + (self.usesModernMusicLayout && savedMusic == nil ? max(0.0, bottomInset - 8.0) : 0.0)
         
         transition.updateFrame(node: self.separatorNode, frame: CGRect(origin: CGPoint(x: 0.0, y: panelHeight), size: CGSize(width: width, height: UIScreenPixel)))
                 
         let sideInset: CGFloat = 16.0
         let sideButtonsInset: CGFloat = sideInset + 60.0
         
-        let infoVerticalOrigin: CGFloat = 21.0
+        let infoVerticalOrigin: CGFloat = (compactLayout ? 10.0 : 21.0) + coverSide // MARK: NEXTGRAM
         
         self.updateLabels(transition: transition)
         
         transition.updateFrame(node: self.shareNode, frame: CGRect(origin: CGPoint(x: width - rightInset - sideInset - 34.0, y: infoVerticalOrigin), size: CGSize(width: 42.0, height: 42.0)))
         
-        let albumArtSize = CGSize(width: 46.0, height: 46.0)
+        // MARK: NEXTGRAM
+        let albumSide = coverSide > 0.0 ? coverSide : 46.0
+        let albumArtSize = CGSize(width: albumSide, height: albumSide)
         let makeAlbumArtLayout = self.albumArtNode.asyncLayout()
-        let applyAlbumArt = makeAlbumArtLayout(TransformImageArguments(corners: ImageCorners(radius: 10.0), imageSize: albumArtSize, boundingSize: albumArtSize, intrinsicInsets: UIEdgeInsets()))
+        let applyAlbumArt = makeAlbumArtLayout(TransformImageArguments(corners: ImageCorners(radius: coverSide > 0.0 ? 20.0 : 10.0), imageSize: albumArtSize, boundingSize: albumArtSize, intrinsicInsets: UIEdgeInsets()))
         applyAlbumArt()
-        let albumArtFrame = CGRect(origin: CGPoint(x: leftInset + sideInset, y: infoVerticalOrigin - 3.0), size: albumArtSize)
+        let albumArtOrigin = coverSide > 0.0 ? CGPoint(x: floor((width + leftInset - rightInset - coverSide) * 0.5), y: 8.0)
+            : CGPoint(x: leftInset + sideInset, y: infoVerticalOrigin - 3.0)
+        let albumArtFrame = CGRect(origin: albumArtOrigin, size: albumArtSize)
         transition.updateFrame(node: self.albumArtNode, frame: albumArtFrame)
         
         let scrubberVerticalOrigin: CGFloat = infoVerticalOrigin + 58.0
         let scrubberInset: CGFloat = 9.0
-        
-        transition.updateFrame(node: self.scrubberNode, frame: CGRect(origin: CGPoint(x: sideInset + scrubberInset, y: scrubberVerticalOrigin - 8.0), size: CGSize(width: width - (sideInset + scrubberInset) * 2.0, height: 10.0 + 8.0 * 2.0)))
+        // MARK: NEXTGRAM
+        transition.updateFrame(node: self.scrubberNode, frame: CGRect(x: leftInset + sideInset + scrubberInset, y: scrubberVerticalOrigin - 8.0,
+            width: max(0.0, width - leftInset - rightInset - (sideInset + scrubberInset) * 2.0), height: 26.0))
         
         let leftLabelVerticalOffset: CGFloat = self.leftDurationLabelPushed ? 6.0 : 0.0
         transition.updateFrame(node: self.leftDurationLabel, frame: CGRect(origin: CGPoint(x: leftInset + sideInset + scrubberInset, y: scrubberVerticalOrigin + 19.0 + leftLabelVerticalOffset), size: CGSize(width: 100.0, height: 20.0)))
@@ -881,19 +948,41 @@ final class OverlayAudioPlayerControlsNode: ASDisplayNode {
         
         transition.updateFrame(node: self.backgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -8.0), size: CGSize(width: width, height: finalPanelHeight + 8.0)))
         
-        let buttonSize = CGSize(width: 64.0, height: 64.0)
-        let buttonsWidth = min(width - leftInset - rightInset - sideButtonsInset * 2.0, 320.0)
-        let buttonsRect = CGRect(origin: CGPoint(x: floor((width - buttonsWidth) / 2.0), y: scrubberVerticalOrigin + 34.0), size: CGSize(width: buttonsWidth, height: buttonSize.height))
-        
-        transition.updateFrame(node: self.orderButton, frame: CGRect(origin: CGPoint(x: leftInset + sideInset - 12.0, y: buttonsRect.minY), size: buttonSize))
-        transition.updateFrame(node: self.loopingButton, frame: CGRect(origin: CGPoint(x: width - rightInset - sideInset - buttonSize.width + 12.0, y: buttonsRect.minY), size: buttonSize))
-        
-        transition.updateFrame(node: self.backwardButton, frame: CGRect(origin: buttonsRect.origin, size: buttonSize))
-        transition.updateFrame(node: self.forwardButton, frame: CGRect(origin: CGPoint(x: buttonsRect.maxX - buttonSize.width, y: buttonsRect.minY), size: buttonSize))
-        
-        let playPauseFrame = CGRect(origin: CGPoint(x: buttonsRect.minX + floor((buttonsRect.width - buttonSize.width) / 2.0), y: buttonsRect.minY), size: buttonSize)
-        transition.updateFrame(node: self.playPauseButton, frame: playPauseFrame)
-        transition.updateFrame(node: self.playPauseIconNode, frame: CGRect(origin: CGPoint(x: -6.0, y: -6.0), size: CGSize(width: 76.0, height: 76.0)))
+        let buttonSide: CGFloat = compactLayout ? 56.0 : 64.0
+        let buttonSize = CGSize(width: buttonSide, height: buttonSide) // MARK: NEXTGRAM
+        // MARK: NEXTGRAM — Five centered touch targets with no overlap on compact widths.
+        let playButtonWidth: CGFloat
+        if self.usesModernMusicLayout {
+            let controlsWidth = min(360.0, max(0.0, width - leftInset - rightInset - 24.0))
+            let step = controlsWidth / 5.0
+            playButtonWidth = min(buttonSize.width, step)
+            let origin = leftInset + floor((width - leftInset - rightInset - controlsWidth) * 0.5)
+            let buttons = [self.orderButton, self.backwardButton, self.playPauseButton, self.forwardButton, self.loopingButton]
+            let buttonY = scrubberVerticalOrigin + (compactLayout ? 27.0 : 34.0)
+            for (index, button) in buttons.enumerated() {
+                let x = origin + step * (CGFloat(index) + 0.5) - playButtonWidth * 0.5
+                transition.updateFrame(node: button, frame: CGRect(x: x, y: buttonY, width: playButtonWidth, height: buttonSize.height))
+            }
+        } else {
+            playButtonWidth = buttonSize.width
+            let buttonsWidth = min(width - leftInset - rightInset - sideButtonsInset * 2.0, 320.0)
+            let buttonsRect = CGRect(origin: CGPoint(x: floor((width - buttonsWidth) / 2.0), y: scrubberVerticalOrigin + 34.0), size: CGSize(width: buttonsWidth, height: buttonSize.height))
+
+            transition.updateFrame(node: self.orderButton, frame: CGRect(origin: CGPoint(x: leftInset + sideInset - 12.0, y: buttonsRect.minY), size: buttonSize))
+            transition.updateFrame(node: self.loopingButton, frame: CGRect(origin: CGPoint(x: width - rightInset - sideInset - buttonSize.width + 12.0, y: buttonsRect.minY), size: buttonSize))
+
+            transition.updateFrame(node: self.backwardButton, frame: CGRect(origin: buttonsRect.origin, size: buttonSize))
+            transition.updateFrame(node: self.forwardButton, frame: CGRect(origin: CGPoint(x: buttonsRect.maxX - buttonSize.width, y: buttonsRect.minY), size: buttonSize))
+
+            let playPauseFrame = CGRect(origin: CGPoint(x: buttonsRect.minX + floor((buttonsRect.width - buttonSize.width) / 2.0), y: buttonsRect.minY), size: buttonSize)
+            transition.updateFrame(node: self.playPauseButton, frame: playPauseFrame)
+        }
+        // MARK: NEXTGRAM
+        let accentSide = max(0.0, playButtonWidth - 4.0)
+        self.modernPlayButtonBackground.cornerRadius = accentSide * 0.5
+        transition.updateFrame(node: self.modernPlayButtonBackground, frame: CGRect(x: 2.0, y: (buttonSize.height - accentSide) * 0.5, width: accentSide, height: accentSide))
+        let iconSide = buttonSide + 12.0
+        transition.updateFrame(node: self.playPauseIconNode, frame: CGRect(x: (playButtonWidth - iconSide) * 0.5, y: -6.0, width: iconSide, height: iconSide))
                                  
         if let savedMusic {
             var profileAudioTransition = transition

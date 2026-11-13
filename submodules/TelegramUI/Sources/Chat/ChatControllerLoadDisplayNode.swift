@@ -597,7 +597,9 @@ extension ChatControllerImpl {
         
         if let initialNavigationBadge = contentData.initialNavigationBadge {
             contentData.initialNavigationBadge = nil
-            self.navigationItem.badge = initialNavigationBadge
+            // MARK: NEXTGRAM
+            self.nextgramChatBackUnreadBadge = initialNavigationBadge
+            self.navigationItem.badge = NagramSettings.shared.hideChatBackUnreadCount ? "" : initialNavigationBadge
         }
         
         if let performDismissAction = contentData.state.performDismissAction, !self.didHandlePerformDismissAction {
@@ -695,6 +697,19 @@ extension ChatControllerImpl {
         }
         
         self.displayNode = ChatControllerNode(context: self.context, chatLocation: self.chatLocation, chatLocationContextHolder: self.chatLocationContextHolder, subject: self.subject, controllerInteraction: self.controllerInteraction!, chatPresentationInterfaceState: self.presentationInterfaceState, automaticMediaDownloadSettings: self.automaticMediaDownloadSettings, navigationBar: self.navigationBar, statusBar: self.statusBar, backgroundNode: self.chatBackgroundNode, controller: self)
+
+        // MARK: NEXTGRAM — Apply chat header preferences to active and already loaded chats.
+        self.nextgramChatHeaderOptionsDisposable = (combineLatest(
+            nagramBoolSignal("nagram.hideChatBackUnreadCount", defaultValue: false),
+            nagramBoolSignal("nagram.hideChatTitleGlass", defaultValue: false)
+        )
+        |> deliverOnMainQueue).startStrict(next: { [weak self] hideUnread, hideGlass in
+            guard let self else { return }
+            self.chatTitleView?.prefersCenteredNavigationTitle = hideUnread
+            self.chatTitleView?.displaysGlassBackground = !hideGlass
+            self.navigationItem.badge = hideUnread ? "" : self.nextgramChatBackUnreadBadge
+            self.requestLayout(transition: .immediate)
+        })
         
         if let currentItem = self.globalControlPanelsContext?.tempVoicePlaylistCurrentItem {
             self.chatDisplayNode.historyNode.voicePlaylistItemChanged(nil, currentItem)
@@ -5164,11 +5179,9 @@ extension ChatControllerImpl {
                             }
                         }
                         
-                        if globalRemainingUnreadChatCount > 0 {
-                            strongSelf.navigationItem.badge = "\(globalRemainingUnreadChatCount)"
-                        } else {
-                            strongSelf.navigationItem.badge = ""
-                        }
+                        // MARK: NEXTGRAM — Keep the count current even while its display is disabled.
+                        strongSelf.nextgramChatBackUnreadBadge = globalRemainingUnreadChatCount > 0 ? "\(globalRemainingUnreadChatCount)" : ""
+                        strongSelf.navigationItem.badge = NagramSettings.shared.hideChatBackUnreadCount ? "" : strongSelf.nextgramChatBackUnreadBadge
                     })
                 
                     self.chatUnreadMentionCountDisposable?.dispose()

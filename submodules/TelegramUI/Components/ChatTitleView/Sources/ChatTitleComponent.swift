@@ -81,6 +81,9 @@ public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
     
     private var ignoreParentTransitionRequests: Bool = false
     public var requestUpdate: ((ContainedViewLayoutTransition) -> Void)?
+    // MARK: NEXTGRAM — The chat controller supplies its navigation appearance.
+    public var prefersCenteredNavigationTitle = false
+    public var displaysGlassBackground = true
     
     public var tapAction: (() -> Void)?
     public var longTapAction: (() -> Void)?
@@ -177,8 +180,6 @@ public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
         let transition = ComponentTransition(transition)
         
         if let contentData = self.contentData {
-            let displayBackground: Bool = true
-            
             let titleSize = self.title.update(
                 transition: transition,
                 component: AnyComponent(ChatTitleComponent(
@@ -188,7 +189,7 @@ public final class ChatNavigationBarTitleView: UIView, NavigationBarTitleView {
                     strings: contentData.strings,
                     dateTimeFormat: contentData.dateTimeFormat,
                     nameDisplayOrder: contentData.nameDisplayOrder,
-                    displayBackground: displayBackground,
+                    displayBackground: self.displaysGlassBackground, // MARK: NEXTGRAM
                     content: contentData.content,
                     activities: self.activities,
                     networkState: self.networkState,

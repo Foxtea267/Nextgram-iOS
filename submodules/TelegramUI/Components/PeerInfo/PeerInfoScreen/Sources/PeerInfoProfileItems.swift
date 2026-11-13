@@ -667,6 +667,7 @@ func infoItems(
         let ItemEdit = 10
         let ItemPeerPersonalChannel = 11
         let ItemCommunity = 12
+        let ItemLinkedChannel = 13 // MARK: NEXTGRAM
         
         if let _ = data.threadData {
             let mainUsername: String
@@ -797,6 +798,23 @@ func infoItems(
                     }))
                 }
                 
+                // MARK: NEXTGRAM — Let members open the broadcast channel linked to this discussion group.
+                if case .group = channel.info,
+                   let linkedPeer = data.linkedDiscussionPeer,
+                   case let .channel(linkedChannel) = linkedPeer,
+                   case .broadcast = linkedChannel.info {
+                    let title = NextgramChatAliases.name(accountPeerId: context.account.peerId.toInt64(), peerId: linkedPeer.id.toInt64())
+                        ?? linkedPeer.compactDisplayTitle
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(
+                        id: ItemLinkedChannel,
+                        label: presentationData.strings.Group_LinkedChannel,
+                        text: title,
+                        textColor: .accent,
+                        action: { _, _ in interaction.openChat(linkedPeer.id) },
+                        requestLayout: { interaction.requestLayout($0) }
+                    ))
+                }
+
                 if let verification = (data.cachedData as? CachedChannelData)?.verification {
                     let attributedPrefix = NSMutableAttributedString(string: "  ")
                     attributedPrefix.addAttribute(ChatTextInputAttributes.customEmoji, value: ChatTextInputTextCustomEmojiAttribute(interactivelySelectedFromPackId: nil, fileId: verification.iconFileId, file: nil), range: NSMakeRange(0, 1))

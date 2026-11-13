@@ -731,3 +731,9 @@
 
 "Nagram.ChannelFeed.Retry" = "部分貼文載入失敗，點按重試";
 "Nagram.ChannelFeed.AutoInclude" = "自動加入新訂閱的頻道";
+"Nagram.HideChatBackUnreadCount" = "隱藏返回按鈕未讀數";
+"Nagram.HideChatTitleGlass" = "以頂部漸進模糊取代標題玻璃";
+"Nagram.BottomBarLayout.Item.profile" = "個人資料";
+"Nagram.MusicPlayerModernUI" = "新版音樂播放器";
+"Nagram.MusicPlayerTitle" = "音樂播放器";
+"Nagram.BottomBarLayout.SettingsAvatar" = "設定圖示使用頭像";

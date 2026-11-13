@@ -731,3 +731,9 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 
 "Nagram.ChannelFeed.Retry" = "一部の投稿を読み込めませんでした。タップして再試行。";
 "Nagram.ChannelFeed.AutoInclude" = "新しく参加したチャンネルを追加";
+"Nagram.HideChatBackUnreadCount" = "戻るボタンの未読数を非表示";
+"Nagram.HideChatTitleGlass" = "チャットタイトルの背景をグラデーションぼかしにする";
+"Nagram.BottomBarLayout.Item.profile" = "プロフィール";
+"Nagram.MusicPlayerModernUI" = "新しい音楽プレーヤーのレイアウト";
+"Nagram.MusicPlayerTitle" = "音楽プレーヤー";
+"Nagram.BottomBarLayout.SettingsAvatar" = "設定アイコンにプロフィール写真を使う";

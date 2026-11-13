@@ -1100,7 +1100,13 @@ public final class NavigationBarImpl: ASDisplayNode, NavigationBar {
                     titleViewTransition = .immediate
                 }
                 
-                let titleSize = titleView.updateLayout(availableSize: CGSize(width: size.width - leftTitleInset - rightTitleInset, height: nominalHeight), transition: titleViewTransition)
+                // MARK: NEXTGRAM — Reserve equal space on either side to center long titles.
+                if titleView.prefersCenteredNavigationTitle {
+                    let symmetricInset = max(leftTitleInset, rightTitleInset)
+                    leftTitleInset = symmetricInset
+                    rightTitleInset = symmetricInset
+                }
+                let titleSize = titleView.updateLayout(availableSize: CGSize(width: max(1.0, size.width - leftTitleInset - rightTitleInset), height: nominalHeight), transition: titleViewTransition)
                 
                 var titleFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((size.width - titleSize.width) * 0.5), y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
                 if titleFrame.origin.x + titleFrame.width > size.width - rightTitleInset {

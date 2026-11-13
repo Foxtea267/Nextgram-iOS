@@ -2743,7 +2743,9 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         })
         
         var topBackgroundEdgeEffectNode: WallpaperEdgeEffectNode?
-        if self.historyNode.rotated && !isOverlay {
+        // MARK: NEXTGRAM — Extend the native gradient under the title and status bar in the glass-free mode.
+        let usesProgressiveHeaderBlur = self.navigationBar != nil && navigationBarHeight > 0.0 && NagramSettings.shared.hideChatTitleGlass
+        if !isOverlay && (self.historyNode.rotated || usesProgressiveHeaderBlur) {
             if let current = self.topBackgroundEdgeEffectNode {
                 topBackgroundEdgeEffectNode = current
             } else {
@@ -2762,12 +2764,16 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
         }
         if let topBackgroundEdgeEffectNode {
             let topExtent: CGFloat = 34.0
-            var blurFrame = CGRect(origin: CGPoint(), size: CGSize(width: layout.size.width, height: max(100.0, listInsets.bottom + topExtent)))
-            blurFrame.origin.y = listInsets.bottom + topExtent - blurFrame.height
+            // MARK: NEXTGRAM
+            let topListInset = self.historyNode.rotated ? listInsets.bottom : listInsets.top
+            let effectBottom = topListInset + topExtent
+            let effectHeight = max(100.0, effectBottom)
+            let blurFrame = CGRect(x: 0.0, y: effectBottom - effectHeight, width: layout.size.width, height: effectHeight)
+            let edgeSize = usesProgressiveHeaderBlur ? max(80.0, navigationBarHeight + 12.0) : 80.0
             transition.updateFrame(node: topBackgroundEdgeEffectNode, frame: blurFrame)
             topBackgroundEdgeEffectNode.update(
                 rect: blurFrame,
-                edge: WallpaperEdgeEffectEdge(edge: .top, size: 80.0),
+                edge: WallpaperEdgeEffectEdge(edge: .top, size: edgeSize), // MARK: NEXTGRAM
                 alpha: edgeEffectAlpha,
                 blur: true,
                 containerSize: wallpaperBounds.size,

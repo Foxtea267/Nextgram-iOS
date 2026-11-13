@@ -212,6 +212,13 @@ final class TabBarControllerNode: ASDisplayNode {
     }
 
     private func nagramItemId(for item: UITabBarItem) -> NagramBottomBarItemId? {
+        // MARK: NEXTGRAM
+        if item.tag == NagramBottomBarItemId.profileTabBarTag {
+            return .profile
+        }
+        if item.tag == NagramBottomBarItemId.settingsTabBarTag { // MARK: NEXTGRAM
+            return .settings
+        }
         switch item.animationName {
         case "TabContacts":
             return .contacts

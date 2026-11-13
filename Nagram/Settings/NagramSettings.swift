@@ -374,6 +374,10 @@ public final class NagramSettings {
     /// 自定义 Liquid Glass 色调强度百分比（0–100，默认 100 = 当前视觉）
     @NagramDefault("nagram.glassTransparencyPercent", Int32(100))
     public var glassTransparencyPercent: Int32
+    @NagramDefault("nagram.hideChatBackUnreadCount", false)
+    public var hideChatBackUnreadCount: Bool
+    @NagramDefault("nagram.hideChatTitleGlass", false)
+    public var hideChatTitleGlass: Bool
 
     // MARK: 波次 3 批 B — UI 中改
     /// 底栏布局完整配置。新逻辑只读写这一份模型。
@@ -550,6 +554,8 @@ public final class NagramSettings {
     /// 音乐封面右下角显示未下载 / 下载中的状态。
     @NagramDefault("nagram.musicPlaylistShowDownloadStatus", true)
     public var musicPlaylistShowDownloadStatus: Bool
+    @NagramDefault("nagram.musicPlayerModernUI", false)
+    public var musicPlayerModernUI: Bool
     /// 将已启用的自动删除时长显示在聊天头像右下角，不占用输入框。
     @NagramDefault("nagram.chatAutoremoveBadgeEnabled", true)
     public var chatAutoremoveBadgeEnabled: Bool

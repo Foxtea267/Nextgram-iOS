@@ -466,6 +466,7 @@ private func nagramGroups(
             }),
             .toggle(titleKey: "Nagram.MusicPlaylistShowFileSize", get: { NagramSettings.shared.musicPlaylistShowFileSize }, set: { NagramSettings.shared.musicPlaylistShowFileSize = $0 }),
             .toggle(titleKey: "Nagram.MusicPlaylistShowDownloadStatus", get: { NagramSettings.shared.musicPlaylistShowDownloadStatus }, set: { NagramSettings.shared.musicPlaylistShowDownloadStatus = $0 }),
+            .toggle(titleKey: "Nagram.MusicPlayerModernUI", get: { NagramSettings.shared.musicPlayerModernUI }, set: { NagramSettings.shared.musicPlayerModernUI = $0 }),
             .toggle(titleKey: "Nagram.ChatAutoremoveBadge", get: { NagramSettings.shared.chatAutoremoveBadgeEnabled }, set: { NagramSettings.shared.chatAutoremoveBadgeEnabled = $0 }),
             .toggle(titleKey: "Nagram.ShowFoldersInShareSheet", get: { NagramSettings.shared.showFoldersInShareSheet }, set: { NagramSettings.shared.showFoldersInShareSheet = $0 }),
             .toggle(titleKey: "Nagram.ChooseFolderAfterJoining", get: { NagramSettings.shared.chooseFolderAfterJoining }, set: { NagramSettings.shared.chooseFolderAfterJoining = $0 }),
@@ -486,6 +487,8 @@ private func nagramGroups(
             }),
             .choice(titleKey: "Nagram.GlassTransparency", prefix: "Nagram.GlassTransparency", options: ["system", "custom"], current: { NagramSettings.shared.glassTransparencyModeValue.rawValue }, set: { NagramSettings.shared.glassTransparencyMode = $0 }),
             .slider(titleKey: "Nagram.GlassTransparency.OverlayOpacity", minValue: 0, maxValue: 100, get: { NagramSettings.shared.glassTransparencyPercent }, set: { NagramSettings.shared.glassTransparencyPercent = $0 }, isVisible: { NagramSettings.shared.glassTransparencyModeValue == .custom }),
+            .toggle(titleKey: "Nagram.HideChatBackUnreadCount", get: { NagramSettings.shared.hideChatBackUnreadCount }, set: { NagramSettings.shared.hideChatBackUnreadCount = $0 }),
+            .toggle(titleKey: "Nagram.HideChatTitleGlass", get: { NagramSettings.shared.hideChatTitleGlass }, set: { NagramSettings.shared.hideChatTitleGlass = $0 }),
             .toggle(titleKey: "Nagram.ControlHighlight", get: { NagramSettings.shared.controlHighlightEnabled }, set: { NagramSettings.shared.controlHighlightEnabled = $0 }),
         ]),
         NagramGroup(tab: .general, headerKey: "Nagram.Section.Stories", footerKey: nil, rows: [

@@ -314,6 +314,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
     
     var historyStateDisposable: Disposable?
     var nextgramMessageDisplayOptionsDisposable: Disposable? // MARK: NEXTGRAM
+    // MARK: NEXTGRAM
+    var nextgramChatHeaderOptionsDisposable: Disposable?
+    var nextgramChatBackUnreadBadge = ""
     
     let galleryHiddenMesageAndMediaDisposable = MetaDisposable()
     let temporaryHiddenGalleryMediaDisposable = MetaDisposable()
@@ -6081,6 +6084,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
         
         self.chatTitleView = ChatNavigationBarTitleView(frame: CGRect())
+        // MARK: NEXTGRAM — Set the initial appearance before the first navigation layout.
+        self.chatTitleView?.prefersCenteredNavigationTitle = NagramSettings.shared.hideChatBackUnreadCount
+        self.chatTitleView?.displaysGlassBackground = !NagramSettings.shared.hideChatTitleGlass
         
         self.navigationItem.titleView = self.chatTitleView
         self.chatTitleView?.longTapAction = { [weak self] in
@@ -7153,6 +7159,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
 
         self.historyStateDisposable?.dispose()
         self.nextgramMessageDisplayOptionsDisposable?.dispose() // MARK: NEXTGRAM
+        self.nextgramChatHeaderOptionsDisposable?.dispose() // MARK: NEXTGRAM
         self.messageIndexDisposable.dispose()
         self.navigationActionDisposable.dispose()
         self.galleryHiddenMesageAndMediaDisposable.dispose()

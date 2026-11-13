@@ -5,11 +5,15 @@ public enum NagramBottomBarItemId: String, CaseIterable, Hashable {
     case calls
     case chats
     case settings
+    case profile
     case search
+
+    public static let profileTabBarTag = 0x4E4750
+    public static let settingsTabBarTag = 0x4E4753
 
     public var isNavigationItem: Bool {
         switch self {
-        case .contacts, .calls, .chats, .settings:
+        case .contacts, .calls, .chats, .settings, .profile:
             return true
         case .search:
             return false
@@ -60,6 +64,7 @@ public struct NagramBottomBarSettings: Equatable {
     public var hiddenItems: Set<NagramBottomBarItemId>
     public var topSearchVisible: Bool
     public var showLabels: Bool
+    public var settingsUseAvatar: Bool?
     public var widthMode: NagramBottomBarWidthMode
     public var slotMode: NagramBottomBarSlotMode
     public var buttonWidthFillRatio: Int32
@@ -73,6 +78,7 @@ public struct NagramBottomBarSettings: Equatable {
         hiddenItems: Set<NagramBottomBarItemId> = [],
         topSearchVisible: Bool = true,
         showLabels: Bool = true,
+        settingsUseAvatar: Bool? = nil,
         widthMode: NagramBottomBarWidthMode = .full,
         slotMode: NagramBottomBarSlotMode = .visibleOnly,
         buttonWidthFillRatio: Int32 = 100,
@@ -85,6 +91,7 @@ public struct NagramBottomBarSettings: Equatable {
         self.hiddenItems = hiddenItems
         self.topSearchVisible = topSearchVisible
         self.showLabels = showLabels
+        self.settingsUseAvatar = settingsUseAvatar
         self.widthMode = widthMode
         self.slotMode = slotMode
         self.buttonWidthFillRatio = buttonWidthFillRatio
@@ -315,7 +322,7 @@ public struct NagramBottomBarSettings: Equatable {
             seen.insert(item)
         }
 
-        for item in NagramBottomBarItemId.allCases where !seen.contains(item) && item != .search {
+        for item in Self.defaultBottomItems where !seen.contains(item) {
             self.bottomItems.append(item)
             seen.insert(item)
         }
@@ -350,6 +357,7 @@ public extension NagramBottomBarSettings {
         static let hiddenItems = "nagram.bottomBarLayout.hiddenItems"
         static let topSearchVisible = "nagram.bottomBarLayout.topSearchVisible"
         static let showLabels = "nagram.bottomBarLayout.showLabels"
+        static let settingsUseAvatar = "nagram.bottomBarLayout.settingsUseAvatar"
         static let widthMode = "nagram.bottomBarLayout.widthMode"
         static let slotMode = "nagram.bottomBarLayout.slotMode"
         static let buttonWidthFillRatio = "nagram.bottomBarLayout.buttonWidthFillRatio"
@@ -378,6 +386,7 @@ public extension NagramBottomBarSettings {
             hiddenItems: hiddenItems,
             topSearchVisible: defaults.object(forKey: Keys.topSearchVisible) as? Bool ?? true,
             showLabels: defaults.object(forKey: Keys.showLabels) as? Bool ?? true,
+            settingsUseAvatar: defaults.object(forKey: Keys.settingsUseAvatar) as? Bool,
             widthMode: widthMode,
             slotMode: defaults.string(forKey: Keys.slotMode).flatMap(NagramBottomBarSlotMode.init(rawValue:)) ?? .visibleOnly,
             buttonWidthFillRatio: buttonWidthFillRatio,
@@ -401,6 +410,11 @@ public extension NagramBottomBarSettings {
         NagramSettingsCloudSync.shared.set(NagramBottomBarItemId.allCases.filter { settings.hiddenItems.contains($0) }.map(\.rawValue), forKey: Keys.hiddenItems, defaults: defaults)
         NagramSettingsCloudSync.shared.set(settings.topSearchVisible, forKey: Keys.topSearchVisible, defaults: defaults)
         NagramSettingsCloudSync.shared.set(settings.showLabels, forKey: Keys.showLabels, defaults: defaults)
+        if let settingsUseAvatar = settings.settingsUseAvatar {
+            NagramSettingsCloudSync.shared.set(settingsUseAvatar, forKey: Keys.settingsUseAvatar, defaults: defaults)
+        } else {
+            NagramSettingsCloudSync.shared.removeObject(forKey: Keys.settingsUseAvatar, defaults: defaults)
+        }
         NagramSettingsCloudSync.shared.set(settings.widthMode.rawValue, forKey: Keys.widthMode, defaults: defaults)
         NagramSettingsCloudSync.shared.set(settings.slotMode.rawValue, forKey: Keys.slotMode, defaults: defaults)
         NagramSettingsCloudSync.shared.set(settings.buttonWidthFillRatio, forKey: Keys.buttonWidthFillRatio, defaults: defaults)
