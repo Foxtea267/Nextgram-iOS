@@ -9,11 +9,9 @@ import TelegramPresentationData
 import UIKit
 
 public let nextgramSettingsLogo: UIImage? = {
-    guard let image = UIImage(bundleImageName: "NextgramPreview") else { return nil }
+    guard let image = UIImage(bundleImageName: "NextgramSettingsLogo") else { return nil }
     return UIGraphicsImageRenderer(size: CGSize(width: 30.0, height: 30.0)).image { _ in
-        let bounds = CGRect(x: 0.0, y: 0.0, width: 30.0, height: 30.0)
-        UIBezierPath(roundedRect: bounds, cornerRadius: 7.0).addClip()
-        image.draw(in: bounds)
+        image.draw(in: CGRect(x: 0.0, y: 0.0, width: 30.0, height: 30.0))
     }
 }()
 

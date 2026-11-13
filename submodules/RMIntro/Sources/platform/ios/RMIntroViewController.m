@@ -313,7 +313,9 @@ static bool RMIntroUseStaticLogoFallback() {
     shadowView.layer.shadowOffset = CGSizeMake(0.0, 8.0);
     
     UIView *iconView = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, logoFrame.size.width, logoFrame.size.height)];
+    // MARK: NEXTGRAM — Use the native continuous corner curve for the welcome icon.
     iconView.layer.cornerRadius = 34.0;
+    iconView.layer.cornerCurve = kCACornerCurveContinuous;
     iconView.layer.masksToBounds = true;
     
     UIImageView *logoImageView = [[UIImageView alloc] initWithImage:logoImage];
@@ -325,7 +327,29 @@ static bool RMIntroUseStaticLogoFallback() {
     shineView.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.18];
     shineView.transform = CGAffineTransformMakeRotation(0.42);
     [iconView addSubview:shineView];
-    
+
+    // MARK: NEXTGRAM — Keep the reflections on the rim, fading into the sides.
+    CAGradientLayer *rim = [CAGradientLayer layer];
+    rim.frame = iconView.bounds;
+    rim.startPoint = CGPointMake(0.08, 0.0);
+    rim.endPoint = CGPointMake(0.85, 1.0);
+    rim.colors = @[
+        (id)[UIColor colorWithRed:0.98 green:0.95 blue:1.0 alpha:0.83].CGColor,
+        (id)[UIColor colorWithRed:0.91 green:0.84 blue:1.0 alpha:0.45].CGColor,
+        (id)[UIColor colorWithRed:0.09 green:0.02 blue:0.24 alpha:0.25].CGColor,
+        (id)[UIColor colorWithRed:0.15 green:0.03 blue:0.31 alpha:0.29].CGColor,
+        (id)[UIColor colorWithRed:0.95 green:0.84 blue:1.0 alpha:0.72].CGColor
+    ];
+    rim.locations = @[@0.0, @0.23, @0.50, @0.72, @1.0];
+    CALayer *rimMask = [CALayer layer];
+    rimMask.frame = rim.bounds;
+    rimMask.cornerRadius = iconView.layer.cornerRadius;
+    rimMask.cornerCurve = iconView.layer.cornerCurve;
+    rimMask.borderWidth = 1.0;
+    rimMask.borderColor = UIColor.blackColor.CGColor;
+    rim.mask = rimMask;
+    [iconView.layer addSublayer:rim];
+
     [shadowView addSubview:iconView];
     [logoView addSubview:shadowView];
     

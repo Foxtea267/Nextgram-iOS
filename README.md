@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" width="160" alt="Nextgram Logo">
+  <img src="docs/assets/nextgram-readme-logo.png" width="160" alt="Nextgram Logo">
 </p>
 
 <h1 align="center">Nextgram-iOS</h1>
