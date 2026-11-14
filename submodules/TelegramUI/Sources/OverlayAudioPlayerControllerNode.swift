@@ -412,7 +412,6 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.playlistSearchBar.returnKeyType = .done
         self.playlistSearchBar.isHidden = !self.supportsPlaylistSearch
         self.updatePlaylistSearchAppearance()
-        self.historyFrameNode.view.addSubview(self.playlistSearchBar)
         
         self.backgroundColor = nil
         self.isOpaque = false
@@ -537,6 +536,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.historyFrameTopOverlayClipNode.addSubnode(self.historyFrameTopOverlayNode)
         self.historyFrameNode.addSubnode(self.historyFrameTopMaskNode)
         self.historyFrameNode.addSubnode(self.collapseNode)
+        // MARK: NEXTGRAM — Install search above the opaque playlist header and its masks.
+        if self.supportsPlaylistSearch {
+            self.historyFrameNode.view.addSubview(self.playlistSearchBar)
+        }
         
         self.historyNode.beganInteractiveDragging = { [weak self] _ in
             self?.controlsNode.collapse()
@@ -687,6 +690,9 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             // MARK: NEXTGRAM — The full-screen player's sliders and lyrics own their gestures.
             if self.isNextgramMusicPlayerVisible {
                 return false
+            }
+            if self.supportsPlaylistSearch && self.playlistSearchBar.bounds.contains(self.view.convert(point, to: self.playlistSearchBar)) {
+                return false // MARK: NEXTGRAM — Let the search field handle its own gestures.
             }
             if self.historyFrameTopOverlayNode.bounds.contains(self.view.convert(point, to: self.historyFrameTopOverlayNode.view)) {
                 return true
@@ -1294,7 +1300,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             // MARK: NEXTGRAM
             self.title.view?.isHidden = true
             self.headerButtons.view?.isHidden = true
-            self.playlistSearchBar.frame = CGRect(x: 12.0, y: 28.0, width: layout.size.width - 24.0, height: 48.0)
+            let searchLeftInset = listSideMargins.left - 4.0
+            let searchRightInset = listSideMargins.right - 4.0
+            self.playlistSearchBar.frame = CGRect(x: searchLeftInset, y: 28.0,
+                width: max(0.0, layout.size.width - searchLeftInset - searchRightInset), height: 48.0)
         }
         
         transition.updateFrame(node: self.collapseNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -7.0), size: CGSize(width: layout.size.width, height: 30.0)))
@@ -1306,8 +1315,8 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         
         self.updateHistoryContentOffset(self.historyNode.visibleContentOffset(), transition: transition)
         // MARK: NEXTGRAM — Search and its backing view use the same height after rotation or a style change.
-        if let offset = self.floatingHeaderOffset {
-            self.updateFloatingHeaderOffset(offset: offset, transition: transition)
+        if self.floatingHeaderOffset != nil || self.supportsPlaylistSearch {
+            self.updateFloatingHeaderOffset(offset: self.floatingHeaderOffset ?? 0.0, transition: transition)
         }
         
         self.albumArtBackground.frame = CGRect(origin: .zero, size: layout.size)
@@ -1514,6 +1523,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         var backgroundOffset = max(layoutTopInset, rawControlsOffset)
         if !self.historyNode.hasAnyMessages {
             backgroundOffset += 25.0
+        }
+        // MARK: NEXTGRAM — Keep the search header above the playback controls on short layouts.
+        if self.supportsPlaylistSearch {
+            backgroundOffset = min(backgroundOffset, max(layoutTopInset, self.controlsNode.frame.minY - headerHeight))
         }
         
         let backgroundFrame = CGRect(origin: CGPoint(x: 0.0, y: backgroundOffset + headerHeight), size: CGSize(width: layout.size.width, height: layout.size.height))

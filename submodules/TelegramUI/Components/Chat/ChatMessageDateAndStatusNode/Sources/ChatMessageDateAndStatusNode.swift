@@ -1,4 +1,5 @@
 import Foundation
+import CoreText // MARK: NEXTGRAM
 import UIKit
 import AsyncDisplayKit
 import TelegramCore
@@ -17,13 +18,49 @@ import StaticGlassBackground
 import NagramSettings
 
 // MARK: NEXTGRAM — A compact monochrome trash glyph rendered from an SVG path, not an emoji.
-private func nextgramDeletedMessageTrashIcon(color: UIColor) -> UIImage? {
-    return generateImage(CGSize(width: 10.0, height: 10.0), opaque: false, scale: 0.0, rotatedContext: { size, context in
+private func nextgramDeletedMessageTrashIcon(side: CGFloat) -> UIImage? {
+    return generateImage(CGSize(width: side, height: side), opaque: false, scale: 0.0, rotatedContext: { size, context in
         context.clear(CGRect(origin: .zero, size: size))
-        context.setFillColor(color.cgColor)
+        context.setFillColor(UIColor.black.cgColor)
         context.scaleBy(x: size.width / 24.0, y: size.height / 24.0)
         let _ = try? drawSvgPath(context, path: "M3,5 L8,5 L9,3 L15,3 L16,5 L21,5 L21,8 L3,8 Z M6,9 L18,9 L17,21 L7,21 Z ")
     })
+}
+
+// MARK: NEXTGRAM — Give Core Text the icon's real width instead of the placeholder glyph's width.
+private func nextgramApplyTrashAttachment(to text: NSMutableAttributedString, range: NSRange, font: UIFont) {
+    let side = floor(font.pointSize * 0.92)
+    guard side > 0.0, let icon = nextgramDeletedMessageTrashIcon(side: side) else {
+        return
+    }
+    let metrics = Unmanaged.passRetained(NextgramTrashAttachmentMetrics(width: icon.size.width, font: font))
+    var callbacks = CTRunDelegateCallbacks(
+        version: kCTRunDelegateCurrentVersion,
+        dealloc: { Unmanaged<NextgramTrashAttachmentMetrics>.fromOpaque($0).release() },
+        getAscent: { Unmanaged<NextgramTrashAttachmentMetrics>.fromOpaque($0).takeUnretainedValue().ascent },
+        getDescent: { Unmanaged<NextgramTrashAttachmentMetrics>.fromOpaque($0).takeUnretainedValue().descent },
+        getWidth: { Unmanaged<NextgramTrashAttachmentMetrics>.fromOpaque($0).takeUnretainedValue().width }
+    )
+    guard let delegate = CTRunDelegateCreate(&callbacks, metrics.toOpaque()) else {
+        metrics.release()
+        return
+    }
+    text.addAttributes([
+        .attachment: icon,
+        NSAttributedString.Key(kCTRunDelegateAttributeName as String): delegate
+    ], range: range)
+}
+
+private final class NextgramTrashAttachmentMetrics {
+    let width: CGFloat
+    let ascent: CGFloat
+    let descent: CGFloat
+
+    init(width: CGFloat, font: UIFont) {
+        self.width = width
+        self.ascent = font.ascender
+        self.descent = -font.descender
+    }
 }
 
 private func maybeAddRotationAnimation(_ layer: CALayer, duration: Double) {
@@ -653,8 +690,8 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
                     attributedDateText.addAttribute(.foregroundColor, value: markerColor, range: markerRange)
                 }
                 let iconRange = (updatedDateText as NSString).range(of: nagramDeletedMessageIconPlaceholder)
-                if iconRange.location != NSNotFound, let icon = nextgramDeletedMessageTrashIcon(color: markerColor) {
-                    attributedDateText.addAttribute(.attachment, value: icon, range: iconRange)
+                if iconRange.location != NSNotFound {
+                    nextgramApplyTrashAttachment(to: attributedDateText, range: iconRange, font: dateFont) // MARK: NEXTGRAM
                 }
             }
             let (date, dateApply) = dateLayout(TextNodeLayoutArguments(attributedString: attributedDateText, backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .middle, constrainedSize: arguments.constrainedSize, alignment: .natural, cutout: nil, insets: UIEdgeInsets()))

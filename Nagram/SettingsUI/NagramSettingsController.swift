@@ -11,7 +11,6 @@ import NagramSettingsSignal
 import NagramStrings
 import PresentationDataUtils
 import SwiftSignalKit
-import TelegramApi
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
@@ -466,7 +465,8 @@ private func nagramGroups(
     channelFeedAction: @escaping () -> Void,
     badgeStyleAction: @escaping () -> Void,
     settingsBackupAction: @escaping () -> Void,
-    aboutAction: @escaping () -> Void
+    aboutAction: @escaping () -> Void,
+    showcaseAction: @escaping () -> Void
 ) -> [NagramGroup] {
     let sensitiveContentEnabled: () -> Bool = {
         return sensitiveContentConfiguration()?.sensitiveContentEnabled ?? false
@@ -674,18 +674,12 @@ private func nagramGroups(
             .navigation(titleKey: "Nagram.Update.Title", action: appUpdateAction),
             .navigation(titleKey: "Nagram.About", action: aboutAction),
         ]),
-        NagramGroup(tab: .showcase, headerKey: nil, footerKey: "Nagram.Showcase.Footer", rows: [
-            .toggle(titleKey: "Nagram.LocalPremium", get: { NagramSettings.shared.localPremiumEnabled }, set: { NagramSettings.shared.localPremiumEnabled = $0 }),
-            .toggle(titleKey: "Nagram.Showcase.ProfileCard", get: { NagramSettings.shared.showLocalProfileCard }, set: { NagramSettings.shared.showLocalProfileCard = $0 }),
-            .input(titleKey: "Nagram.Showcase.Stars", placeholderKey: "Nagram.Showcase.Amount", get: { NagramSettings.shared.localProfileStars }, set: { NagramSettings.shared.localProfileStars = String($0.filter { "0123456789".contains($0) }.prefix(12)) }, isSecret: false, isVisible: { true }),
-            .input(titleKey: "Nagram.Showcase.Ton", placeholderKey: "Nagram.Showcase.Amount", get: { NagramSettings.shared.localProfileTon }, set: {
-                let value = String($0.filter { "0123456789.,".contains($0) }.prefix(12)).replacingOccurrences(of: ",", with: ".")
-                if value.filter({ $0 == "." }).count <= 1 {
-                    NagramSettings.shared.localProfileTon = value
-                }
-            }, isSecret: false, isVisible: { true }),
-            .input(titleKey: "Nagram.Showcase.Phone", placeholderKey: "Nagram.Showcase.Optional", get: { NagramSettings.shared.localProfilePhone }, set: { NagramSettings.shared.localProfilePhone = String($0.filter { "+0123456789 -()".contains($0) }.prefix(26)) }, isSecret: false, isVisible: { true }),
-            .input(titleKey: "Nagram.Showcase.Rating", placeholderKey: "Nagram.Showcase.Optional", get: { NagramSettings.shared.localProfileRating }, set: { NagramSettings.shared.localProfileRating = String($0.filter { "-0123456789".contains($0) }.prefix(6)) }, isSecret: false, isVisible: { true }),
+        NagramGroup(tab: .showcase, headerKey: nil, footerKey: nil, rows: [
+            .navigation(titleKey: "Nagram.LocalPremium", action: showcaseAction),
+            .navigation(titleKey: "Nagram.Showcase.Phone", action: showcaseAction),
+            .navigation(titleKey: "Nagram.Showcase.Rating", action: showcaseAction),
+            .navigation(titleKey: "Nagram.Showcase.Stars", action: showcaseAction),
+            .navigation(titleKey: "Nagram.Showcase.Ton", action: showcaseAction),
         ]),
         NagramGroup(tab: .media, headerKey: "Nagram.Section.Experimental", footerKey: "Nagram.MediaMetadata.Footer", rows: [
             .toggle(titleKey: "Nagram.MediaMetadata", get: { NagramSettings.shared.mediaMetadataEnabled }, set: { NagramSettings.shared.mediaMetadataEnabled = $0 }),
@@ -770,7 +764,6 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
     case slider(stableId: Int32, section: Int32, title: String?, minValue: Int32, maxValue: Int32, value: Int32, index: Int)
     case footer(stableId: Int32, section: Int32, text: String)
     case category(stableId: Int32, tab: NextgramSettingsCategory, title: String)
-    case brand(title: String, version: String)
 
     var section: ItemListSectionId {
         switch self {
@@ -780,7 +773,6 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .input(_, section, _, _, _, _, _, _): return section
         case let .slider(_, section, _, _, _, _, _): return section
         case let .footer(_, section, _): return section
-        case .brand: return 0
         case let .category(_, tab, _): return tab.homeSection
         }
     }
@@ -794,7 +786,6 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
         case let .slider(stableId, _, _, _, _, _, _): return stableId
         case let .footer(stableId, _, _): return stableId
         case let .category(stableId, _, _): return stableId
-        case .brand: return -101
         }
     }
 
@@ -820,9 +811,6 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
             return false
         case let .category(lId, lTab, lTitle):
             if case let .category(rId, rTab, rTitle) = rhs { return lId == rId && lTab == rTab && lTitle == rTitle }
-            return false
-        case let .brand(title, version):
-            if case let .brand(otherTitle, otherVersion) = rhs { return title == otherTitle && version == otherVersion }
             return false
         }
     }
@@ -857,9 +845,6 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
                 sectionId: self.section, style: .blocks, action: {
                     arguments.openCategory(tab)
                 })
-        case let .brand(title, version):
-            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: nextgramSettingsLogo,
-                title: title, titleFont: .bold, label: version, sectionId: self.section, style: .blocks, disclosureStyle: .none, action: nil)
         case let .toggle(_, section, title, value, enabled, enableInteractiveChanges, index):
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: value, enableInteractiveChanges: enableInteractiveChanges, enabled: enabled, sectionId: section, style: .blocks, updated: { value in
                 arguments.toggle(index, value)
@@ -873,7 +858,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
                 arguments.copyDeepLink(index)
             }, tag: self.tag)
         case let .input(_, section, title, text, placeholder, isSecret, rightAligned, index):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), alignment: rightAligned ? .right : .default, clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { updatedText in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), alignment: rightAligned ? .right : .default, spacing: rightAligned ? 8.0 : 0.0, clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { updatedText in
                 arguments.inputUpdated(index, updatedText)
             }, action: {
             })
@@ -905,8 +890,6 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
 
     let updateSensitiveContentDisposable = MetaDisposable()
     let deletedMessagesArchiveDisposable = MetaDisposable()
-    // MARK: NEXTGRAM — Measure the active account's actual MTProto round trip.
-    let latencyTestDisposable = MetaDisposable()
     var presentControllerImpl: ((ViewController, ViewControllerPresentationArguments?) -> Void)?
     var presentAgeVerificationImpl: ((@escaping () -> Void) -> Void)?
     var pushControllerImpl: ((ViewController) -> Void)?
@@ -1008,23 +991,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
             update()
         }
     }, latencyTestAction: {
-        let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let lang = presentationData.strings.baseLanguageCode
-        let startedAt = ProcessInfo.processInfo.systemUptime
-        latencyTestDisposable.set((context.account.network.request(Api.functions.help.test())
-        |> map(Optional.init)
-        |> timeout(10.0, queue: .mainQueue(), alternate: .single(nil))
-        |> deliverOnMainQueue).start(next: { result in
-            switch result {
-            case .some(.boolTrue):
-                let milliseconds = Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000.0)
-                presentArchiveAlert(ngI18n("Nagram.TelegramLatency", lang), String(format: ngI18n("Nagram.TelegramLatency.Result", lang), milliseconds))
-            case .some(.boolFalse), .none:
-                presentArchiveAlert(ngI18n("Nagram.TelegramLatency", lang), ngI18n("Nagram.TelegramLatency.Failed", lang))
-            }
-        }, error: { _ in
-            presentArchiveAlert(ngI18n("Nagram.TelegramLatency", lang), ngI18n("Nagram.TelegramLatency.Failed", lang))
-        }))
+        pushControllerImpl?(nextgramServerTestController(context: context))
     }, setLocalNotificationFallbackEnabled: { enabled in
         guard enabled else {
             NagramSettings.shared.localNotificationFallbackEnabled = false
@@ -1083,6 +1050,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nextgramSettingsBackupController(context: context))
     }, aboutAction: {
         pushControllerImpl?(nagramAboutController(context: context))
+    }, showcaseAction: {
+        pushControllerImpl?(nextgramShowcaseController(context: context))
     })
     let flatRows = groups.flatMap { $0.rows }
     let rowCategories = groups.flatMap { group in group.rows.map { _ in group.tab } }
@@ -1096,6 +1065,10 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
     }
 
     let category = deepLinkTarget.tab
+    if !isRoot && category == .showcase {
+        let focus = deepLinkTarget.rowIndex.map { nagramRowTitleKey(flatRows[$0]) }
+        return nextgramShowcaseController(context: context, focus: focus)
+    }
     let section = normalizedNagramDeepLinkToken(parseNagramDeepLinkRequest(deepLinkPath)?.section ?? "")
     let legacyGroupTab = section == "camera" ? 1 : (section == "stickers" ? 2 : 0)
     let initialGroupTab = deepLinkTarget.rowIndex.flatMap { index in
@@ -1136,6 +1109,10 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         }
         let row = flatRows[index]
         if isRoot {
+            if case let .navigation(titleKey, action) = row, titleKey == "Nagram.About" || titleKey == "Nagram.TelegramLatency" {
+                action()
+                return
+            }
             var target = URLComponents()
             target.path = rowCategories[index].rawValue
             target.queryItems = [URLQueryItem(name: "r", value: nagramRowDeepLinkKey(row))]
@@ -1280,7 +1257,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: ngI18n("\(prefix).\(currentValue)", lang), index: rowIndex))
             case let .input(titleKey, placeholderKey, get, _, isSecret, isVisible):
                 if isVisible() {
-                    entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, rightAligned: titleKey == "Nagram.DeletedMessageIndicatorColor", index: rowIndex))
+                    entries.append(.input(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), text: get(), placeholder: ngI18n(placeholderKey, lang), isSecret: isSecret, rightAligned: true, index: rowIndex))
                 }
             case let .startupFolder(titleKey):
                 entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: nagramChatListStartupFolderLabel(accountPeerId: context.account.peerId.toInt64(), strings: presentationData.strings, lang: lang), index: rowIndex))
@@ -1296,12 +1273,14 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         if isRoot {
             entries.append(.input(stableId: -100, section: 0, title: "", text: selection.1, placeholder: ngI18n("Nagram.Settings.Search", lang), isSecret: false, rightAligned: false, index: -1))
             if searchQuery.isEmpty {
-                let version = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String
-                    ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-                    ?? ""
-                entries.insert(.brand(title: "Nextgram", version: version), at: 0)
                 for (index, tab) in NextgramSettingsCategory.allCases.enumerated() {
                     entries.append(.category(stableId: -20 + Int32(index), tab: tab, title: ngI18n(tab.titleKey, lang)))
+                }
+                if let aboutIndex = flatRows.firstIndex(where: { nagramRowTitleKey($0) == "Nagram.About" }) {
+                    let version = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String
+                        ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                        ?? ""
+                    entries.append(.disclosure(stableId: Int32.max, section: 5, title: ngI18n("Nagram.About", lang), label: version, index: aboutIndex))
                 }
             }
         }
@@ -1368,7 +1347,6 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
     |> afterDisposed {
         updateSensitiveContentDisposable.dispose()
         deletedMessagesArchiveDisposable.dispose()
-        latencyTestDisposable.dispose()
     }
 
     let controller: ItemListController

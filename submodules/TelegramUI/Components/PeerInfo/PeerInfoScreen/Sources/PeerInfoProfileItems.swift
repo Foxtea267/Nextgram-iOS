@@ -182,22 +182,31 @@ func infoItems(
         let ItemCommunity = 10000
 
         // MARK: NEXTGRAM — Showcase values are rendered on the owner's profile only.
-        if isMyProfile, user.id == context.account.peerId, NagramSettings.shared.showLocalProfileCard {
+        if isMyProfile, user.id == context.account.peerId {
+            let settings = NagramSettings.shared
             let language = presentationData.strings.baseLanguageCode
-            let stars = UInt64(NagramSettings.shared.localProfileStars).map { String($0) } ?? "0"
-            let storedTon = NagramSettings.shared.localProfileTon
-            let ton = Decimal(string: storedTon, locale: Locale(identifier: "en_US_POSIX")) == nil ? "0" : storedTon
-            items[.balances]!.append(PeerInfoScreenHeaderItem(id: ItemBalanceHeader, text: ngI18n("Nagram.Showcase.Preview", language)))
-            items[.balances]!.append(PeerInfoScreenDisclosureItem(id: ItemBalanceStars, label: .text(stars),
-                text: ngI18n("Nagram.Showcase.Stars", language), icon: PresentationResourcesSettings.stars, hasArrow: false, action: nil))
-            items[.balances]!.append(PeerInfoScreenDisclosureItem(id: ItemBalanceTon, label: .text(ton),
-                text: ngI18n("Nagram.Showcase.Ton", language), icon: PresentationResourcesSettings.ton, hasArrow: false, action: nil))
-            let phone = NagramSettings.shared.localProfilePhone
-            if phone.contains(where: { "0123456789".contains($0) }) {
+            let phone = settings.localProfilePhone
+            let showsPhone = settings.nextgramShowcasePhoneEnabled && phone.contains(where: { "0123456789".contains($0) })
+            let rating = settings.nextgramShowcaseRatingEnabled ? Int(settings.localProfileRating) : nil
+            if settings.showLocalProfileCard || showsPhone || rating != nil {
+                items[.balances]!.append(PeerInfoScreenHeaderItem(id: ItemBalanceHeader, text: ngI18n("Nagram.Showcase.Preview", language)))
+            }
+            if settings.showLocalProfileCard {
+                let stars = UInt64(settings.localProfileStars).map { String($0) } ?? "0"
+                items[.balances]!.append(PeerInfoScreenDisclosureItem(id: ItemBalanceStars, label: .text(stars),
+                    text: ngI18n("Nagram.Showcase.Stars", language), icon: PresentationResourcesSettings.stars, hasArrow: false, action: nil))
+                if settings.nextgramShowcaseTonEnabled {
+                    let storedTon = settings.localProfileTon
+                    let ton = Decimal(string: storedTon, locale: Locale(identifier: "en_US_POSIX")) == nil ? "0" : storedTon
+                    items[.balances]!.append(PeerInfoScreenDisclosureItem(id: ItemBalanceTon, label: .text(ton),
+                        text: ngI18n("Nagram.Showcase.Ton", language), icon: PresentationResourcesSettings.ton, hasArrow: false, action: nil))
+                }
+            }
+            if showsPhone {
                 items[.balances]!.append(PeerInfoScreenDisclosureItem(id: 7003, label: .text(phone),
                     text: ngI18n("Nagram.Showcase.Phone", language), icon: PresentationResourcesSettings.recentCalls, hasArrow: false, action: nil))
             }
-            if let rating = Int(NagramSettings.shared.localProfileRating) {
+            if let rating {
                 items[.balances]!.append(PeerInfoScreenDisclosureItem(id: 7004, label: .text(String(rating)),
                     text: ngI18n("Nagram.Showcase.Rating", language), icon: PresentationResourcesSettings.reactions, hasArrow: false, action: nil))
             }

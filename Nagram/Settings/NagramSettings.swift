@@ -274,6 +274,17 @@ public final class NagramSettings {
     public var localProfilePhone: String
     @NagramDefault("nextgram.localProfileRating", "")
     public var localProfileRating: String
+    // Preserve whether older versions displayed the values under the shared profile switch.
+    public var nextgramShowcasePhoneEnabled: Bool {
+        get { (NagramDemoMode.userDefaults.object(forKey: "nextgram.showcasePhoneEnabled") as? Bool) ?? self.showLocalProfileCard }
+        set { NagramSettingsCloudSync.shared.set(newValue, forKey: "nextgram.showcasePhoneEnabled") }
+    }
+    public var nextgramShowcaseRatingEnabled: Bool {
+        get { (NagramDemoMode.userDefaults.object(forKey: "nextgram.showcaseRatingEnabled") as? Bool) ?? self.showLocalProfileCard }
+        set { NagramSettingsCloudSync.shared.set(newValue, forKey: "nextgram.showcaseRatingEnabled") }
+    }
+    @NagramDefault("nextgram.showcaseTonEnabled", true)
+    public var nextgramShowcaseTonEnabled: Bool
     @NagramDefault("nagram.unlimitedAccountsEnabled", false)
     public var unlimitedAccountsEnabled: Bool
     @NagramDefault("nagram.locationIndicatorMode", NagramLocationIndicatorMode.always.rawValue)

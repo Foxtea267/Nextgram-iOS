@@ -146,6 +146,7 @@ public class ItemListSingleLineInputItemNode: ListViewItemNode, UITextFieldDeleg
     private let labelNode: TextNode
     
     private var item: ItemListSingleLineInputItem?
+    private var rightAlignedTextFrame: CGRect? // MARK: NEXTGRAM
     
     public var tag: ItemListItemTag? {
         return self.item?.tag
@@ -251,7 +252,7 @@ public class ItemListSingleLineInputItemNode: ListViewItemNode, UITextFieldDeleg
             let leftInset: CGFloat = 16.0 + params.leftInset
             var rightInset: CGFloat = 16.0 + params.rightInset
             
-            if item.clearType.hasButton {
+            if item.clearType.hasButton && item.alignment != .right { // MARK: NEXTGRAM
                 rightInset += 32.0
             }
             
@@ -289,7 +290,8 @@ public class ItemListSingleLineInputItemNode: ListViewItemNode, UITextFieldDeleg
             let layout = ListViewItemNodeLayout(contentSize: contentSize, insets: insets)
             let layoutSize = layout.size
             
-            let attributedPlaceholderText = NSAttributedString(string: item.placeholder, font: Font.regular(item.presentationData.fontSize.itemListBaseFontSize), textColor: item.presentationData.theme.list.itemPlaceholderTextColor)
+            // MARK: NEXTGRAM — Explicitly align the attributed placeholder as well as entered text.
+            let attributedPlaceholderText = NSAttributedString(string: item.placeholder, font: Font.regular(item.presentationData.fontSize.itemListBaseFontSize), textColor: item.presentationData.theme.list.itemPlaceholderTextColor, paragraphAlignment: item.alignment == .right ? .right : nil)
             
             return (layout, { [weak self] in
                 if let strongSelf = self {
@@ -403,8 +405,10 @@ public class ItemListSingleLineInputItemNode: ListViewItemNode, UITextFieldDeleg
                     
                     switch item.alignment {
                         case .default:
+                            strongSelf.rightAlignedTextFrame = nil // MARK: NEXTGRAM
                             strongSelf.textNode.textField.textAlignment = .natural
                         case .right:
+                            strongSelf.rightAlignedTextFrame = strongSelf.textNode.frame // MARK: NEXTGRAM
                             strongSelf.textNode.textField.textAlignment = .right
                     }
                     
@@ -489,13 +493,21 @@ public class ItemListSingleLineInputItemNode: ListViewItemNode, UITextFieldDeleg
             return
         }
         let isHidden: Bool
+        let isEmpty = self.rightAlignedTextFrame == nil ? item.text.isEmpty : (self.textNode.textField.text ?? "").isEmpty // MARK: NEXTGRAM
         switch item.clearType {
             case .none:
                 isHidden = true
             case .always:
-                isHidden = item.text.isEmpty
+                isHidden = isEmpty
             case .onFocus:
-                isHidden = !self.textNode.textField.isFirstResponder || item.text.isEmpty
+                isHidden = !self.textNode.textField.isFirstResponder || isEmpty
+        }
+        // MARK: NEXTGRAM — Only reserve room when a clear button is visible.
+        if var frame = self.rightAlignedTextFrame {
+            if !isHidden {
+                frame.size.width = max(1.0, frame.width - 32.0)
+            }
+            self.textNode.frame = frame
         }
         self.clearIconNode.isHidden = isHidden
         self.clearButtonNode.isHidden = isHidden
@@ -523,6 +535,9 @@ public class ItemListSingleLineInputItemNode: ListViewItemNode, UITextFieldDeleg
     }
     
     private func textUpdated(_ text: String) {
+        if self.rightAlignedTextFrame != nil { // MARK: NEXTGRAM
+            self.updateClearButtonVisibility()
+        }
         self.item?.textUpdated(text)
     }
     

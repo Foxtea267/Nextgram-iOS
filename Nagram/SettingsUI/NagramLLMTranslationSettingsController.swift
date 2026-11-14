@@ -195,7 +195,7 @@ private enum NagramLLMTranslationEntry: ItemListNodeEntry {
                 arguments.chooseFormat()
             }, tag: self.tag)
         case let .input(section, field, title, text, placeholder, isSecret):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { value in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), alignment: .right, spacing: 8.0, clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { value in
                 arguments.inputUpdated(field, value)
             }, action: {
             })

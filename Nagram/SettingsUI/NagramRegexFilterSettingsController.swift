@@ -416,11 +416,11 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
                 arguments.updateScoped(value)
             })
         case let .title(_, section, title, text, placeholder):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title), text: text, placeholder: placeholder, type: .regular(capitalization: false, autocorrection: false), returnKeyType: .next, clearType: .always, tag: NagramRegexFilterEditInputTag(0), sectionId: section, textUpdated: { value in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title), text: text, placeholder: placeholder, type: .regular(capitalization: false, autocorrection: false), returnKeyType: .next, alignment: .right, spacing: 8.0, clearType: .always, tag: NagramRegexFilterEditInputTag(0), sectionId: section, textUpdated: { value in
                 arguments.updateTitle(value)
             }, action: {})
         case let .authorPeerId(_, section, title, text, placeholder):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title), text: text, placeholder: placeholder, type: .number, returnKeyType: .next, clearType: .always, tag: NagramRegexFilterEditInputTag(2), sectionId: section, textUpdated: { value in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title), text: text, placeholder: placeholder, type: .number, returnKeyType: .next, alignment: .right, spacing: 8.0, clearType: .always, tag: NagramRegexFilterEditInputTag(2), sectionId: section, textUpdated: { value in
                 arguments.updateAuthorPeerId(value)
             }, action: {})
         case let .pattern(_, section, text, placeholder):

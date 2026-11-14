@@ -99,7 +99,7 @@ private enum NagramSTTSettingsEntry: ItemListNodeEntry {
         case let .header(section, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
         case let .input(field, title, text, placeholder):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: field == .apiKey ? .password : .regular(capitalization: false, autocorrection: false), spacing: 8.0, clearType: .onFocus, tag: self.tag, sectionId: 0, textUpdated: { value in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: field == .apiKey ? .password : .regular(capitalization: false, autocorrection: false), alignment: .right, spacing: 8.0, clearType: .onFocus, tag: self.tag, sectionId: 0, textUpdated: { value in
                 arguments.inputUpdated(field, value)
             }, action: {})
         case let .prompt(text, placeholder):

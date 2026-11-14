@@ -1481,6 +1481,25 @@ public final class Network: NSObject {
         }
     }
     
+    // MARK: NEXTGRAM — Probe through the account's active MTProto session and proxy, if configured.
+    public func nextgramConnectionLatency() -> Signal<Int?, NoError> {
+        return Signal { subscriber in
+            let startedAt = ProcessInfo.processInfo.systemUptime
+            return (self.request(Api.functions.help.getConfig(), automaticFloodWait: false)
+            |> map { _ -> Int? in
+                return max(1, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000.0).rounded()))
+            }
+            |> `catch` { _ -> Signal<Int?, NoError> in
+                return .single(nil)
+            }
+            |> timeout(10.0, queue: .mainQueue(), alternate: .single(nil))).start(next: { value in
+                subscriber.putNext(value)
+            }, completed: {
+                subscriber.putCompletion()
+            })
+        }
+    }
+
     func updateNetworkSpeedLimitedEventNotifyInterval(value: Double) {
         let _ = self.networkSpeedLimitedEventState.with { state in
             state.notifyInterval = value
