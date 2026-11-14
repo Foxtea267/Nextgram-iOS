@@ -78,7 +78,11 @@ private final class NextgramUpdateDownloadDelegate: NSObject, URLSessionDownload
 }
 
 public enum NextgramUpdateClient {
-    private static func cacheDirectory() throws -> URL {
+    public static func clearCache() throws {
+        try FileManager.default.removeItem(at: cacheDirectory())
+    }
+
+    static func cacheDirectory() throws -> URL {
         let directory = try FileManager.default.url(for: .applicationSupportDirectory, in: .userDomainMask, appropriateFor: nil, create: true)
             .appendingPathComponent("NextgramUpdates", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -92,7 +96,7 @@ public enum NextgramUpdateClient {
     public static func restore(bundleIdentifier: String, installedVersion: String) async -> (NextgramUpdateRelease, NextgramUpdatePackage)? {
         guard let directory = try? cacheDirectory() else { return nil }
         let manifest = directory.appendingPathComponent("Latest.plist")
-        guard let metadata = try? Data(contentsOf: manifest), metadata.count <= 16 * 1024,
+        guard let metadata = try? Data(contentsOf: manifest), metadata.count <= 128 * 1024,
               let release = try? PropertyListDecoder().decode(NextgramUpdateRelease.self, from: metadata) else {
             return nil
         }

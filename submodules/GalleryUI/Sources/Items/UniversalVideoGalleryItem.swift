@@ -987,6 +987,8 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     private(set) var item: UniversalVideoGalleryItem?
     private var playbackRate: Double?
     private var videoQuality: UniversalVideoContentVideoQuality = .auto
+    private let nextgramVideoQualityDisposable = MetaDisposable() // MARK: NEXTGRAM
+    private var nextgramVideoQualitySelected = false // MARK: NEXTGRAM
     private let playbackRatePromise = ValuePromise<Double>()
     private let videoQualityPromise = ValuePromise<UniversalVideoContentVideoQuality>()
     
@@ -1224,6 +1226,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     deinit {
+        self.nextgramVideoQualityDisposable.dispose() // MARK: NEXTGRAM
         self.statusDisposable.dispose()
         self.moreButtonStateDisposable.dispose()
         self.mediaPlaybackStateDisposable.dispose()
@@ -1412,7 +1415,11 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     }
 
     func setupItem(_ item: UniversalVideoGalleryItem) {
-        if self.item?.content.id != item.content.id {            
+        if self.item?.content.id != item.content.id {
+            // MARK: NEXTGRAM
+            self.nextgramVideoQualityDisposable.set(nil)
+            self.nextgramVideoQualitySelected = false
+            self.videoQuality = .auto
             var chapters = parseMediaPlayerChapters(item.caption)
             if chapters.isEmpty, let description = item.description {
                 chapters = parseMediaPlayerChapters(description)
@@ -1578,6 +1585,9 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
             videoNode.ownsContentNodeUpdated = { [weak self] value in
                 if let strongSelf = self {
                     strongSelf.updateDisplayPlaceholder(!value)
+                    if value {
+                        strongSelf.applyNextgramDefaultVideoQuality() // MARK: NEXTGRAM
+                    }
 
                     // MARK: NAGRAM — A transferred video layer must not keep its previous PiP controller.
                     if !value {
@@ -1645,6 +1655,7 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                 }
             }
             self.videoNode = videoNode
+            self.applyNextgramDefaultVideoQuality() // MARK: NEXTGRAM
             self.videoNodeUserInteractionEnabled = disablePlayerControls || forceEnableUserInteraction
             videoNode.isUserInteractionEnabled = disablePlayerControls || forceEnableUserInteraction
             videoNode.backgroundColor = UIColor.black
@@ -2295,6 +2306,9 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
         
         if self.isCentral != isCentral {
             self.isCentral = isCentral
+            if isCentral {
+                self.applyNextgramDefaultVideoQuality() // MARK: NEXTGRAM
+            }
             
             if let videoNode = self.videoNode {
                 if isCentral {
@@ -3687,11 +3701,10 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                         }, action: { [weak strongSelf] _, f in
                             f(.default)
                             
-                            guard let strongSelf, let videoNode = strongSelf.videoNode else {
+                            guard let strongSelf, strongSelf.videoNode != nil else { // MARK: NEXTGRAM
                                 return
                             }
-                            videoNode.setVideoQuality(.auto)
-                            strongSelf.videoQualityPromise.set(.auto)
+                            strongSelf.updateVideoQuality(.auto) // MARK: NEXTGRAM
                         })))
                     }
                     
@@ -3741,11 +3754,10 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
                             }, action: { [weak self] _, f in
                                 f(.default)
                                 
-                                guard let self, let videoNode = self.videoNode else {
+                                guard let self, self.videoNode != nil else { // MARK: NEXTGRAM
                                     return
                                 }
-                                videoNode.setVideoQuality(.quality(quality))
-                                self.videoQualityPromise.set(.quality(quality))
+                                self.updateVideoQuality(.quality(quality)) // MARK: NEXTGRAM
                                 
                                 /*if let controller = strongSelf.galleryController() as? GalleryController {
                                  controller.updateSharedPlaybackRate(rate)
@@ -4116,10 +4128,34 @@ final class UniversalVideoGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     func updateVideoQuality(_ videoQuality: UniversalVideoContentVideoQuality) {
+        self.nextgramVideoQualitySelected = true // MARK: NEXTGRAM
         self.videoQuality = videoQuality
         self.videoQualityPromise.set(videoQuality)
         
         self.videoNode?.setVideoQuality(videoQuality)
+    }
+
+    // MARK: NEXTGRAM — choose an available rendition once, before any manual selection.
+    private func applyNextgramDefaultVideoQuality() {
+        let preference = NagramSettings.shared.defaultVideoQuality
+        guard preference == "highest" || preference == "lowest",
+              self.isCentral == true, !self.nextgramVideoQualitySelected,
+              let videoNode = self.videoNode, videoNode.ownsContentNode else { return }
+        self.nextgramVideoQualityDisposable.set((videoNode.videoQualityStateSignal()
+        |> filter { $0?.available.isEmpty == false }
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { [weak self, weak videoNode] state in
+            guard let self, let videoNode, self.videoNode === videoNode, self.isCentral == true,
+                  !self.nextgramVideoQualitySelected, let state else { return }
+            if state.preferred != .auto {
+                self.nextgramVideoQualitySelected = true
+                return
+            }
+            let renditions = state.available.filter { $0 > 0 }
+            if let quality = preference == "highest" ? renditions.max() : renditions.min() {
+                self.updateVideoQuality(.quality(quality))
+            }
+        }))
     }
     
     public func seekToStart() {

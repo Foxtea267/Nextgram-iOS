@@ -19,6 +19,10 @@ import TooltipUI
 import ChatEntityKeyboardInputNode
 import notify
 import TelegramNotices
+// MARK: NEXTGRAM
+import NagramSettings
+import NagramStrings
+import PresentationDataUtils
 
 func hasFirstResponder(_ view: UIView) -> Bool {
     if view.isFirstResponder {
@@ -1348,6 +1352,10 @@ private final class StoryContainerScreenComponent: Component {
             }
             
             let environment = environment[ViewControllerComponentContainer.Environment.self].value
+            // MARK: NEXTGRAM — Do not start playback or send a view receipt before consent.
+            if let screen = environment.controller() as? StoryContainerScreen, screen.nextgramNeedsViewingConfirmation {
+                return availableSize
+            }
             self.environment = environment
             if case .regular = environment.metrics.widthClass {
                 self.isCardLayout = true
@@ -2258,6 +2266,9 @@ public class StoryContainerScreen: ViewControllerComponentContainer, KeyShortcut
     private let context: AccountContext
     private var didAnimateIn: Bool = false
     private var isDismissed: Bool = false
+    // MARK: NEXTGRAM
+    fileprivate var nextgramNeedsViewingConfirmation = NagramSettings.shared.confirmBeforeViewingStories
+    private var nextgramConfirmationPresented = false
     
     private let focusedItemPromise = Promise<EngineStoryId?>()
     public var focusedItem: Signal<EngineStoryId?, NoError> {
@@ -2309,7 +2320,38 @@ public class StoryContainerScreen: ViewControllerComponentContainer, KeyShortcut
         super.viewDidAppear(animated)
         
         self.view.disablesInteractiveModalDismiss = true
+
+        // MARK: NEXTGRAM
+        if self.nextgramNeedsViewingConfirmation {
+            if !self.nextgramConfirmationPresented {
+                self.nextgramConfirmationPresented = true
+                let strings = self.context.sharedContext.currentPresentationData.with { $0.strings }
+                let language = strings.baseLanguageCode
+                self.present(textAlertController(
+                    context: self.context,
+                    title: ngI18n("Nagram.Stories.ConfirmTitle", language),
+                    text: ngI18n("Nagram.Stories.ConfirmText", language),
+                    actions: [
+                        TextAlertAction(type: .genericAction, title: strings.Common_Cancel, action: { [weak self] in
+                            self?.dismiss()
+                        }),
+                        TextAlertAction(type: .defaultAction, title: ngI18n("Nagram.Stories.View", language), action: { [weak self] in
+                            guard let self, !self.isDismissed else { return }
+                            self.nextgramNeedsViewingConfirmation = false
+                            self.requestLayout(forceUpdate: true, transition: ContainedViewLayoutTransition.immediate)
+                            self.nextgramAnimateInIfNeeded()
+                        })
+                    ],
+                    dismissOnOutsideTap: false
+                ), in: .window(.root))
+            }
+            return
+        }
+        self.nextgramAnimateInIfNeeded()
+    }
         
+    // MARK: NEXTGRAM
+    private func nextgramAnimateInIfNeeded() {
         if !self.didAnimateIn {
             self.didAnimateIn = true
             
@@ -2320,6 +2362,7 @@ public class StoryContainerScreen: ViewControllerComponentContainer, KeyShortcut
     }
 
     public var keyShortcuts: [KeyShortcut] {
+        if self.nextgramNeedsViewingConfirmation { return [] } // MARK: NEXTGRAM
         if self.isViewLoaded, hasFirstResponder(self.view) {
             return []
         }

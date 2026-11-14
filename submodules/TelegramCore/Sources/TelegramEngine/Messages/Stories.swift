@@ -1,6 +1,7 @@
 import Foundation
 import SwiftSignalKit
 import Postbox
+import NagramSettings // MARK: NEXTGRAM
 internal import TelegramApi
 
 public enum EngineStoryInputMedia {
@@ -2108,11 +2109,15 @@ func _internal_deleteStories(account: Account, peerId: PeerId, ids: [Int32]) -> 
 }
 
 func _internal_markStoryAsSeen(account: Account, peerId: PeerId, id: Int32, asPinned: Bool) -> Signal<Never, NoError> {
+    // MARK: NEXTGRAM — Do not update local read state or queue a later upload for silently viewed stories.
+    if NagramSettings.shared.suppressStoryReadReceipts { return .complete() }
     if asPinned {
         return account.postbox.transaction { transaction -> Api.InputPeer? in
             return transaction.getPeer(peerId).flatMap(apiInputPeer)
         }
         |> mapToSignal { inputPeer -> Signal<Never, NoError> in
+            // MARK: NEXTGRAM — Recheck after the asynchronous lookup, before incrementing profile-story views.
+            if NagramSettings.shared.suppressStoryReadReceipts { return .complete() }
             guard let inputPeer = inputPeer else {
                 return .complete()
             }
@@ -2131,6 +2136,8 @@ func _internal_markStoryAsSeen(account: Account, peerId: PeerId, id: Int32, asPi
         }
     } else {
         return account.postbox.transaction { transaction -> Api.InputUser? in
+            // MARK: NEXTGRAM
+            if NagramSettings.shared.suppressStoryReadReceipts { return nil }
             if let peerStoryState = transaction.getPeerStoryState(peerId: peerId)?.entry.get(Stories.PeerState.self) {
                 transaction.setPeerStoryState(peerId: peerId, state: Stories.PeerState(
                     maxReadId: max(peerStoryState.maxReadId, id)
@@ -2145,6 +2152,8 @@ func _internal_markStoryAsSeen(account: Account, peerId: PeerId, id: Int32, asPi
             return transaction.getPeer(peerId).flatMap(apiInputUser)
         }
         |> mapToSignal { _ -> Signal<Never, NoError> in
+            // MARK: NEXTGRAM
+            if NagramSettings.shared.suppressStoryReadReceipts { return .complete() }
             account.stateManager.injectStoryUpdates(updates: [.read(peerId: peerId, maxId: id)])
             
             return .complete()

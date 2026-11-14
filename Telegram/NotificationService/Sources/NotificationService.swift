@@ -22,6 +22,7 @@ import CoreServices
 import ImageIO
 import UniformTypeIdentifiers
 import NagramSettings // MARK: NAGRAM
+import NextgramNotificationPolicy // MARK: NEXTGRAM
 
 // MARK: NAGRAM
 private let canFilterEmptyControlNotifications = (Bundle.main.object(forInfoDictionaryKey: "NagramNotificationFilteringEnabled") as? Bool) == true
@@ -2283,10 +2284,41 @@ private final class NotificationServiceHandler {
                                             
                                             var parsedMedia: Media?
                                             if let messageId, let message = transaction.getMessage(messageId) {
-                                                // MARK: NAGRAM — 后台命中 hide/用户 ID 规则时不展示通知，也不让原始未读数覆盖桌面角标。
-                                                if let matcher = NagramSettings.shared.regexFilterMatcher(peerId: message.id.peerId.toInt64(), isOutgoing: false), matcher.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
+                                                // MARK: NEXTGRAM — Apply the same persisted filters to parsed background notifications.
+                                                let regexHidden = NagramSettings.shared.regexFilterMatcher(peerId: message.id.peerId.toInt64(), isOutgoing: false).map {
+                                                    $0.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value())
+                                                } ?? false
+                                                let memberHidden = message.author.map {
+                                                    NextgramGroupMemberFilter.hiddenMembers(accountId: accountPeerId.toInt64(), chatId: message.id.peerId.toInt64()).contains($0.id.toInt64())
+                                                } ?? false
+                                                if regexHidden || memberHidden {
                                                     content = NotificationContent(isLockedMessage: nil)
                                                     content.dismissAfterDelivery = true
+                                                }
+                                                // MARK: NEXTGRAM — Enhance only a push that actually arrived and parsed successfully.
+                                                if !content.dismissAfterDelivery, let author = message.author {
+                                                    let isGroup: Bool
+                                                    if let group = message.peers[message.id.peerId] as? TelegramGroup {
+                                                        if case .Member = group.membership { isGroup = true } else { isGroup = false }
+                                                    } else if let channel = message.peers[message.id.peerId] as? TelegramChannel,
+                                                        case .group = channel.info, case .member = channel.participationStatus { isGroup = true }
+                                                    else { isGroup = false }
+                                                    let eligible = NextgramMemberNotifications.isEligible(
+                                                        selected: NextgramMemberNotifications.members(accountId: accountPeerId.toInt64(), chatId: message.id.peerId.toInt64()).contains(author.id.toInt64()),
+                                                        isGroup: isGroup, incoming: message.flags.contains(.Incoming) && author.id != accountPeerId,
+                                                        imported: message.forwardInfo?.flags.contains(.isImported) == true,
+                                                        unread: transaction.getCombinedPeerReadState(message.id.peerId).map { !$0.isIncomingMessageIndexRead(message.index) } ?? false,
+                                                        serviceMessage: message.media.contains { $0 is TelegramMediaAction })
+                                                    let silent = message.attributes.contains { ($0 as? NotificationInfoMessageAttribute)?.flags.contains(.muted) == true }
+                                                    if eligible && !silent && content.sound == nil { content.sound = "0.m4a" }
+                                                }
+                                                // MARK: NEXTGRAM — Explicit event policies still take precedence over special alerts.
+                                                switch nextgramNotificationMode(message: EngineMessage(message), accountPeerId: accountPeerId) {
+                                                case .off:
+                                                    content = NotificationContent(isLockedMessage: nil)
+                                                    content.dismissAfterDelivery = true
+                                                case .silent: content.sound = nil
+                                                case .default: break
                                                 }
                                             }
                                             if let messageId, let message = transaction.getMessage(messageId), !content.dismissAfterDelivery, !message.containsSecretMedia, !message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) {

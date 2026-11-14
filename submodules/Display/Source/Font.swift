@@ -1,4 +1,6 @@
 import Foundation
+// MARK: NEXTGRAM
+import NextgramTypography
 import UIKit
 
 public struct Font {
@@ -160,6 +162,22 @@ public struct Font {
     private static let cache = Cache()
     
     public static func with(size: CGFloat, design: Design = .regular, weight: Weight = .regular, width: Width = .standard, traits: Traits = []) -> UIFont {
+        // MARK: NEXTGRAM — Resolve before the native cache so a settings change cannot reuse a stale custom font.
+        if design == .regular, width == .standard,
+           let font = NextgramTypography.shared.font(size: size, weight: weight.weight, italic: traits.contains(.italic)) {
+            if traits.contains(.monospacedNumbers) || traits.contains(.alternateDollarSign) {
+                var features: [[String: Any]] = []
+                if traits.contains(.monospacedNumbers) {
+                    features.append([UIFontDescriptor.FeatureKey.type.rawValue: kNumberSpacingType,
+                                     UIFontDescriptor.FeatureKey.selector.rawValue: kMonospacedNumbersSelector])
+                }
+                if traits.contains(.alternateDollarSign) {
+                    features.append([kCTFontOpenTypeFeatureTag as String: "cv09", kCTFontOpenTypeFeatureValue as String: 1])
+                }
+                return UIFont(descriptor: font.fontDescriptor.addingAttributes([.featureSettings: features]), size: size)
+            }
+            return font
+        }
         let key = "\(size)_\(design.key)_\(weight.key)_\(width.key)_\(traits.rawValue)"
         
         if let cachedFont = self.cache.get(key) {
@@ -289,18 +307,23 @@ public struct Font {
     }
     
     public static func regular(_ size: CGFloat) -> UIFont {
-        return UIFont.systemFont(ofSize: size)
+        // MARK: NEXTGRAM
+        return self.with(size: size)
     }
     
     public static func medium(_ size: CGFloat) -> UIFont {
-        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.medium)
+        // MARK: NEXTGRAM
+        return self.with(size: size, weight: .medium)
     }
     
     public static func semibold(_ size: CGFloat) -> UIFont {
-        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.semibold)
+        // MARK: NEXTGRAM
+        return self.with(size: size, weight: .semibold)
     }
     
     public static func bold(_ size: CGFloat) -> UIFont {
+        // MARK: NEXTGRAM
+        if let font = NextgramTypography.shared.font(size: size, weight: .bold) { return font }
         if #available(iOS 8.2, *) {
             return UIFont.boldSystemFont(ofSize: size)
         } else {
@@ -313,10 +336,13 @@ public struct Font {
     }
     
     public static func light(_ size: CGFloat) -> UIFont {
-        return UIFont.systemFont(ofSize: size, weight: UIFont.Weight.light)
+        // MARK: NEXTGRAM
+        return self.with(size: size, weight: .light)
     }
     
     public static func semiboldItalic(_ size: CGFloat) -> UIFont {
+        // MARK: NEXTGRAM
+        if let font = NextgramTypography.shared.font(size: size, weight: .semibold, italic: true) { return font }
         if let descriptor = UIFont.systemFont(ofSize: size).fontDescriptor.withSymbolicTraits([.traitBold, .traitItalic]) {
             return UIFont(descriptor: descriptor, size: size)
         } else {
@@ -325,6 +351,8 @@ public struct Font {
     }
     
     public static func mediumItalic(_ size: CGFloat) -> UIFont {
+        // MARK: NEXTGRAM
+        if let font = NextgramTypography.shared.font(size: size, weight: .medium, italic: true) { return font }
         if let descriptor = UIFont.systemFont(ofSize: size, weight: .medium).fontDescriptor.withSymbolicTraits([.traitItalic]) {
             return UIFont(descriptor: descriptor, size: size)
         } else {
@@ -349,6 +377,8 @@ public struct Font {
     }
     
     public static func italic(_ size: CGFloat) -> UIFont {
+        // MARK: NEXTGRAM
+        if let font = NextgramTypography.shared.font(size: size, italic: true) { return font }
         return UIFont.italicSystemFont(ofSize: size)
     }
 }

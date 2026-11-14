@@ -2054,6 +2054,10 @@ public final class ChatListNode: ListViewImpl {
         |> map { update, _, _, _, _ in
             return update
         }
+        // MARK: NEXTGRAM — refresh previews after a member is hidden or restored.
+        chatListViewUpdate = combineLatest(queue: .mainQueue(), chatListViewUpdate,
+            nagramStringSignal(NextgramGroupMemberFilter.revisionKey(accountId: context.account.peerId.toInt64()), defaultValue: ""))
+        |> map { update, _ in update }
         |> mapToSignal { update, filter -> Signal<(ChatListNodeViewUpdate, ChatListFilter?), NoError> in
             return nagramChatListNodeViewUpdateWithPreviousUnhiddenMessages(account: context.account, update: update)
             |> map { updatedView in
@@ -3389,8 +3393,13 @@ public final class ChatListNode: ListViewImpl {
         }
         self.view.addGestureRecognizer(selectionRecognizer)
 
-        // MARK: NEXTGRAM — Rebuild existing rows when an account's aliases change.
-        self.chatAliasDisposable.set((nextgramChatAliasesSignal(accountPeerId: context.account.peerId.toInt64())
+        // MARK: NEXTGRAM — Rebuild existing rows when their appearance or quick actions change.
+        self.chatAliasDisposable.set((combineLatest(
+            nextgramChatAliasesSignal(accountPeerId: context.account.peerId.toInt64()),
+            nagramBoolSignal("nagram.hideChatListSeparators", defaultValue: false),
+            nagramBoolSignal("nagram.hideChatListSwipeDelete", defaultValue: false),
+            nagramStringSignal("nagram.chatListSwipeAction", defaultValue: "both")
+        )
         |> deliverOnMainQueue).start(next: { [weak self] _ in
             self?.updateState { state in
                 var state = state

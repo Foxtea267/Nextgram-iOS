@@ -3,7 +3,12 @@ import UIKit
 
 private final class NextgramLyricCell: UITableViewCell {
     private let lyricLabel = UILabel()
+    private let translationLabel = UILabel()
     private var timed = false
+    private var line: NextgramLyricLine?
+    private var color = UIColor.white
+    private var font = UIFont.systemFont(ofSize: 28.0, weight: .bold)
+    private var wordProgress: [Int] = []
 
     override init(style: UITableViewCell.CellStyle, reuseIdentifier: String?) {
         super.init(style: style, reuseIdentifier: reuseIdentifier)
@@ -12,17 +17,22 @@ private final class NextgramLyricCell: UITableViewCell {
         self.contentView.backgroundColor = .clear
         self.selectionStyle = .none
         self.isAccessibilityElement = true
-        self.lyricLabel.translatesAutoresizingMaskIntoConstraints = false
         self.lyricLabel.numberOfLines = 0
         self.lyricLabel.lineBreakMode = .byWordWrapping
         self.lyricLabel.textColor = .white
         self.lyricLabel.isAccessibilityElement = false
-        self.contentView.addSubview(self.lyricLabel)
+        self.translationLabel.numberOfLines = 0
+        self.translationLabel.isAccessibilityElement = false
+        let stack = UIStackView(arrangedSubviews: [self.lyricLabel, self.translationLabel])
+        stack.axis = .vertical
+        stack.spacing = 6.0
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        self.contentView.addSubview(stack)
         NSLayoutConstraint.activate([
-            self.lyricLabel.leadingAnchor.constraint(equalTo: self.contentView.leadingAnchor, constant: 24.0),
-            self.lyricLabel.trailingAnchor.constraint(equalTo: self.contentView.trailingAnchor, constant: -24.0),
-            self.lyricLabel.topAnchor.constraint(equalTo: self.contentView.topAnchor, constant: 14.0),
-            self.lyricLabel.bottomAnchor.constraint(equalTo: self.contentView.bottomAnchor, constant: -14.0)
+            stack.leadingAnchor.constraint(equalTo: self.contentView.leadingAnchor, constant: 24.0),
+            stack.trailingAnchor.constraint(equalTo: self.contentView.trailingAnchor, constant: -24.0),
+            stack.topAnchor.constraint(equalTo: self.contentView.topAnchor, constant: 14.0),
+            stack.bottomAnchor.constraint(equalTo: self.contentView.bottomAnchor, constant: -14.0)
         ])
     }
 
@@ -30,12 +40,21 @@ private final class NextgramLyricCell: UITableViewCell {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func configure(line: NextgramLyricLine, font: UIFont, active: Bool) {
+    func configure(line: NextgramLyricLine, font: UIFont, color: UIColor, active: Bool) {
+        self.line = line
+        self.color = color
+        self.font = font
+        self.wordProgress = []
         self.timed = line.time != nil
         let text = line.text.isEmpty ? (self.timed ? "•••" : " ") : line.text
         self.lyricLabel.text = text
         self.lyricLabel.font = font
-        self.accessibilityLabel = text
+        self.lyricLabel.textColor = color
+        self.translationLabel.text = line.translation
+        self.translationLabel.isHidden = line.translation == nil
+        self.translationLabel.font = .systemFont(ofSize: max(13, font.pointSize * 0.56), weight: .semibold)
+        self.translationLabel.textColor = color.withAlphaComponent(0.76)
+        self.accessibilityLabel = line.translation.map { text + "\n" + $0 } ?? text
         if let timestamp = line.time, timestamp.isFinite {
             let seconds = Int(max(0.0, min(359999.0, timestamp)))
             self.accessibilityValue = String(format: "%d:%02d", seconds / 60, seconds % 60)
@@ -52,14 +71,41 @@ private final class NextgramLyricCell: UITableViewCell {
             traits.insert(.selected)
         }
         self.accessibilityTraits = traits
+        if !active, !self.wordProgress.isEmpty {
+            self.wordProgress = []
+            self.lyricLabel.attributedText = nil
+            self.lyricLabel.text = self.line?.text
+        }
         if animated && !UIAccessibility.isReduceMotionEnabled {
             UIView.animate(withDuration: 0.2, delay: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: {
                 self.lyricLabel.alpha = alpha
+                self.translationLabel.alpha = alpha
             })
         } else {
             self.lyricLabel.layer.removeAllAnimations()
+            self.translationLabel.layer.removeAllAnimations()
             self.lyricLabel.alpha = alpha
+            self.translationLabel.alpha = alpha
         }
+    }
+
+    func updateWords(at position: Double) {
+        guard let line = self.line, !line.words.isEmpty else { return }
+        let progress = line.words.map { word -> Int in
+            guard position >= word.time else { return 0 }
+            if position >= word.end { return 8 }
+            return max(0, min(8, Int((position - word.time) / (word.end - word.time) * 8.0)))
+        }
+        guard progress != self.wordProgress else { return }
+        self.wordProgress = progress
+        let text = NSMutableAttributedString(string: line.text, attributes: [
+            .foregroundColor: self.color.withAlphaComponent(0.46),
+            .font: self.font
+        ])
+        for (word, step) in zip(line.words, progress) where step > 0 {
+            text.addAttribute(.foregroundColor, value: self.color.withAlphaComponent(0.54 + CGFloat(step) * 0.0575), range: word.range)
+        }
+        self.lyricLabel.attributedText = text
     }
 }
 
@@ -71,6 +117,7 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
     private var lyrics: NextgramLyrics?
     private var lyricFont = NextgramLyricsView.font(size: 28.0)
     private var fontSize: CGFloat = 28.0
+    private var color = UIColor.white
     private var position = 0.0
     private var activeIndex: Int?
     private var needsCentering = true
@@ -109,20 +156,23 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
         return font.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: size) } ?? font
     }
 
-    func update(lyrics: NextgramLyrics?, placeholder: String, fontSize: CGFloat) {
+    func update(lyrics: NextgramLyrics?, placeholder: String, fontSize: CGFloat, color: UIColor) {
         let fontSize = fontSize.isFinite ? min(64.0, max(12.0, fontSize)) : 28.0
         let lyricsChanged = self.lyrics != lyrics
         let fontChanged = self.fontSize != fontSize
+        let colorChanged = self.color != color
         self.placeholderLabel.text = placeholder
         let hasLines = lyrics?.lines.isEmpty == false
         self.tableView.isHidden = !hasLines
         self.placeholderLabel.isHidden = hasLines
-        guard lyricsChanged || fontChanged else {
+        guard lyricsChanged || fontChanged || colorChanged else {
             return
         }
 
         self.lyrics = lyrics
         self.fontSize = fontSize
+        self.color = color
+        self.placeholderLabel.textColor = color.withAlphaComponent(0.85)
         self.lyricFont = Self.font(size: fontSize)
         self.tableView.estimatedRowHeight = fontSize * 2.0 + 28.0
         self.activeIndex = lyrics?.currentLineIndex(at: self.position)
@@ -162,6 +212,9 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
             if let index, let cell = self.tableView.cellForRow(at: IndexPath(row: index, section: 0)) as? NextgramLyricCell {
                 cell.setActive(true, animated: true)
             }
+        }
+        if let index, let cell = self.tableView.cellForRow(at: IndexPath(row: index, section: 0)) as? NextgramLyricCell {
+            cell.updateWords(at: self.position)
         }
         self.centerActiveLineIfNeeded(animated: !force)
     }
@@ -204,7 +257,8 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: "Lyric", for: indexPath)
         if let cell = cell as? NextgramLyricCell, let lyrics = self.lyrics, lyrics.lines.indices.contains(indexPath.row) {
-            cell.configure(line: lyrics.lines[indexPath.row], font: self.lyricFont, active: self.activeIndex == indexPath.row)
+            cell.configure(line: lyrics.lines[indexPath.row], font: self.lyricFont, color: self.color, active: self.activeIndex == indexPath.row)
+            if self.activeIndex == indexPath.row { cell.updateWords(at: self.position) }
         }
         return cell
     }

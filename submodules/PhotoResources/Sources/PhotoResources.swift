@@ -3069,12 +3069,13 @@ private func drawAlbumArtPlaceholder(into c: CGContext, arguments: TransformImag
     }
 }
 
-// MARK: NEXTGRAM — Fitting preserves the complete artwork for configurable music covers.
-public func playerAlbumArt(engine: TelegramEngine, fileReference: FileMediaReference?, albumArt: SharedMediaPlaybackAlbumArt?, thumbnail: Bool, overlayColor: UIColor? = nil, emptyColor: UIColor? = nil, drawPlaceholderWhenEmpty: Bool = true, attemptSynchronously: Bool = false, aspectFit: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
+// MARK: NEXTGRAM — Preserve the source aspect ratio for the full-screen player.
+public func nextgramPlayerArtwork(engine: TelegramEngine, fileReference: FileMediaReference?, albumArt: SharedMediaPlaybackAlbumArt?, thumbnail: Bool = false, attemptSynchronously: Bool = false, embeddedArtSize: CGFloat = 768.0) -> Signal<UIImage?, NoError> {
     let postbox = engine.account.postbox
     var fileArtworkData: Signal<Data?, NoError> = .single(nil)
     if let fileReference = fileReference {
-        let size = thumbnail ? CGSize(width: 48.0, height: 48.0) : CGSize(width: 320.0, height: 320.0)
+        let side = thumbnail ? 48.0 : embeddedArtSize
+        let size = CGSize(width: side, height: side)
         fileArtworkData = fileArtworkData
         |> then(
             postbox.mediaBox.cachedResourceRepresentation(fileReference.media.resource, representation: CachedAlbumArtworkRepresentation(size: size), complete: false, fetch: true)
@@ -3164,20 +3165,23 @@ public func playerAlbumArt(engine: TelegramEngine, fileReference: FileMediaRefer
         let remoteThumbnailData = remoteArtworkData._0
         let remoteFullSizeData = remoteArtworkData._1
         let remoteFullSizeComplete = remoteArtworkData._2
+        if let fileArtworkData, let image = UIImage(data: fileArtworkData) {
+            return image
+        } else if remoteFullSizeComplete, let remoteFullSizeData, let image = UIImage(data: remoteFullSizeData) {
+            return image
+        }
+        return remoteThumbnailData.flatMap { UIImage(data: $0) }
+    }
+}
+
+// MARK: NEXTGRAM — Keep the existing thumbnail rendering API for the other player surfaces.
+public func playerAlbumArt(engine: TelegramEngine, fileReference: FileMediaReference?, albumArt: SharedMediaPlaybackAlbumArt?, thumbnail: Bool, overlayColor: UIColor? = nil, emptyColor: UIColor? = nil, drawPlaceholderWhenEmpty: Bool = true, attemptSynchronously: Bool = false, aspectFit: Bool = false) -> Signal<(TransformImageArguments) -> DrawingContext?, NoError> {
+    return nextgramPlayerArtwork(engine: engine, fileReference: fileReference, albumArt: albumArt, thumbnail: thumbnail, attemptSynchronously: attemptSynchronously, embeddedArtSize: 320.0)
+    |> map { sourceImage in
         return { arguments in
             guard let context = DrawingContext(size: arguments.drawingSize, clear: true) else {
                 return nil
             }
-            
-            var sourceImage: UIImage?
-            if let fileArtworkData = fileArtworkData, let image = UIImage(data: fileArtworkData) {
-                sourceImage = image
-            } else if remoteFullSizeComplete, let fullSizeData = remoteFullSizeData, let image = UIImage(data: fullSizeData) {
-                sourceImage = image
-            } else if let thumbnailData = remoteThumbnailData, let image = UIImage(data: thumbnailData) {
-                sourceImage = image
-            }
-            
             if let sourceImage = sourceImage, let cgImage = sourceImage.cgImage {
                 // MARK: NEXTGRAM — Existing callers retain the cropped fill layout by default.
                 let imageSize = aspectFit ? sourceImage.size.aspectFitted(arguments.drawingRect.size) : sourceImage.size.aspectFilled(arguments.drawingRect.size)

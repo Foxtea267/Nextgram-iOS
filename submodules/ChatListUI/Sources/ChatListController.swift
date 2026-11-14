@@ -172,6 +172,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     public var interceptPeerSelection: ((EnginePeer.Id, Int64?, EngineMessage.Id?) -> Bool)?
     /// Hosted by the chat side list: compact inline rows, an "All Messages" row, a rounded highlight.
     public let isSideList: Bool
+    private weak var nextgramChatSidebar: NextgramChatSidebar? // MARK: NEXTGRAM
     /// Set by the chat side list: its header's More button opens the menu of the chat it lists (`sourceView` is where
     /// the menu grows from).
     public var sideListMoreAction: ((UIView, ContextGesture?) -> Void)?
@@ -438,12 +439,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         self.tabBarItem.animationOffset = CGPoint(x: 0.0, y: UIScreenPixel)
                     }
                     
-                    self.primaryContext?.leftButton = NavigationBarComponent.Button(id: "edit",
-                        content: .text(title: self.presentationData.strings.Common_Edit, isBold: false),
-                        action: { [weak self] _ in
-                            self?.editPressed()
-                        }
-                    )
+                    self.primaryContext?.leftButton = self.nextgramSidebarButton() // MARK: NEXTGRAM
                     
                     self.primaryContext?.rightButton = NavigationBarComponent.Button(id: "compose",
                         content: .icon(imageName: "Chat List/ComposeIcon"),
@@ -3029,6 +3025,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     override public func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
+        self.nextgramChatSidebar?.close(animated: false) // MARK: NEXTGRAM
         // MARK: NEXTGRAM
         self.context.sharedContext.mainWindow?.setScreenshotBadgePage(.other)
 
@@ -3801,6 +3798,49 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
         if let rootController = self.context.sharedContext.mainWindow?.viewController as? TelegramRootControllerInterface, let settingsController = rootController.getSettingsController() {
             (self.navigationController as? NavigationController)?.pushViewController(settingsController)
         }
+    }
+
+    // MARK: NEXTGRAM
+    fileprivate func nextgramSidebarButton() -> NavigationBarComponent.Button? {
+        guard !NagramSettings.shared.hideChatListEditButton else { return nil }
+        if self.isSideList {
+            return NavigationBarComponent.Button(id: "edit", content: .text(title: self.presentationData.strings.Common_Edit, isBold: false),
+                action: { [weak self] _ in self?.editPressed() })
+        }
+        return NavigationBarComponent.Button(id: "nextgramSidebar",
+            content: .icon(imageName: "Chat/Title Panels/SidebarIcon"),
+            staysInRow: true,
+            action: { [weak self] _ in self?.openNextgramChatSidebar() },
+            accessibilityLabel: ngI18n("Nagram.ChatSidebar.Open", self.presentationData.strings.baseLanguageCode)
+        )
+    }
+
+    private func openNextgramChatSidebar() {
+        guard self.nextgramChatSidebar == nil else { return }
+        let strings = self.presentationData.strings
+        let root = self.context.sharedContext.mainWindow?.viewController as? TelegramRootControllerInterface
+        var actions: [(title: String, icon: String, action: () -> Void)] = [
+            (ngI18n("Nagram.ChatSidebar.EditChats", strings.baseLanguageCode), "checklist", { [weak self] in self?.editPressed() })
+        ]
+        if !NagramSettings.shared.bottomBarSettings.visibleNavigationItems.contains(.feed) {
+            actions.append((ngI18n("Nagram.ChannelFeed", strings.baseLanguageCode), "rectangle.stack", { [weak self] in
+                guard let self else { return }
+                self.push(nextgramChannelFeedController(context: self.context))
+            }))
+        }
+        if let settings = root?.getSettingsController() {
+            actions.append((strings.Settings_Title, "gearshape", { [weak self, weak settings] in
+                guard let self, let settings else { return }
+                if let tabs = self.parent as? TabBarController, let index = tabs.controllers.firstIndex(where: { $0 === settings }) {
+                    tabs.selectedIndex = index
+                } else {
+                    self.settingsPressed()
+                }
+            }))
+        }
+        let sidebar = NextgramChatSidebar(theme: self.presentationData.theme, title: "Nextgram", closeTitle: strings.Common_Close, actions: actions)
+        self.nextgramChatSidebar = sidebar
+        sidebar.open(in: self.navigationController?.view ?? self.view)
     }
 
     @objc func editPressed() {
@@ -7790,15 +7830,8 @@ private final class ChatListLocationContext {
                                 self?.parentController?.donePressed()
                             }
                         )
-                    } else if NagramSettings.shared.hideChatListEditButton { // MARK: NAGRAM
-                        self.leftButton = nil
                     } else {
-                        self.leftButton = NavigationBarComponent.Button(id: "edit",
-                            content: .text(title: presentationData.strings.Common_Edit, isBold: false),
-                            action: { [weak self] _ in
-                                self?.parentController?.editPressed()
-                            }
-                        )
+                        self.leftButton = self.parentController?.nextgramSidebarButton() // MARK: NEXTGRAM
                     }
                 }
                 

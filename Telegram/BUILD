@@ -1842,7 +1842,8 @@ plist_fragment(
     <key>NSMicrophoneUsageDescription</key>
     <string>We need this so that you can record and share voice messages and videos with sound.</string>
     <key>NSMotionUsageDescription</key>
-    <string>Nextgram uses motion access only when needed to improve location sharing.</string>
+    <!-- MARK: NEXTGRAM — Optional local artwork parallax. Motion data is never stored or sent. -->
+    <string>Nextgram uses motion for location sharing and, when enabled, interactive music artwork. Artwork motion stays on your device.</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
     <string>We need this so that you can share photos and videos from your photo library.</string>
     <key>NSPhotoLibraryUsageDescription</key>

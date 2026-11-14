@@ -5,7 +5,10 @@ objc_library(
     name = "NextgramUpdateArchive",
     module_name = "NextgramUpdateArchive",
     enable_modules = True,
-    srcs = ["UpdateArchive.m"],
+    srcs = [
+        "UpdateArchive.m",
+        "//third-party/ZipArchive:nextgram_minizip_headers",
+    ],
     hdrs = ["UpdateArchive.h"],
     sdk_frameworks = ["Foundation"],
     deps = ["//third-party/ZipArchive:ZipArchive"],
@@ -14,7 +17,7 @@ objc_library(
 swift_library(
     name = "NextgramUpdate",
     module_name = "NextgramUpdate",
-    srcs = ["Release.swift", "ReleaseDownload.swift", "SigningFiles.swift", "InstallManifest.swift", "LoopbackPackageServer.swift"],
+    srcs = ["Release.swift", "ReleaseDownload.swift", "SigningFiles.swift", "SigningImport.swift", "InstallManifest.swift", "LoopbackPackageServer.swift"],
     copts = ["-warnings-as-errors"],
     deps = [":NextgramUpdateArchive", "//Nagram/UpdateSigner:NextgramUpdateSigner"],
     visibility = ["//Nagram/SettingsUI:__pkg__"],

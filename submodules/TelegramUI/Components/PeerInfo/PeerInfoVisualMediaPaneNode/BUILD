@@ -10,6 +10,8 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        "//Nagram/Settings:NagramSettings", # MARK: NEXTGRAM — Shared spoiler preference.
+        "//Nagram/SettingsSignal:NagramSettingsSignal", # MARK: NEXTGRAM
         "//submodules/SSignalKit/SwiftSignalKit",
         "//submodules/AsyncDisplayKit",
         "//submodules/TelegramCore",

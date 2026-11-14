@@ -163,6 +163,9 @@ extension PeerInfoScreenNode {
         // MARK: NEXTGRAM
         case .nextgramBookmarks:
             push(nextgramMessageBookmarksController(context: self.context))
+        // MARK: NEXTGRAM
+        case .nextgramChannelFeed:
+            push(nextgramChannelFeedController(context: self.context))
         // MARK: NAGRAM — Debug fallback when the bottom tab bar is hidden.
         case .nagramDebug:
             if let controller = self.context.sharedContext.makeDebugSettingsController(context: self.context) {

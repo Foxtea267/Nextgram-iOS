@@ -15,6 +15,8 @@ import AlertComponent
 import WalletContext
 import WalletSendScreen
 import NagramSettingsUI // MARK: NAGRAM
+import NagramSettings // MARK: NEXTGRAM
+import NagramStrings // MARK: NEXTGRAM
 
 extension PeerInfoScreenNode {
     func performButtonAction(key: PeerInfoHeaderButtonKey, buttonNode: PeerInfoHeaderButtonNode?, gesture: ContextGesture?) {
@@ -462,6 +464,37 @@ extension PeerInfoScreenNode {
                     })))
                 }
                 
+                // MARK: NEXTGRAM — make the per-group restore list available from group information.
+                let isGroup: Bool
+                switch chatPeer {
+                case .legacyGroup:
+                    isGroup = true
+                case let .channel(channel):
+                    if case .group = channel.info { isGroup = true } else { isGroup = false }
+                default:
+                    isGroup = false
+                }
+                // MARK: NEXTGRAM — Selected-member alerts are scoped to this account and group.
+                if isGroup, !NextgramMemberNotifications.members(accountId: strongSelf.context.account.peerId.toInt64(), chatId: chatPeer.id.toInt64()).isEmpty {
+                    items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.MemberNotifications.Manage", presentationData.strings.baseLanguageCode), icon: { theme in
+                        generateTintedImage(image: UIImage(systemName: "bell.badge"), color: theme.contextMenu.primaryColor)
+                    }, action: { [weak self] _, dismiss in
+                        dismiss(.dismissWithoutContent)
+                        guard let self else { return }
+                        self.controller?.push(nextgramMemberNotificationsController(context: self.context, chatId: chatPeer.id.toInt64()))
+                    })))
+                }
+                if isGroup, !NextgramGroupMemberFilter.hiddenMembers(accountId: strongSelf.context.account.peerId.toInt64(),
+                    chatId: chatPeer.id.toInt64()).isEmpty {
+                    items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.GroupMemberFilter.Manage", presentationData.strings.baseLanguageCode), icon: { theme in
+                        generateTintedImage(image: UIImage(systemName: "person.crop.circle.badge.minus"), color: theme.contextMenu.primaryColor)
+                    }, action: { [weak self] _, dismiss in
+                        dismiss(.dismissWithoutContent)
+                        guard let self else { return }
+                        self.controller?.push(nextgramHiddenGroupMembersController(context: self.context, chatId: chatPeer.id.toInt64()))
+                    })))
+                }
+
                 if case let .secretChat(secretChat) = chatPeer {
                     currentAutoremoveTimeout = secretChat.messageAutoremoveTimeout
                     canSetupAutoremoveTimeout = false

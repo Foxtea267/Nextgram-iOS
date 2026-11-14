@@ -1,6 +1,8 @@
 import Foundation
 import UIKit
 import Display
+// MARK: NEXTGRAM
+import NextgramTypography
 import TelegramCore
 import TelegramUIPreferences
 
@@ -57,19 +59,28 @@ public final class ChatPresentationData {
         self.isPreview = isPreview
         
         let baseFontSize = fontSize.baseDisplaySize
-        self.messageFont = Font.regular(baseFontSize)
-        self.messageEmojiFont = Font.regular(53.0)
-        self.messageBoldFont = Font.bold(baseFontSize)
-        self.messageItalicFont = Font.italic(baseFontSize)
-        self.messageBoldItalicFont = Font.semiboldItalic(baseFontSize)
+        // MARK: NEXTGRAM — Interface typography must not leak into independently configured message text or emoji.
+        self.messageFont = NextgramTypography.shared.font(message: true, size: baseFontSize) ?? UIFont.systemFont(ofSize: baseFontSize)
+        self.messageEmojiFont = UIFont.systemFont(ofSize: 53.0)
+        self.messageBoldFont = NextgramTypography.shared.font(message: true, size: baseFontSize, weight: .bold) ?? UIFont.boldSystemFont(ofSize: baseFontSize)
+        self.messageItalicFont = NextgramTypography.shared.font(message: true, size: baseFontSize, italic: true) ?? UIFont.italicSystemFont(ofSize: baseFontSize)
+        self.messageBoldItalicFont = NextgramTypography.shared.font(message: true, size: baseFontSize, weight: .semibold, italic: true) ?? UIFont(descriptor: UIFont.systemFont(ofSize: baseFontSize).fontDescriptor.withSymbolicTraits([.traitBold, .traitItalic]) ?? UIFont.systemFont(ofSize: baseFontSize).fontDescriptor, size: baseFontSize)
         self.messageFixedFont = Font.monospace(baseFontSize)
-        self.messageBlockQuoteFont = Font.regular(baseFontSize - 1.0)
+        // MARK: NEXTGRAM
+        self.messageBlockQuoteFont = NextgramTypography.shared.font(message: true, size: baseFontSize - 1.0) ?? UIFont.systemFont(ofSize: baseFontSize - 1.0)
         self.messageTextFonts = ChatPresentationData.messageTextFonts(serif: chatBubbleCorners.serifMessageText, baseFontSize: baseFontSize)
 
         self.animatedEmojiScale = animatedEmojiScale
     }
 
     public static func messageTextFonts(serif: Bool, baseFontSize: CGFloat) -> ChatMessageTextFonts? {
+        // MARK: NEXTGRAM — Explicit custom message selection takes precedence over the built-in New York option.
+        if let regular = NextgramTypography.shared.font(message: true, size: baseFontSize) {
+            return ChatMessageTextFonts(regular: regular,
+                bold: NextgramTypography.shared.font(message: true, size: baseFontSize, weight: .bold) ?? regular,
+                italic: NextgramTypography.shared.font(message: true, size: baseFontSize, italic: true) ?? regular,
+                boldItalic: NextgramTypography.shared.font(message: true, size: baseFontSize, weight: .semibold, italic: true) ?? regular)
+        }
         if !serif {
             return nil
         }

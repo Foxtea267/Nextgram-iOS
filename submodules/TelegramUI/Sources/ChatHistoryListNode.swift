@@ -1982,8 +1982,8 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         } else {
             hiddenGroupMembers = .single("")
         }
-        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), self.musicPlaylistSearchQuery ?? .single(""), nagramBoolSignal("nagram.deletedMessageSemiTransparent", defaultValue: false), customTranscriptionEnabled, hiddenGroupMembers)
-        |> map { update, _, query, _, _, _ in
+        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), self.musicPlaylistSearchQuery ?? .single(""), customTranscriptionEnabled, hiddenGroupMembers) // MARK: NEXTGRAM
+        |> map { update, _, query, _, _ in
             let _ = currentMusicPlaylistSearchQuery.swap(query)
             return update
         }
@@ -2697,11 +2697,13 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         }
         
         var didSetPresentationData = false
+        var previousDeletedAppearance: NextgramDeletedMessageAppearance? // MARK: NEXTGRAM
         self.presentationDataDisposable = (combineLatest(queue: .mainQueue(),
             updated |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_beginPresentationDataManagement_updated"),
-            appConfiguration |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_beginPresentationDataManagement_appConfiguration")
+            appConfiguration |> debug_measureTimeToFirstEvent(label: "chatHistoryNode_beginPresentationDataManagement_appConfiguration"),
+            nextgramDeletedMessageAppearanceSignal() // MARK: NEXTGRAM
         )
-        |> deliverOnMainQueue).startStrict(next: { [weak self] presentationData, appConfiguration in
+        |> deliverOnMainQueue).startStrict(next: { [weak self] presentationData, appConfiguration, deletedAppearance in // MARK: NEXTGRAM
             if let strongSelf = self {
                 let previousTheme = strongSelf.currentPresentationData.theme
                 let previousStrings = strongSelf.currentPresentationData.strings
@@ -2710,8 +2712,9 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 
                 let animatedEmojiConfig = ChatHistoryAnimatedEmojiConfiguration.with(appConfiguration: appConfiguration)
                 
-                if !didSetPresentationData || previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousWallpaper != presentationData.chatWallpaper || previousAnimatedEmojiScale != animatedEmojiConfig.scale {
+                if !didSetPresentationData || previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousWallpaper != presentationData.chatWallpaper || previousAnimatedEmojiScale != animatedEmojiConfig.scale || previousDeletedAppearance != deletedAppearance { // MARK: NEXTGRAM
                     didSetPresentationData = true
+                    previousDeletedAppearance = deletedAppearance // MARK: NEXTGRAM
                     
                     let themeData = ChatPresentationThemeData(theme: presentationData.theme, wallpaper: presentationData.chatWallpaper)
                     let chatPresentationData = ChatPresentationData(theme: themeData, fontSize: presentationData.chatFontSize, strings: presentationData.strings, dateTimeFormat: presentationData.dateTimeFormat, nameDisplayOrder: presentationData.nameDisplayOrder, disableAnimations: true, largeEmoji: presentationData.largeEmoji, chatBubbleCorners: presentationData.chatBubbleCorners, animatedEmojiScale: animatedEmojiConfig.scale)
@@ -4177,6 +4180,10 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
             return readIndex
         }
         let peerId = self.chatLocation.peerId?.toInt64()
+        // MARK: NEXTGRAM — Revealed messages have real rows and must be read by visibility, not skipped.
+        if let peerId, NextgramTemporaryFilterReveal.shared.isActive(accountId: self.context.account.peerId.toInt64(), chatId: peerId) {
+            return readIndex
+        }
         let incomingMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId, isOutgoing: false)
         let outgoingMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId, isOutgoing: true)
         if incomingMatcher == nil && outgoingMatcher == nil {

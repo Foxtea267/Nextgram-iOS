@@ -90,6 +90,8 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     private var nextgramMusicPlayerEnabled = false
     private var nextgramShowsQueue = false
     private var nextgramIsDismissing = false
+    private let nextgramQueueBackdrop = UIControl()
+    private var nextgramQueueTransition: UIViewPropertyAnimator?
     private let replacementHistoryNodeReadyDisposable = MetaDisposable()
     
     private let getParentController: () -> ViewController?
@@ -438,7 +440,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                     
                 } else {
                     if value <= -10.0 {
-                        self.requestDismiss()
+                        self.nextgramCloseQueueOrPlayer() // MARK: NEXTGRAM
                     }
                 }
             default:
@@ -470,7 +472,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         }
         
         self.controlsNode.requestCollapse = { [weak self] in
-            self?.requestDismiss()
+            self?.nextgramCloseQueueOrPlayer() // MARK: NEXTGRAM
         }
         
         self.controlsNode.requestShare = { [weak self] subject in
@@ -657,6 +659,11 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.nextgramNowPlayingButton.addTarget(self, action: #selector(self.nextgramShowNowPlaying), for: .touchUpInside)
         self.nextgramNowPlayingButton.isHidden = true
         self.historyFrameNode.view.addSubview(self.nextgramNowPlayingButton)
+        // MARK: NEXTGRAM — The queue is an independent sheet above Now Playing, not a replacement page.
+        self.nextgramQueueBackdrop.backgroundColor = UIColor.black.withAlphaComponent(0.35)
+        self.nextgramQueueBackdrop.addTarget(self, action: #selector(self.nextgramShowNowPlaying), for: .touchUpInside)
+        self.nextgramQueueBackdrop.isHidden = true
+        self.view.addSubview(self.nextgramQueueBackdrop)
         self.updateNextgramNowPlayingAppearance()
         if self.supportsPlaylistSearch {
             self.nextgramPlayerStyleDisposable = (nagramBoolSignal("nagram.musicPlayerModernUI", defaultValue: false)
@@ -688,7 +695,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 return false
             }
             // MARK: NEXTGRAM — The full-screen player's sliders and lyrics own their gestures.
-            if self.isNextgramMusicPlayerVisible {
+            if self.isNextgramMusicPlayerVisible || self.nextgramQueueTransition != nil { // MARK: NEXTGRAM
                 return false
             }
             if self.supportsPlaylistSearch && self.playlistSearchBar.bounds.contains(self.view.convert(point, to: self.playlistSearchBar)) {
@@ -794,7 +801,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             guard let self else {
                 return
             }
-            self.requestDismiss()
+            self.nextgramCloseQueueOrPlayer() // MARK: NEXTGRAM
         }
     }
 
@@ -1078,15 +1085,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 self?.requestDismiss()
             }
             playerView.showQueue = { [weak self] in
-                guard let self else {
-                    return
-                }
-                self.nextgramShowsQueue = true
-                self.nextgramMusicPlayerView?.setActive(false)
-                self.nextgramMusicPlayerView?.isHidden = true
-                if let layout = self.validLayout {
-                    self.containerLayoutUpdated(layout, transition: .immediate)
-                }
+                self?.nextgramSetQueueVisible(true)
             }
             playerView.openSettings = { [weak self] in
                 guard let self else {
@@ -1106,6 +1105,14 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             self.nextgramMusicPlayerView = playerView
             self.view.addSubview(playerView)
         } else {
+            self.nextgramQueueTransition?.stopAnimation(true)
+            self.nextgramQueueTransition = nil
+            self.nextgramQueueBackdrop.isHidden = true
+            self.containerContainingNode.view.isHidden = false
+            self.containerContainingNode.view.accessibilityViewIsModal = false // MARK: NEXTGRAM
+            self.contentNode.view.transform = .identity
+            self.contentNode.view.isHidden = false
+            self.contentNode.view.alpha = 1
             self.nextgramMusicPlayerView?.setActive(false)
             self.nextgramMusicPlayerView?.removeFromSuperview()
             self.nextgramMusicPlayerView = nil
@@ -1120,12 +1127,60 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         guard self.nextgramMusicPlayerEnabled else {
             return
         }
+        self.nextgramSetQueueVisible(false)
+    }
+
+    // MARK: NEXTGRAM — Queue dismissal never dismisses the underlying player.
+    private func nextgramCloseQueueOrPlayer() {
+        if self.nextgramMusicPlayerEnabled && self.nextgramQueueTransition != nil { return }
+        if self.nextgramMusicPlayerEnabled && self.nextgramShowsQueue { self.nextgramSetQueueVisible(false) }
+        else { self.requestDismiss() }
+    }
+
+    private func nextgramSetQueueVisible(_ visible: Bool) {
+        guard self.nextgramMusicPlayerEnabled, !self.nextgramIsDismissing,
+              self.nextgramShowsQueue != visible, self.nextgramQueueTransition == nil,
+              let layout = self.validLayout else { return }
         self.view.endEditing(true)
-        self.nextgramShowsQueue = false
         self.currentAlbumArt = nil
-        if let layout = self.validLayout {
-            self.containerLayoutUpdated(layout, transition: .immediate)
+        self.nextgramShowsQueue = visible
+        self.contentNode.view.transform = .identity
+        self.containerLayoutUpdated(layout, transition: .immediate)
+        let sheet = self.contentNode.view
+        self.containerContainingNode.view.isHidden = false
+        sheet.isHidden = false
+        self.nextgramQueueBackdrop.isHidden = false
+        self.containerContainingNode.view.accessibilityViewIsModal = true // MARK: NEXTGRAM
+        let reducedMotion = UIAccessibility.isReduceMotionEnabled
+        if visible {
+            sheet.transform = reducedMotion ? .identity : CGAffineTransform(translationX: 0, y: layout.size.height)
+            sheet.alpha = reducedMotion ? 0 : 1
+            self.nextgramQueueBackdrop.alpha = 0
+            UIAccessibility.post(notification: .screenChanged, argument: self.nextgramNowPlayingButton)
         }
+        let animator = UIViewPropertyAnimator(duration: reducedMotion ? 0.18 : 0.38, dampingRatio: 1) {
+            sheet.transform = visible || reducedMotion ? .identity : CGAffineTransform(translationX: 0, y: layout.size.height)
+            sheet.alpha = !visible && reducedMotion ? 0 : 1
+            self.nextgramQueueBackdrop.alpha = visible ? 1 : 0
+        }
+        self.nextgramQueueTransition = animator
+        animator.addCompletion { [weak self] _ in
+            guard let self else { return }
+            self.nextgramQueueTransition = nil
+            sheet.isHidden = !self.nextgramShowsQueue
+            self.containerContainingNode.view.isHidden = !self.nextgramShowsQueue
+            sheet.transform = .identity
+            sheet.alpha = 1
+            self.nextgramQueueBackdrop.isHidden = !self.nextgramShowsQueue
+            self.containerContainingNode.view.accessibilityViewIsModal = self.nextgramShowsQueue
+            if !self.nextgramShowsQueue {
+                var bounds = self.contentNode.bounds
+                bounds.origin.y = 0
+                self.contentNode.bounds = bounds
+            }
+            if !self.nextgramShowsQueue { UIAccessibility.post(notification: .screenChanged, argument: self.nextgramMusicPlayerView) }
+        }
+        animator.startAnimation()
     }
 
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
@@ -1211,7 +1266,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                         guard let self else {
                             return
                         }
-                        self.requestDismiss()
+                        self.nextgramCloseQueueOrPlayer() // MARK: NEXTGRAM
                     }
                 )
             ]
@@ -1374,10 +1429,14 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             playerInsets.top = max(playerInsets.top, layout.statusBarHeight ?? 0.0)
             playerInsets.bottom = max(playerInsets.bottom, layout.intrinsicInsets.bottom)
             playerView.updateLayout(size: layout.size, safeInsets: playerInsets)
-            playerView.isHidden = !self.isNextgramMusicPlayerVisible
+            playerView.isHidden = !self.nextgramMusicPlayerEnabled
             playerView.setActive(self.isNextgramMusicPlayerVisible && !self.nextgramIsDismissing)
-            if self.isNextgramMusicPlayerVisible {
+            self.nextgramQueueBackdrop.frame = CGRect(origin: .zero, size: layout.size)
+            self.containerContainingNode.view.isHidden = !self.nextgramShowsQueue && self.nextgramQueueTransition == nil
+            if self.nextgramMusicPlayerEnabled {
                 self.view.bringSubviewToFront(playerView)
+                self.view.bringSubviewToFront(self.nextgramQueueBackdrop)
+                self.view.bringSubviewToFront(self.containerContainingNode.view)
             }
         }
 
@@ -1397,6 +1456,8 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     func animateOut(completion: (() -> Void)?) {
         // MARK: NEXTGRAM — Stop lyric clocks and metadata requests while dismissing.
         self.nextgramIsDismissing = true
+        self.nextgramQueueTransition?.stopAnimation(true)
+        self.nextgramQueueTransition = nil
         self.nextgramMusicPlayerView?.setActive(false)
         self.dismissAllTooltips()
         
@@ -1412,11 +1473,17 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         if !self.bounds.contains(point) {
             return nil
         }
+        // MARK: NEXTGRAM — Do not let a tap pass through a closing sheet and dismiss the player beneath it.
+        if self.nextgramMusicPlayerEnabled && self.nextgramQueueTransition != nil {
+            return self.nextgramQueueBackdrop
+        }
         // MARK: NEXTGRAM — Do not replace full-screen player touches with the legacy dim node.
         if self.isNextgramMusicPlayerVisible {
             return result
         }
         if self.albumArtBackground.superview == nil &&  point.y < self.historyFrameNode.frame.minY {
+            // MARK: NEXTGRAM — Dismiss only the sheet when tapping above it.
+            if self.nextgramMusicPlayerEnabled && self.nextgramShowsQueue { return self.nextgramQueueBackdrop }
             return self.dimNode.view
         }
         return result
@@ -1424,7 +1491,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     
     @objc func dimTapGesture(_ recognizer: UITapGestureRecognizer) {
         if case .ended = recognizer.state {
-            self.requestDismiss()
+            self.nextgramCloseQueueOrPlayer() // MARK: NEXTGRAM
         }
     }
     
@@ -1485,7 +1552,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 let velocity = recognizer.velocity(in: self.contentNode.view)
                 
                 if (bounds.minY < -60.0 || velocity.y > 300.0) {
-                    self.requestDismiss()
+                    self.nextgramCloseQueueOrPlayer() // MARK: NEXTGRAM
                 } else {
                     let previousBounds = self.bounds
                     var bounds = self.bounds
@@ -1688,7 +1755,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
 
                     } else {
                         if value <= -10.0 {
-                            strongSelf.requestDismiss()
+                            strongSelf.nextgramCloseQueueOrPlayer() // MARK: NEXTGRAM
                         }
                     }
                 default:

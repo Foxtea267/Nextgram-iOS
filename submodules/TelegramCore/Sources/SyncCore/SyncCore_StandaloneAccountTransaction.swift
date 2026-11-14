@@ -1,6 +1,7 @@
 import Foundation
 import SwiftSignalKit
 import Postbox
+import NagramMessageHistory // MARK: NEXTGRAM
 
 public let telegramPostboxSeedConfiguration: SeedConfiguration = {
     var messageHoles: [PeerId.Namespace: [MessageId.Namespace: Set<MessageTags>]] = [:]
@@ -123,6 +124,8 @@ public let telegramPostboxSeedConfiguration: SeedConfiguration = {
             if previous.isEmpty {
                 return
             }
+            // MARK: NEXTGRAM — Server refreshes must not erase account-local history or deletion markers.
+            updated = nagramPreservingMessageHistory(previous: previous, updated: updated)
             var audioTranscription: AudioTranscriptionMessageAttribute?
             for attribute in previous {
                 if let attribute = attribute as? AudioTranscriptionMessageAttribute {

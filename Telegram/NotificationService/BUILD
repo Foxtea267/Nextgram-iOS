@@ -9,7 +9,8 @@ swift_library(
         "Sources/*.swift",
     ]),
     deps = [
-        "//Nagram/Settings:NagramSettings", # MARK: NAGRAM — 后台通知复用消息屏蔽规则。
+        "//Nagram/Settings:NagramSettings", # MARK: NEXTGRAM — Shared notification filtering settings.
+        "//Nagram/NotificationPolicy:NextgramNotificationPolicy", # MARK: NEXTGRAM
         "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/BuildConfig:BuildConfig",

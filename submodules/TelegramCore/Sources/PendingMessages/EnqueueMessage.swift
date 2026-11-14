@@ -3,6 +3,7 @@ import Postbox
 internal import TelegramApi
 import SwiftSignalKit
 import Emoji
+import NagramMessageHistory // MARK: NEXTGRAM
 
 public enum EnqueueMessageGrouping {
     case none
@@ -933,7 +934,16 @@ func enqueueMessages(transaction: Transaction, account: Account, peerId: PeerId,
     var localGroupingKeyBySourceKey: [Int64: Int64] = [:]
     
     var updatedMessages: [(Bool, EnqueueMessage)] = []
-    outer: for (transformedMedia, message) in messages {
+    outer: for (transformedMedia, originalMessage) in messages {
+        // MARK: NEXTGRAM — If a reply was already queued in the composer when the target was deleted,
+        // keep the outgoing text/media, but omit the invalid reply and its quote.
+        let message: EnqueueMessage
+        if case let .message(_, _, _, _, _, reply, _, _, _, _) = originalMessage,
+           let reply, transaction.getMessage(reply.messageId)?.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) == true {
+            message = originalMessage.withUpdatedReplyToMessageId(nil)
+        } else {
+            message = originalMessage
+        }
         var updatedMessage = message
         if transformGroupingKeysWithPeerId {
             updatedMessage = updatedMessage.withUpdatedGroupingKey { groupingKey -> Int64? in

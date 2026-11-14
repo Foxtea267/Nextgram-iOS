@@ -1,6 +1,6 @@
 # Regram 功能对照
 
-以 [Regram 的功能清单](https://github.com/RegramDev/Regram-ios/blob/67c4050ea0c33d1c12e0e89a1e20bc36c839d35d/docs/features.md) 为参考。这里记录 Nextgram 的实现范围与待补功能。
+此页保留早期迁移记录。当前实现范围、待补功能与验证状态统一维护在 [Regram 功能对照](regram-port.md)，下表不代表最新状态。
 
 | 范围 | Nextgram 已有 | 还需补齐或对照验证 |
 | --- | --- | --- |

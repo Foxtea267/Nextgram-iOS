@@ -10,11 +10,14 @@ import UIKit
 import UndoUI
 
 private struct NextgramServerTestState: Equatable {
-    var running = true
+    var running = false
     var accountLatency: Int?
     var accountCompleted = false
     var samples: [Int: [Int?]] = [:]
     var completed: Set<Int> = []
+    var dnsResults: [String: NextgramDNSDiagnosticResult] = [:]
+    var dnsFinished: Set<String> = []
+    var dnsCompleted: Bool { self.dnsFinished.count == 4 }
 }
 
 private enum NextgramServerTestEntry: ItemListNodeEntry {
@@ -55,21 +58,43 @@ func nextgramServerTestController(context: AccountContext) -> ViewController {
     var snapshot = NextgramServerTestState()
     let disposable = MetaDisposable()
     var generation = UUID()
+    var currentRoute: String?
     var reportCopied: (() -> Void)?
     let publish = { result.set(snapshot) }
+    let cancel: () -> Void = {
+        generation = UUID()
+        disposable.set(nil)
+        snapshot.running = false
+        publish()
+    }
+    let backgroundObserver = NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { _ in cancel() }
     let run: () -> Void = {
         let id = UUID()
         generation = id
         snapshot = NextgramServerTestState()
+        snapshot.running = true
         publish()
         let batch = DisposableSet()
         disposable.set(batch)
+        for (provider, endpoint) in [("Cloudflare", "https://cloudflare-dns.com/dns-query"), ("Google", "https://dns.google/resolve")] {
+            for (type, label) in [(1, "A"), (28, "AAAA")] {
+                let name = provider + " · " + label
+                let task = NextgramDNSDiagnosticQuery(provider: endpoint, recordType: type) { value in
+                    guard generation == id else { return }
+                    snapshot.dnsResults[name] = value
+                    snapshot.dnsFinished.insert(name)
+                    snapshot.running = !snapshot.accountCompleted || snapshot.completed.count < 5 || !snapshot.dnsCompleted
+                    publish()
+                }
+                batch.add(ActionDisposable { task.cancel() })
+            }
+        }
         batch.add((network.nextgramConnectionLatency()
         |> deliverOnMainQueue).start(next: { value in
             guard generation == id else { return }
             snapshot.accountLatency = value
             snapshot.accountCompleted = true
-            snapshot.running = snapshot.completed.count < 5
+            snapshot.running = snapshot.completed.count < 5 || !snapshot.dnsCompleted
             publish()
         }))
         for dc in 1...5 {
@@ -81,7 +106,7 @@ func nextgramServerTestController(context: AccountContext) -> ViewController {
             }, completed: {
                 guard generation == id else { return }
                 snapshot.completed.insert(dc)
-                snapshot.running = !snapshot.accountCompleted || snapshot.completed.count < 5
+                snapshot.running = !snapshot.accountCompleted || snapshot.completed.count < 5 || !snapshot.dnsCompleted
                 publish()
             }))
         }
@@ -90,19 +115,17 @@ func nextgramServerTestController(context: AccountContext) -> ViewController {
         switch actionId {
         case 70:
             if snapshot.running {
-                generation = UUID()
-                disposable.set(nil)
-                snapshot.running = false
-                publish()
+                cancel()
             } else {
                 run()
             }
         case 71:
-            UIPasteboard.general.string = (1...5).map { dc in
+            let report = (1...5).map { dc in
                 let samples = snapshot.samples[dc, default: []].dropFirst().compactMap { $0 }
                 let average = samples.isEmpty ? "—" : "\(samples.reduce(0, +) / samples.count) ms"
                 return "DC \(dc): \(average)"
-            }.joined(separator: "\n")
+            }
+            UIPasteboard.general.string = report.joined(separator: "\n")
             reportCopied?()
         default:
             break
@@ -121,6 +144,14 @@ func nextgramServerTestController(context: AccountContext) -> ViewController {
             route = string("Connecting")
         case let .online(proxyAddress):
             route = string(proxyAddress == nil ? "Direct" : "Proxy")
+        }
+        // A proxy switch invalidates comparisons with the previous network route.
+        if case let .online(proxyAddress) = connection {
+            let routeIdentity = proxyAddress ?? "direct"
+            if let previous = currentRoute, previous != routeIdentity, result.running {
+                Queue.mainQueue().async { cancel() }
+            }
+            currentRoute = routeIdentity
         }
         var entries: [NextgramServerTestEntry] = [
             .value(0, string("Datacenter"), "DC \(network.datacenterId)"),
@@ -158,20 +189,35 @@ func nextgramServerTestController(context: AccountContext) -> ViewController {
             entries.append(.value(id + 4, string("Spread"), milliseconds(spread)))
             entries.append(.value(id + 5, string("Failures"), "\(values.filter { $0 == nil }.count)"))
         }
+        entries.append(.header(60, string("DNS")))
+        for (index, name) in ["Cloudflare · A", "Cloudflare · AAAA", "Google · A", "Google · AAAA"].enumerated() {
+            let value: String
+            if let answer = result.dnsResults[name] {
+                value = milliseconds(answer.milliseconds) + " · " + answer.addresses.joined(separator: ", ")
+            } else {
+                value = result.running && !result.dnsFinished.contains(name) ? string("Running") : "—"
+            }
+            entries.append(.value(Int32(61 + index), name, value))
+        }
         entries.append(.action(70, result.running ? data.strings.Common_Cancel : string("Retry")))
         if !result.running && !result.samples.isEmpty {
             entries.append(.action(71, string("CopyAverages")))
         }
         entries.append(.footer(72, string("DCExplanation")))
+        entries.append(.footer(73, string("DNSExplanation")))
         let presentation = ItemListPresentationData(data)
         return (
             ItemListControllerState(presentationData: presentation, title: .text(ngI18n("Nagram.TelegramLatency", lang)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: data.strings.Common_Back)),
             (ItemListNodeState(presentationData: presentation, entries: entries, style: .blocks, animateChanges: false), action)
         )
     }
-    |> afterDisposed { disposable.dispose() }
+    |> afterDisposed {
+        disposable.dispose()
+        NotificationCenter.default.removeObserver(backgroundObserver)
+    }
     let controller = ItemListController(context: context, state: state)
     controller.navigationPresentation = .default
+    controller.willDisappear = { _ in cancel() }
     reportCopied = { [weak controller] in
         let data = context.sharedContext.currentPresentationData.with { $0 }
         HapticFeedback().tap()
@@ -179,6 +225,5 @@ func nextgramServerTestController(context: AccountContext) -> ViewController {
             content: .linkCopied(title: nil, text: ngI18n("Nagram.TelegramLatency.Copied", data.strings.baseLanguageCode)),
             elevatedLayout: false, animateInAsReplacement: false, action: { _ in false }), in: .current)
     }
-    run()
     return controller
 }

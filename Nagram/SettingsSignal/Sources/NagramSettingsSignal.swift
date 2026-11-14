@@ -53,6 +53,19 @@ public func nagramSettingsRestoredSignal() -> Signal<Int32, NoError> {
     }
 }
 
+public func nextgramDeletedMessageAppearanceSignal() -> Signal<NextgramDeletedMessageAppearance, NoError> {
+    return Signal { subscriber in
+        let observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification,
+            object: NagramDemoMode.userDefaults, queue: .main) { _ in
+            Queue.mainQueue().async { subscriber.putNext(NextgramDeletedMessageAppearance()) }
+        }
+        subscriber.putNext(NextgramDeletedMessageAppearance())
+        return ActionDisposable { NotificationCenter.default.removeObserver(observer) }
+    }
+    |> distinctUntilChanged
+    |> deliverOnMainQueue
+}
+
 public func nagramMusicPlayerSettingsSignal() -> Signal<NagramMusicPlayerSettings, NoError> {
     return Signal { subscriber in
         let observer = NotificationCenter.default.addObserver(

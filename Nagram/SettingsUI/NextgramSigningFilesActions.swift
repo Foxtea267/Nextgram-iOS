@@ -11,6 +11,8 @@ final class NextgramSigningFilesActions: NSObject, UIDocumentPickerDelegate {
     struct Status: Equatable {
         var profileName: String?
         var expiration: Date?
+        var profileCount = 0
+        var hasCertificate = false
         var errorKey: String?
         var importing = false
     }
@@ -27,30 +29,44 @@ final class NextgramSigningFilesActions: NSObject, UIDocumentPickerDelegate {
         reload()
     }
 
-    func pick() {
+    func pick(profilesOnly: Bool = false) {
         guard !current.importing else {
             return
         }
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: false)
+        self.profilesOnly = profilesOnly
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
         picker.allowsMultipleSelection = true
         picker.delegate = self
         context.sharedContext.applicationBindings.presentNativeController(picker)
     }
 
+    private var profilesOnly = false
+
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        let certificates = urls.filter { ["p12", "pfx"].contains($0.pathExtension.lowercased()) }
-        let profiles = urls.filter { $0.pathExtension.lowercased() == "mobileprovision" }
-        guard certificates.count == 1, let certificate = certificates.first, urls.count <= 16,
-              urls.count == certificates.count + profiles.count else {
-            setError("Nagram.Update.Signing.Selection")
-            return
+        let profilesOnly = self.profilesOnly
+        current.errorKey = nil
+        current.importing = true
+        status.set(current)
+        let read: () -> Void = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                do {
+                    let files = try await Task.detached(priority: .userInitiated) { try NextgramSigningImport.read(urls) }.value
+                    if profilesOnly, files.certificate != nil { throw NextgramSigningFilesError.invalidFileSelection }
+                    if let certificate = files.certificate {
+                        self.requestPassword(certificate: certificate, name: files.certificateName ?? "", profiles: files.profiles)
+                    } else {
+                        self.importFiles(certificate: nil, password: "", profiles: files.profiles)
+                    }
+                } catch {
+                    self.setError("Nagram.Update.Signing.Selection")
+                }
+            }
         }
         if controller.presentingViewController != nil {
-            controller.dismiss(animated: true) { [weak self] in
-                self?.requestPassword(certificate: certificate, profiles: profiles)
-            }
+            controller.dismiss(animated: true, completion: read)
         } else {
-            requestPassword(certificate: certificate, profiles: profiles)
+            read()
         }
     }
 
@@ -77,17 +93,17 @@ final class NextgramSigningFilesActions: NSObject, UIDocumentPickerDelegate {
         context.sharedContext.applicationBindings.presentNativeController(alert)
     }
 
-    private func requestPassword(certificate: URL, profiles: [URL]) {
+    private func requestPassword(certificate: Data, name: String, profiles: [Data]) {
         let data = context.sharedContext.currentPresentationData.with { $0 }
         let lang = data.strings.baseLanguageCode
         let title = ngI18n("Nagram.Update.Signing.Password", lang)
-        let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
+        let alert = UIAlertController(title: title, message: name, preferredStyle: .alert)
         alert.addTextField { field in
             field.isSecureTextEntry = true
             field.autocorrectionType = .no
             field.autocapitalizationType = .none
         }
-        alert.addAction(UIAlertAction(title: data.strings.Common_Cancel, style: .cancel, handler: nil))
+        alert.addAction(UIAlertAction(title: data.strings.Common_Cancel, style: .cancel) { [weak self] _ in self?.reload() })
         alert.addAction(UIAlertAction(title: ngI18n("Nagram.Update.Signing.Save", lang), style: .default) { [weak self, weak alert] _ in
             let password = alert?.textFields?.first?.text ?? ""
             self?.importFiles(certificate: certificate, password: password, profiles: profiles)
@@ -95,7 +111,7 @@ final class NextgramSigningFilesActions: NSObject, UIDocumentPickerDelegate {
         context.sharedContext.applicationBindings.presentNativeController(alert)
     }
 
-    private func importFiles(certificate: URL, password: String, profiles: [URL]) {
+    private func importFiles(certificate: Data?, password: String, profiles: [Data]) {
         current.errorKey = nil
         current.importing = true
         status.set(current)
@@ -103,12 +119,15 @@ final class NextgramSigningFilesActions: NSObject, UIDocumentPickerDelegate {
         Task { @MainActor [weak self] in
             do {
                 try await Task.detached(priority: .userInitiated) {
-                    let files = try NextgramSigningFiles.validated(
-                        certificate: Self.read(certificate),
-                        password: password,
-                        profiles: profiles.map(Self.read),
-                        bundleIdentifier: bundleIdentifier
-                    )
+                    let files: NextgramSigningFiles
+                    if let certificate {
+                        files = try .validated(certificate: certificate, password: password, profiles: profiles, bundleIdentifier: bundleIdentifier)
+                    } else {
+                        guard let saved = try NextgramSigningFiles.saved(bundleIdentifier: bundleIdentifier) else {
+                            throw NextgramSigningFilesError.missingSigningFiles
+                        }
+                        files = try saved.addingProfiles(profiles, bundleIdentifier: bundleIdentifier)
+                    }
                     try files.save(bundleIdentifier: bundleIdentifier)
                 }.value
                 self?.reload()
@@ -120,52 +139,20 @@ final class NextgramSigningFilesActions: NSObject, UIDocumentPickerDelegate {
                     self?.setError("Nagram.Update.Signing.ProfileError")
                 case .keychain:
                     self?.setError("Nagram.Update.Signing.Storage")
-                case .invalidFileSelection, .missingSigningFiles, .signingFilesChanged, nil:
+                case .missingSigningFiles:
+                    self?.setError("Nagram.Update.Signing.CertificateRequired")
+                case .invalidFileSelection, .signingFilesChanged, nil:
                     self?.setError("Nagram.Update.Signing.Selection")
                 }
             }
         }
     }
 
-    nonisolated private static func read(_ url: URL) throws -> Data {
-        let accessed = url.startAccessingSecurityScopedResource()
-        defer {
-            if accessed {
-                url.stopAccessingSecurityScopedResource()
-            }
-        }
-        var coordinationError: NSError?
-        var result: Result<Data, Error>?
-        NSFileCoordinator().coordinate(readingItemAt: url, options: [], error: &coordinationError) { url in
-            result = Result {
-                let maxSize = 4 * 1024 * 1024
-                let values = try url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
-                guard values.isRegularFile == true, let size = values.fileSize, size > 0, size <= maxSize else {
-                    throw NextgramSigningFilesError.invalidFileSelection
-                }
-                let file = try FileHandle(forReadingFrom: url)
-                defer {
-                    try? file.close()
-                }
-                guard let data = try file.read(upToCount: maxSize + 1), data.count == size else {
-                    throw NextgramSigningFilesError.invalidFileSelection
-                }
-                return data
-            }
-        }
-        if let coordinationError {
-            throw coordinationError
-        }
-        guard let result else {
-            throw NextgramSigningFilesError.invalidFileSelection
-        }
-        return try result.get()
-    }
 
     private func reload() {
         do {
             let files = try NextgramSigningFiles.saved(bundleIdentifier: bundleIdentifier)
-            current = Status(profileName: files?.profileName, expiration: files?.expiration)
+            current = Status(profileName: files?.profileName, expiration: files?.expiration, profileCount: files?.profileCount ?? 0, hasCertificate: files != nil)
             status.set(current)
         } catch {
             setError("Nagram.Update.Signing.Storage")

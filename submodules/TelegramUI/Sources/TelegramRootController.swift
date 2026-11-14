@@ -103,6 +103,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
     public var chatListController: ChatListController?
     public var accountSettingsController: PeerInfoScreen?
     private var nextgramProfileController: PeerInfoScreenImpl? // MARK: NEXTGRAM
+    private var nextgramFeedController: ViewController? // MARK: NEXTGRAM
+    private var nextgramSavedMessagesController: ViewController? // MARK: NEXTGRAM
     public var newsController: NewsScreen?
     
     private var permissionsDisposable: Disposable?
@@ -150,6 +152,8 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
                 // MARK: NEXTGRAM
                 if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings {
                     strongSelf.updateNextgramProfileTabItem()
+                    strongSelf.updateNextgramFeedTabItem() // MARK: NEXTGRAM
+                    strongSelf.updateNextgramSavedMessagesTabItem() // MARK: NEXTGRAM
                 }
                 if previousTheme !== presentationData.theme {
                     (strongSelf.rootTabController as? TabBarControllerImpl)?.updateTheme(theme: presentationData.theme)
@@ -205,8 +209,9 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
                 if active {
                     Task { @MainActor [weak self] in
                         guard self != nil else { return }
-                        nextgramCheckForUpdateOnForeground(context: context, openUpdater: { [weak self] in
-                            self?.pushViewController(nextgramUpdateController(context: context))
+                        // MARK: NEXTGRAM
+                        nextgramCheckForUpdateOnForeground(context: context, openUpdater: { [weak self] controller in
+                            self?.pushViewController(controller)
                         })
                     }
                 }
@@ -303,6 +308,17 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
         controller.tabBarItem.selectedImage = generateTintedImage(image: image, color: tabBarTheme.selectedIconColor)
     }
 
+    // MARK: NEXTGRAM
+    private func updateNextgramFeedTabItem() {
+        guard let controller = self.nextgramFeedController else { return }
+        let theme = self.presentationData.theme.rootController.tabBar
+        let image = UIImage(bundleImageName: "Chat List/Tabs/IconNews")
+        controller.tabBarItem.tag = NagramBottomBarItemId.feedTabBarTag
+        controller.tabBarItem.title = ngI18n("Nagram.BottomBarLayout.Item.feed", self.presentationData.strings.baseLanguageCode)
+        controller.tabBarItem.image = generateTintedImage(image: image, color: theme.iconColor)
+        controller.tabBarItem.selectedImage = generateTintedImage(image: image, color: theme.selectedIconColor)
+    }
+
     private func nagramRootControllers(showCallsTab: Bool, showNewsTab: Bool) -> [ViewController] {
         guard let contactsController = self.nagramContactsTabController, let callListController = self.callListController, let chatListController = self.chatListController, let accountSettingsController = self.accountSettingsController else {
             return []
@@ -326,6 +342,26 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             controllers.append(accountSettingsController)
         }
         // MARK: NEXTGRAM
+        if bottomBarSettings.visibleNavigationItems.contains(.savedMessages) {
+            if self.nextgramSavedMessagesController == nil {
+                self.nextgramSavedMessagesController = self.context.sharedContext.makeChatController(
+                    context: self.context, chatLocation: .peer(id: self.context.account.peerId),
+                    subject: nil, botStart: nil, mode: .standard(.default), params: nil)
+                self.updateNextgramSavedMessagesTabItem()
+            }
+            if let savedMessagesController = self.nextgramSavedMessagesController {
+                controllers.append(savedMessagesController)
+            }
+        }
+        if bottomBarSettings.visibleNavigationItems.contains(.feed) {
+            if self.nextgramFeedController == nil {
+                self.nextgramFeedController = nextgramChannelFeedController(context: self.context)
+                self.updateNextgramFeedTabItem()
+            }
+            if let feedController = self.nextgramFeedController {
+                controllers.append(feedController)
+            }
+        }
         if bottomBarSettings.visibleNavigationItems.contains(.profile) {
             if self.nextgramProfileController == nil {
                 self.nextgramProfileController = PeerInfoScreenImpl(context: self.context, updatedPresentationData: nil,
@@ -341,6 +377,17 @@ public final class TelegramRootController: NavigationController, TelegramRootCon
             controllers.append(chatListController)
         }
         return controllers
+    }
+
+    // MARK: NEXTGRAM
+    private func updateNextgramSavedMessagesTabItem() {
+        guard let controller = self.nextgramSavedMessagesController else { return }
+        let theme = self.presentationData.theme.rootController.tabBar
+        let image = UIImage(bundleImageName: "Instant View/Bookmark")
+        controller.tabBarItem.tag = NagramBottomBarItemId.savedMessagesTabBarTag
+        controller.tabBarItem.title = self.presentationData.strings.Settings_SavedMessages
+        controller.tabBarItem.image = generateTintedImage(image: image, color: theme.iconColor)
+        controller.tabBarItem.selectedImage = generateTintedImage(image: image, color: theme.selectedIconColor)
     }
     
     public func addRootControllers(showCallsTab: Bool, showNewsTab: Bool) {

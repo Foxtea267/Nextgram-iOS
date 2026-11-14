@@ -36,6 +36,7 @@ import BrowserUI
 import NewsFeedSupport
 import NagramSettings
 import NagramSettingsSignal
+import NextgramNotificationPolicy // MARK: NEXTGRAM
 
 // MARK: NEXTGRAM — Schedule a local notification when APNs is unavailable but MTProto remains online.
 func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [Message], notify: Bool) {
@@ -93,7 +94,8 @@ func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [
         } else {
             content.body = messageText
         }
-        if playSound {
+        // MARK: NEXTGRAM
+        if playSound && nextgramNotificationMode(message: EngineMessage(firstMessage), accountPeerId: context.account.peerId) != .silent {
             content.sound = .default
         }
         content.threadIdentifier = "nextgram-local-\(context.account.id.int64)-\(firstMessage.id.peerId.toInt64())"
@@ -123,7 +125,7 @@ func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [
 
     // MARK: NEXTGRAM — Recheck unread/mute settings and honor per-chat preview privacy and silent messages.
     let _ = (context.account.postbox.transaction { transaction -> (Bool, Bool, Bool) in
-        let resolved = messagesForNotification(transaction: transaction, id: firstMessage.id, alwaysReturnMessage: false)
+        let resolved = messagesForNotification(transaction: transaction, id: firstMessage.id, alwaysReturnMessage: false, notificationAccountPeerId: context.account.peerId) // MARK: NEXTGRAM
         return (resolved.notify, resolved.displayContents, resolved.sound != .none)
     }
     |> deliverOnMainQueue).start(next: { shouldNotify, displayContents, playSound in
@@ -146,8 +148,10 @@ func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [
 private func nextgramFilterHiddenMemberNotifications(_ messages: [Message], accountId: Int64) -> [Message] {
     guard let chatId = messages.first?.id.peerId.toInt64() else { return messages }
     let hidden = NextgramGroupMemberFilter.hiddenMembers(accountId: accountId, chatId: chatId)
-    guard !hidden.isEmpty else { return messages }
     return messages.filter { message in
+        // MARK: NEXTGRAM — Apply event policy and content rules before creating any local alert.
+        if nextgramNotificationMode(message: EngineMessage(message), accountPeerId: PeerId(accountId)) == .off { return false }
+        if NagramSettings.shared.regexFilterMatcher(peerId: message.id.peerId.toInt64(), isOutgoing: !message.flags.contains(.Incoming))?.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) == true { return false }
         guard let authorId = message.author?.id.toInt64() else { return true }
         return !hidden.contains(authorId)
     }
@@ -591,7 +595,8 @@ final class AuthorizedApplicationContext {
                                     return false
                                 }
                             })
-                            if !isMuted {
+                            // MARK: NEXTGRAM
+                            if !isMuted && nextgramNotificationMode(message: EngineMessage(firstMessage), accountPeerId: context.account.peerId) != .silent {
                                 if firstMessage.id.peerId == context.account.peerId, !firstMessage.flags.contains(.WasScheduled) {
                                 } else {
                                     if inAppNotificationSettings.playSounds {

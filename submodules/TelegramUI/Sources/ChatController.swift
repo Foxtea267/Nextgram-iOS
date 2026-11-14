@@ -17,6 +17,7 @@ import TextFormat
 import TelegramBaseController
 import AccountContext
 import NagramMessageFormatting // MARK: NEXTGRAM
+import NagramMessageHistory // MARK: NEXTGRAM
 import NagramPlugins // MARK: NEXTGRAM
 import WalletContext
 import NagramSettings // MARK: NAGRAM
@@ -3993,6 +3994,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }, setupReply: { [weak self] messageId in
             self?.interfaceInteraction?.setupReplyMessage(messageId, nil, { _, f in f() })
         }, canSetupReply: { [weak self] message in
+            if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) { // MARK: NEXTGRAM
+                return .none
+            }
             if Namespaces.Message.allEphemeral.contains(message.id.namespace) {
                 if !message.flags.contains(.Incoming) {
                     return .none
@@ -4664,6 +4668,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             case .translate:
                 self.openNagramTextTranslation(messageId: message?.id, canCopy: canCopy, text: text, entities: entities) // MARK: NAGRAM
             case let .quote(range):
+                if message?.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) == true { // MARK: NEXTGRAM
+                    return
+                }
                 let completion: (ContainedViewLayoutTransition?) -> Void = { [weak self] transition in
                     guard let self else {
                         return
@@ -4931,6 +4938,16 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                             action: { _, dismiss in
                                 dismiss(.dismissWithoutContent)
                                 NextgramGroupMemberFilter.setHidden(!hidden, memberId: memberId, accountId: accountId, chatId: chatId)
+                            }
+                        )))
+                        // MARK: NEXTGRAM — An independent opt-in for this sender in this group only.
+                        let alerts = NextgramMemberNotifications.members(accountId: accountId, chatId: chatId).contains(memberId)
+                        items.append(.action(ContextMenuActionItem(
+                            text: ngI18n(alerts ? "Nagram.MemberNotifications.Disable" : "Nagram.MemberNotifications.Enable", lang),
+                            icon: { theme in generateTintedImage(image: UIImage(systemName: alerts ? "bell.slash" : "bell.badge"), color: theme.contextMenu.primaryColor) },
+                            action: { _, dismiss in
+                                dismiss(.dismissWithoutContent)
+                                NextgramMemberNotifications.setEnabled(!alerts, memberId: memberId, accountId: accountId, chatId: chatId)
                             }
                         )))
                     }
@@ -6349,6 +6366,29 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         let hiddenAccountId = context.account.peerId.toInt64()
                         let hiddenChatId = peer.id.toInt64()
                         let hiddenMembers = NextgramGroupMemberFilter.hiddenMembers(accountId: hiddenAccountId, chatId: hiddenChatId)
+                        // MARK: NEXTGRAM — Reveal this chat locally for at most five minutes; notification filters stay active.
+                        if NagramSettings.shared.regexFiltersEnabled || !hiddenMembers.isEmpty {
+                            let reveal = NextgramTemporaryFilterReveal.shared.isActive(accountId: hiddenAccountId, chatId: hiddenChatId)
+                            let lang = strongSelf.presentationData.strings.baseLanguageCode
+                            items.append(.action(ContextMenuActionItem(text: ngI18n(reveal ? "Nagram.Filters.EndReveal" : "Nagram.Filters.Reveal", lang),
+                                icon: { theme in generateTintedImage(image: UIImage(systemName: reveal ? "eye.slash" : "eye"), color: theme.contextMenu.primaryColor) },
+                                action: { _, dismiss in
+                                    dismiss(.dismissWithoutContent)
+                                    NextgramTemporaryFilterReveal.shared.setActive(!reveal, accountId: hiddenAccountId, chatId: hiddenChatId)
+                                }
+                            )))
+                        }
+                        // MARK: NEXTGRAM — Manage selected members without finding their messages again.
+                        if !NextgramMemberNotifications.members(accountId: hiddenAccountId, chatId: hiddenChatId).isEmpty {
+                            let lang = strongSelf.presentationData.strings.baseLanguageCode
+                            items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.MemberNotifications.Manage", lang),
+                                icon: { theme in generateTintedImage(image: UIImage(systemName: "bell.badge"), color: theme.contextMenu.primaryColor) },
+                                action: { [weak self] _, dismiss in
+                                    dismiss(.dismissWithoutContent)
+                                    self?.push(nextgramMemberNotificationsController(context: context, chatId: hiddenChatId))
+                                }
+                            )))
+                        }
                         if !hiddenMembers.isEmpty {
                             let lang = strongSelf.presentationData.strings.baseLanguageCode
                             items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.GroupMemberFilter.Manage", lang),
@@ -7866,7 +7906,10 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 // only the rest. Only hidden messages inside the loaded window are subtracted from the positions.
                 let accountPeerId = context.account.peerId
                 let hiddenMembers = NextgramGroupMemberFilter.hiddenMembers(accountId: accountPeerId.toInt64(), chatId: peerId.toInt64()) // MARK: NEXTGRAM
+                // MARK: NEXTGRAM — The pinned bar follows the same temporary presentation override as message rows.
+                let revealing = NextgramTemporaryFilterReveal.shared.isActive(accountId: accountPeerId.toInt64(), chatId: peerId.toInt64())
                 let nagramIsHidden: (Message) -> Bool = { message in
+                    if revealing { return false }
                     if let senderId = message.author?.id.toInt64(), hiddenMembers.contains(senderId) {
                         return true // MARK: NEXTGRAM
                     }

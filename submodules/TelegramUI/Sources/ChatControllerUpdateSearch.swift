@@ -4,6 +4,7 @@ import AccountContext
 import ChatPresentationInterfaceState
 import SwiftSignalKit
 import TelegramCore
+import NagramSettings // MARK: NEXTGRAM
 
 extension ChatControllerImpl {    
     func updateSearch(_ interfaceState: ChatPresentationInterfaceState) -> ChatPresentationInterfaceState? {
@@ -92,7 +93,7 @@ extension ChatControllerImpl {
                             self.searchDisposable = searchDisposable
                         }
 
-                        let search = self.context.engine.messages.searchMessages(location: searchState.location, query: searchState.query, state: nil, limit: limit)
+                        let search = self.nextgramSearchMessages(location: searchState.location, query: searchState.query, state: nil, limit: limit) // MARK: NEXTGRAM
                         |> delay(0.2, queue: Queue.mainQueue())
                         self.searchResult.set(search
                         |> map { (result, state) -> (SearchMessagesResult, SearchMessagesState, SearchMessagesLocation)? in
@@ -147,7 +148,7 @@ extension ChatControllerImpl {
                             searchDisposable = MetaDisposable()
                             self.searchDisposable = searchDisposable
                         }
-                        searchDisposable.set((self.context.engine.messages.searchMessages(location: searchState.location, query: searchState.query, state: loadMoreState, limit: limit)
+                        searchDisposable.set((self.nextgramSearchMessages(location: searchState.location, query: searchState.query, state: loadMoreState, limit: limit) // MARK: NEXTGRAM
                         |> delay(0.2, queue: Queue.mainQueue())
                         |> deliverOnMainQueue).startStrict(next: { [weak self] results, updatedState in
                             guard let strongSelf = self else {
@@ -185,5 +186,34 @@ extension ChatControllerImpl {
         }
         self.updateItemNodesSearchTextHighlightStates()
         return nil
+    }
+}
+// MARK: NEXTGRAM
+extension ChatControllerImpl {
+    func nextgramSearchMessages(location: SearchMessagesLocation, query: String, state: SearchMessagesState?, limit: Int32 = 100) -> Signal<(SearchMessagesResult, SearchMessagesState), NoError> {
+        let accountId = self.context.account.peerId.toInt64()
+        let engine = self.context.engine
+        func load(_ cursor: SearchMessagesState?, remaining: Int) -> Signal<(SearchMessagesResult, SearchMessagesState), NoError> {
+            return engine.messages.searchMessages(location: location, query: query, state: cursor, limit: limit)
+            |> mapToSignal { result, state in
+                var hiddenByChat: [EnginePeer.Id: Set<Int64>] = [:]
+                let visible = result.messages.filter { message in
+                    guard let id = message.author?.id.toInt64() else { return true }
+                    let peerId = message.id.peerId
+                    let hidden = hiddenByChat[peerId] ?? NextgramGroupMemberFilter.hiddenMembers(accountId: accountId, chatId: peerId.toInt64())
+                    hiddenByChat[peerId] = hidden
+                    return !hidden.contains(id)
+                }
+                let removedCount = Int32(result.messages.count - visible.count)
+                guard removedCount != 0 else { return .single((result, state)) }
+                // An entirely hidden page has no row from which the UI could request the next page.
+                if visible.isEmpty, !result.completed, remaining > 0, cursor != state {
+                    return load(state, remaining: remaining - 1)
+                }
+                return .single((SearchMessagesResult(messages: visible, readStates: result.readStates, threadInfo: result.threadInfo,
+                    totalCount: max(0, result.totalCount - removedCount), completed: result.completed), state))
+            }
+        }
+        return load(state, remaining: 3)
     }
 }

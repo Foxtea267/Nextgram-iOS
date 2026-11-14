@@ -299,6 +299,15 @@ public final class NagramSettings {
     public var screenshotBadgeStyle: String
     @NagramDefault("nagram.autoCheckForUpdates", false)
     public var autoCheckForUpdates: Bool
+
+    @NagramDefault("nagram.updateInstallMethod", "")
+    public var updateInstallMethod: String
+
+    @NagramDefault("nagram.updateLCSignNode", "")
+    public var updateLCSignNode: String
+
+    @NagramDefault("nagram.updateAutoPrepare", false)
+    public var updateAutoPrepare: Bool
     @NagramDefault("nagram.usageAgreementAcceptedVersion", Int32(0))
     public var usageAgreementAcceptedVersion: Int32
     @NagramDefault("nagram.antiRecallWhitelist", "")
@@ -315,14 +324,34 @@ public final class NagramSettings {
     public var deletedMessageIndicatorText: String
     @NagramDefault("nagram.deletedMessageSemiTransparent", false)
     public var deletedMessageSemiTransparent: Bool
+
+    @NagramDefault("nagram.deletedMessageOpacity", 50)
+    public var deletedMessageOpacity: Int32
+
+    @NagramDefault("nagram.deletedMessageOverlayEnabled", false)
+    public var deletedMessageOverlayEnabled: Bool
+
+    @NagramDefault("nagram.deletedMessageOverlayOpacity", 20)
+    public var deletedMessageOverlayOpacity: Int32
+
+    @NagramDefault("nagram.deletedMessageOverlayColor", "#000000")
+    public var deletedMessageOverlayColor: String
+
+    @NagramDefault("nagram.deletedMessageDimAvatar", false)
+    public var deletedMessageDimAvatar: Bool
     @NagramDefault("nagram.preserveBotMessages", false)
     public var preserveBotMessages: Bool
+
+    @NagramDefault("nagram.excludeBotMessagesFromInterception", false)
+    public var excludeBotMessagesFromInterception: Bool
     @NagramDefault("nagram.saveMessageEditHistory", false)
     public var saveMessageEditHistory: Bool
     @NagramDefault("nagram.ghostModeEnabled", false)
     public var ghostModeEnabled: Bool
     @NagramDefault("nagram.disableReadReceipts", false)
     public var disableReadReceipts: Bool
+    @NagramDefault("nagram.disableStoryReadReceipts", false)
+    public var disableStoryReadReceipts: Bool
     @NagramDefault("nagram.disableTypingStatus", false)
     public var disableTypingStatus: Bool
     @NagramDefault("nagram.disableOnlineStatus", false)
@@ -336,6 +365,10 @@ public final class NagramSettings {
 
     public var suppressReadReceipts: Bool {
         return self.ghostModeEnabled || self.disableReadReceipts
+    }
+
+    public var suppressStoryReadReceipts: Bool {
+        return self.ghostModeEnabled || self.disableStoryReadReceipts
     }
 
     public var suppressTypingStatus: Bool {
@@ -603,12 +636,21 @@ public final class NagramSettings {
     /// 显示贴纸时间戳（默认开 = 原生行为）
     @NagramDefault("nagram.stickerTimestamp", true)
     public var stickerTimestamp: Bool
+
+    @NagramDefault("nagram.openEmojiTabFirst", false)
+    public var openEmojiTabFirst: Bool
+
+    @NagramDefault("nagram.systemEmojiBeforePacks", false)
+    public var systemEmojiBeforePacks: Bool
     /// 最近贴纸数量上限（默认 20 = Telegram 原生行为）
     @NagramDefault("nagram.recentStickerLimit", Int32(20))
     public var recentStickerLimit: Int32
     /// 上滑视频开启画中画（"up" / "none"）
     @NagramDefault("nagram.videoPIPSwipeDirection", "up")
     public var videoPIPSwipeDirection: String
+
+    @NagramDefault("nagram.defaultVideoQuality", "auto")
+    public var defaultVideoQuality: String
     /// 视频播放控制放在进度条下方，不在画面中央显示大圆按钮（默认关 = 原生行为）
     @NagramDefault("nagram.videoControlsInFooter", false)
     public var videoControlsInFooter: Bool
@@ -618,6 +660,12 @@ public final class NagramSettings {
     /// 对话列表横滑行为（"both" / "switch" / "quick" / "none"）
     @NagramDefault("nagram.chatListSwipeAction", NagramChatListSwipeAction.both.rawValue)
     public var chatListSwipeAction: String
+
+    @NagramDefault("nagram.hideChatListSeparators", false)
+    public var hideChatListSeparators: Bool
+
+    @NagramDefault("nagram.hideChatListSwipeDelete", false)
+    public var hideChatListSwipeDelete: Bool
     /// 下拉展示归档后自动进入归档
     @NagramDefault("nagram.openArchiveOnPull", false)
     public var openArchiveOnPull: Bool
@@ -725,6 +773,9 @@ public final class NagramSettings {
     /// When enabled, only the song title, artist, and duration are sent to LRCLIB.
     @NagramDefault("nagram.musicPlayerOnlineLyricsEnabled", false)
     public var musicPlayerOnlineLyricsEnabled: Bool
+
+    @NagramDefault("nagram.musicPlayerLyricsSourceOrder", NextgramLyricsSource.defaultOrder)
+    public var musicPlayerLyricsSourceOrder: String
     @NagramDefault("nagram.musicPlayerShowVolume", true)
     public var musicPlayerShowVolume: Bool
     @NagramDefault("nagram.musicPlayerShowRemainingTime", true)
@@ -733,6 +784,12 @@ public final class NagramSettings {
     public var musicPlayerLyricsFontSize: Int32
     @NagramDefault("nagram.musicPlayerBlurIntensity", Int32(36))
     public var musicPlayerBlurIntensity: Int32
+    @NagramDefault("nagram.musicPlayerBackground", "blur")
+    public var musicPlayerBackground: String
+    @NagramDefault("nagram.musicPlayerColors", "cover")
+    public var musicPlayerColors: String
+    @NagramDefault("nagram.musicPlayerCustomColor", "#29344A")
+    public var musicPlayerCustomColor: String
     @NagramDefault("nagram.musicPlayerTitleAlignment", "left")
     public var musicPlayerTitleAlignment: String
     @NagramDefault("nagram.musicPlayerTitleFontSize", Int32(25))
@@ -743,6 +800,12 @@ public final class NagramSettings {
     public var musicPlayerDiscRotation: Bool
     @NagramDefault("nagram.musicPlayerSwipeToSkip", true)
     public var musicPlayerSwipeToSkip: Bool
+    @NagramDefault("nagram.musicPlayerArtworkMotion", false)
+    public var musicPlayerArtworkMotion: Bool
+    @NagramDefault("nagram.musicSystemNowPlaying", "always")
+    public var musicSystemNowPlaying: String
+    @NagramDefault("nagram.channelFeedAutoLoad", true)
+    public var channelFeedAutoLoad: Bool
     /// 将已启用的自动删除时长显示在聊天头像右下角，不占用输入框。
     @NagramDefault("nagram.chatAutoremoveBadgeEnabled", true)
     public var chatAutoremoveBadgeEnabled: Bool
@@ -761,6 +824,9 @@ public final class NagramSettings {
     /// 资料页显示用户数字 ID（默认关 = 保持原生）
     @NagramDefault("nagram.showProfileId", false)
     public var showProfileId: Bool
+
+    @NagramDefault("nagram.profileOpensMutualGroups", false)
+    public var profileOpensMutualGroups: Bool
 
     // MARK: 波次 3 批 C — 底层加速
     /// 上传加速
@@ -875,6 +941,12 @@ public final class NagramSettings {
     /// 隐藏动态（Stories）
     @NagramDefault("nagram.hideStories", false)
     public var hideStories: Bool
+
+    @NagramDefault("nagram.confirmBeforeViewingStories", false)
+    public var confirmBeforeViewingStories: Bool
+
+    @NagramDefault("nagram.hideRepostToStory", false)
+    public var hideRepostToStory: Bool
 
     @NagramDefault("nagram.hideTopStories", false)
     public var hideTopStories: Bool

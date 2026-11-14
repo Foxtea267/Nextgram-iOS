@@ -3,6 +3,7 @@ import Postbox
 import SwiftSignalKit
 internal import TelegramApi
 import MtProtoKit
+import NagramSettings // MARK: NEXTGRAM
 
 private enum CustomOperationEvent<T, E> {
     case Next(T)
@@ -399,7 +400,8 @@ public final class AccountStateManager {
                 callSessionManager: callSessionManager,
                 peerInputActivityManager: peerInputActivityManager,
                 updateConfigRequested: updateConfigRequested,
-                isPremiumUpdated: isPremiumUpdated
+                isPremiumUpdated: isPremiumUpdated,
+                notificationAccountPeerId: accountPeerId // MARK: NEXTGRAM
             )
         }
         
@@ -1509,7 +1511,8 @@ func resolveNotificationSettings(list: [TelegramPeerNotificationSettings], defau
     return (sound, notify, displayContents)
 }
 
-public func messagesForNotification(transaction: Transaction, id: MessageId, alwaysReturnMessage: Bool) -> (messages: [Message], notify: Bool, sound: PeerMessageSound, displayContents: Bool, threadData: MessageHistoryThreadData?) {
+// MARK: NEXTGRAM — The account-scoped override is used only by live delivery and its unread recheck.
+public func messagesForNotification(transaction: Transaction, id: MessageId, alwaysReturnMessage: Bool, notificationAccountPeerId: PeerId? = nil) -> (messages: [Message], notify: Bool, sound: PeerMessageSound, displayContents: Bool, threadData: MessageHistoryThreadData?) {
     if id.namespace == Namespaces.Message.EphemeralLocal || Namespaces.Message.allWelcomeMessages.contains(id.namespace) {
         return ([], false, defaultCloudPeerNotificationSound, false, nil)
     }
@@ -1588,7 +1591,21 @@ public func messagesForNotification(transaction: Transaction, id: MessageId, alw
     let (resolvedSound, resolvedNotify, resolvedDisplayContents) = resolveNotificationSettings(list: notificationSettingsStack, defaultSettings: defaultNotificationSettings)
     
     var sound = resolvedSound
-    if !resolvedNotify {
+    // MARK: NEXTGRAM — Selected members may bypass a muted group, never structural eligibility or preview privacy.
+    var memberOverride = false
+    if let accountId = notificationAccountPeerId, let author = message.author {
+        let isGroup: Bool
+        if let group = peer as? TelegramGroup, case .Member = group.membership { isGroup = true }
+        else if let channel = peer as? TelegramChannel, case .group = channel.info { isGroup = true }
+        else { isGroup = false }
+        memberOverride = NextgramMemberNotifications.isEligible(
+            selected: NextgramMemberNotifications.members(accountId: accountId.toInt64(), chatId: id.peerId.toInt64()).contains(author.id.toInt64()),
+            isGroup: isGroup, incoming: message.flags.contains(.Incoming) && author.id != accountId,
+            imported: message.forwardInfo?.flags.contains(.isImported) == true,
+            unread: transaction.getCombinedPeerReadState(id.peerId).map { !$0.isIncomingMessageIndexRead(message.index) } ?? false,
+            serviceMessage: message.media.contains { $0 is TelegramMediaAction })
+    }
+    if !resolvedNotify && !memberOverride {
         notify = false
     }
     if !resolvedDisplayContents {

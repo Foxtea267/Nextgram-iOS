@@ -1,12 +1,11 @@
 import UIKit
 
-enum NextgramSettingsIcons {
+public enum NextgramSettingsIcons {
     private static let bottomBar = make("rectangle.bottomthird.inset.filled", color: 0x5856d6)
     private static let badge = make("camera.viewfinder", color: 0x5856d6)
     private static let backup = make("externaldrive.fill", color: 0x00a6a6)
     private static let update = make("arrow.triangle.2.circlepath", color: 0x007aff)
     private static let plugins = make("puzzlepiece.extension.fill", color: 0xaf52de)
-    private static let feed = make("newspaper.fill", color: 0xff9500)
     private static let translation = make("character.bubble.fill", color: 0xaf52de)
     private static let transcription = make("waveform", color: 0xff9500)
     private static let filters = make("line.3.horizontal.decrease.circle.fill", color: 0x34a853)
@@ -14,23 +13,30 @@ enum NextgramSettingsIcons {
     private static let diagnostics = make("waveform.path.ecg", color: 0x007aff)
     private static let profile = make("person.crop.rectangle", color: 0x007aff)
     private static let appIcon = make("app.fill", color: 0xaf52de)
+    private static let bookmarks = make("text.badge.star", color: 0xff9500)
+    private static let feed = make("newspaper.fill", color: 0x5856d6)
+    private static let fonts = make("textformat", color: 0x5856d6)
+    private static let memberAlerts = make("bell.badge.fill", color: 0xff9500)
 
-    static func icon(for titleKey: String) -> UIImage? {
+    public static func icon(for titleKey: String) -> UIImage? {
         switch titleKey {
         case "Nagram.BottomBarLayout": return self.bottomBar
+        case "Nagram.Fonts.Title": return self.fonts
+        case "Nagram.MemberNotifications.Manage": return self.memberAlerts
         case "Nagram.Settings.AppIcons": return self.appIcon
         case "Nagram.BadgeStyle": return self.badge
         case "Nagram.Settings.Backup", "Nagram.SessionBackup",
              "Nagram.DeletedMessages.Export", "Nagram.DeletedMessages.Import": return self.backup
         case "Nagram.Update.Title": return self.update
         case "Nagram.ExteraPlugins": return self.plugins
-        case "Nagram.ChannelFeed": return self.feed
-        case "Nagram.TranslationLLMSettings": return self.translation
+        case "Nagram.TranslationLLMSettings", "Nagram.Summary.Settings": return self.translation
         case "Nagram.STTSettings": return self.transcription
         case "Nagram.AntiRecallRules", "Nagram.RegexFilters", "Nagram.InlineBotRules": return self.filters
         case "Nagram.MessageMenu": return self.messageMenu
         case "Nagram.TelegramLatency", "Nagram.NotificationDiagnostics": return self.diagnostics
         case "Nagram.GroupProfileSettings": return self.profile
+        case "Nagram.Bookmarks": return self.bookmarks
+        case "Nagram.ChannelFeed": return self.feed
         case "Nagram.About": return nextgramSettingsLogo
         default: return nil
         }

@@ -678,6 +678,7 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
     }
     
     private var fetchEffectDisposable: Disposable?
+    private var nextgramDeletionOverlay: CALayer? // MARK: NEXTGRAM
     
     public var playedEffectAnimation: Bool = false
     public var effectAnimationNodes: [ChatMessageTransitionNode.DecorationItemNode] = []
@@ -701,6 +702,9 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
         super.reuse()
         
         self.item = nil
+        self.nextgramDeletionOverlay?.removeFromSuperlayer() // MARK: NEXTGRAM
+        self.nextgramDeletionOverlay = nil // MARK: NEXTGRAM
+        self.alpha = 1.0 // MARK: NEXTGRAM
         self.scrollTiltProvider = nil
         self.frame = CGRect()
     }
@@ -712,7 +716,40 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
         let isRetainedDeletion = item.content.contains(where: { content in
             content.0.attributes.contains(where: { $0 is NagramDeletedMessageAttribute })
         })
-        self.alpha = isRetainedDeletion && NagramSettings.shared.deletedMessageSemiTransparent ? 0.5 : 1.0
+        self.updateNextgramDeletionAppearance(retained: isRetainedDeletion)
+    }
+
+    // MARK: NEXTGRAM
+    private func updateNextgramDeletionAppearance(retained: Bool) {
+        let appearance = NextgramDeletedMessageAppearance()
+        self.alpha = retained ? CGFloat(appearance.opacity) : 1.0
+        guard retained, appearance.overlayOpacity > 0.0 else {
+            self.nextgramDeletionOverlay?.removeFromSuperlayer()
+            self.nextgramDeletionOverlay = nil
+            return
+        }
+        let overlay = self.nextgramDeletionOverlay ?? CALayer()
+        if overlay.superlayer == nil {
+            overlay.zPosition = 20.0
+            overlay.actions = ["bounds": NSNull(), "position": NSNull(), "backgroundColor": NSNull()]
+            self.layer.addSublayer(overlay)
+            self.nextgramDeletionOverlay = overlay
+        }
+        overlay.backgroundColor = UIColor(rgb: appearance.overlayRGB).withAlphaComponent(CGFloat(appearance.overlayOpacity)).cgColor
+        self.setNeedsLayout()
+    }
+
+    override open func layout() { // MARK: NEXTGRAM
+        super.layout()
+        if let overlay = self.nextgramDeletionOverlay {
+            let frame = self.contentFrame().intersection(self.bounds)
+            overlay.isHidden = frame.isEmpty || frame.isNull || frame.width >= self.bounds.width
+            if !overlay.isHidden {
+                overlay.frame = frame
+                overlay.cornerRadius = min(14.0, frame.height * 0.5)
+                overlay.cornerCurve = .continuous
+            }
+        }
     }
     
     open func updateAccessibilityData(_ accessibilityData: ChatMessageAccessibilityData) {

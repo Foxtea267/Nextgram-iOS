@@ -240,6 +240,7 @@ public struct NagramRegexFilterMatcher {
         let currentText = text
         var spoilerRanges: [Range<Int>] = []
         let matchRange = NSRange(location: 0, length: (currentText as NSString).length)
+        let deadline = Date.timeIntervalSinceReferenceDate + 0.025
         for rule in self.rules {
             if let ruleAuthorPeerId = rule.authorPeerId {
                 if ruleAuthorPeerId == authorPeerId {
@@ -253,14 +254,27 @@ public struct NagramRegexFilterMatcher {
             guard !currentText.isEmpty else {
                 continue
             }
-            guard expression.firstMatch(in: currentText, options: [], range: matchRange) != nil else {
+            // ICU invokes progress callbacks during backtracking. A pathological imported rule
+            // must not monopolize the UI or a notification extension's execution budget.
+            var matches: [NSTextCheckingResult] = []
+            var timedOut = false
+            expression.enumerateMatches(in: currentText, options: [.reportProgress], range: matchRange) { match, _, stop in
+                if Date.timeIntervalSinceReferenceDate >= deadline || matches.count >= 4096 {
+                    timedOut = true
+                    stop.pointee = true
+                } else if let match {
+                    matches.append(match)
+                    if rule.action != .mask { stop.pointee = true }
+                }
+            }
+            // Incomplete matches must never hide or partially mask a message.
+            guard !timedOut, !matches.isEmpty else {
                 continue
             }
             switch rule.action {
             case .hide:
                 return .hidden
             case .mask:
-                let matches = expression.matches(in: currentText, options: [], range: matchRange)
                 for match in matches where match.range.length > 0 {
                     spoilerRanges.append(match.range.location ..< (match.range.location + match.range.length))
                 }

@@ -49,6 +49,7 @@ private final class UpdatedStarGiftAuctionMyStateSubscriberContext {
 final class AccountStateEventHub {
     private let queue: Queue
     private let postbox: Postbox
+    private let notificationAccountPeerId: PeerId? // MARK: NEXTGRAM
     private let network: Network
     private let callSessionManager: CallSessionManager?
     private let peerInputActivityManager: PeerInputActivityManager?
@@ -201,9 +202,10 @@ final class AccountStateEventHub {
     private let reportMessageDeliveryDisposable = DisposableSet()
     private let updateEmojiGameInfoDisposable = MetaDisposable()
 
-    init(queue: Queue, postbox: Postbox, network: Network, callSessionManager: CallSessionManager?, peerInputActivityManager: PeerInputActivityManager?, updateConfigRequested: (() -> Void)?, isPremiumUpdated: (() -> Void)?) {
+    init(queue: Queue, postbox: Postbox, network: Network, callSessionManager: CallSessionManager?, peerInputActivityManager: PeerInputActivityManager?, updateConfigRequested: (() -> Void)?, isPremiumUpdated: (() -> Void)?, notificationAccountPeerId: PeerId? = nil) { // MARK: NEXTGRAM
         self.queue = queue
         self.postbox = postbox
+        self.notificationAccountPeerId = notificationAccountPeerId // MARK: NEXTGRAM
         self.network = network
         self.callSessionManager = callSessionManager
         self.peerInputActivityManager = peerInputActivityManager
@@ -232,7 +234,8 @@ final class AccountStateEventHub {
             var messageList: [([Message], PeerGroupId, Bool, MessageHistoryThreadData?)] = []
 
             for id in events.addedIncomingMessageIds {
-                let (messages, notify, _, _, threadData) = messagesForNotification(transaction: transaction, id: id, alwaysReturnMessage: false)
+                // MARK: NEXTGRAM — Only newly delivered incoming message IDs enter the member override path.
+                let (messages, notify, _, _, threadData) = messagesForNotification(transaction: transaction, id: id, alwaysReturnMessage: false, notificationAccountPeerId: self.notificationAccountPeerId)
                 if !messages.isEmpty {
                     messageList.append((messages, .root, notify, threadData))
                 }

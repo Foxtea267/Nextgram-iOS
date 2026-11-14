@@ -47,16 +47,21 @@ public struct SearchMessagesResult: Equatable {
     public let readStates: [PeerId: CombinedPeerReadState]
     public let totalCount: Int32
     public let completed: Bool
+    // MARK: NEXTGRAM — Distinguish a failed request from a genuinely empty, complete page.
+    public let nextgramRequestFailed: Bool
     
-    public init(messages: [Message], readStates: [PeerId: CombinedPeerReadState], threadInfo:[MessageId : MessageHistoryThreadData], totalCount: Int32, completed: Bool) {
+    public init(messages: [Message], readStates: [PeerId: CombinedPeerReadState], threadInfo:[MessageId : MessageHistoryThreadData], totalCount: Int32, completed: Bool, nextgramRequestFailed: Bool = false) {
         self.messages = messages
         self.threadInfo = threadInfo
         self.readStates = readStates
         self.totalCount = totalCount
         self.completed = completed
+        self.nextgramRequestFailed = nextgramRequestFailed
     }
     
     public static func ==(lhs: SearchMessagesResult, rhs: SearchMessagesResult) -> Bool {
+        // MARK: NEXTGRAM
+        if lhs.nextgramRequestFailed != rhs.nextgramRequestFailed || lhs.completed != rhs.completed || lhs.totalCount != rhs.totalCount { return false }
         if lhs.messages.count != rhs.messages.count {
             return false
         }
@@ -306,6 +311,8 @@ func _internal_getSearchMessageCount(account: Account, location: SearchMessagesL
 }
 
 func _internal_searchMessages(account: Account, location: SearchMessagesLocation, query: String, state: SearchMessagesState?, centerId: MessageId?, limit: Int32 = 100) -> Signal<(SearchMessagesResult, SearchMessagesState), NoError> {
+    // MARK: NEXTGRAM — Track failures in either requested migration-history page.
+    let nextgramRequestFailed = Atomic<Bool>(value: false)
     if case let .peer(peerId, fromId, tags, reactions, threadId, minDate, maxDate) = location, fromId == nil, tags == nil, peerId == account.peerId, let reactions, let reaction = reactions.first, (minDate == nil || minDate == 0), (maxDate == nil || maxDate == 0) {
         return account.postbox.transaction { transaction -> (SearchMessagesResult, SearchMessagesState) in
             let messages = transaction.getMessagesWithCustomTag(peerId: peerId, namespace: Namespaces.Message.Cloud, threadId: threadId, customTag: ReactionsMessageAttribute.messageTag(reaction: reaction), from: MessageIndex.upperBound(peerId: peerId, namespace: Namespaces.Message.Cloud), includeFrom: false, to: MessageIndex.lowerBound(peerId: peerId, namespace: Namespaces.Message.Cloud), limit: 500)
@@ -434,6 +441,8 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                     peerMessages = signal
                     |> map(Optional.init)
                     |> `catch` { _ -> Signal<Api.messages.Messages?, NoError> in
+                        // MARK: NEXTGRAM
+                        _ = nextgramRequestFailed.swap(true)
                         return .single(nil)
                     }
                 }
@@ -460,6 +469,8 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                         additionalPeerMessages = account.network.request(Api.functions.messages.search(flags: flags, peer: inputPeer, q: query, fromId: fromInputPeer, savedPeerId: inputSavedPeer, savedReaction: savedReactions, topMsgId: topMsgId, filter: filter, minDate: minDate ?? 0, maxDate: maxDate ?? (Int32.max - 1), offsetId: lowerBound?.id.id ?? 0, addOffset: 0, limit: limit, maxId: Int32.max - 1, minId: 0, hash: 0))
                         |> map(Optional.init)
                         |> `catch` { _ -> Signal<Api.messages.Messages?, NoError> in
+                            // MARK: NEXTGRAM
+                            _ = nextgramRequestFailed.swap(true)
                             return .single(nil)
                         }
                     } else {
@@ -503,6 +514,8 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                         return (result, nil)
                     }
                     |> `catch` { _ -> Signal<(Api.messages.Messages?, Api.messages.Messages?), NoError> in
+                        // MARK: NEXTGRAM
+                        _ = nextgramRequestFailed.swap(true)
                         return .single((nil, nil))
                     }
                 }
@@ -548,6 +561,8 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                         return (result, nil)
                     }
                     |> `catch` { _ -> Signal<(Api.messages.Messages?, Api.messages.Messages?), NoError> in
+                        // MARK: NEXTGRAM
+                        _ = nextgramRequestFailed.swap(true)
                         return .single((nil, nil))
                     }
                 }
@@ -562,6 +577,8 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
                 peerMessages = account.network.request(Api.functions.messages.searchSentMedia(q: query, filter: filter, limit: limit))
                 |> map(Optional.init)
                 |> `catch` { _ -> Signal<Api.messages.Messages?, NoError> in
+                    // MARK: NEXTGRAM
+                    _ = nextgramRequestFailed.swap(true)
                     return .single(nil)
                 }
             }
@@ -644,7 +661,13 @@ func _internal_searchMessages(account: Account, location: SearchMessagesLocation
             }
             
             let updatedState = SearchMessagesState(main: mergedState(transaction: transaction, seedConfiguration: account.postbox.seedConfiguration, accountPeerId: account.peerId, state: state?.main, result: result) ?? SearchMessagesPeerState(messages: [], readStates: [:], threadInfo: [:], totalCount: 0, completed: true, nextRate: nil), additional: additional)
-            return (mergedResult(updatedState), updatedState)
+            // MARK: NEXTGRAM — A missing requested page must not be presented as a completed range.
+            let mainFailed = result == nil && state?.main.completed != true
+            let additionalFailed = additionalResult == nil && state?.additional != nil && state?.additional?.completed != true && (state?.main.completed ?? false)
+            let merged = mergedResult(updatedState)
+            let reported = SearchMessagesResult(messages: merged.messages, readStates: merged.readStates, threadInfo: merged.threadInfo,
+                totalCount: merged.totalCount, completed: merged.completed, nextgramRequestFailed: mainFailed || additionalFailed || nextgramRequestFailed.with { $0 })
+            return (reported, updatedState)
         }
     }
 }

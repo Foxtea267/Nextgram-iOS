@@ -57,6 +57,7 @@ public struct NextgramUpdateRelease: Equatable, Codable, Sendable {
         let draft: Bool
         let prerelease: Bool
         let assets: [Asset]
+        let body: String?
     }
 
     private static let assetNames = [
@@ -72,6 +73,7 @@ public struct NextgramUpdateRelease: Equatable, Codable, Sendable {
     let downloadURL: URL
     let size: Int64
     let sha256: String
+    public let notes: String?
 
     public var versionName: String {
         return version.value
@@ -110,7 +112,8 @@ public struct NextgramUpdateRelease: Equatable, Codable, Sendable {
             throw NextgramUpdateError.unavailableAsset
         }
         return Self(version: version, bundleIdentifier: bundleIdentifier, assetName: assetName,
-                    downloadURL: expectedURL, size: asset.size, sha256: sha256)
+                    downloadURL: expectedURL, size: asset.size, sha256: sha256,
+                    notes: release.body.map { String($0.prefix(16000)).trimmingCharacters(in: .whitespacesAndNewlines) })
     }
 
     static func supports(bundleIdentifier: String, version: String) -> Bool {

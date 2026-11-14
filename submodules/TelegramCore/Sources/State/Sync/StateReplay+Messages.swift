@@ -61,7 +61,16 @@ private func nagramShouldPreserveDeletedMessage(_ message: Message, accountId: P
     guard settings.antiRecallFilters.shouldPreserve(entities: entities, text: message.text) else {
         return (false, false)
     }
-    let preserveBotMessage = settings.preserveBotMessages && nagramMessageWasSentByBot(message, transaction: transaction)
+    // MARK: NEXTGRAM — The bot exception applies to both global and per-chat interception.
+    var preserveBotMessage = false
+    if settings.preserveBotMessages || settings.excludeBotMessagesFromInterception {
+        if nagramMessageWasSentByBot(message, transaction: transaction) {
+            if settings.excludeBotMessagesFromInterception {
+                return (false, false)
+            }
+            preserveBotMessage = settings.preserveBotMessages
+        }
+    }
     return (policy == .preserve || settings.antiRecallEnabled || preserveBotMessage, preserveBotMessage)
 }
 
@@ -464,24 +473,8 @@ extension ReplayContext {
             }
 
             let updatedMessage = mergedServerMessageUpdate(previous: previousMessage, updated: message)
-            var updatedAttributes = updatedMessage.attributes
-            // MARK: NEXTGRAM — Carry local history across API edits and append the replaced text when enabled.
-            if let retainedDeletion = previousMessage.attributes.first(where: { $0 is NagramDeletedMessageAttribute }) as? NagramDeletedMessageAttribute {
-                updatedAttributes.removeAll(where: { $0 is NagramDeletedMessageAttribute })
-                updatedAttributes.append(retainedDeletion)
-            }
-            let existingHistory = previousMessage.attributes.first(where: { $0 is NagramMessageHistoryAttribute }) as? NagramMessageHistoryAttribute
-            updatedAttributes.removeAll(where: { $0 is NagramMessageHistoryAttribute })
-            if NagramSettings.shared.saveMessageEditHistory && previousMessage.text != message.text {
-                let editTimestamp = (message.attributes.first(where: { $0 is EditedMessageAttribute }) as? EditedMessageAttribute)?.date
-                    ?? Int32(clamping: Int64(Date().timeIntervalSince1970))
-                updatedAttributes.append(NagramMessageHistoryAttribute(
-                    appending: NagramMessageEditVersion(text: previousMessage.text, timestamp: editTimestamp),
-                    to: existingHistory
-                ))
-            } else if let existingHistory {
-                updatedAttributes.append(existingHistory)
-            }
+            // MARK: NEXTGRAM — Incoming and self-edits share the same bounded capture rules.
+            let updatedAttributes = nextgramCarryMessageHistory(previous: previousMessage, updated: updatedMessage, mediaBox: mediaBox)
             return .update(updatedMessage.withUpdatedAttributes(updatedAttributes))
         })
         // A fetch in flight may be bringing the message with its old content, over the edited one or, with none stored

@@ -3,6 +3,7 @@ import Postbox
 import SwiftSignalKit
 internal import TelegramApi
 import MtProtoKit
+import NagramSettings // MARK: NEXTGRAM
 
 private final class ManagedSynchronizeViewStoriesOperationsHelper {
     var operationDisposables: [PeerId: (Int32, Disposable)] = [:]
@@ -119,6 +120,8 @@ func managedSynchronizeViewStoriesOperations(postbox: Postbox, network: Network,
 }
 
 private func pushStoriesAreSeen(postbox: Postbox, network: Network, stateManager: AccountStateManager, peer: Peer, operation: SynchronizeViewStoriesOperation) -> Signal<Void, NoError> {
+    // MARK: NEXTGRAM — Drop queued reports while privacy mode is enabled; never replay them after it is disabled.
+    if NagramSettings.shared.suppressStoryReadReceipts { return .complete() }
     guard let inputPeer = apiInputPeer(peer) else {
         return .complete()
     }

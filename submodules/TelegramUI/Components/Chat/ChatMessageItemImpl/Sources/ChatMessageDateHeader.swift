@@ -21,6 +21,8 @@ import ComponentFlow
 import EmojiStatusComponent
 import AppBundle
 import GlassBackgroundComponent
+import NagramMessageHistory // MARK: NEXTGRAM
+import NagramSettings // MARK: NEXTGRAM
 
 private let timezoneOffset: Int32 = {
     let nowTimestamp = Int32(CFAbsoluteTimeGetCurrent() + NSTimeIntervalSince1970)
@@ -1027,9 +1029,11 @@ public final class ChatMessageAvatarHeader: ListViewItemHeader {
     public let context: AccountContext
     public let controllerInteraction: ChatControllerInteraction?
     public let storyStats: EnginePeerStoryStats?
+    private let nextgramRetainedDeletion: Bool // MARK: NEXTGRAM
 
     public init(timestamp: Int32, peerId: EnginePeer.Id, peer: EnginePeer?, messageReference: MessageReference?, message: EngineMessage, presentationData: ChatPresentationData, context: AccountContext, controllerInteraction: ChatControllerInteraction?, storyStats: EnginePeerStoryStats?) {
         let message = message._asMessage()
+        self.nextgramRetainedDeletion = message.attributes.contains { $0 is NagramDeletedMessageAttribute } // MARK: NEXTGRAM
         self.peerId = peerId
         self.peer = peer
         self.messageReference = messageReference
@@ -1069,6 +1073,9 @@ public final class ChatMessageAvatarHeader: ListViewItemHeader {
 
     public func combinesWith(other: ListViewItemHeader) -> Bool {
         if let other = other as? ChatMessageAvatarHeader, other.id == self.id {
+            if self.nextgramRetainedDeletion != other.nextgramRetainedDeletion && NextgramDeletedMessageAppearance().includesAvatar { // MARK: NEXTGRAM
+                return false
+            }
             if abs(self.effectiveTimestamp - other.effectiveTimestamp) >= chatMessageBubblelessRunInterval {
                 return false
             }
@@ -1079,7 +1086,9 @@ public final class ChatMessageAvatarHeader: ListViewItemHeader {
     }
 
     public func node(synchronousLoad: Bool) -> ListViewItemHeaderNode {
-        return ChatMessageAvatarHeaderNodeImpl(peerId: self.peerId, peer: self.peer, messageReference: self.messageReference, adMessageId: self.adMessageId, presentationData: self.presentationData, context: self.context, controllerInteraction: self.controllerInteraction, storyStats: self.storyStats, synchronousLoad: synchronousLoad)
+        let node = ChatMessageAvatarHeaderNodeImpl(peerId: self.peerId, peer: self.peer, messageReference: self.messageReference, adMessageId: self.adMessageId, presentationData: self.presentationData, context: self.context, controllerInteraction: self.controllerInteraction, storyStats: self.storyStats, synchronousLoad: synchronousLoad)
+        node.updateNextgramDeletionAppearance(retained: self.nextgramRetainedDeletion) // MARK: NEXTGRAM
+        return node
     }
 
     public func updateNode(_ node: ListViewItemHeaderNode, previous: ListViewItemHeader?, next: ListViewItemHeader?) {
@@ -1091,6 +1100,7 @@ public final class ChatMessageAvatarHeader: ListViewItemHeader {
             node.updatePeer(peer: peer)
         }
         node.updateStoryStats(storyStats: self.storyStats, theme: self.presentationData.theme.theme, force: false)
+        node.updateNextgramDeletionAppearance(retained: self.nextgramRetainedDeletion) // MARK: NEXTGRAM
     }
 }
 
@@ -1111,6 +1121,7 @@ public final class ChatMessageAvatarHeaderNodeImpl: ListViewItemHeaderNode, Chat
 
     private let containerNode: ContextControllerSourceNode
     public let avatarNode: AvatarNode
+    private var nextgramDeletionOverlay: CALayer? // MARK: NEXTGRAM
     private var avatarVideoNode: AvatarVideoNode?
         
     private var cachedDataDisposable = MetaDisposable()
@@ -1365,6 +1376,26 @@ public final class ChatMessageAvatarHeaderNodeImpl: ListViewItemHeaderNode, Chat
             self.presentationData = presentationData
             self.setNeedsLayout()
         }
+    }
+
+    // MARK: NEXTGRAM — The avatar and bubble use the same opacity and tint settings.
+    fileprivate func updateNextgramDeletionAppearance(retained: Bool) {
+        let appearance = NextgramDeletedMessageAppearance()
+        let enabled = retained && appearance.includesAvatar
+        self.containerNode.alpha = enabled ? CGFloat(appearance.opacity) : 1.0
+        guard enabled, appearance.overlayOpacity > 0 else {
+            self.nextgramDeletionOverlay?.removeFromSuperlayer()
+            self.nextgramDeletionOverlay = nil
+            return
+        }
+        let overlay = self.nextgramDeletionOverlay ?? CALayer()
+        let side = avatarHeaderSize()
+        overlay.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        overlay.cornerRadius = side * 0.5
+        overlay.zPosition = 20
+        overlay.backgroundColor = UIColor(rgb: appearance.overlayRGB).withAlphaComponent(CGFloat(appearance.overlayOpacity)).cgColor
+        if overlay.superlayer == nil { self.avatarNode.layer.addSublayer(overlay) }
+        self.nextgramDeletionOverlay = overlay
     }
 
     override public func updateLayout(size: CGSize, leftInset: CGFloat, rightInset: CGFloat, transition: ContainedViewLayoutTransition) {

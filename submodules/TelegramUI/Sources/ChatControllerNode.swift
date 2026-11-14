@@ -3945,7 +3945,7 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
                             }
                             
                             self.loadMoreSearchResultsDisposable?.dispose()
-                            self.loadMoreSearchResultsDisposable = (self.context.engine.messages.searchMessages(location: currentSearchState.location, query: currentSearchState.query, state: currentResultsState.state)
+                            self.loadMoreSearchResultsDisposable = (controller.nextgramSearchMessages(location: currentSearchState.location, query: currentSearchState.query, state: currentResultsState.state) // MARK: NEXTGRAM
                             |> deliverOnMainQueue).startStrict(next: { [weak self] results, updatedState in
                                 guard let self, let controller = self.controller else {
                                     return
@@ -4584,7 +4584,8 @@ class ChatControllerNode: ASDisplayNode, ASScrollViewDelegate {
             context: self.context,
             currentInputData: inputMediaNodeData,
             updatedInputData: self.inputMediaNodeDataPromise.get(),
-            defaultToEmojiTab: !self.chatPresentationInterfaceState.interfaceState.effectiveInputState.isEmpty || self.chatPresentationInterfaceState.interfaceState.forwardMessageIds != nil || self.openStickersBeginWithEmoji || self.chatPresentationInterfaceState.focusedPollAddOptionMessageId != nil,
+            // MARK: NEXTGRAM
+            defaultToEmojiTab: NagramSettings.shared.openEmojiTabFirst || !self.chatPresentationInterfaceState.interfaceState.effectiveInputState.isEmpty || self.chatPresentationInterfaceState.interfaceState.forwardMessageIds != nil || self.openStickersBeginWithEmoji || self.chatPresentationInterfaceState.focusedPollAddOptionMessageId != nil,
             interaction: ChatEntityKeyboardInputNode.Interaction(chatControllerInteraction: self.controllerInteraction, panelInteraction: interfaceInteraction),
             chatPeerId: peerId,
             stateContext: self.inputMediaNodeStateContext,

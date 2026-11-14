@@ -18,6 +18,7 @@ swift_library(
         "//submodules/ItemListUI:ItemListUI",
         "//submodules/ItemListPeerItem:ItemListPeerItem",
         "//Nagram/Strings:NagramStrings",
+        "//Nagram/Settings:NagramSettings",
     ],
     visibility = ["//visibility:public"],
 )

@@ -12,6 +12,7 @@ swift_library(
     deps = [
         # MARK: NAGRAM
         "//Nagram/Settings:NagramSettings",
+        "//Nagram/Strings:NagramStrings", # MARK: NEXTGRAM
         "//submodules/UrlWhitelist",
         "//submodules/Display",
         "//submodules/AsyncDisplayKit",

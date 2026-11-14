@@ -12,6 +12,8 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        # MARK: NEXTGRAM — Message font selection is independent of the interface font.
+        "//Nagram/Typography:NextgramTypography",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/Postbox:Postbox",
         "//submodules/Display:Display",

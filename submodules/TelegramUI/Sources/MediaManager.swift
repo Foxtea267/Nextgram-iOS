@@ -15,6 +15,9 @@ import DeviceProximity
 import MediaResources
 import PhotoResources
 import PeerMessagesMediaPlaylist
+// MARK: NEXTGRAM — System media presentation can be disabled independently of audio playback.
+import NagramSettings
+import NagramSettingsSignal
 
 enum SharedMediaPlayerGroup: Int {
     case music = 0
@@ -219,6 +222,23 @@ public final class MediaManagerImpl: NSObject, MediaManager {
         }))
         
         var baseNowPlayingInfo: [String: Any]?
+        // MARK: NEXTGRAM — Artwork completion must retain the current clock and playback speed.
+        var latestNowPlayingStatus: MediaPlayerStatus?
+        func publishNowPlayingInfo() {
+            guard var info = baseNowPlayingInfo else { return }
+            if let status = latestNowPlayingStatus {
+                info[MPMediaItemPropertyPlaybackDuration] = status.duration as NSNumber
+                var timestamp = status.timestamp
+                if case .playing = status.status {
+                    info[MPNowPlayingInfoPropertyPlaybackRate] = status.baseRate as NSNumber
+                    if status.generationTimestamp > 0 {
+                        timestamp += max(0, CACurrentMediaTime() - status.generationTimestamp) * status.baseRate
+                    }
+                } else { info[MPNowPlayingInfoPropertyPlaybackRate] = 0.0 as NSNumber }
+                info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = max(0, min(status.duration, timestamp)) as NSNumber
+            }
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        }
         
         var previousState: SharedMediaPlayerItemPlaybackState?
         var previousDisplayData: SharedMediaPlaybackDisplayData?
@@ -227,10 +247,13 @@ public final class MediaManagerImpl: NSObject, MediaManager {
         
         var currentGlobalControlsOptions = GlobalControlOptions()
         
-        self.globalControlsDisposable.set((combineLatest(self.globalMediaPlayerState, self.presentationData)
-        |> deliverOnMainQueue).startStrict(next: { stateAndType, presentationData in
+        // MARK: NEXTGRAM — iOS shares Now Playing across Dynamic Island, Lock Screen and Control Center.
+        self.globalControlsDisposable.set((combineLatest(self.globalMediaPlayerState, self.presentationData,
+            inForeground, nagramStringSignal("nagram.musicSystemNowPlaying", defaultValue: "always"))
+        |> deliverOnMainQueue).startStrict(next: { stateAndType, presentationData, inForeground, visibility in
+            let showsSystemPlayer = (NextgramSystemMusicDisplay(rawValue: visibility) ?? .always).isVisible(inForeground: inForeground)
             var updatedGlobalControlOptions = GlobalControlOptions()
-            if let (_, stateOrLoading, type) = stateAndType, case let .state(state) = stateOrLoading {
+            if showsSystemPlayer, let (_, stateOrLoading, type) = stateAndType, case let .state(state) = stateOrLoading {
                 if type == .music {
                     updatedGlobalControlOptions.insert(.previous)
                     updatedGlobalControlOptions.insert(.next)
@@ -244,7 +267,7 @@ public final class MediaManagerImpl: NSObject, MediaManager {
                 }
             }
             
-            if let (account, stateOrLoading, type) = stateAndType, type == .music, case let .state(state) = stateOrLoading, let displayData = state.item.displayData {
+            if showsSystemPlayer, let (account, stateOrLoading, type) = stateAndType, type == .music, case let .state(state) = stateOrLoading, let displayData = state.item.displayData {
                 if previousDisplayData != displayData {
                     previousDisplayData = displayData
                     
@@ -271,11 +294,10 @@ public final class MediaManagerImpl: NSObject, MediaManager {
                             nowPlayingInfo[MPMediaItemPropertyTitle] = titleText
                     }
                     
-                    globalControlsArtwork.set(.single(artwork.flatMap({ (account, $0) })))
-                    
                     baseNowPlayingInfo = nowPlayingInfo
-                    
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+                    latestNowPlayingStatus = state.status // MARK: NEXTGRAM
+                    publishNowPlayingInfo()
+                    globalControlsArtwork.set(.single(artwork.flatMap({ (account, $0) })))
                 }
                 
                 if previousState != state {
@@ -285,13 +307,12 @@ public final class MediaManagerImpl: NSObject, MediaManager {
             } else {
                 previousState = nil
                 previousDisplayData = nil
+                latestNowPlayingStatus = nil // MARK: NEXTGRAM
+                baseNowPlayingInfo = nil // MARK: NEXTGRAM — Invalidate before cancellation can synchronously emit nil artwork.
                 globalControlsStatus.set(.single(nil))
                 globalControlsArtwork.set(.single(nil))
-                
-                if baseNowPlayingInfo != nil {
-                    baseNowPlayingInfo = nil
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
-                }
+                // MARK: NEXTGRAM — Clear immediately, including while metadata/artwork is still loading.
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
             }
             
             if currentGlobalControlsOptions != updatedGlobalControlOptions {
@@ -351,27 +372,16 @@ public final class MediaManagerImpl: NSObject, MediaManager {
                 } else {
                     nowPlayingInfo.removeValue(forKey: MPMediaItemPropertyArtwork)
                 }
-                MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
                 baseNowPlayingInfo = nowPlayingInfo
+                publishNowPlayingInfo() // MARK: NEXTGRAM
             }
         }))
         
         self.globalControlsStatusDisposable.set((self.globalControlsStatus.get()
         |> deliverOnMainQueue).startStrict(next: { next in
-            if let next = next {
-                if var nowPlayingInfo = baseNowPlayingInfo {
-                    nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = next.duration as NSNumber
-                    switch next.status {
-                        case .playing:
-                            nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = 1.0 as NSNumber
-                        case .buffering, .paused:
-                            nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = 0.0 as NSNumber
-                    }
-                    nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = next.timestamp as NSNumber
-                    
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
-                }
-            }
+            // MARK: NEXTGRAM — A hidden session has no base dictionary, so late callbacks cannot revive its card.
+            latestNowPlayingStatus = next
+            publishNowPlayingInfo()
         }))
         
        

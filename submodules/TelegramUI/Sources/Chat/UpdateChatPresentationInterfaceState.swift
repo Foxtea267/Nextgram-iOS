@@ -17,6 +17,7 @@ import LegacyChatHeaderPanelComponent
 import ComponentFlow
 import ComponentDisplayAdapters
 import NagramSettings // MARK: NAGRAM // MARK: NEXTGRAM
+import NagramMessageHistory // MARK: NEXTGRAM
 import ChatTitleView
 import EmojiStatusComponent
 
@@ -442,6 +443,16 @@ func updateChatPresentationInterfaceStateImpl(
             disposable.set((selfController.context.engine.data.subscribe(TelegramEngine.EngineData.Item.Messages.Message(id: replyMessageId))
             |> deliverOnMainQueue).start(next: { [weak selfController] message in
                 guard let selfController else {
+                    return
+                }
+                // MARK: NEXTGRAM — A recalled target can disappear while the user is composing.
+                if message?.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) == true {
+                    Queue.mainQueue().async { [weak selfController] in
+                        guard let selfController, selfController.presentationInterfaceState.interfaceState.replyMessageSubject?.messageId == replyMessageId else { return }
+                        selfController.updateChatPresentationInterfaceState(interactive: false, { state in
+                            state.updatedInterfaceState { $0.withUpdatedReplyMessageSubject(nil) }.updatedReplyMessage(nil)
+                        })
+                    }
                     return
                 }
                 if message != selfController.presentationInterfaceState.replyMessage.flatMap(EngineMessage.init) {

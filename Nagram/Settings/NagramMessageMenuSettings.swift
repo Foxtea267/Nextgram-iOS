@@ -23,6 +23,7 @@ public enum NagramMessageMenuItemId: String, CaseIterable {
     case sendLogs
     case viewReplies
     case viewEditHistory
+    case summarize
     case edit
     case editSuggestedPostMessage
     case editSuggestedPostTime

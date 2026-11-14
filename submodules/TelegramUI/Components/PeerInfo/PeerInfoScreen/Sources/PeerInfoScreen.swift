@@ -295,6 +295,7 @@ enum PeerInfoSettingsSection {
     // MARK: NAGRAM — Debug fallback when the bottom tab bar is hidden.
     case nagramDebug
     case nextgramBookmarks // MARK: NEXTGRAM
+    case nextgramChannelFeed // MARK: NEXTGRAM
 }
 
 enum PeerInfoReportType {

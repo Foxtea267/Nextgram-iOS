@@ -6,14 +6,18 @@ public enum NagramBottomBarItemId: String, CaseIterable, Codable, Hashable {
     case chats
     case settings
     case profile
+    case feed
     case search
+    case savedMessages
 
     public static let profileTabBarTag = 0x4E4750
     public static let settingsTabBarTag = 0x4E4753
+    public static let feedTabBarTag = 0x4E4746
+    public static let savedMessagesTabBarTag = 0x4E474D
 
     public var isNavigationItem: Bool {
         switch self {
-        case .contacts, .calls, .chats, .settings, .profile:
+        case .contacts, .calls, .chats, .settings, .profile, .feed, .savedMessages:
             return true
         case .search:
             return false
@@ -56,7 +60,7 @@ public enum NagramBottomBarSearchMode: String, Codable {
 
 public struct NagramBottomBarSettings: Codable, Equatable {
     public static let defaultBottomItems: [NagramBottomBarItemId] = [.contacts, .calls, .chats, .settings]
-    public static let minimumVisibleNonSearchBottomItems = 2
+    public static let minimumLayoutItemCount = 4
 
     public var isBottomBarVisible: Bool
     public var bottomItems: [NagramBottomBarItemId]
@@ -76,7 +80,7 @@ public struct NagramBottomBarSettings: Codable, Equatable {
         bottomItems: [NagramBottomBarItemId] = NagramBottomBarSettings.defaultBottomItems,
         externalItem: NagramBottomBarItemId? = .search,
         // Telegram 13.2 moved Contacts out of the tab bar into Settings: the tab can still be added, but starts hidden.
-        hiddenItems: Set<NagramBottomBarItemId> = [.contacts],
+        hiddenItems: Set<NagramBottomBarItemId> = [.contacts, .feed, .savedMessages],
         topSearchVisible: Bool = true,
         showLabels: Bool = true,
         settingsUseAvatar: Bool? = nil,
@@ -140,10 +144,14 @@ public struct NagramBottomBarSettings: Codable, Equatable {
     }
 
     public func canHide(_ item: NagramBottomBarItemId) -> Bool {
-        if item == .search || !self.activeBottomItems.contains(item) {
+        if item == .search {
+            return !self.activeBottomItems.isEmpty || self.externalItem?.isNavigationItem == true
+        }
+        if item != .chats {
             return true
         }
-        return item != .chats
+        return self.isVisible(.search) && self.activeBottomItems.allSatisfy { $0 == .chats }
+            && (self.externalItem?.isNavigationItem != true || self.externalItem == .chats)
     }
 
     public mutating func toggleHidden(_ item: NagramBottomBarItemId) {
@@ -177,13 +185,6 @@ public struct NagramBottomBarSettings: Codable, Equatable {
 
     public mutating func hide(_ item: NagramBottomBarItemId) {
         guard self.canHide(item) else {
-            return
-        }
-        if self.activeBottomItems.contains(item) && self.activeBottomItems.count <= Self.minimumVisibleNonSearchBottomItems {
-            let activeItems = Set(self.activeBottomItems)
-            self.hiddenItems.formUnion(activeItems)
-            self.bottomItems.removeAll(where: { activeItems.contains($0) })
-            self.normalize()
             return
         }
         if !self.hiddenItems.contains(item) {
@@ -230,6 +231,18 @@ public struct NagramBottomBarSettings: Codable, Equatable {
         let item = self.bottomItems.remove(at: sourceIndex)
         let index = max(0, min(targetIndex, self.bottomItems.count))
         self.bottomItems.insert(item, at: index)
+        self.normalize()
+    }
+
+    public mutating func reorderPages(_ items: [NagramBottomBarItemId]) {
+        let allowed = self.activeBottomItems + (self.externalItem.flatMap { $0.isNavigationItem && self.isVisible($0) ? [$0] : nil } ?? [])
+        guard Set(allowed) == Set(items), allowed.count == items.count else { return }
+        if let external = self.externalItem, external != .search, self.isVisible(external) {
+            self.externalItem = items.last
+            self.bottomItems = Array(items.dropLast())
+        } else {
+            self.bottomItems = items
+        }
         self.normalize()
     }
 
@@ -332,17 +345,15 @@ public struct NagramBottomBarSettings: Codable, Equatable {
             self.bottomItems.append(item)
             seen.insert(item)
         }
-        if !self.activeBottomItems.isEmpty && !self.activeBottomItems.contains(.chats) {
+        if !self.activeBottomItems.isEmpty && !self.activeBottomItems.contains(.chats) && self.externalItem != .chats {
             self.hiddenItems.remove(.chats)
             if !self.bottomItems.contains(.chats) {
                 self.bottomItems.append(.chats)
             }
         }
-        if self.activeBottomItems.count == 1, let restoredItem = Self.defaultBottomItems.first(where: { self.hiddenItems.contains($0) }) {
-            self.hiddenItems.remove(restoredItem)
-            if !self.bottomItems.contains(restoredItem) {
-                self.bottomItems.append(restoredItem)
-            }
+        if self.activeBottomItems.isEmpty && self.externalItem?.isNavigationItem != true && self.searchMode == .hidden {
+            self.hiddenItems.remove(.chats)
+            self.bottomItems.append(.chats)
         }
         self.buttonWidthFillRatio = max(0, min(100, self.buttonWidthFillRatio))
     }
@@ -373,7 +384,8 @@ public extension NagramBottomBarSettings {
 
     /// Version 2 made the compact bar the default. Version 1 stored the old full-width default on every launch, so a
     /// version 1 layout still exactly at that default moves to the new one; any other width setting is kept.
-    private static let currentVersion = 2
+    /// Version 3 makes Feed optional and adds Saved Messages as an optional page.
+    private static let currentVersion = 3
 
     static func load(from defaults: UserDefaults = NagramDemoMode.userDefaults) -> NagramBottomBarSettings {
         guard let version = (defaults.object(forKey: Keys.marker) as? NSNumber)?.intValue else {
@@ -383,12 +395,18 @@ public extension NagramBottomBarSettings {
         }
         if version < Self.currentVersion {
             var settings = self.storedSettings(from: defaults)
-            if settings.widthMode == .full && settings.slotMode == .visibleOnly && settings.buttonWidthFillRatio >= 100 && settings.alignment == .leftCenter {
+            if version < 2 && settings.widthMode == .full && settings.slotMode == .visibleOnly && settings.buttonWidthFillRatio >= 100 && settings.alignment == .leftCenter {
                 let compact = NagramBottomBarSettings()
                 settings.widthMode = compact.widthMode
                 settings.slotMode = compact.slotMode
                 settings.buttonWidthFillRatio = compact.buttonWidthFillRatio
                 settings.alignment = compact.alignment
+            }
+            // Earlier versions automatically added Feed to the default layout.
+            let previousDefault: [NagramBottomBarItemId] = [.contacts, .calls, .chats, .feed, .settings]
+            let previousVisibleDefault = previousDefault.filter { !settings.hiddenItems.contains($0) }
+            if settings.bottomItems == previousVisibleDefault && settings.externalItem == .search {
+                settings.hide(.feed)
             }
             settings.save(to: defaults)
             return settings
@@ -407,7 +425,7 @@ public extension NagramBottomBarSettings {
 
         return NagramBottomBarSettings(
             isBottomBarVisible: defaults.object(forKey: Keys.isBottomBarVisible) as? Bool ?? true,
-            bottomItems: bottomItems.isEmpty ? Self.defaultBottomItems : bottomItems,
+            bottomItems: defaults.object(forKey: Keys.bottomItems) == nil ? Self.defaultBottomItems : bottomItems,
             externalItem: externalItem,
             hiddenItems: hiddenItems,
             topSearchVisible: defaults.object(forKey: Keys.topSearchVisible) as? Bool ?? true,
@@ -478,7 +496,7 @@ public extension NagramBottomBarSettings {
         let hideTopSearch = defaults.object(forKey: "nagram.showTabBarSearch") as? Bool ?? false
         let wideTabBar = defaults.object(forKey: "nagram.wideTabBar") as? Bool ?? false
 
-        var hiddenItems = Set<NagramBottomBarItemId>()
+        var hiddenItems: Set<NagramBottomBarItemId> = [.feed, .savedMessages]
         if hideContacts {
             hiddenItems.insert(.contacts)
         }

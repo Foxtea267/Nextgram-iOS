@@ -9,17 +9,37 @@ import SwiftSignalKit
 import TelegramPresentationData
 import UIKit
 
+private enum NextgramUpdateMethod: String, CaseIterable {
+    case certificate, trollStore
+
+    static var current: Self {
+        if let method = Self(rawValue: NagramSettings.shared.updateInstallMethod) { return method }
+        let marker = Bundle.main.bundleURL.deletingLastPathComponent().appendingPathComponent("_TrollStore")
+        return FileManager.default.fileExists(atPath: marker.path) ? .trollStore : .certificate
+    }
+}
+
 private enum UpdateState: Equatable {
     case idle
     case checking
+    case clearing
+    case cacheCleared
     case current
     case available(NextgramUpdateRelease)
     case downloading(NextgramUpdateRelease, Int?)
     case downloaded(NextgramUpdateRelease, NextgramUpdatePackage, String?)
     case signing(NextgramUpdateRelease)
     case signed(NextgramUpdateRelease, NextgramUpdatePackage, NextgramSignedUpdate, String?)
-    case installing(NextgramUpdateRelease, NextgramUpdatePackage, NextgramSignedUpdate, Bool)
+    case installing(NextgramUpdateRelease, NextgramUpdatePackage, NextgramSignedUpdate?, Bool)
+    case trollStoreResult(NextgramUpdateRelease, NextgramUpdatePackage, String)
     case failed(String, NextgramUpdateRelease?)
+}
+
+private struct UpdatePreferences: Equatable {
+    let automaticChecks = NagramSettings.shared.autoCheckForUpdates
+    let autoPrepare = NagramSettings.shared.updateAutoPrepare
+    let method = NextgramUpdateMethod.current
+    let preferredNode = NagramSettings.shared.updateLCSignNode
 }
 
 @MainActor
@@ -30,6 +50,18 @@ private final class UpdateActions {
     private var lastProgress: Int?
     private var installation: NextgramInstallSession?
     private var backgroundTask: UIBackgroundTaskIdentifier = .invalid
+
+    func clearCache() {
+        guard task == nil else { return }
+        state.set(.clearing)
+        task = Task { @MainActor [weak self] in
+            let succeeded = await Task.detached(priority: .utility) {
+                (try? NextgramUpdateClient.clearCache()) != nil
+            }.value
+            self?.task = nil
+            self?.state.set(succeeded ? .cacheCleared : .failed("Nagram.Update.Cache.Error", nil))
+        }
+    }
 
     deinit {
         task?.cancel()
@@ -42,14 +74,21 @@ private final class UpdateActions {
         }
     }
 
-    func restore(bundleIdentifier: String, installedVersion: String) {
+    func restore(bundleIdentifier: String, installedVersion: String, incomingRelease: NextgramUpdateRelease?) {
         state.set(.checking)
         task = Task { @MainActor [weak self] in
             let restored = await NextgramUpdateClient.restore(bundleIdentifier: bundleIdentifier, installedVersion: installedVersion)
+            let restoredSignature: NextgramSignedUpdate?
+            if let (release, package) = restored, NextgramUpdateMethod.current == .certificate {
+                restoredSignature = await NextgramSigningFiles.restoreSignedUpdate(release: release, package: package)
+            } else { restoredSignature = nil }
             if !Task.isCancelled {
                 self?.task = nil
                 if let (release, package) = restored {
-                    self?.state.set(.downloaded(release, package, nil))
+                    if let restoredSignature { self?.state.set(.signed(release, package, restoredSignature, nil)) }
+                    else { self?.didDownload(release, package: package) }
+                } else if let incomingRelease {
+                    self?.didFind(incomingRelease)
                 } else {
                     self?.state.set(.idle)
                 }
@@ -63,17 +102,18 @@ private final class UpdateActions {
         }
         state.set(.checking)
         task = Task { @MainActor [weak self] in
-            defer {
-                if !Task.isCancelled {
-                    self?.task = nil
-                }
-            }
             do {
                 let release = try await NextgramUpdateClient.check(bundleIdentifier: bundleIdentifier, installedVersion: version)
                 try Task.checkCancellation()
-                self?.state.set(release.map(UpdateState.available) ?? .current)
+                self?.task = nil
+                if let release {
+                    self?.didFind(release)
+                } else {
+                    self?.state.set(.current)
+                }
             } catch {
                 if !Task.isCancelled {
+                    self?.task = nil
                     self?.state.set(.failed(Self.errorKey(error, fallback: "Nagram.Update.CheckFailed"), nil))
                 }
             }
@@ -89,12 +129,6 @@ private final class UpdateActions {
         lastProgress = nil
         state.set(.downloading(release, nil))
         task = Task { @MainActor [weak self] in
-            defer {
-                if !Task.isCancelled {
-                    self?.downloadID = nil
-                    self?.task = nil
-                }
-            }
             do {
                 let downloadedPackage = try await NextgramUpdateClient.download(release, progress: { [weak self] progress in
                     Task { @MainActor in
@@ -105,13 +139,33 @@ private final class UpdateActions {
                 })
                 try Task.checkCancellation()
                 self?.downloadID = nil
-                self?.state.set(.downloaded(release, downloadedPackage, nil))
+                self?.task = nil
+                self?.didDownload(release, package: downloadedPackage)
             } catch {
                 if !Task.isCancelled {
                     self?.downloadID = nil
+                    self?.task = nil
                     self?.state.set(.failed(Self.errorKey(error, fallback: "Nagram.Update.DownloadFailed"), release))
                 }
             }
+        }
+    }
+
+    private func didFind(_ release: NextgramUpdateRelease) {
+        if NagramSettings.shared.updateAutoPrepare {
+            download(release)
+        } else {
+            state.set(.available(release))
+        }
+    }
+
+    private func didDownload(_ release: NextgramUpdateRelease, package: NextgramUpdatePackage) {
+        if NagramSettings.shared.updateAutoPrepare, NextgramUpdateMethod.current == .certificate,
+           let files = try? NextgramSigningFiles.saved(bundleIdentifier: release.bundleIdentifier),
+           let expiration = files.expiration, expiration > Date() {
+            sign(release, package: package)
+        } else {
+            state.set(.downloaded(release, package, nil))
         }
     }
 
@@ -134,10 +188,15 @@ private final class UpdateActions {
         }
     }
 
-    func install(_ release: NextgramUpdateRelease, package: NextgramUpdatePackage, signed: NextgramSignedUpdate) {
+    func install(_ release: NextgramUpdateRelease, package: NextgramUpdatePackage, signed: NextgramSignedUpdate?) {
         guard task == nil else { return }
         state.set(.installing(release, package, signed, false))
+        let preferredNode = NagramSettings.shared.updateLCSignNode
         task = Task { @MainActor [weak self] in
+            func result(_ key: String, trollStoreKey: String? = nil) -> UpdateState {
+                if let signed { return .signed(release, package, signed, key) }
+                return .trollStoreResult(release, package, trollStoreKey ?? key)
+            }
             defer {
                 if !Task.isCancelled {
                     self?.stopInstallation()
@@ -145,7 +204,14 @@ private final class UpdateActions {
                 }
             }
             do {
-                let session = try await NextgramInstallSession.prepare(signed)
+                let session: NextgramInstallSession
+                if let signed {
+                    session = try await NextgramInstallSession.prepare(signed, preferredNode: preferredNode)
+                } else {
+                    session = try await Task.detached(priority: .userInitiated) {
+                        try await NextgramInstallSession.prepareForTrollStore(package, release: release)
+                    }.value
+                }
                 try Task.checkCancellation()
                 guard let self else { return }
                 self.installation = session
@@ -155,36 +221,36 @@ private final class UpdateActions {
                         self.task?.cancel()
                         self.task = nil
                         self.stopInstallation()
-                        self.state.set(.signed(release, package, signed, "Nagram.Update.Install.NoTransfer"))
+                        self.state.set(result("Nagram.Update.Install.NoTransfer"))
                     }
                 }
                 guard await UIApplication.shared.open(session.installationURL) else {
-                    self.state.set(.signed(release, package, signed, "Nagram.Update.Install.Rejected"))
+                    self.state.set(result("Nagram.Update.Install.Rejected", trollStoreKey: "Nagram.Update.TrollStore.Unavailable"))
                     return
                 }
                 try Task.checkCancellation()
                 for attempt in 0..<300 {
                     if await session.transferComplete() {
-                        self.state.set(.signed(release, package, signed, "Nagram.Update.Install.Delivered"))
+                        self.state.set(result("Nagram.Update.Install.Delivered"))
                         return
                     }
                     if attempt == 29 {
                         if await session.transferStarted() {
                             self.state.set(.installing(release, package, signed, true))
                         } else {
-                            self.state.set(.signed(release, package, signed, "Nagram.Update.Install.NoTransfer"))
+                            self.state.set(result("Nagram.Update.Install.NoTransfer"))
                             return
                         }
                     }
                     try await Task.sleep(nanoseconds: 1_000_000_000)
                 }
-                self.state.set(.signed(release, package, signed, "Nagram.Update.Install.NoTransfer"))
+                self.state.set(result("Nagram.Update.Install.NoTransfer"))
             } catch {
                 if !Task.isCancelled {
                     if (error as? NextgramSigningFilesError) == .signingFilesChanged {
                         self?.state.set(.downloaded(release, package, nil))
                     } else {
-                        self?.state.set(.signed(release, package, signed, "Nagram.Update.Install.Failed"))
+                        self?.state.set(result("Nagram.Update.Install.Failed"))
                     }
                 }
             }
@@ -224,13 +290,16 @@ private final class UpdateActions {
 
 private struct UpdateRow: ItemListNodeEntry {
     enum Id: Int32 {
-        case installed, status, check, download, sign, install, cancel, export, release, automaticChecks
-        case importSigningFiles, removeSigningFiles, signingStatus, signingHelp
+        case versionHeader, installed, availableVersion, notes, status, signingNotice, check, download, sign, install, cancel, export, release
+        case installHeader, method, automaticChecks, automaticPrepare, node, methodHelp
+        case signingHeader, signingStatus, importSigningFiles, importProfiles, removeSigningFiles, signingHelp
+        case cacheHeader, clearCache, cacheHelp
     }
 
     let id: Id
     let title: String
     var switchValue: Bool? = nil
+    var detail: String? = nil
 
     var stableId: Int32 {
         return id.rawValue
@@ -238,12 +307,14 @@ private struct UpdateRow: ItemListNodeEntry {
 
     var section: ItemListSectionId {
         switch id {
-        case .installed, .status:
-            return 0
-        case .importSigningFiles, .removeSigningFiles, .signingStatus, .signingHelp:
+        case .importSigningFiles, .importProfiles, .removeSigningFiles, .signingStatus, .signingHelp, .signingHeader:
             return 2
-        default:
+        case .installHeader, .method, .automaticChecks, .automaticPrepare, .node, .methodHelp:
             return 1
+        case .cacheHeader, .clearCache, .cacheHelp:
+            return 3
+        default:
+            return 0
         }
     }
 
@@ -252,10 +323,24 @@ private struct UpdateRow: ItemListNodeEntry {
     }
 
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
-        if section == 0 || id == .signingStatus || id == .signingHelp {
+        if id == .versionHeader || id == .installHeader || id == .signingHeader || id == .cacheHeader {
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: title, sectionId: section)
+        }
+        if id == .status || id == .signingNotice || id == .signingStatus || id == .signingHelp || id == .methodHelp || id == .cacheHelp {
             return ItemListTextItem(presentationData: presentationData, text: .plain(title), sectionId: section)
         }
         let perform = arguments as! @MainActor (Id) -> Void
+        if let detail {
+            let action: (() -> Void)?
+            if id == .installed || id == .availableVersion {
+                action = nil
+            } else {
+                action = { Task { @MainActor in perform(id) } }
+            }
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, title: title,
+                label: detail, sectionId: section, style: .blocks,
+                disclosureStyle: action == nil ? .none : .optionArrows, action: action)
+        }
         if let switchValue {
             return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: title, value: switchValue,
                                       sectionId: section, style: .blocks, updated: { _ in
@@ -273,43 +358,60 @@ private struct UpdateRow: ItemListNodeEntry {
 
 @MainActor
 public func nextgramUpdateController(context: AccountContext) -> ViewController {
+    return nextgramUpdateController(context: context, incomingRelease: nil)
+}
+
+@MainActor
+private func nextgramUpdateController(context: AccountContext, incomingRelease: NextgramUpdateRelease?) -> ViewController {
     let actions = UpdateActions()
     let bundleIdentifier = Bundle.main.bundleIdentifier ?? ""
     let signing = NextgramSigningFilesActions(context: context, bundleIdentifier: bundleIdentifier)
-    let autoCheck = ValuePromise(NagramSettings.shared.autoCheckForUpdates, ignoreRepeated: true)
+    let preferences = ValuePromise(UpdatePreferences(), ignoreRepeated: true)
     let installedVersion = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String ?? ""
-    actions.restore(bundleIdentifier: bundleIdentifier, installedVersion: installedVersion)
+    actions.restore(bundleIdentifier: bundleIdentifier, installedVersion: installedVersion, incomingRelease: incomingRelease)
     let versionLabel = installedVersion.isEmpty
         ? (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
         : installedVersion
-    let state = combineLatest(context.sharedContext.presentationData, actions.state.get(), signing.status.get(), autoCheck.get())
+    let buildLabel = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""
+    let state = combineLatest(context.sharedContext.presentationData, actions.state.get(), signing.status.get(), preferences.get())
     |> deliverOnMainQueue
-    |> map { presentationData, update, signingStatus, automaticChecks -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, update, signingStatus, preferencesValue -> (ItemListControllerState, (ItemListNodeState, Any)) in
+        let method = preferencesValue.method
         let language = presentationData.strings.baseLanguageCode
         var entries: [UpdateRow] = []
         func add(_ id: UpdateRow.Id, _ key: String, suffix: String = "") {
             entries.append(UpdateRow(id: id, title: ngI18n(key, language) + suffix))
         }
-        add(.installed, "Nagram.Update.Installed", suffix: " " + versionLabel)
+        add(.versionHeader, "Nagram.Update.VersionSection")
+        entries.append(UpdateRow(id: .installed, title: ngI18n("Nagram.Update.Installed", language),
+            detail: buildLabel.isEmpty ? versionLabel : "\(versionLabel) (\(buildLabel))"))
 
         var release: NextgramUpdateRelease?
         var downloadedPackage: NextgramUpdatePackage?
         var signedUpdate: NextgramSignedUpdate?
         var cancelState: UpdateState = .idle
+        var updating = false
         switch update {
         case .idle:
             add(.check, "Nagram.Update.Check")
         case .checking:
+            updating = true
             add(.status, "Nagram.Update.Checking")
             add(.cancel, "Nagram.Update.Cancel")
+        case .clearing:
+            updating = true
+            add(.status, "Nagram.Update.Cache.Clearing")
+        case .cacheCleared:
+            add(.status, "Nagram.Update.Cache.Cleared")
+            add(.check, "Nagram.Update.Check")
         case .current:
             add(.status, "Nagram.Update.Current")
             add(.check, "Nagram.Update.Check")
         case let .available(candidate):
             release = candidate
-            add(.status, "Nagram.Update.Available", suffix: " " + candidate.versionName)
             add(.download, "Nagram.Update.Download", suffix: " · " + candidate.assetName)
         case let .downloading(candidate, progress):
+            updating = true
             release = candidate
             cancelState = .available(candidate)
             add(.status, "Nagram.Update.Downloading", suffix: progress.map { " \($0)%" } ?? "")
@@ -322,12 +424,17 @@ public func nextgramUpdateController(context: AccountContext) -> ViewController 
             } else {
                 add(.status, "Nagram.Update.Downloaded")
             }
-            if let expiration = signingStatus.expiration, expiration > Date(), !signingStatus.importing {
+            if method == .trollStore {
+                add(.install, "Nagram.Update.TrollStore.Install")
+            } else if let expiration = signingStatus.expiration, expiration > Date(), !signingStatus.importing {
                 add(.sign, "Nagram.Update.Signing.Prepare")
+            } else {
+                add(.signingNotice, signingStatus.hasCertificate ? "Nagram.Update.Signing.ProfileRequired" : "Nagram.Update.Signing.CertificateRequired")
             }
             add(.export, "Nagram.Update.Export")
             add(.check, "Nagram.Update.Check")
         case let .signing(candidate):
+            updating = true
             release = candidate
             add(.status, "Nagram.Update.Signing.Preparing")
         case let .signed(candidate, downloaded, signed, message):
@@ -335,14 +442,25 @@ public func nextgramUpdateController(context: AccountContext) -> ViewController 
             downloadedPackage = downloaded
             signedUpdate = signed
             add(.status, message ?? "Nagram.Update.Signing.Ready")
-            add(.install, "Nagram.Update.Install.Action")
-            add(.sign, "Nagram.Update.Signing.Prepare")
+            add(.install, method == .trollStore ? "Nagram.Update.TrollStore.Install" : "Nagram.Update.Install.Action")
+            if method == .certificate { add(.sign, "Nagram.Update.Signing.Prepare") }
             add(.export, "Nagram.Update.Export")
         case let .installing(candidate, downloaded, signed, transferring):
+            updating = true
             release = candidate
-            cancelState = .signed(candidate, downloaded, signed, nil)
+            cancelState = signed.map { UpdateState.signed(candidate, downloaded, $0, nil) } ?? .downloaded(candidate, downloaded, nil)
             add(.status, transferring ? "Nagram.Update.Install.Transferring" : "Nagram.Update.Install.Requesting")
             add(.cancel, "Nagram.Update.Cancel")
+        case let .trollStoreResult(candidate, downloaded, message):
+            release = candidate
+            downloadedPackage = downloaded
+            add(.status, message)
+            if method == .trollStore {
+                add(.install, "Nagram.Update.TrollStore.Install")
+            } else if let expiration = signingStatus.expiration, expiration > Date(), !signingStatus.importing {
+                add(.sign, "Nagram.Update.Signing.Prepare")
+            }
+            add(.export, "Nagram.Update.Export")
         case let .failed(key, candidate):
             release = candidate
             add(.status, key)
@@ -351,14 +469,38 @@ public func nextgramUpdateController(context: AccountContext) -> ViewController 
             }
             add(.check, "Nagram.Update.Check")
         }
+        if let release {
+            entries.append(UpdateRow(id: .availableVersion, title: ngI18n("Nagram.Update.Available", language), detail: release.versionName))
+            if let notes = release.notes, !notes.isEmpty { add(.notes, "Nagram.Update.ReleaseNotes") }
+        }
         add(.release, "Nagram.Update.ReleasePage")
-        entries.append(UpdateRow(id: .automaticChecks, title: ngI18n("Nagram.Update.AutomaticChecks", language), switchValue: automaticChecks))
-        if signingStatus.importing {
-            add(.signingStatus, "Nagram.Update.Signing.Importing")
+        add(.installHeader, "Nagram.Update.InstallSection")
+        let methodTitle = ngI18n("Nagram.Update.Method." + method.rawValue, language)
+        if updating || signingStatus.importing {
+            add(.methodHelp, "Nagram.Update.Method." + method.rawValue)
         } else {
-            add(.importSigningFiles, "Nagram.Update.Signing.Import")
-            if signingStatus.profileName != nil {
-                add(.removeSigningFiles, "Nagram.Update.Signing.Remove")
+            entries.append(UpdateRow(id: .method, title: ngI18n("Nagram.Update.Method", language), detail: methodTitle))
+            add(.methodHelp, method == .trollStore ? "Nagram.Update.TrollStore.Help" : "Nagram.Update.Install.Consent")
+        }
+        entries.append(UpdateRow(id: .automaticChecks, title: ngI18n("Nagram.Update.AutomaticChecks", language), switchValue: preferencesValue.automaticChecks))
+        if !updating && !signingStatus.importing {
+            entries.append(UpdateRow(id: .automaticPrepare, title: ngI18n(method == .certificate ? "Nagram.Update.AutoPrepare" : "Nagram.Update.AutoDownload", language), switchValue: preferencesValue.autoPrepare))
+            if method == .certificate {
+                entries.append(UpdateRow(id: .node, title: ngI18n("Nagram.Update.Node", language), detail: preferencesValue.preferredNode.isEmpty ? ngI18n("Nagram.Update.Node.Automatic", language) : preferencesValue.preferredNode.uppercased()))
+            }
+        }
+        if method == .certificate {
+            add(.signingHeader, "Nagram.Update.SigningSection")
+        }
+        if method == .certificate && signingStatus.importing {
+            add(.signingStatus, "Nagram.Update.Signing.Importing")
+        } else if method == .certificate {
+            if !updating {
+                add(.importSigningFiles, "Nagram.Update.Signing.Import")
+                if signingStatus.hasCertificate {
+                    add(.importProfiles, "Nagram.Update.Signing.ImportProfiles")
+                    add(.removeSigningFiles, "Nagram.Update.Signing.Remove")
+                }
             }
             if let errorKey = signingStatus.errorKey {
                 add(.signingStatus, errorKey)
@@ -366,11 +508,19 @@ public func nextgramUpdateController(context: AccountContext) -> ViewController 
                 if expiration <= Date() {
                     add(.signingStatus, "Nagram.Update.Signing.Expired", suffix: " " + profileName)
                 } else {
-                    add(.signingStatus, "Nagram.Update.Signing.Saved", suffix: " " + profileName)
+                    let date = DateFormatter.localizedString(from: expiration, dateStyle: .medium, timeStyle: .none)
+                    add(.signingStatus, "Nagram.Update.Signing.Saved", suffix: " \(profileName) · \(signingStatus.profileCount) · \(date)")
                 }
+            } else if signingStatus.hasCertificate {
+                add(.signingStatus, "Nagram.Update.Signing.ProfileRequired")
             }
         }
-        add(.signingHelp, "Nagram.Update.Signing.Help")
+        if method == .certificate { add(.signingHelp, "Nagram.Update.Signing.Help") }
+        if !updating && !signingStatus.importing {
+            add(.cacheHeader, "Nagram.Update.Cache.Section")
+            add(.clearCache, "Nagram.Update.Cache.Clear")
+            add(.cacheHelp, "Nagram.Update.Cache.Help")
+        }
 
         let perform: @MainActor (UpdateRow.Id) -> Void = { id in
             switch id {
@@ -387,12 +537,12 @@ public func nextgramUpdateController(context: AccountContext) -> ViewController 
                     actions.sign(release, package: downloadedPackage)
                 }
             case .install:
-                if let release, let downloadedPackage, let signedUpdate {
+                if let release, let downloadedPackage, method == .trollStore || signedUpdate != nil {
                     let title = ngI18n("Nagram.Update.Install.Action", language)
-                    let alert = UIAlertController(title: title, message: ngI18n("Nagram.Update.Install.Consent", language), preferredStyle: .alert)
+                    let alert = UIAlertController(title: title, message: ngI18n(method == .trollStore ? "Nagram.Update.TrollStore.Help" : "Nagram.Update.Install.Consent", language), preferredStyle: .alert)
                     alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel, handler: nil))
                     alert.addAction(UIAlertAction(title: title, style: .default) { _ in
-                        actions.install(release, package: downloadedPackage, signed: signedUpdate)
+                        actions.install(release, package: downloadedPackage, signed: method == .trollStore ? nil : signedUpdate)
                     })
                     context.sharedContext.applicationBindings.presentNativeController(alert)
                 }
@@ -403,15 +553,58 @@ public func nextgramUpdateController(context: AccountContext) -> ViewController 
                 }
             case .release:
                 UIApplication.shared.open(release?.pageURL ?? NextgramUpdateRelease.releasesPage)
+            case .notes:
+                guard let notes = release?.notes else { break }
+                let controller = UpdateReleaseNotesController()
+                controller.title = ngI18n("Nagram.Update.ReleaseNotes", language)
+                controller.notes = notes
+                controller.navigationItem.rightBarButtonItem = UIBarButtonItem(title: presentationData.strings.Common_Close, style: .done, target: controller, action: #selector(UpdateReleaseNotesController.close))
+                context.sharedContext.applicationBindings.presentNativeController(UINavigationController(rootViewController: controller))
+            case .method:
+                let alert = UIAlertController(title: ngI18n("Nagram.Update.Method", language), message: nil, preferredStyle: .alert)
+                for method in NextgramUpdateMethod.allCases {
+                    alert.addAction(UIAlertAction(title: ngI18n("Nagram.Update.Method." + method.rawValue, language), style: .default) { _ in
+                        NagramSettings.shared.updateInstallMethod = method.rawValue
+                        preferences.set(UpdatePreferences())
+                    })
+                }
+                alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+                context.sharedContext.applicationBindings.presentNativeController(alert)
             case .automaticChecks:
                 let enabled = !NagramSettings.shared.autoCheckForUpdates
                 NagramSettings.shared.autoCheckForUpdates = enabled
-                autoCheck.set(enabled)
+                preferences.set(UpdatePreferences())
+            case .automaticPrepare:
+                NagramSettings.shared.updateAutoPrepare.toggle()
+                preferences.set(UpdatePreferences())
+            case .node:
+                Task { @MainActor in
+                    let nodes = await NextgramInstallSession.availableNodes()
+                    let alert = UIAlertController(title: ngI18n("Nagram.Update.Node", language), message: nil, preferredStyle: .alert)
+                    func choose(_ node: String) {
+                        NagramSettings.shared.updateLCSignNode = node
+                        preferences.set(UpdatePreferences())
+                    }
+                    alert.addAction(UIAlertAction(title: ngI18n("Nagram.Update.Node.Automatic", language), style: .default) { _ in choose("") })
+                    for node in nodes {
+                        alert.addAction(UIAlertAction(title: node.label, style: .default) { _ in choose(node.code) })
+                    }
+                    alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+                    context.sharedContext.applicationBindings.presentNativeController(alert)
+                }
             case .importSigningFiles:
                 signing.pick()
+            case .importProfiles:
+                signing.pick(profilesOnly: true)
             case .removeSigningFiles:
                 signing.remove()
-            case .installed, .status, .signingStatus, .signingHelp:
+            case .clearCache:
+                let title = ngI18n("Nagram.Update.Cache.Clear", language)
+                let alert = UIAlertController(title: title, message: ngI18n("Nagram.Update.Cache.Help", language), preferredStyle: .alert)
+                alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel))
+                alert.addAction(UIAlertAction(title: title, style: .destructive) { _ in actions.clearCache() })
+                context.sharedContext.applicationBindings.presentNativeController(alert)
+            case .installed, .availableVersion, .versionHeader, .status, .signingNotice, .installHeader, .methodHelp, .signingHeader, .signingStatus, .signingHelp, .cacheHeader, .cacheHelp:
                 break
             }
         }
@@ -431,8 +624,28 @@ public func nextgramUpdateController(context: AccountContext) -> ViewController 
     return controller
 }
 
+private final class UpdateReleaseNotesController: UIViewController {
+    var notes = ""
+
+    override func loadView() {
+        let textView = UITextView()
+        textView.backgroundColor = .systemBackground
+        textView.textColor = .label
+        textView.font = .preferredFont(forTextStyle: .body)
+        textView.adjustsFontForContentSizeCategory = true
+        textView.isEditable = false
+        textView.textContainerInset = UIEdgeInsets(top: 16, left: 16, bottom: 16, right: 16)
+        textView.text = notes
+        view = textView
+    }
+
+    @objc func close() {
+        dismiss(animated: true)
+    }
+}
+
 @MainActor
-public func nextgramCheckForUpdateOnForeground(context: AccountContext, openUpdater: @escaping () -> Void) {
+public func nextgramCheckForUpdateOnForeground(context: AccountContext, openUpdater: @escaping (ViewController) -> Void) {
     guard NagramSettings.shared.autoCheckForUpdates, NagramSettings.shared.usageAgreementAcceptedVersion > 0,
           let bundleIdentifier = Bundle.main.bundleIdentifier,
           let version = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String else {
@@ -457,7 +670,9 @@ public func nextgramCheckForUpdateOnForeground(context: AccountContext, openUpda
         let message = ngI18n("Nagram.Update.Available", language) + " " + release.versionName
         let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: presentationData.strings.Common_Cancel, style: .cancel, handler: nil))
-        alert.addAction(UIAlertAction(title: title, style: .default) { _ in openUpdater() })
+        alert.addAction(UIAlertAction(title: title, style: .default) { _ in
+            openUpdater(nextgramUpdateController(context: context, incomingRelease: release))
+        })
         context.sharedContext.applicationBindings.presentNativeController(alert)
     }
 }

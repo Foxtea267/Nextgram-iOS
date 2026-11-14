@@ -49,7 +49,7 @@ swift_library(
     module_name = "TelegramUI",
     srcs = glob([
         "Sources/**/*.swift",
-    ]) + ["//Nagram/AppLifecycle:AppLifecycle"], # MARK: NAGRAM — app scene integration.
+    ]) + ["//Nagram/AppLifecycle:AppLifecycle", "//Nagram/VoiceMessages:ChatVoiceImport"], # MARK: NEXTGRAM — Native voice draft integration.
     copts = [
         "-warnings-as-errors",
     ],
@@ -104,6 +104,8 @@ swift_library(
         "//Nagram/Strings:NagramStrings",
         "//Nagram/SettingsUI:NagramSettingsUI",
         "//Nagram/MusicUI:NextgramMusicUI", # MARK: NEXTGRAM — Full-screen music player and lyrics.
+        "//Nagram/VoiceMessages:NextgramVoiceMessages", # MARK: NEXTGRAM — Streaming local audio import.
+        "//Nagram/NotificationPolicy:NextgramNotificationPolicy", # MARK: NEXTGRAM — Shared alert classification.
         "//Nagram/Translate:NagramTranslate",  # MARK: NAGRAM
         "//Nagram/Transcription:NagramTranscription",  # MARK: NAGRAM
         "//submodules/MediaPlayer:UniversalMediaPlayer",

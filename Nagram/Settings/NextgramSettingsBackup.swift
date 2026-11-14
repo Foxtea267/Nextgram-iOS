@@ -67,6 +67,9 @@ public struct NextgramSettingsBackup {
         let regexFilters: RegexFilters?
         let notificationFallback: Bool?
         let appIcon: AppIcon?
+        let summary: NextgramSummarySettings.Configuration?
+        let notificationPolicy: [String: String]?
+        let fonts: NextgramFontConfiguration?
     }
 
     public static let maximumFileSize = 2 * 1024 * 1024
@@ -90,6 +93,8 @@ public struct NextgramSettingsBackup {
         "nagram.hidePrivateChatActivities": (.chat, .boolean),
         "nagram.stayAtLatestMessageAfterRefresh": (.chat, .boolean),
         "nagram.chatListSwipeAction": (.chat, .string),
+        "nagram.hideChatListSeparators": (.chat, .boolean),
+        "nagram.hideChatListSwipeDelete": (.chat, .boolean),
         "nagram.openArchiveOnPull": (.chat, .boolean),
         "nagram.showArchiveInFolders": (.chat, .boolean),
         "nagram.hideSavedAndArchivedMessagesInList": (.chat, .boolean),
@@ -152,10 +157,17 @@ public struct NextgramSettingsBackup {
         "nagram.deletedMessageIndicatorText": (.privacy, .string),
         "nagram.deletedMessageIndicatorColor": (.privacy, .string),
         "nagram.deletedMessageSemiTransparent": (.privacy, .boolean),
+        "nagram.deletedMessageOpacity": (.privacy, .integer),
+        "nagram.deletedMessageOverlayEnabled": (.privacy, .boolean),
+        "nagram.deletedMessageOverlayOpacity": (.privacy, .integer),
+        "nagram.deletedMessageOverlayColor": (.privacy, .string),
+        "nagram.deletedMessageDimAvatar": (.privacy, .boolean),
         "nagram.preserveBotMessages": (.privacy, .boolean),
+        "nagram.excludeBotMessagesFromInterception": (.privacy, .boolean),
         "nagram.saveMessageEditHistory": (.privacy, .boolean),
         "nagram.ghostModeEnabled": (.privacy, .boolean),
         "nagram.disableReadReceipts": (.privacy, .boolean),
+        "nagram.disableStoryReadReceipts": (.privacy, .boolean),
         "nagram.disableTypingStatus": (.privacy, .boolean),
         "nagram.disableOnlineStatus": (.privacy, .boolean),
         "nagram.disableContactPhoneSharingByDefault": (.privacy, .boolean),
@@ -163,6 +175,8 @@ public struct NextgramSettingsBackup {
         "nagram.skipSensitiveContentWarning": (.privacy, .boolean),
         "nagram.ignoreContentRestrictions": (.privacy, .boolean),
         "nagram.hideStories": (.privacy, .boolean),
+        "nagram.confirmBeforeViewingStories": (.privacy, .boolean),
+        "nagram.hideRepostToStory": (.privacy, .boolean),
         "nagram.hideTopStories": (.privacy, .boolean),
         "nagram.disableStoryCameraSwipe": (.privacy, .boolean),
         "nagram.disableChatAvatarStories": (.privacy, .boolean),
@@ -172,7 +186,10 @@ public struct NextgramSettingsBackup {
         "nagram.stickerSize": (.media, .integer),
         "nagram.stickerTimestamp": (.media, .boolean),
         "nagram.recentStickerLimit": (.media, .integer),
+        "nagram.openEmojiTabFirst": (.media, .boolean),
+        "nagram.systemEmojiBeforePacks": (.media, .boolean),
         "nagram.videoPIPSwipeDirection": (.media, .string),
+        "nagram.defaultVideoQuality": (.media, .string),
         "nagram.musicPlaylistShowFileSize": (.media, .boolean),
         "nagram.musicPlaylistShowDownloadStatus": (.media, .boolean),
         "nagram.musicPlayerModernUI": (.media, .boolean),
@@ -181,15 +198,22 @@ public struct NextgramSettingsBackup {
         "nagram.musicPlayerCoverCornerRadius": (.media, .integer),
         "nagram.musicPlayerLyricsEnabled": (.media, .boolean),
         "nagram.musicPlayerOnlineLyricsEnabled": (.media, .boolean),
+        "nagram.musicPlayerLyricsSourceOrder": (.media, .string),
         "nagram.musicPlayerShowVolume": (.media, .boolean),
         "nagram.musicPlayerShowRemainingTime": (.media, .boolean),
         "nagram.musicPlayerLyricsFontSize": (.media, .integer),
         "nagram.musicPlayerBlurIntensity": (.media, .integer),
+        "nagram.musicPlayerBackground": (.media, .string),
+        "nagram.musicPlayerColors": (.media, .string),
+        "nagram.musicPlayerCustomColor": (.media, .string),
         "nagram.musicPlayerTitleAlignment": (.media, .string),
         "nagram.musicPlayerTitleFontSize": (.media, .integer),
         "nagram.musicPlayerControlScale": (.media, .integer),
         "nagram.musicPlayerDiscRotation": (.media, .boolean),
         "nagram.musicPlayerSwipeToSkip": (.media, .boolean),
+        "nagram.musicPlayerArtworkMotion": (.media, .boolean),
+        "nagram.musicSystemNowPlaying": (.media, .string),
+        "nagram.channelFeedAutoLoad": (.chat, .boolean),
         "nagram.mediaMetadataEnabled": (.media, .boolean),
         "nagram.fixLinkPreviews": (.media, .boolean),
         "nagram.locationIndicatorMode": (.appearance, .string),
@@ -209,6 +233,7 @@ public struct NextgramSettingsBackup {
         "nagram.globalHeaderBlurEnabled": (.appearance, .boolean),
         "nagram.globalHeaderShadeEnabled": (.appearance, .boolean),
         "nagram.showProfileId": (.appearance, .boolean),
+        "nagram.profileOpensMutualGroups": (.appearance, .boolean),
         "nagram.hideTabBarPermissionWarnings": (.appearance, .boolean),
         "nagram.showRegDate": (.appearance, .boolean),
         "nagram.groupProfileSettingItems": (.appearance, .string),
@@ -267,7 +292,10 @@ public struct NextgramSettingsBackup {
             regexFilters: categories.contains(.privacy) ? RegexFilters(enabled: settings.regexFiltersEnabled,
                 filterOutgoing: settings.regexFiltersFilterOutgoing, rules: settings.regexFilterRules) : nil,
             notificationFallback: categories.contains(.notifications) ? settings.localNotificationFallbackEnabled : nil,
-            appIcon: categories.contains(.appearance) ? AppIcon(name: appIconName) : nil
+            appIcon: categories.contains(.appearance) ? AppIcon(name: appIconName) : nil,
+            summary: categories.contains(.translation) ? Self.portableSummary() : nil,
+            notificationPolicy: categories.contains(.notifications) ? Dictionary(uniqueKeysWithValues: ["pin", "mention", "reply"].map { ($0, NextgramNotificationPolicy.mode(for: $0).rawValue) }) : nil,
+            fonts: categories.contains(.appearance) ? NextgramFontConfiguration.current : nil
         )
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -296,6 +324,15 @@ public struct NextgramSettingsBackup {
                 }
             }
         }
+        if let summary = document.summary {
+            guard ["openai", "anthropic"].contains(summary.format), summary.baseURL.utf8.count <= 4096,
+                  summary.endpoint.utf8.count <= 2048, summary.model.utf8.count <= 512,
+                  summary.prompt.utf8.count <= 16384, summary.temperature.isFinite,
+                  (0 ... 1).contains(summary.temperature) else { throw BackupError.invalidFile }
+        }
+        if let policy = document.notificationPolicy {
+            guard policy.count <= 3, policy.allSatisfy({ ["pin", "mention", "reply"].contains($0.key) && NextgramNotificationMode(rawValue: $0.value) != nil }) else { throw BackupError.invalidFile }
+        }
         self.document = document
         guard !self.counts.isEmpty else { throw BackupError.noSettings }
     }
@@ -309,6 +346,9 @@ public struct NextgramSettingsBackup {
         if self.document.regexFilters != nil { result[.privacy, default: 0] += 1 }
         if self.document.notificationFallback != nil { result[.notifications, default: 0] += 1 }
         if self.document.appIcon != nil { result[.appearance, default: 0] += 1 }
+        if self.document.summary != nil { result[.translation, default: 0] += 1 }
+        if self.document.notificationPolicy != nil { result[.notifications, default: 0] += 1 }
+        if self.document.fonts != nil { result[.appearance, default: 0] += 1 }
         return result
     }
 
@@ -354,6 +394,18 @@ public struct NextgramSettingsBackup {
             settings.regexFiltersFilterOutgoing = filters.filterOutgoing
             settings.regexFilterRules = filters.rules
         }
+        if categories.contains(.translation), var summary = self.document.summary {
+            // A backup is configuration, never consent to disclose messages to an external service.
+            summary.enabled = false
+            NextgramSummarySettings.configuration = summary
+        }
+        if categories.contains(.notifications), let policy = self.document.notificationPolicy {
+            for category in ["pin", "mention", "reply"] {
+                if let value = policy[category], let mode = NextgramNotificationMode(rawValue: value) {
+                    NextgramNotificationPolicy.setMode(mode, for: category)
+                }
+            }
+        }
         var restoredBottomBar: NagramBottomBarSettings?
         if categories.contains(.appearance), var bottomBar = self.document.bottomBar {
             if bottomBar.searchMode == .bar && !bottomBar.visibleBottomItems.isEmpty {
@@ -362,6 +414,8 @@ public struct NextgramSettingsBackup {
             settings.bottomBarSettings = bottomBar
             restoredBottomBar = settings.bottomBarSettings
         }
+        // Imported font bytes and licenses are not copied into a settings backup. Missing faces fall back to iOS.
+        if categories.contains(.appearance), let fonts = self.document.fonts { NextgramFontConfiguration.current = fonts }
         NotificationCenter.default.post(name: UserDefaults.didChangeNotification, object: NagramDemoMode.userDefaults)
         NotificationCenter.default.post(name: Self.didRestoreNotification, object: nil)
         return restoredBottomBar
@@ -392,5 +446,11 @@ public struct NextgramSettingsBackup {
         default:
             return value
         }
+    }
+
+    private static func portableSummary() -> NextgramSummarySettings.Configuration {
+        var configuration = NextgramSummarySettings.configuration
+        configuration.enabled = false
+        return configuration
     }
 }

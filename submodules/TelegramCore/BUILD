@@ -7,7 +7,7 @@ swift_library(
     module_name = "TelegramCore",
     srcs = glob([
         "Sources/**/*.swift",
-    ]),
+    ]) + ["//Nagram/MessageHistory:CoreCapture"], # MARK: NEXTGRAM — Shared incoming/outgoing history capture.
     copts = [
         "-warnings-as-errors",
     ],

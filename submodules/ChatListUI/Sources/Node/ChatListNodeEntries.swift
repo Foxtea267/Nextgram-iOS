@@ -663,6 +663,11 @@ struct ChatListContactPeer {
 
 // MARK: NAGRAM — 对话列表预览复用聊天内正则过滤规则，仅改展示层消息副本。
 func nagramChatListMessageIsHidden(_ message: EngineMessage, peerId: EnginePeer.Id?, accountPeerId: EnginePeer.Id) -> Bool {
+    // MARK: NEXTGRAM — share the earlier preview fallback with the hidden member filter.
+    if let id = message.author?.id.toInt64(),
+       NextgramGroupMemberFilter.hiddenMembers(accountId: accountPeerId.toInt64(), chatId: message.id.peerId.toInt64()).contains(id) {
+        return true
+    }
     let isOutgoing = !message.effectivelyIncoming(accountPeerId)
     guard let matcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64(), isOutgoing: isOutgoing) else {
         return false
@@ -671,6 +676,15 @@ func nagramChatListMessageIsHidden(_ message: EngineMessage, peerId: EnginePeer.
 }
 
 private func nagramFilteredChatListMessages(_ messages: [EngineMessage], peerId: EnginePeer.Id?, accountPeerId: EnginePeer.Id, presentationData: ChatListPresentationData) -> [EngineMessage] {
+    // MARK: NEXTGRAM
+    var hiddenByChat: [EnginePeer.Id: Set<Int64>] = [:]
+    let messages = messages.filter { message in
+        guard let id = message.author?.id.toInt64() else { return true }
+        let chatId = message.id.peerId
+        let hidden = hiddenByChat[chatId] ?? NextgramGroupMemberFilter.hiddenMembers(accountId: accountPeerId.toInt64(), chatId: chatId.toInt64())
+        hiddenByChat[chatId] = hidden
+        return !hidden.contains(id)
+    }
     let incomingMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64(), isOutgoing: false)
     let outgoingMatcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId?.toInt64(), isOutgoing: true)
     guard incomingMatcher != nil || outgoingMatcher != nil else {

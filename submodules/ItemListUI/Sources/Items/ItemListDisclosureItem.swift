@@ -13,6 +13,11 @@ import ListItemComponentAdaptor
 
 private let avatarFont = avatarPlaceholderFont(size: 16.0)
 
+// MARK: NEXTGRAM — Shared by layout and regression tests; supplementary text follows the deepest preceding line.
+func nextgramDisclosureAdditionalDetailY(titleFrame: CGRect, labelFrame: CGRect, stackedLabel: Bool, spacing: CGFloat) -> CGFloat {
+    return (stackedLabel ? max(titleFrame.maxY, labelFrame.maxY) : titleFrame.maxY) + spacing
+}
+
 public enum ItemListDisclosureItemTitleColor {
     case primary
     case accent
@@ -76,6 +81,7 @@ public class ItemListDisclosureItem: ListViewItem, ItemListItem, ListItemCompone
     let clearHighlightAutomatically: Bool
     public let tag: ItemListItemTag?
     public let shimmeringIndex: Int?
+    let nextgramReorderable: Bool // MARK: NEXTGRAM
     
     public init(
         presentationData: ItemListPresentationData,
@@ -104,7 +110,8 @@ public class ItemListDisclosureItem: ListViewItem, ItemListItem, ListItemCompone
         longTapAction: (() -> Void)? = nil,
         clearHighlightAutomatically: Bool = true,
         tag: ItemListItemTag? = nil,
-        shimmeringIndex: Int? = nil
+        shimmeringIndex: Int? = nil,
+        nextgramReorderable: Bool = false // MARK: NEXTGRAM
     ) {
         self.presentationData = presentationData
         self.systemStyle = systemStyle
@@ -133,6 +140,7 @@ public class ItemListDisclosureItem: ListViewItem, ItemListItem, ListItemCompone
         self.clearHighlightAutomatically = clearHighlightAutomatically
         self.tag = tag
         self.shimmeringIndex = shimmeringIndex
+        self.nextgramReorderable = nextgramReorderable // MARK: NEXTGRAM
     }
     
     public func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
@@ -209,6 +217,10 @@ private let badgeFont = Font.regular(15.0)
 private let boldBadgeFont = Font.semibold(14.0)
 
 public class ItemListDisclosureItemNode: ListViewItemNode, ItemListItemNode {
+    // MARK: NEXTGRAM
+    override public func isReorderable(at point: CGPoint) -> Bool {
+        return self.item?.nextgramReorderable == true && self.bounds.contains(point)
+    }
     private let backgroundNode: ASDisplayNode
     private let highlightNode: ASDisplayNode
     private let topStripeNode: ASDisplayNode
@@ -518,8 +530,14 @@ public class ItemListDisclosureItemNode: ListViewItemNode, ItemListItemNode {
             var additionalDetailLabelInfo: (TextNodeLayout, () -> TextNode)?
             if let additionalDetailLabel = item.additionalDetailLabel {
                 var detailRightInset: CGFloat = 20.0 + params.rightInset + additionalTextRightInset
-                if labelLayout.size.width != 0 {
-                    detailRightInset += labelLayout.size.width + 7.0
+                // MARK: NEXTGRAM — Stacked previews and dates share a column, not a horizontal row.
+                switch item.labelStyle {
+                case .detailText, .multilineDetailText:
+                    detailRightInset = rightInset
+                default:
+                    if labelLayout.size.width != 0 {
+                        detailRightInset += labelLayout.size.width + 7.0
+                    }
                 }
                 let additionalDetailColor: UIColor
                 switch item.additionalDetailLabelColor {
@@ -530,7 +548,7 @@ public class ItemListDisclosureItemNode: ListViewItemNode, ItemListItemNode {
                 case .destructive:
                     additionalDetailColor = item.presentationData.theme.list.itemDestructiveColor
                 }
-                additionalDetailLabelInfo = makeAdditionalDetailLabelLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: additionalDetailLabel, font: detailFont, textColor: additionalDetailColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width - leftInset - detailRightInset, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+                additionalDetailLabelInfo = makeAdditionalDetailLabelLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: additionalDetailLabel, font: detailFont, textColor: additionalDetailColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: max(0.0, params.width - leftInset - detailRightInset), height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             }
             
             let verticalInset: CGFloat
@@ -795,7 +813,14 @@ public class ItemListDisclosureItemNode: ListViewItemNode, ItemListItemNode {
                             strongSelf.addSubnode(additionalDetailLabelNode)
                         }
                         
-                        additionalDetailLabelNode.frame = CGRect(origin: CGPoint(x: leftInset, y: titleFrame.maxY + titleSpacing), size: additionalDetailLabelInfo.0.size)
+                        // MARK: NEXTGRAM — A third-line date follows the full preview instead of overlapping it.
+                        let stackedLabel: Bool
+                        switch item.labelStyle {
+                        case .detailText, .multilineDetailText: stackedLabel = true
+                        default: stackedLabel = false
+                        }
+                        let detailY = nextgramDisclosureAdditionalDetailY(titleFrame: titleFrame, labelFrame: labelFrame, stackedLabel: stackedLabel, spacing: titleSpacing)
+                        additionalDetailLabelNode.frame = CGRect(origin: CGPoint(x: leftInset, y: detailY), size: additionalDetailLabelInfo.0.size)
                     } else if let additionalDetailLabelNode = strongSelf.additionalDetailLabelNode {
                         strongSelf.additionalDetailLabelNode = nil
                         additionalDetailLabelNode.removeFromSupernode()

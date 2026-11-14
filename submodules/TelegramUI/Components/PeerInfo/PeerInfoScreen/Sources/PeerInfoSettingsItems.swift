@@ -235,8 +235,12 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.savedMessages)
     }))
     // MARK: NEXTGRAM
-    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 51, text: ngI18n("Nagram.Bookmarks", presentationData.strings.baseLanguageCode), icon: PresentationResourcesSettings.savedMessages, action: {
+    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 51, text: ngI18n("Nagram.Bookmarks", presentationData.strings.baseLanguageCode), icon: NextgramSettingsIcons.icon(for: "Nagram.Bookmarks"), action: {
         interaction.openSettings(.nextgramBookmarks)
+    }))
+    // MARK: NEXTGRAM
+    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 52, text: ngI18n("Nagram.ChannelFeed", presentationData.strings.baseLanguageCode), icon: NextgramSettingsIcons.icon(for: "Nagram.ChannelFeed"), action: {
+        interaction.openSettings(.nextgramChannelFeed)
     }))
     // MARK: NAGRAM — 联系人 / 通话记录入口只在对应 tab 不在底栏时显示
     let nagramBottomBarSettings = NagramSettings.shared.bottomBarSettings

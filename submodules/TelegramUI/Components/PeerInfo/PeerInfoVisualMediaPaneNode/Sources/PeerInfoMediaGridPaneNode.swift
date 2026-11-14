@@ -16,6 +16,8 @@ import TelegramNotices
 import TelegramStringFormatting
 import PeerInfoPaneNode
 import MediaGrid
+import NagramSettings // MARK: NEXTGRAM
+import NagramSettingsSignal // MARK: NEXTGRAM
 
 private final class MediaGridPaneHostNode: ASDisplayNode {
     let gridView: MediaGridView
@@ -64,6 +66,7 @@ public final class PeerInfoMediaGridPaneNode: ASDisplayNode, PeerInfoVisualMedia
     private var revealedSpoilerMessageIds = Set<EngineMessage.Id>()
     private var storedStateDisposable: Disposable?
     private var presentationDataDisposable: Disposable?
+    private var nextgramSpoilerDisposable: Disposable? // MARK: NEXTGRAM
     private var presentationData: PresentationData
     private(set) var checkTheme: CheckNodeTheme
     private(set) var shimmerColors: MediaGridPaneShimmerColors
@@ -185,6 +188,12 @@ public final class PeerInfoMediaGridPaneNode: ASDisplayNode, PeerInfoVisualMedia
             self.updateHiddenMedia()
         })
 
+        // MARK: NEXTGRAM — Refresh retained profile panes when the preference changes.
+        self.nextgramSpoilerDisposable = (nagramBoolSignal("nagram.autoRevealSpoilers", defaultValue: false)
+        |> deliverOnMainQueue).start(next: { [weak self] _ in
+            self?.refreshVisibleCells(animated: false)
+        })
+
         self.presentationDataDisposable = (context.sharedContext.presentationData
         |> deliverOnMainQueue).start(next: { [weak self] presentationData in
             guard let self else {
@@ -215,6 +224,7 @@ public final class PeerInfoMediaGridPaneNode: ASDisplayNode, PeerInfoVisualMedia
         self.hiddenMediaDisposable?.dispose()
         self.storedStateDisposable?.dispose()
         self.presentationDataDisposable?.dispose()
+        self.nextgramSpoilerDisposable?.dispose() // MARK: NEXTGRAM
     }
 
     private static func shimmerColors(theme: PresentationTheme) -> MediaGridPaneShimmerColors {
@@ -230,7 +240,8 @@ public final class PeerInfoMediaGridPaneNode: ASDisplayNode, PeerInfoVisualMedia
             return nil
         }
         let rawMessage = message._asMessage()
-        var hasSpoiler = rawMessage.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) && !self.revealedSpoilerMessageIds.contains(message.id)
+        // MARK: NEXTGRAM — Match chat spoiler preferences; sensitive-content consent stays independent.
+        var hasSpoiler = !NagramSettings.shared.autoRevealSpoilers && rawMessage.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) && !self.revealedSpoilerMessageIds.contains(message.id)
         if rawMessage.isSensitiveContent(platform: "ios", contentSettings: self.context.currentContentSettings.with { $0 }) {
             hasSpoiler = true
         }

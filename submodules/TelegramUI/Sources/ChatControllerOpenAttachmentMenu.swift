@@ -576,6 +576,9 @@ extension ChatControllerImpl {
                             guard let self else {
                                 return
                             }
+                            // MARK: NEXTGRAM — Offer a native voice draft for a completed local audio file.
+                            let sendFiles: () -> Void = { [weak self] in
+                            guard let self else { return }
                             var messages: [EnqueueMessage] = []
                             var groupingKey: Int64?
                             if mediaReferences.count > 1 {
@@ -621,6 +624,18 @@ extension ChatControllerImpl {
                             self.presentPaidMessageAlertIfNeeded(completion: { [weak self] postpone in
                                 self?.sendMessages(messages, media: true, postpone: postpone)
                             })
+                            }
+                            // A voice draft cannot preserve a file caption or scheduled/silent delivery options.
+                            // Keep those paths on the original file sender rather than silently discarding intent.
+                            if mediaReferences.count == 1, silentPosting != true, scheduleTime == nil,
+                               caption?.string.isEmpty != false,
+                               let file = mediaReferences.first?.media as? TelegramMediaFile,
+                               let path = self.context.engine.resources.completedResourcePath(id: EngineMediaResource.Id(file.resource.id)),
+                               self.nextgramOfferVoiceImport(urls: [URL(fileURLWithPath: path)], fileName: file.fileName, sendAsFile: sendFiles) {
+                                attachmentController?.dismiss(animated: true)
+                                return
+                            }
+                            sendFiles()
                         })
                         if let controller = controller as? AttachmentFileControllerImpl {
                             let _ = currentFilesController.swap(controller)
@@ -675,10 +690,13 @@ extension ChatControllerImpl {
                         }, presentFiles: { [weak self, weak attachmentController] in
                             attachmentController?.dismiss(animated: true)
                             self?.presentICloudFileGallery(documentTypes: ["public.mp3", "public.mpeg-4-audio", "public.aac-audio", "org.xiph.flac"])
-                        }, presentDocumentScanner: nil, send: { [weak self] mediaReferences, silentPosting, scheduleTime, caption in
+                        }, presentDocumentScanner: nil, send: { [weak self, weak attachmentController] mediaReferences, silentPosting, scheduleTime, caption in
                             guard let self else {
                                 return
                             }
+                            // MARK: NEXTGRAM — Audio-library selections share the local voice-import path.
+                            let sendFiles: () -> Void = { [weak self] in
+                            guard let self else { return }
                             var messages: [EnqueueMessage] = []
                             var groupingKey: Int64?
                             if mediaReferences.count > 1 {
@@ -708,6 +726,16 @@ extension ChatControllerImpl {
                             self.presentPaidMessageAlertIfNeeded(completion: { [weak self] postpone in
                                 self?.sendMessages(messages, media: true, postpone: postpone)
                             })
+                            }
+                            if mediaReferences.count == 1, silentPosting != true, scheduleTime == nil,
+                               caption?.string.isEmpty != false,
+                               let file = mediaReferences.first?.media as? TelegramMediaFile,
+                               let path = self.context.engine.resources.completedResourcePath(id: EngineMediaResource.Id(file.resource.id)),
+                               self.nextgramOfferVoiceImport(urls: [URL(fileURLWithPath: path)], fileName: file.fileName, sendAsFile: sendFiles) {
+                                attachmentController?.dismiss(animated: true)
+                                return
+                            }
+                            sendFiles()
                         })
                         if let controller = controller as? AttachmentFileControllerImpl {
                             let _ = currentAudioController.swap(controller)
@@ -1431,12 +1459,25 @@ extension ChatControllerImpl {
 
             strongSelf.present(legacyICloudFilePicker(theme: strongSelf.presentationData.theme, hasMultiselection: !editingMessage, documentTypes: documentTypes, completion: { [weak self] urls in
                 if let strongSelf = self, !urls.isEmpty {
+                    // MARK: NEXTGRAM — Conversion creates a preview draft; upload only follows native Send.
+                    if !editingMessage && strongSelf.nextgramOfferVoiceImport(urls: urls, sendAsFile: { [weak self] in
+                        self?.nextgramEnqueueImportedFiles(urls: urls, editingMessage: editingMessage, limits: limits, premiumLimits: premiumLimits, isPremium: isPremium)
+                    }) { return }
+                    strongSelf.nextgramEnqueueImportedFiles(urls: urls, editingMessage: editingMessage, limits: limits, premiumLimits: premiumLimits, isPremium: isPremium)
+                }
+            }), in: .window(.root))
+        })
+    }
+
+    // MARK: NEXTGRAM — Shared file path after the optional voice-import choice.
+    private func nextgramEnqueueImportedFiles(urls: [URL], editingMessage: Bool, limits: EngineConfiguration.UserLimits, premiumLimits: EngineConfiguration.UserLimits, isPremium: Bool) {
+        let strongSelf = self
                     var signals: [Signal<ICloudFileDescription?, NoError>] = []
                     for url in urls {
                         signals.append(iCloudFileDescription(url))
                     }
                     strongSelf.enqueueMediaMessageDisposable.set((combineLatest(signals)
-                    |> deliverOnMainQueue).startStrict(next: { results in
+                      |> deliverOnMainQueue).startStrict(next: { [weak self] results in
                         if let strongSelf = self {
                             let replyMessageSubject = strongSelf.presentationInterfaceState.interfaceState.replyMessageSubject
 
@@ -1529,9 +1570,6 @@ extension ChatControllerImpl {
                             }
                         }
                     }))
-                }
-            }), in: .window(.root))
-        })
     }
 
     func presentFileMediaPickerOptions(editingMessage: Bool) {

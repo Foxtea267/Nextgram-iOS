@@ -4405,6 +4405,10 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                 peerLeftRevealOptions = []
             }
             let allowsQuickActions = NagramSettings.shared.chatListSwipeActionMode.allowsQuickActions // MARK: NAGRAM
+            if NagramSettings.shared.hideChatListSwipeDelete, case .chatList = item.chatListLocation,
+               case .peer = item.content, case .auto? = item.enabledContextActions { // MARK: NEXTGRAM
+                peerRevealOptions.removeAll { $0.key == RevealOptionKey.delete.rawValue }
+            }
             if !allowsQuickActions {
                 peerRevealOptions = []
                 peerLeftRevealOptions = []
@@ -5822,7 +5826,7 @@ public class ChatListItemNode: ItemListRevealOptionsItemNode {
                     }
                     
                     transition.updateFrame(node: strongSelf.separatorNode, frame: CGRect(origin: CGPoint(x: leftSeparatorInset, y: layoutOffset + itemHeight - separatorHeight), size: CGSize(width: params.width - leftSeparatorInset - rightSeparatorInset, height: separatorHeight)))
-                    strongSelf.separatorNode.isHidden = hideCommunitySeparator
+                    strongSelf.separatorNode.isHidden = hideCommunitySeparator || NagramSettings.shared.hideChatListSeparators // MARK: NEXTGRAM
                     if let inlineNavigationLocation = item.interaction.inlineNavigationLocation {
                         strongSelf.updateSeparatorAlpha(transition: transition, inlineNavigationProgress: inlineNavigationLocation.progress)
                     } else {

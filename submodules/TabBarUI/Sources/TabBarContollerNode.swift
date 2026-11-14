@@ -254,6 +254,12 @@ final class TabBarControllerNode: ASDisplayNode {
         if item.tag == NagramBottomBarItemId.profileTabBarTag {
             return .profile
         }
+        if item.tag == NagramBottomBarItemId.feedTabBarTag { // MARK: NEXTGRAM
+            return .feed
+        }
+        if item.tag == NagramBottomBarItemId.savedMessagesTabBarTag { // MARK: NEXTGRAM
+            return .savedMessages
+        }
         if item.tag == NagramBottomBarItemId.settingsTabBarTag { // MARK: NEXTGRAM
             return .settings
         }
@@ -468,7 +474,7 @@ final class TabBarControllerNode: ASDisplayNode {
         if self.tabBarView.view == nil {
             tabBarTransition = .immediate
         }
-        let nagramLayoutItemCount = max(visibleComponentItems.count, NagramBottomBarSettings.defaultBottomItems.count)
+        let nagramLayoutItemCount = max(visibleComponentItems.count, NagramBottomBarSettings.minimumLayoutItemCount) // MARK: NEXTGRAM
         let tabBarSize = self.tabBarView.update(
             transition: tabBarTransition,
             component: AnyComponent(TabBarComponent(

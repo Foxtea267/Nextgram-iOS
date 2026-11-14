@@ -1053,7 +1053,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         
         let data = MessageContextMenuData(
             starStatus: stickerSaveStatus,
-            canReply: canReply,
+            canReply: canReply && !message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }), // MARK: NEXTGRAM
             canPin: canPin && !isEmbeddedMode,
             canEdit: canEdit && !isEmbeddedMode,
             canSelect: canSelect && !isEmbeddedMode,
@@ -1813,32 +1813,72 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         }
         
         // MARK: NAGRAM
-        // MARK: NEXTGRAM — Expose locally retained text versions from the message menu.
+        // MARK: NEXTGRAM — Browse local text, formatting and media versions without changing the live message.
         if let editHistory = message.attributes.first(where: { $0 is NagramMessageHistoryAttribute }) as? NagramMessageHistoryAttribute, !editHistory.versions.isEmpty {
             actions.append(.viewEditHistory, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.viewEditHistory", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Edit"), color: theme.actionSheet.primaryTextColor)
             }, action: { controller, _ in
                 controller?.dismiss(completion: {
-                    let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-                    let languageCode = presentationData.strings.baseLanguageCode
-                    let formatter = DateFormatter()
-                    formatter.dateStyle = .medium
-                    formatter.timeStyle = .medium
-                    var versions = editHistory.versions.enumerated().map { index, version -> String in
-                        let date = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(version.timestamp)))
-                        let text = version.text.isEmpty ? "∅" : version.text
-                        return "\(index + 1). \(date)\n\(text)"
-                    }
-                    let currentDate = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(message.editedTime ?? message.timestamp)))
-                    let currentTitle = ngI18n("Nagram.MessageEditHistory.Current", languageCode)
-                    let currentText = message.text.isEmpty ? "∅" : message.text
-                    versions.append("\(currentTitle) · \(currentDate)\n\(currentText)")
-                    controllerInteraction.presentController(textAlertController(
-                        context: context,
-                        title: ngI18n("Nagram.MessageEditHistory.Title", languageCode),
-                        text: versions.joined(separator: "\n\n"),
-                        actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]
-                    ), nil)
+                    let current = NagramMessageEditVersion(text: message.text, timestamp: message.editedTime ?? message.timestamp,
+                        attributes: message.attributes.filter { $0 is TextEntitiesMessageAttribute || $0 is RichTextMessageAttribute || $0 is MediaSpoilerMessageAttribute },
+                        media: message.media.filter { $0 is TelegramMediaImage || $0 is TelegramMediaFile })
+                    let historyController = NextgramMessageEditHistoryController(context: context,
+                        versions: [current] + Array(editHistory.versions.reversed()), copyProtected: isCopyProtected,
+                        openMedia: { version in
+                            // MARK: NEXTGRAM — Render the stored page, not the live message's rich content.
+                            if let richText = version.attributes.first(where: { $0 is RichTextMessageAttribute }) as? RichTextMessageAttribute {
+                                let page = richText.fullInstantPage ?? richText.instantPage
+                                let content = TelegramMediaWebpageLoadedContent(url: "", displayUrl: "", hash: 0,
+                                    type: nil, websiteName: nil, title: nil, text: nil, embedUrl: nil,
+                                    embedType: nil, embedSize: nil, duration: nil, author: nil,
+                                    isMediaLargeByDefault: nil, imageIsVideoCover: false, image: nil,
+                                    file: nil, story: nil, attributes: [], instantPage: page)
+                                let webpage = TelegramMediaWebpage(webpageId: EngineMedia.Id(namespace: Namespaces.Media.LocalWebpage, id: Int64.random(in: 1 ... Int64.max)), content: .Loaded(content))
+                                let browser = context.sharedContext.makeInstantPageController(context: context, webPage: webpage, anchor: nil,
+                                    sourceLocation: InstantPageSourceLocation(userLocation: .peer(message.id.peerId), peerType: .channel))
+                                controllerInteraction.presentController(browser, nil)
+                                return
+                            }
+                            let attributes = message.attributes.filter {
+                                !($0 is TextEntitiesMessageAttribute) && !($0 is RichTextMessageAttribute) && !($0 is MediaSpoilerMessageAttribute) && !($0 is NagramMessageHistoryAttribute)
+                            } + version.attributes
+                            let historicalMessage = message.withUpdatedText(version.text).withUpdatedAttributes(attributes).withUpdatedMedia(version.media)
+                            let opened = context.sharedContext.openChatMessage(OpenChatMessageParams(
+                                context: context, chatLocation: nil, chatFilterTag: nil, chatLocationContextHolder: nil,
+                                message: historicalMessage, standalone: true, copyProtected: isCopyProtected,
+                                reverseMessageGalleryOrder: false, navigationController: controllerInteraction.navigationController(),
+                                dismissInput: { controllerInteraction.dismissTextInput() },
+                                present: { controller, arguments, _ in controllerInteraction.presentController(controller, arguments) },
+                                transitionNode: { _, _, _ in nil }, addToTransitionSurface: { _ in },
+                                openUrl: { url in controllerInteraction.openUrl(.init(url: url, concealed: false, progress: Promise())) },
+                                openPeer: { peer, navigation in controllerInteraction.openPeer(EnginePeer(peer), navigation, nil, .default) },
+                                callPeer: { peerId, video in controllerInteraction.callPeer(peerId, video) },
+                                openConferenceCall: { controllerInteraction.openConferenceCall($0) }, enqueueMessage: { _ in },
+                                sendSticker: nil, sendEmoji: nil, setupTemporaryHiddenMedia: { _, _, _ in },
+                                chatAvatarHiddenMedia: { _, _ in }, gallerySource: .standaloneMessage(historicalMessage, nil)
+                            ))
+                            if !opened {
+                                let presentationData = context.sharedContext.currentPresentationData.with { $0 }
+                                controllerInteraction.presentController(textAlertController(context: context, title: nil,
+                                    text: ngI18n("Nagram.MessageEditHistory.MediaUnavailable", presentationData.strings.baseLanguageCode),
+                                    actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})]), nil)
+                            }
+                        })
+                    context.sharedContext.applicationBindings.presentNativeController(UINavigationController(rootViewController: historyController))
+                })
+            })))
+        }
+
+        // MARK: NEXTGRAM — Preview selected messages or load a bounded chat/topic range before explicit upload.
+        if NextgramSummarySettings.configuration.enabled, message.id.peerId.namespace != Namespaces.Peer.SecretChat,
+           !chatPresentationInterfaceState.copyProtectionEnabled, !message.isCopyProtected(), !message.containsSecretMedia {
+            actions.append(.summarize, .action(ContextMenuActionItem(text: ngI18n("Nagram.Summary.Title", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
+                generateTintedImage(image: UIImage(systemName: "text.alignleft"), color: theme.contextMenu.primaryColor)
+            }, action: { controller, _ in
+                controller?.dismiss(completion: {
+                    let summary = NextgramMessageSummaryController(context: context, peerId: message.id.peerId,
+                        threadId: message.threadId, selected: messages.map(EngineMessage.init))
+                    context.sharedContext.applicationBindings.presentNativeController(UINavigationController(rootViewController: summary))
                 })
             })))
         }

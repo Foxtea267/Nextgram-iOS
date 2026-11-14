@@ -17,12 +17,32 @@ public final class NextgramInstallSession: Sendable {
         self.server = server
     }
 
-    public static func prepare(_ update: NextgramSignedUpdate) async throws -> NextgramInstallSession {
+    public static func prepare(_ update: NextgramSignedUpdate, preferredNode: String = "") async throws -> NextgramInstallSession {
         try NextgramSigningFiles.checkFiles(for: update)
         let server = try LoopbackPackageServer(package: update.package)
         do {
             let packageURL = try await server.start()
-            let url = try await installationURL(packageURL: packageURL, bundleIdentifier: update.bundleIdentifier, build: update.package.build)
+            let url = try await installationURL(packageURL: packageURL, bundleIdentifier: update.bundleIdentifier, build: update.package.build, preferredNode: preferredNode)
+            try Task.checkCancellation()
+            return NextgramInstallSession(installationURL: url, server: server)
+        } catch {
+            server.stop()
+            throw error
+        }
+    }
+
+    public static func prepareForTrollStore(_ package: NextgramUpdatePackage, release: NextgramUpdateRelease) async throws -> NextgramInstallSession {
+        guard try NextgramUpdateClient.verify(package.url, release: release) == package.build else {
+            throw NextgramUpdateError.invalidPackage
+        }
+        let server = try LoopbackPackageServer(package: package)
+        do {
+            let packageURL = try await server.start()
+            var components = URLComponents()
+            components.scheme = "apple-magnifier"
+            components.host = "install"
+            components.queryItems = [URLQueryItem(name: "url", value: packageURL.absoluteString)]
+            guard let url = components.url else { throw NextgramInstallError.transport }
             try Task.checkCancellation()
             return NextgramInstallSession(installationURL: url, server: server)
         } catch {
@@ -39,11 +59,24 @@ public final class NextgramInstallSession: Sendable {
         server.stop()
     }
 
-    private struct Node: Decodable {
-        let code: String
+    public struct Node: Decodable, Sendable {
+        public let code: String
+        private let name: String?
         let base_url: URL
         let enabled: Bool
         let priority: Int
+
+        fileprivate init(code: String, baseURL: URL, priority: Int) {
+            self.code = code
+            self.name = nil
+            self.base_url = baseURL
+            self.enabled = true
+            self.priority = priority
+        }
+
+        public var label: String {
+            return name.map { String($0.prefix(40)) }.flatMap { $0.isEmpty ? nil : $0 } ?? code.uppercased()
+        }
 
         var isTrusted: Bool {
             return enabled && !code.isEmpty && code.utf8.count <= 24
@@ -55,30 +88,51 @@ public final class NextgramInstallSession: Sendable {
         }
     }
 
-    private static func installationURL(packageURL: URL, bundleIdentifier: String, build: String) async throws -> URL {
-        struct NodeList: Decodable { let services: [Node] }
-        struct TokenResponse: Decodable { let token: String }
+    private static func manifestSession() -> URLSession {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
         configuration.timeoutIntervalForResource = 20
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
-        let session = URLSession(configuration: configuration, delegate: ManifestRedirectPolicy(), delegateQueue: nil)
-        defer { session.finishTasksAndInvalidate() }
+        return URLSession(configuration: configuration, delegate: ManifestRedirectPolicy(), delegateQueue: nil)
+    }
 
-        var nodes = ["jp", "cf", "hk"].map { URL(string: "https://\($0)-i.lcsignx.com")! }
+    private static func nodes(_ session: URLSession) async -> [Node] {
+        struct NodeList: Decodable { let services: [Node] }
         let listURL = URL(string: "https://support.lcsignx.com/install/services")!
         if let (data, response) = try? await session.data(from: listURL), successful(response, at: listURL, data: data),
            let list = try? JSONDecoder().decode(NodeList.self, from: data), list.services.count <= 32 {
-            let active = list.services.filter(\.isTrusted).sorted { $0.priority < $1.priority }
+            var codes = Set<String>()
+            let active = list.services.filter(\.isTrusted).sorted { $0.priority < $1.priority }.filter { codes.insert($0.code).inserted }
             if !active.isEmpty {
-                nodes = Array(active.prefix(4).map(\.base_url))
+                return active
             }
+        }
+        return [Node(code: "jp", baseURL: URL(string: "https://jp-i.lcsignx.com")!, priority: 1),
+                Node(code: "cf", baseURL: URL(string: "https://cf-i.lcsignx.com")!, priority: 2),
+                Node(code: "hk", baseURL: URL(string: "https://hk-i.lcsignx.com")!, priority: 3)]
+    }
+
+    public static func availableNodes() async -> [Node] {
+        let session = manifestSession()
+        defer { session.finishTasksAndInvalidate() }
+        return await nodes(session)
+    }
+
+    private static func installationURL(packageURL: URL, bundleIdentifier: String, build: String, preferredNode: String) async throws -> URL {
+        struct TokenResponse: Decodable { let token: String }
+        let session = manifestSession()
+        defer { session.finishTasksAndInvalidate() }
+        var nodes = await Self.nodes(session)
+        if let index = nodes.firstIndex(where: { $0.code == preferredNode }) {
+            let preferred = nodes.remove(at: index)
+            nodes.insert(preferred, at: 0)
         }
         let payload = try JSONSerialization.data(withJSONObject: [
             "bundle_id": bundleIdentifier, "version": build, "title": "Nextgram", "ipa_url": packageURL.absoluteString
         ])
-        for node in nodes {
+        for service in nodes.prefix(4) {
+            let node = service.base_url
             try Task.checkCancellation()
             do {
                 let endpoint = node.appendingPathComponent("ota").appendingPathComponent("manifest")

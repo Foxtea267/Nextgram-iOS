@@ -11,6 +11,9 @@ import MergeLists
 import ShimmerEffect
 import ContextUI
 import MoreButtonNode
+// MARK: NEXTGRAM — Original sticker/emoji pack backup.
+import NagramMediaActions
+import NagramStrings
 import UndoUI
 import TextFormat
 import PremiumUI
@@ -170,6 +173,8 @@ private final class StickerPackContainer: ASDisplayNode {
     private var updatedTitle: String?
     
     private var itemsDisposable: Disposable?
+    // MARK: NEXTGRAM
+    private let nextgramBackupDisposable = MetaDisposable()
     private var currentContents: [LoadedStickerPack]?
     private(set) var currentStickerPack: (StickerPackCollectionInfo, [StickerPackItem], Bool)?
     private(set) var currentStickerPacks: [(StickerPackCollectionInfo, [StickerPackItem], Bool)] = []
@@ -472,6 +477,8 @@ private final class StickerPackContainer: ASDisplayNode {
     
     deinit {
         self.itemsDisposable?.dispose()
+        // MARK: NEXTGRAM
+        self.nextgramBackupDisposable.dispose()
     }
     
     private var peekGestureRecognizer: PeekControllerGestureRecognizer?
@@ -1106,6 +1113,18 @@ private final class StickerPackContainer: ASDisplayNode {
         }
            
         var items: [ContextMenuItem] = []
+        // MARK: NEXTGRAM — Export only the currently displayed pack, preserving original order.
+        if let (info, stickers, _) = self.currentStickerPack, !stickers.isEmpty {
+            items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.StickerBackup", self.presentationData.strings.baseLanguageCode), icon: { theme in
+                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Download"), color: theme.contextMenu.primaryColor)
+            }, action: { [weak self] _, finish in
+                finish(.default)
+                guard let self else { return }
+                self.nextgramBackupDisposable.set(nextgramPresentStickerPackBackup(context: self.context, info: info, items: stickers, presentationData: self.presentationData, present: { [weak self] controller in
+                    self?.controller?.present(controller, in: .window(.root))
+                }))
+            })))
+        }
         items.append(.action(ContextMenuActionItem(text: strings.StickerPack_Share, icon: { theme in
             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Share"), color: theme.contextMenu.primaryColor)
         }, action: { [weak self] _, f in

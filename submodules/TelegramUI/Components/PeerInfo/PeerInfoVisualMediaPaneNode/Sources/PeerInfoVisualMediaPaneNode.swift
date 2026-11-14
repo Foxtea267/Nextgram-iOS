@@ -29,6 +29,8 @@ import MediaPickerUI
 import ChatControllerInteraction
 import UIKitRuntimeUtils
 import PeerInfoPaneNode
+import NagramSettings // MARK: NEXTGRAM
+import NagramSettingsSignal // MARK: NEXTGRAM
 
 private final class FrameSequenceThumbnailNode: ASDisplayNode {
     private let context: AccountContext
@@ -953,7 +955,8 @@ private final class SparseItemGridBindingImpl: SparseItemGridBinding, ListShimme
                 }
 
                 let message = item.message._asMessage()
-                var hasSpoiler = message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) && !self.revealedSpoilerMessageIds.contains(message.id)
+                // MARK: NEXTGRAM — Keep spoiler behavior consistent with chat and the native media grid.
+                var hasSpoiler = !NagramSettings.shared.autoRevealSpoilers && message.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute }) && !self.revealedSpoilerMessageIds.contains(message.id)
                 if message.isSensitiveContent(platform: "ios", contentSettings: self.context.currentContentSettings.with { $0 }) {
                     hasSpoiler = true
                 }
@@ -1300,6 +1303,7 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
 
     private var presentationData: PresentationData
     private var presentationDataDisposable: Disposable?
+    private var nextgramSpoilerDisposable: Disposable? // MARK: NEXTGRAM
         
     public init(context: AccountContext, chatControllerInteraction: ChatControllerInteraction, peerId: EnginePeer.Id, chatLocation: ChatLocation, chatLocationContextHolder: Atomic<ChatLocationContextHolder?>, contentType: ContentType, captureProtected: Bool, initialFocusMessageIndex: EngineMessage.Index?) {
         self.context = context
@@ -1821,6 +1825,23 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
             }
         }))
 
+        // MARK: NEXTGRAM — Refresh visible fallback-grid layers without reopening the profile.
+        self.nextgramSpoilerDisposable = (nagramBoolSignal("nagram.autoRevealSpoilers", defaultValue: false)
+        |> deliverOnMainQueue).start(next: { [weak self] _ in
+            guard let self else { return }
+            self.itemGrid.forEachVisibleItem { item in
+                guard let layer = item.layer as? ItemLayer, let message = layer.item?.message else { return }
+                let rawMessage = message._asMessage()
+                var hasSpoiler = !NagramSettings.shared.autoRevealSpoilers
+                    && rawMessage.attributes.contains(where: { $0 is MediaSpoilerMessageAttribute })
+                    && !self.itemGridBinding.revealedSpoilerMessageIds.contains(message.id)
+                if rawMessage.isSensitiveContent(platform: "ios", contentSettings: self.context.currentContentSettings.with { $0 }) {
+                    hasSpoiler = true
+                }
+                layer.updateHasSpoiler(hasSpoiler: self.itemInteraction.hiddenMedia[message.id] == nil && hasSpoiler)
+            }
+        })
+
         self.presentationDataDisposable = (self.context.sharedContext.presentationData
         |> deliverOnMainQueue).start(next: { [weak self] presentationData in
             guard let strongSelf = self, let (size, topInset, sideInset, bottomInset, _, _, _, _, _, _) = strongSelf.currentParams  else {
@@ -1863,6 +1884,7 @@ public final class PeerInfoVisualMediaPaneNode: ASDisplayNode, PeerInfoPaneNode,
         self.hiddenMediaDisposable?.dispose()
         self.animationTimer?.invalidate()
         self.presentationDataDisposable?.dispose()
+        self.nextgramSpoilerDisposable?.dispose() // MARK: NEXTGRAM
     }
 
     public func loadHole(anchor: SparseItemGrid.HoleAnchor, at location: SparseItemGrid.HoleLocation) -> Signal<Never, NoError> {

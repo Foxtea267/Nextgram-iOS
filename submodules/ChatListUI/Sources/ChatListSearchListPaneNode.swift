@@ -3097,6 +3097,16 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
             )
             |> map { accountPeer, foundLocalPeers, foundRemotePeers, foundRemoteMessages, foundPublicMessages, presentationData, searchState, selectionState, resolvedMessage, recentPeers, allAndFoundThreads, adsHidden -> ([ChatListSearchEntry], Bool, String?)? in
                 let isSearching = foundRemotePeers.3 || foundRemoteMessages.1 || foundPublicMessages.1
+                // MARK: NEXTGRAM — filter displayed rows without changing the server's pagination state.
+                let hiddenAccountId = context.account.peerId.toInt64()
+                var hiddenByChat: [EnginePeer.Id: Set<Int64>] = [:]
+                func isFromHiddenMember(_ message: EngineMessage) -> Bool {
+                    guard let senderId = message.author?.id.toInt64() else { return false }
+                    let peerId = message.id.peerId
+                    let hidden = hiddenByChat[peerId] ?? NextgramGroupMemberFilter.hiddenMembers(accountId: hiddenAccountId, chatId: peerId.toInt64())
+                    hiddenByChat[peerId] = hidden
+                    return hidden.contains(senderId)
+                }
                 var entries: [ChatListSearchEntry] = []
                 var index = 0
 
@@ -3475,7 +3485,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                     }
                 }
 
-                if let message = resolvedMessage {
+                if let message = resolvedMessage, !isFromHiddenMember(message) { // MARK: NEXTGRAM
                     var peer = EngineRenderedPeer(message: message)
                     if let group = message.peers[message.id.peerId] as? TelegramGroup, let migrationReference = group.migrationReference {
                         if let channelPeer = message.peers[migrationReference.peerId] {
@@ -3493,6 +3503,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                     var existingPostIds = Set<MessageId>()
                     for foundPublicMessageSet in foundPublicMessages.0 {
                         for message in foundPublicMessageSet.messages {
+                            if isFromHiddenMember(message) { continue } // MARK: NEXTGRAM
                             if existingPostIds.contains(message.id) {
                                 continue
                             }
@@ -3519,6 +3530,7 @@ final class ChatListSearchListPaneNode: ASDisplayNode, ChatListSearchPaneNode {
                         var hasAnyMessages = false
                         for foundRemoteMessageSet in foundRemoteMessages.0 {
                             for message in foundRemoteMessageSet.messages {
+                                if isFromHiddenMember(message) { continue } // MARK: NEXTGRAM
                                 if existingMessageIds.contains(message.id) {
                                     continue
                                 }

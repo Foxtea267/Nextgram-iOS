@@ -208,9 +208,14 @@ public extension EmojiPagerContentComponent {
             searchCategories,
             iconStatusEmoji,
             peerSpecificPack,
-            ApplicationSpecificNotice.dismissedTrendingEmojiPacks(accountManager: context.sharedContext.accountManager)
+            // MARK: NEXTGRAM
+            combineLatest(
+                ApplicationSpecificNotice.dismissedTrendingEmojiPacks(accountManager: context.sharedContext.accountManager),
+                subject == .emoji ? nagramBoolSignal("nagram.systemEmojiBeforePacks", defaultValue: false) : .single(false)
+            )
         )
-        |> map { view, hasPremium, featuredEmojiPacks, availableReactions, searchCategories, iconStatusEmoji, peerSpecificPack, dismissedTrendingEmojiPacks -> EmojiPagerContentComponent in
+        |> map { view, hasPremium, featuredEmojiPacks, availableReactions, searchCategories, iconStatusEmoji, peerSpecificPack, preferences -> EmojiPagerContentComponent in
+            let (dismissedTrendingEmojiPacks, systemEmojiBeforePacks) = preferences // MARK: NEXTGRAM
             struct ItemGroup {
                 var supergroupId: AnyHashable
                 var id: AnyHashable
@@ -1316,7 +1321,7 @@ public extension EmojiPagerContentComponent {
                 skippedCollectionIds.insert(supergroupId)
             }
             
-            if !hasPremium {
+            if !hasPremium || systemEmojiBeforePacks { // MARK: NEXTGRAM
                 maybeAppendUnicodeEmoji()
             }
                         
@@ -1516,7 +1521,7 @@ public extension EmojiPagerContentComponent {
                 }
             }
             
-            if hasPremium {
+            if hasPremium && !systemEmojiBeforePacks { // MARK: NEXTGRAM
                 maybeAppendUnicodeEmoji()
             }
                         

@@ -15,22 +15,28 @@ public enum NextgramSigningFilesError: Error, Equatable {
 public struct NextgramSigningFiles: Codable, Sendable {
     private let certificate: Data
     private let password: String
-    private let profile: Data
+    private let profile: Data?
     private let additionalProfiles: [Data]?
-    public let profileName: String
-    public let expiration: Date
+    public let profileName: String?
+    public let expiration: Date?
+    private var profiles: [Data] { (profile.map { [$0] } ?? []) + (additionalProfiles ?? []) }
+    public var profileCount: Int { profiles.count }
+
+    public func addingProfiles(_ profiles: [Data], bundleIdentifier: String) throws -> Self {
+        return try Self.validated(certificate: self.certificate, password: self.password, profiles: profiles, bundleIdentifier: bundleIdentifier, previousProfiles: self.profiles)
+    }
 
     private var fingerprint: Data {
         var hash = SHA256()
         hash.update(data: Data(SHA256.hash(data: certificate)))
-        for profile in [profile] + (additionalProfiles ?? []) {
+        for profile in profiles {
             hash.update(data: Data(SHA256.hash(data: profile)))
         }
         return Data(hash.finalize())
     }
 
     public static func sign(_ package: NextgramUpdatePackage, release: NextgramUpdateRelease) throws -> NextgramSignedUpdate {
-        guard let files = try saved(bundleIdentifier: release.bundleIdentifier), files.expiration > Date() else {
+        guard let files = try saved(bundleIdentifier: release.bundleIdentifier), let expiration = files.expiration, expiration > Date() else {
             throw NextgramSigningFilesError.missingSigningFiles
         }
         guard try NextgramUpdateClient.verify(package.url, release: release) == package.build else {
@@ -48,8 +54,13 @@ public struct NextgramSigningFiles: Codable, Sendable {
             let destination = directory.appendingPathComponent("Signed-" + release.assetName)
             if let error = NextgramSignUpdateIPA(package.url.path, destination.path, Bundle.main.bundlePath,
                                                  scratch.path, release.versionName, files.certificate, files.password,
-                                                 [files.profile] + (files.additionalProfiles ?? [])) {
+                                                 files.profiles) {
                 throw error
+            }
+            // A signed archive is reusable only with exactly the same release and signing material.
+            if let cached = try? cacheSignedUpdate(at: destination, release: release, build: package.build, files: files) {
+                try? manager.removeItem(at: directory)
+                return cached
             }
             let signed = NextgramUpdatePackage(url: destination, directory: directory, build: package.build)
             return NextgramSignedUpdate(package: signed, bundleIdentifier: release.bundleIdentifier, signingFingerprint: files.fingerprint)
@@ -59,14 +70,81 @@ public struct NextgramSigningFiles: Codable, Sendable {
         }
     }
 
+    private struct SignedCacheRecord: Codable {
+        let releaseHash: String
+        let archiveHash: String
+        let size: Int64
+        let build: String
+        let fingerprint: Data
+        let installedBuild: String
+    }
+
+    private static var installedBuild: String {
+        return [Bundle.main.bundleIdentifier ?? "", Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+            Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String ?? ""].joined(separator: ":")
+    }
+
+    private static func signedArchiveHash(_ url: URL) throws -> (String, Int64) {
+        guard let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size > 0, size <= 1024 * 1024 * 1024 else { throw NextgramUpdateError.invalidPackage }
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        var hash = SHA256()
+        var read = 0
+        while let chunk = try file.read(upToCount: 1024 * 1024), !chunk.isEmpty {
+            try Task.checkCancellation()
+            read += chunk.count
+            guard read <= size else { throw NextgramUpdateError.invalidPackage }
+            hash.update(data: chunk)
+        }
+        guard read == size else { throw NextgramUpdateError.invalidPackage }
+        return (hash.finalize().map { String(format: "%02x", $0) }.joined(), Int64(size))
+    }
+
+    private static func cacheSignedUpdate(at url: URL, release: NextgramUpdateRelease, build: String, files: Self) throws -> NextgramSignedUpdate {
+        let (hash, size) = try signedArchiveHash(url)
+        let folder = try NextgramUpdateClient.cacheDirectory().appendingPathComponent("Signed-" + release.sha256, isDirectory: true)
+        let manager = FileManager.default
+        try manager.createDirectory(at: folder, withIntermediateDirectories: true)
+        let destination = folder.appendingPathComponent("Signed-" + release.assetName)
+        // Copy first: if storage is full the caller still has a usable temporary signed IPA.
+        let staged = folder.appendingPathComponent(UUID().uuidString + ".ipa")
+        defer { try? manager.removeItem(at: staged) }
+        try manager.copyItem(at: url, to: staged)
+        if manager.fileExists(atPath: destination.path) { _ = try manager.replaceItemAt(destination, withItemAt: staged) }
+        else { try manager.moveItem(at: staged, to: destination) }
+        let record = SignedCacheRecord(releaseHash: release.sha256, archiveHash: hash, size: size, build: build, fingerprint: files.fingerprint,
+            installedBuild: self.installedBuild)
+        try PropertyListEncoder().encode(record).write(to: folder.appendingPathComponent("Signature.plist"), options: .atomic)
+        return NextgramSignedUpdate(package: NextgramUpdatePackage(url: destination, directory: nil, build: build),
+            bundleIdentifier: release.bundleIdentifier, signingFingerprint: files.fingerprint)
+    }
+
+    public static func restoreSignedUpdate(release: NextgramUpdateRelease, package: NextgramUpdatePackage) async -> NextgramSignedUpdate? {
+        guard let files = try? saved(bundleIdentifier: release.bundleIdentifier), let expiration = files.expiration, expiration > Date(),
+              let root = try? NextgramUpdateClient.cacheDirectory() else { return nil }
+        let folder = root.appendingPathComponent("Signed-" + release.sha256, isDirectory: true)
+        let manifest = folder.appendingPathComponent("Signature.plist")
+        guard let manifestSize = try? manifest.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              manifestSize <= 16 * 1024, let data = try? Data(contentsOf: manifest),
+              let record = try? PropertyListDecoder().decode(SignedCacheRecord.self, from: data),
+              record.releaseHash == release.sha256, record.build == package.build, record.fingerprint == files.fingerprint,
+              record.installedBuild == self.installedBuild else { return nil }
+        let url = folder.appendingPathComponent("Signed-" + release.assetName)
+        guard let (hash, size) = try? signedArchiveHash(url), hash == record.archiveHash, size == record.size,
+              !Task.isCancelled else { return nil }
+        return NextgramSignedUpdate(package: NextgramUpdatePackage(url: url, directory: nil, build: record.build),
+            bundleIdentifier: release.bundleIdentifier, signingFingerprint: files.fingerprint)
+    }
+
     static func checkFiles(for update: NextgramSignedUpdate) throws {
-        guard let files = try saved(bundleIdentifier: update.bundleIdentifier), files.expiration > Date(),
+        guard let files = try saved(bundleIdentifier: update.bundleIdentifier), let expiration = files.expiration, expiration > Date(),
               files.fingerprint == update.signingFingerprint else {
             throw NextgramSigningFilesError.signingFilesChanged
         }
     }
 
-    public static func validated(certificate: Data, password: String, profiles: [Data], bundleIdentifier: String) throws -> Self {
+    public static func validated(certificate: Data, password: String, profiles: [Data], bundleIdentifier: String, previousProfiles: [Data] = []) throws -> Self {
         var result: CFArray?
         let options = [kSecImportExportPassphrase as String: password]
         guard SecPKCS12Import(certificate as CFData, options as CFDictionary, &result) == errSecSuccess,
@@ -85,15 +163,22 @@ public struct NextgramSigningFiles: Codable, Sendable {
         }
         let certificateData = SecCertificateCopyData(signingCertificate) as Data
 
-        var candidates = profiles
-        if let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
-           let embedded = try? Data(contentsOf: url), !candidates.contains(embedded) {
-            candidates.append(embedded)
-        }
+        var profiles = profiles
         guard !bundleIdentifier.isEmpty, profiles.count <= 15,
               profiles.reduce(certificate.count, { $0 + $1.count }) <= 4 * 1024 * 1024,
               profiles.allSatisfy({ profileInfo($0, certificate: certificateData) != nil }) else {
             throw NextgramSigningFilesError.invalidProfile
+        }
+        var size = profiles.reduce(certificate.count, { $0 + $1.count })
+        for previous in previousProfiles where profiles.count < 15 && !profiles.contains(previous) {
+            guard previous.count <= 4 * 1024 * 1024 - size, profileInfo(previous, certificate: certificateData) != nil else { continue }
+            profiles.append(previous)
+            size += previous.count
+        }
+        var candidates = profiles
+        if let url = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision"),
+           let embedded = try? Data(contentsOf: url), !candidates.contains(embedded) {
+            candidates.append(embedded)
         }
         for profile in candidates {
             guard let info = profileInfo(profile, certificate: certificateData),
@@ -105,7 +190,8 @@ public struct NextgramSigningFiles: Codable, Sendable {
                         additionalProfiles: profiles.filter { $0 != profile },
                         profileName: String(info.name.prefix(120)), expiration: info.expiration)
         }
-        throw NextgramSigningFilesError.invalidProfile
+        return Self(certificate: certificate, password: password, profile: nil,
+                    additionalProfiles: profiles, profileName: nil, expiration: nil)
     }
 
     // Pair files before saving. The signer checks permissions against the installed code signature.

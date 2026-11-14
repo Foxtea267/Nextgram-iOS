@@ -173,12 +173,16 @@ func chatHistoryEntriesForView(
     
     var count = 0
     let nagramRegexFilterPeerId = location.peerId?.toInt64() // MARK: NAGRAM
-    let nagramIncomingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: false) // MARK: NAGRAM
-    let nagramOutgoingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: true) // MARK: NAGRAM
+    // MARK: NEXTGRAM — Temporary reveal is presentation-only; persisted rules remain active everywhere else.
+    let revealing = nagramRegexFilterPeerId.map {
+        NextgramTemporaryFilterReveal.shared.isActive(accountId: context.account.peerId.toInt64(), chatId: $0)
+    } ?? false
+    let nagramIncomingRegexFilterMatcher = revealing ? nil : NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: false)
+    let nagramOutgoingRegexFilterMatcher = revealing ? nil : NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: true)
     // MARK: NEXTGRAM — Apply the local per-group sender filter without modifying message storage.
-    let nextgramHiddenMembers = nagramRegexFilterPeerId.map {
+    let nextgramHiddenMembers: Set<Int64> = revealing ? [] : (nagramRegexFilterPeerId.map {
         NextgramGroupMemberFilter.hiddenMembers(accountId: context.account.peerId.toInt64(), chatId: $0)
-    } ?? []
+    } ?? [])
     loop: for entry in view.entries {
         var message = entry.message.withAppliedEphemeralReplacementMessage()
         var isRead = entry.isRead

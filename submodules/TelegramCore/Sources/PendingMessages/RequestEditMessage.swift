@@ -297,7 +297,9 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
                                                     updatedMedia = previousMessage.media
                                                 }
 
-                                                return .update(message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia))
+                                                // MARK: NEXTGRAM — Capture self-edits before the old text/photo is overwritten.
+                                                let updated = message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia)
+                                                return .update(updated.withUpdatedAttributes(nextgramCarryMessageHistory(previous: previousMessage, updated: updated, mediaBox: postbox.mediaBox)))
                                             })
                                         }
                                     case .updateNewMessage(let data):
@@ -323,7 +325,9 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
                                                     updatedMedia = previousMessage.media
                                                 }
 
-                                                return .update(message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia))
+                                                // MARK: NEXTGRAM
+                                                let updated = message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia)
+                                                return .update(updated.withUpdatedAttributes(nextgramCarryMessageHistory(previous: previousMessage, updated: updated, mediaBox: postbox.mediaBox)))
                                             })
                                         }
                                     case .updateEditChannelMessage(let data):
@@ -349,7 +353,9 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
                                                     updatedMedia = previousMessage.media
                                                 }
 
-                                                return .update(message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia))
+                                                // MARK: NEXTGRAM
+                                                let updated = message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia)
+                                                return .update(updated.withUpdatedAttributes(nextgramCarryMessageHistory(previous: previousMessage, updated: updated, mediaBox: postbox.mediaBox)))
                                             })
                                         }
                                     case .updateNewChannelMessage(let data):
@@ -375,7 +381,9 @@ private func requestEditMessageInternal(accountPeerId: PeerId, postbox: Postbox,
                                                     updatedMedia = previousMessage.media
                                                 }
                                                 
-                                                return .update(message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia))
+                                                // MARK: NEXTGRAM
+                                                let updated = message.withUpdatedLocalTags(updatedLocalTags).withUpdatedFlags(updatedFlags).withUpdatedMedia(updatedMedia)
+                                                return .update(updated.withUpdatedAttributes(nextgramCarryMessageHistory(previous: previousMessage, updated: updated, mediaBox: postbox.mediaBox)))
                                             })
                                         }
                                     default:

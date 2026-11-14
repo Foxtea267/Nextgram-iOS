@@ -20,6 +20,8 @@ swift_library(
     	"//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/Markdown:Markdown",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
+        # MARK: NEXTGRAM — Local custom font registry, below the UI dependency boundary.
+        "//Nagram/Typography:NextgramTypography",
     ],
     visibility = [
         "//visibility:public",

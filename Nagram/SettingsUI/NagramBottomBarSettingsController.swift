@@ -35,14 +35,16 @@ private enum NagramBottomBarSwitchOption: Int32 {
 private enum NagramBottomBarOption: Equatable {
     case alignment
     case searchMode
-    case position(NagramBottomBarItemId)
+    case add
+    case remove(NagramBottomBarItemId)
 }
 
 private enum NagramBottomBarEntry: ItemListNodeEntry {
     case preview(section: Int32, settings: NagramBottomBarSettings, strings: PresentationStrings, itemTitles: [NagramBottomBarItemId: String], topSearchTitle: String, topSearchVisibleHint: String, topSearchHiddenHint: String, bottomBarTitle: String, emptyBottomTitle: String)
     case header(stableId: Int32, section: Int32, text: String)
     case toggle(stableId: Int32, section: Int32, title: String, value: Bool, option: NagramBottomBarSwitchOption)
-    case visibility(stableId: Int32, section: Int32, title: String, settings: NagramBottomBarSettings, itemTitles: [NagramBottomBarItemId: String])
+    case page(index: Int32, id: NagramBottomBarItemId, title: String, canRemove: Bool, canDrag: Bool)
+    case add(title: String, enabled: Bool)
     case slider(stableId: Int32, section: Int32, title: String, value: Int32)
     case disclosure(stableId: Int32, section: Int32, title: String, label: String, option: NagramBottomBarOption)
     case reset(stableId: Int32, section: Int32, title: String)
@@ -56,8 +58,8 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
             return section
         case let .toggle(_, section, _, _, _):
             return section
-        case let .visibility(_, section, _, _, _):
-            return section
+        case .page, .add:
+            return 2
         case let .slider(_, section, _, _):
             return section
         case let .disclosure(_, section, _, _, _):
@@ -77,8 +79,10 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
             return stableId
         case let .toggle(stableId, _, _, _, _):
             return stableId
-        case let .visibility(stableId, _, _, _, _):
-            return stableId
+        case let .page(_, id, _, _, _):
+            return 100 + Int32(NagramBottomBarItemId.allCases.firstIndex(of: id) ?? 0)
+        case .add:
+            return 38
         case let .slider(stableId, _, _, _):
             return stableId
         case let .disclosure(stableId, _, _, _, _):
@@ -107,10 +111,13 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                 return lId == rId && lSection == rSection && lTitle == rTitle && lValue == rValue && lOption == rOption
             }
             return false
-        case let .visibility(lId, lSection, lTitle, lSettings, lItemTitles):
-            if case let .visibility(rId, rSection, rTitle, rSettings, rItemTitles) = rhs {
-                return lId == rId && lSection == rSection && lTitle == rTitle && lSettings == rSettings && lItemTitles == rItemTitles
+        case let .page(lIndex, lId, lTitle, lCanRemove, lCanDrag):
+            if case let .page(rIndex, rId, rTitle, rCanRemove, rCanDrag) = rhs {
+                return lIndex == rIndex && lId == rId && lTitle == rTitle && lCanRemove == rCanRemove && lCanDrag == rCanDrag
             }
+            return false
+        case let .add(lTitle, lEnabled):
+            if case let .add(rTitle, rEnabled) = rhs { return lTitle == rTitle && lEnabled == rEnabled }
             return false
         case let .slider(lId, lSection, lTitle, lValue):
             if case let .slider(rId, rSection, rTitle, rValue) = rhs {
@@ -136,7 +143,12 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
     }
 
     static func <(lhs: NagramBottomBarEntry, rhs: NagramBottomBarEntry) -> Bool {
-        return lhs.stableId < rhs.stableId
+        return lhs.sortIndex < rhs.sortIndex
+    }
+
+    private var sortIndex: Int32 {
+        if case let .page(index, _, _, _, _) = self { return 31 + index }
+        return self.stableId
     }
 
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
@@ -153,8 +165,7 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                 topSearchHiddenHint: topSearchHiddenHint,
                 bottomBarTitle: bottomBarTitle,
                 emptyBottomTitle: emptyBottomTitle,
-                sectionId: self.section,
-                update: arguments.update
+                sectionId: self.section
             )
         case let .header(_, section, text):
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: section)
@@ -171,29 +182,19 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                     }
                 }
             })
-        case let .visibility(_, section, title, settings, itemTitles):
-            let visibleBottomItems = Set(settings.visibleBottomItems)
-            let chips = NagramBottomBarItemId.allCases.map { id in
-                let isSelected = settings.isVisible(id)
-                let isEnabled = id == .search || !isSelected || !visibleBottomItems.contains(id) || settings.canHide(id)
-                return NagramBottomBarChipRowItem.Chip(id: id.rawValue, title: itemTitles[id] ?? id.rawValue, isSelected: isSelected, isEnabled: isEnabled)
-            }
-            return NagramBottomBarChipRowItem(theme: presentationData.theme, title: title, chips: chips, sectionId: section, selected: { rawValue in
-                guard let id = NagramBottomBarItemId(rawValue: rawValue) else {
-                    return
-                }
-                arguments.update { settings in
-                    if id == .search {
-                        settings.toggleHidden(.search)
-                    } else {
-                        if settings.isVisible(id) {
-                            settings.hide(id)
-                        } else {
-                            settings.moveToBottom(id, at: settings.bottomItems.count)
-                        }
-                    }
-                }
-            })
+        case let .page(_, id, title, canRemove, canDrag):
+            let handle = canDrag ? UIImage(systemName: "line.3.horizontal")?.withTintColor(
+                presentationData.theme.list.itemSecondaryTextColor, renderingMode: .alwaysOriginal) : nil
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass,
+                icon: nextgramBottomBarPageIcon(id, color: presentationData.theme.list.itemAccentColor),
+                title: title, label: "", labelStyle: handle.map { .image(image: $0, size: CGSize(width: 18.0, height: 16.0)) } ?? .text,
+                sectionId: self.section, style: .blocks, disclosureStyle: .none,
+                action: canRemove ? { arguments.option(.remove(id)) } : nil, nextgramReorderable: canDrag)
+        case let .add(title, enabled):
+            return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass,
+                icon: UIImage(systemName: "plus.circle.fill")?.withTintColor(presentationData.theme.list.itemAccentColor, renderingMode: .alwaysOriginal),
+                title: title, enabled: enabled, titleColor: .accent, label: "", sectionId: self.section, style: .blocks,
+                action: enabled ? { arguments.option(.add) } : nil)
         case let .slider(_, section, title, value):
             return NagramSliderItem(theme: presentationData.theme, minValue: 0, maxValue: 100, value: value, title: title, sectionId: section, updated: { value in
                 arguments.update { settings in
@@ -213,6 +214,41 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
         case let .footer(_, section, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
         }
+    }
+}
+
+private func nextgramBottomBarPageTitle(_ id: NagramBottomBarItemId, language: String) -> String {
+    return ngI18n("Nagram.BottomBarLayout.Item.\(id.rawValue)", language)
+}
+
+private func nextgramBottomBarPageIcon(_ id: NagramBottomBarItemId, color: UIColor) -> UIImage? {
+    let symbol: String
+    switch id {
+    case .contacts: symbol = "person.2"
+    case .calls: symbol = "phone"
+    case .chats: symbol = "bubble.left.and.bubble.right"
+    case .feed: symbol = "newspaper"
+    case .savedMessages: symbol = "bookmark"
+    case .settings: symbol = "gearshape"
+    case .profile: symbol = "person.crop.circle"
+    case .search: symbol = "magnifyingglass"
+    }
+    return UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18.0, weight: .medium))?
+        .withTintColor(color, renderingMode: .alwaysOriginal)
+}
+
+private func nextgramBottomBarPages(_ settings: NagramBottomBarSettings) -> [NagramBottomBarItemId] {
+    var items = settings.bottomItems.filter { settings.isVisible($0) }
+    if let external = settings.externalItem, external != .search, settings.isVisible(external) {
+        items.append(external)
+    }
+    return items
+}
+
+private final class NextgramBottomBarSettingsController: ItemListController {
+    override func loadDisplayNode() {
+        super.loadDisplayNode()
+        (self.displayNode as? ItemListControllerNode)?.listNode.reorderingRequiresLongPress = true
     }
 }
 
@@ -290,17 +326,21 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             ] + (nagramBottomBarSettingsCanUseSearchBar(settings) ? [
                 ("Nagram.BottomBarLayout.SearchStyle.bar", { $0.setSearchMode(.bar) })
             ] : [])
-        case let .position(item):
-            titleKey = "Nagram.BottomBarLayout.Order"
-            let visibleItems = nagramBottomBarSettings(NagramSettings.shared.bottomBarSettings, applyingShowCallsTab: currentShowCallsTab).visibleBottomItems
-            items = visibleItems.indices.map { index in
-                (String(index + 1), { $0.moveToBottom(item, at: index) })
+        case .add:
+            titleKey = "Nagram.BottomBarLayout.AddPage"
+            let settings = nagramBottomBarSettings(NagramSettings.shared.bottomBarSettings, applyingShowCallsTab: currentShowCallsTab)
+            items = NagramBottomBarItemId.allCases.filter { !settings.isVisible($0) }.map { id in
+                ("Nagram.BottomBarLayout.Item.\(id.rawValue)", { $0.show(id) })
             }
+        case let .remove(id):
+            titleKey = "Nagram.BottomBarLayout.Item.\(id.rawValue)"
+            items = [("Nagram.BottomBarLayout.RemovePage", { $0.hide(id) })]
         }
 
         var actionItems: [ActionSheetItem] = [ActionSheetTextItem(title: ngI18n(titleKey, lang))]
         for (key, apply) in items {
-            actionItems.append(ActionSheetButtonItem(title: ngI18n(key, lang), color: .accent, action: {
+            let isRemove = key == "Nagram.BottomBarLayout.RemovePage"
+            actionItems.append(ActionSheetButtonItem(title: ngI18n(key, lang), color: isRemove ? .destructive : .accent, action: {
                 dismissAction()
                 var settings = nagramBottomBarSettings(NagramSettings.shared.bottomBarSettings, applyingShowCallsTab: currentShowCallsTab)
                 apply(&settings)
@@ -345,14 +385,7 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
         }
         let lang = presentationData.strings.baseLanguageCode
         let settings = nagramBottomBarSettings(NagramSettings.shared.bottomBarSettings, applyingShowCallsTab: currentShowCallsTab)
-        let itemTitles: [NagramBottomBarItemId: String] = [
-            .contacts: ngI18n("Nagram.BottomBarLayout.Item.contacts", lang),
-            .calls: ngI18n("Nagram.BottomBarLayout.Item.calls", lang),
-            .chats: ngI18n("Nagram.BottomBarLayout.Item.chats", lang),
-            .settings: ngI18n("Nagram.BottomBarLayout.Item.settings", lang),
-            .profile: ngI18n("Nagram.BottomBarLayout.Item.profile", lang),
-            .search: ngI18n("Nagram.BottomBarLayout.Item.search", lang)
-        ]
+        let itemTitles = Dictionary(uniqueKeysWithValues: NagramBottomBarItemId.allCases.map { ($0, nextgramBottomBarPageTitle($0, language: lang)) })
 
         let alignmentLabel: String
         switch settings.alignment {
@@ -378,9 +411,7 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             ),
             .header(stableId: 1, section: 1, text: ngI18n("Nagram.BottomBarLayout.State", lang)),
             .toggle(stableId: 2, section: 1, title: ngI18n("Nagram.BottomBarLayout.TopSearch", lang), value: settings.topSearchVisible, option: .topSearch),
-            .visibility(stableId: 3, section: 1, title: ngI18n("Nagram.BottomBarLayout.Visibility", lang), settings: settings, itemTitles: itemTitles),
             .header(stableId: 40, section: 3, text: ngI18n("Nagram.BottomBarLayout.Options", lang)),
-            .disclosure(stableId: 41, section: 3, title: ngI18n("Nagram.BottomBarLayout.SearchStyle", lang), label: settings.searchMode == .bar ? ngI18n("Nagram.BottomBarLayout.SearchStyle.bar", lang) : ngI18n("Nagram.BottomBarLayout.SearchStyle.button", lang), option: .searchMode),
             .toggle(stableId: 42, section: 3, title: ngI18n("Nagram.BottomBarLayout.ShowLabels", lang), value: settings.showLabels, option: .labels),
             .slider(stableId: 43, section: 3, title: ngI18n("Nagram.BottomBarLayout.ButtonWidth", lang), value: settings.buttonWidthFillRatio),
             .disclosure(stableId: 44, section: 3, title: ngI18n("Nagram.BottomBarLayout.Alignment", lang), label: alignmentLabel, option: .alignment),
@@ -388,228 +419,56 @@ public func nagramBottomBarSettingsController(context: AccountContext) -> ViewCo
             .reset(stableId: 46, section: 4, title: ngI18n("Nagram.BottomBarLayout.Reset", lang)),
             .footer(stableId: 47, section: 4, text: ngI18n("Nagram.BottomBarLayout.Footer", lang))
         ]
-        if settings.visibleBottomItems.count > 1 {
-            var orderEntries: [NagramBottomBarEntry] = [
-                .header(stableId: 30, section: 2, text: ngI18n("Nagram.BottomBarLayout.Order", lang))
-            ]
-            orderEntries += settings.visibleBottomItems.enumerated().map { index, item in
-                .disclosure(stableId: 31 + Int32(index), section: 2, title: itemTitles[item] ?? item.rawValue, label: String(index + 1), option: .position(item))
-            }
-            entries.insert(contentsOf: orderEntries, at: 4)
+        let pages = nextgramBottomBarPages(settings)
+        var pageEntries: [NagramBottomBarEntry] = [
+            .header(stableId: 30, section: 2, text: ngI18n("Nagram.BottomBarLayout.Order", lang))
+        ]
+        for (index, id) in pages.enumerated() {
+            pageEntries.append(.page(index: Int32(index), id: id, title: itemTitles[id] ?? id.rawValue,
+                canRemove: settings.canHide(id), canDrag: pages.count > 1))
         }
+        if settings.isVisible(.search) {
+            pageEntries.append(.page(index: Int32(pages.count), id: .search, title: itemTitles[.search] ?? "", canRemove: settings.canHide(.search), canDrag: false))
+        }
+        pageEntries.append(.add(title: ngI18n("Nagram.BottomBarLayout.AddPage", lang),
+            enabled: NagramBottomBarItemId.allCases.contains { !settings.isVisible($0) }))
+        pageEntries.append(.footer(stableId: 39, section: 2, text: ngI18n("Nagram.BottomBarLayout.ReorderHint", lang)))
+        entries += pageEntries
+        if settings.isVisible(.search) {
+            let searchStyleKey = "Nagram.BottomBarLayout.SearchStyle"
+            entries.append(.disclosure(stableId: 41, section: 3, title: ngI18n(searchStyleKey, lang),
+                label: ngI18n(searchStyleKey + "." + settings.searchMode.rawValue, lang), option: .searchMode))
+        }
+        entries.sort()
 
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text(ngI18n("Nagram.BottomBarLayout", lang)), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }
 
-    let controller = ItemListController(context: context, state: signal)
+    let presentationData = ItemListPresentationData(context.sharedContext.currentPresentationData.with { $0 })
+    let controller = NextgramBottomBarSettingsController(presentationData: presentationData,
+        updatedPresentationData: context.sharedContext.presentationData |> map { ItemListPresentationData($0) },
+        state: signal, tabBarItem: nil)
     controller.navigationPresentation = .default
+    controller.setReorderEntry({ (from: Int, to: Int, entries: [NagramBottomBarEntry]) -> Signal<Bool, NoError> in
+        guard entries.indices.contains(from), case let .page(sourceIndex, id, _, _, true) = entries[from] else { return .single(false) }
+        var settings = nagramBottomBarSettings(NagramSettings.shared.bottomBarSettings, applyingShowCallsTab: currentShowCallsTab)
+        var pages = nextgramBottomBarPages(settings)
+        guard let source = pages.firstIndex(of: id), !pages.isEmpty else { return .single(false) }
+        let target = min(pages.count - 1, max(0, Int(sourceIndex) + to - from))
+        guard source != target else { return .single(false) }
+        pages.remove(at: source)
+        pages.insert(id, at: target)
+        settings.reorderPages(pages)
+        saveSettings(settings)
+        bump()
+        return .single(true)
+    })
     presentControllerImpl = { [weak controller] c, presentationArguments in
         controller?.present(c, in: .window(.root), with: presentationArguments)
     }
     return controller
-}
-
-private final class NagramBottomBarChipRowItem: ListViewItem, ItemListItem {
-    struct Chip: Equatable {
-        let id: String
-        let title: String
-        let isSelected: Bool
-        let isEnabled: Bool
-    }
-
-    let theme: PresentationTheme
-    let title: String
-    let chips: [Chip]
-    let sectionId: ItemListSectionId
-    let selected: (String) -> Void
-
-    init(theme: PresentationTheme, title: String, chips: [Chip], sectionId: ItemListSectionId, selected: @escaping (String) -> Void) {
-        self.theme = theme
-        self.title = title
-        self.chips = chips
-        self.sectionId = sectionId
-        self.selected = selected
-    }
-
-    var selectable: Bool {
-        return false
-    }
-
-    func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
-        async {
-            let node = NagramBottomBarChipRowItemNode()
-            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
-            node.contentSize = layout.contentSize
-            node.insets = layout.insets
-            Queue.mainQueue().async {
-                completion(node, {
-                    return (nil, { _ in apply() })
-                })
-            }
-        }
-    }
-
-    func updateNode(async: @escaping (@escaping () -> Void) -> Void, node: @escaping () -> ListViewItemNode, params: ListViewItemLayoutParams, neighbors: ListViewItemNeighbors, animation: ListViewItemUpdateAnimation, completion: @escaping (ListViewItemNodeLayout, @escaping (ListViewItemApply) -> Void) -> Void) {
-        Queue.mainQueue().async {
-            if let nodeValue = node() as? NagramBottomBarChipRowItemNode {
-                let makeLayout = nodeValue.asyncLayout()
-                async {
-                    let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
-                    Queue.mainQueue().async {
-                        completion(layout, { _ in apply() })
-                    }
-                }
-            }
-        }
-    }
-}
-
-private final class NagramBottomBarChipButton: UIButton {
-    var chipId: String?
-}
-
-private final class NagramBottomBarChipRowItemNode: ListViewItemNode, ItemListItemNode {
-    private let backgroundNode = ASDisplayNode()
-    private let topStripeNode = ASDisplayNode()
-    private let bottomStripeNode = ASDisplayNode()
-    private let maskNode = ASImageNode()
-    private let titleLabel = UILabel()
-    private var buttons: [String: NagramBottomBarChipButton] = [:]
-    private var item: NagramBottomBarChipRowItem?
-
-    var tag: ItemListItemTag? {
-        return nil
-    }
-
-    init() {
-        self.backgroundNode.isLayerBacked = true
-        super.init(layerBacked: false)
-        self.addSubnode(self.backgroundNode)
-    }
-
-    override func didLoad() {
-        super.didLoad()
-        self.view.addSubview(self.titleLabel)
-    }
-
-    func asyncLayout() -> (_ item: NagramBottomBarChipRowItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
-            let separatorHeight = UIScreenPixel
-            let separatorRightInset: CGFloat = 16.0
-            let contentHeight: CGFloat = 84.0
-            let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: contentHeight), insets: itemListNeighborsGroupedInsets(neighbors, params))
-            let insets = layout.insets
-            return (layout, { [weak self] in
-                guard let self else {
-                    return
-                }
-                self.item = item
-                self.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
-                self.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
-                self.bottomStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
-
-                if self.topStripeNode.supernode == nil {
-                    self.insertSubnode(self.topStripeNode, aboveSubnode: self.backgroundNode)
-                }
-                if self.bottomStripeNode.supernode == nil {
-                    self.insertSubnode(self.bottomStripeNode, aboveSubnode: self.backgroundNode)
-                }
-                if self.maskNode.supernode == nil {
-                    self.insertSubnode(self.maskNode, aboveSubnode: self.bottomStripeNode)
-                }
-
-                let hasCorners = itemListHasRoundedBlockLayout(params)
-                var hasTopCorners = false
-                var hasBottomCorners = false
-                switch neighbors.top {
-                case .sameSection(false):
-                    self.topStripeNode.isHidden = true
-                default:
-                    hasTopCorners = true
-                    self.topStripeNode.isHidden = hasCorners
-                }
-                let bottomStripeInset: CGFloat
-                let bottomStripeOffset: CGFloat
-                switch neighbors.bottom {
-                case .sameSection(false):
-                    bottomStripeInset = params.leftInset + 16.0
-                    bottomStripeOffset = -separatorHeight
-                    self.bottomStripeNode.isHidden = false
-                default:
-                    bottomStripeInset = 0.0
-                    bottomStripeOffset = 0.0
-                    hasBottomCorners = true
-                    self.bottomStripeNode.isHidden = hasCorners
-                }
-
-                self.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
-                self.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentHeight + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                self.maskNode.frame = self.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
-                self.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
-                self.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentHeight + bottomStripeOffset), size: CGSize(width: params.width - params.rightInset - bottomStripeInset - separatorRightInset, height: separatorHeight))
-
-                self.titleLabel.text = item.title
-                self.titleLabel.font = Font.regular(17.0)
-                self.titleLabel.textColor = item.theme.list.itemPrimaryTextColor
-                self.titleLabel.frame = CGRect(x: params.leftInset + 16.0, y: 12.0, width: params.width - params.leftInset - params.rightInset - 32.0, height: 22.0)
-
-                let availableWidth = params.width - params.leftInset - params.rightInset - 32.0
-                let gap: CGFloat = 7.0
-                let chipCount = max(1, item.chips.count)
-                let chipWidth = floor((availableWidth - gap * CGFloat(chipCount - 1)) / CGFloat(chipCount))
-                var activeIds = Set<String>()
-                for (index, chip) in item.chips.enumerated() {
-                    activeIds.insert(chip.id)
-                    let button = self.button(for: chip.id)
-                    button.chipId = chip.id
-                    button.frame = CGRect(x: params.leftInset + 16.0 + CGFloat(index) * (chipWidth + gap), y: 44.0, width: chipWidth, height: 30.0)
-                    self.configure(button: button, chip: chip, theme: item.theme)
-                }
-                for (id, button) in self.buttons {
-                    button.isHidden = !activeIds.contains(id)
-                }
-            })
-        }
-    }
-
-    private func button(for id: String) -> NagramBottomBarChipButton {
-        if let current = self.buttons[id] {
-            return current
-        }
-        let button = NagramBottomBarChipButton(type: .system)
-        button.layer.cornerRadius = 15.0
-        button.layer.borderWidth = UIScreenPixel
-        button.titleLabel?.font = Font.medium(13.0)
-        button.addTarget(self, action: #selector(self.buttonPressed(_:)), for: .touchUpInside)
-        self.view.addSubview(button)
-        self.buttons[id] = button
-        return button
-    }
-
-    private func configure(button: NagramBottomBarChipButton, chip: NagramBottomBarChipRowItem.Chip, theme: PresentationTheme) {
-        button.setTitle(chip.title, for: .normal)
-        button.isEnabled = chip.isEnabled
-        if chip.isSelected {
-            let selectedColor = theme.rootController.tabBar.selectedTextColor
-            button.backgroundColor = selectedColor
-            button.layer.borderColor = selectedColor.cgColor
-            button.setTitleColor(.white, for: .normal)
-        } else {
-            button.backgroundColor = theme.list.itemInputField.backgroundColor
-            button.layer.borderColor = theme.list.itemBlocksSeparatorColor.cgColor
-            button.setTitleColor(theme.list.itemSecondaryTextColor, for: .normal)
-        }
-        button.alpha = chip.isEnabled ? 1.0 : 0.35
-    }
-
-    @objc private func buttonPressed(_ button: NagramBottomBarChipButton) {
-        guard let chipId = button.chipId else {
-            return
-        }
-        self.item?.selected(chipId)
-    }
 }
 
 private final class NagramBottomBarPreviewItem: ListViewItem, ItemListItem {
@@ -623,9 +482,7 @@ private final class NagramBottomBarPreviewItem: ListViewItem, ItemListItem {
     let bottomBarTitle: String
     let emptyBottomTitle: String
     let sectionId: ItemListSectionId
-    let update: ((inout NagramBottomBarSettings) -> Void) -> Void
-
-    init(theme: PresentationTheme, settings: NagramBottomBarSettings, strings: PresentationStrings, itemTitles: [NagramBottomBarItemId: String], topSearchTitle: String, topSearchVisibleHint: String, topSearchHiddenHint: String, bottomBarTitle: String, emptyBottomTitle: String, sectionId: ItemListSectionId, update: @escaping ((inout NagramBottomBarSettings) -> Void) -> Void) {
+    init(theme: PresentationTheme, settings: NagramBottomBarSettings, strings: PresentationStrings, itemTitles: [NagramBottomBarItemId: String], topSearchTitle: String, topSearchVisibleHint: String, topSearchHiddenHint: String, bottomBarTitle: String, emptyBottomTitle: String, sectionId: ItemListSectionId) {
         self.theme = theme
         self.settings = settings
         self.strings = strings
@@ -636,7 +493,6 @@ private final class NagramBottomBarPreviewItem: ListViewItem, ItemListItem {
         self.bottomBarTitle = bottomBarTitle
         self.emptyBottomTitle = emptyBottomTitle
         self.sectionId = sectionId
-        self.update = update
     }
 
     var selectable: Bool {
@@ -672,7 +528,7 @@ private final class NagramBottomBarPreviewItem: ListViewItem, ItemListItem {
     }
 }
 
-private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListItemNode, UIGestureRecognizerDelegate {
+private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListItemNode {
     private var item: NagramBottomBarPreviewItem?
     private let topSearchTitleLabel = UILabel()
     private let topSearchHintLabel = UILabel()
@@ -681,14 +537,6 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
     private let backgroundView = UIView()
     private lazy var topSearchView = NavigationSearchView(action: {}, closeAction: {})
     private let tabBarComponentView = ComponentView<Empty>()
-    private let externalDropView = UIView()
-    private var itemFrames: [NagramBottomBarItemId: CGRect] = [:]
-    private var componentIdsByItemId: [NagramBottomBarItemId: AnyHashable] = [:]
-    private var itemIdsByComponentId: [AnyHashable: NagramBottomBarItemId] = [:]
-    private var bottomFrame: CGRect = .zero
-    private var externalFrame: CGRect = .zero
-    private var draggingItem: NagramBottomBarItemId?
-    private var panGestureRecognizer: UIPanGestureRecognizer?
 
     var tag: ItemListItemTag? {
         return nil
@@ -706,15 +554,7 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
         self.backgroundView.addSubview(self.topSearchHintLabel)
         self.backgroundView.addSubview(self.bottomBarTitleLabel)
         self.backgroundView.addSubview(self.emptyBottomLabel)
-        self.backgroundView.addSubview(self.externalDropView)
-
         self.topSearchView.isUserInteractionEnabled = false
-
-        let panGesture = UIPanGestureRecognizer(target: self, action: #selector(self.panGesture(_:)))
-        panGesture.cancelsTouchesInView = false
-        panGesture.delegate = self
-        self.backgroundView.addGestureRecognizer(panGesture)
-        self.panGestureRecognizer = panGesture
     }
 
     func asyncLayout() -> (_ item: NagramBottomBarPreviewItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
@@ -785,14 +625,8 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
         var previewSettings = item.settings
         previewSettings.isBottomBarVisible = true
 
-        self.componentIdsByItemId.removeAll()
-        self.itemIdsByComponentId.removeAll()
-        self.itemFrames.removeAll()
-
-        let makeComponentItem: (NagramBottomBarItemId) -> TabBarComponent.Item = { [weak self] id in
-            let componentId = AnyHashable("nagram.preview.\(id.rawValue)")
-            self?.componentIdsByItemId[id] = componentId
-            self?.itemIdsByComponentId[componentId] = id
+        let componentId: (NagramBottomBarItemId) -> AnyHashable = { AnyHashable("nagram.preview.\($0.rawValue)") }
+        let makeComponentItem: (NagramBottomBarItemId) -> TabBarComponent.Item = { id in
 
             let icon: TabBarComponent.Item.Content.CustomItem.Icon
             switch id {
@@ -806,12 +640,16 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
                 icon = .animation(name: "TabSettings", offset: .zero)
             case .profile:
                 icon = .bundleIcon(name: "Item List/Icons/Profile")
+            case .feed:
+                icon = .bundleIcon(name: "Chat List/Tabs/IconNews")
+            case .savedMessages:
+                icon = .bundleIcon(name: "Instant View/Bookmark")
             case .search:
                 icon = .bundleIcon(name: "Navigation/Search")
             }
 
             return TabBarComponent.Item(
-                content: .customItem(TabBarComponent.Item.Content.CustomItem(id: componentId, title: item.itemTitles[id] ?? id.rawValue, icon: icon)),
+                content: .customItem(TabBarComponent.Item.Content.CustomItem(id: componentId(id), title: item.itemTitles[id] ?? id.rawValue, icon: icon)),
                 action: { _ in },
                 doubleTapAction: nil,
                 contextAction: nil
@@ -835,8 +673,9 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
             deactivate: {}
         ) : nil
 
-        let selectedId = self.componentIdsByItemId[.chats] ?? visibleBottomItems.compactMap { self.componentIdsByItemId[$0] }.first ?? previewSettings.externalItem.flatMap { self.componentIdsByItemId[$0] }
-        let layoutItemCount = max(visibleComponentItems.count, NagramBottomBarSettings.defaultBottomItems.count)
+        let selectedPage = visibleBottomItems.contains(.chats) ? NagramBottomBarItemId.chats : visibleBottomItems.first ?? previewSettings.externalItem
+        let selectedId = selectedPage.map(componentId)
+        let layoutItemCount = max(visibleComponentItems.count, NagramBottomBarSettings.minimumLayoutItemCount)
         let sideInset: CGFloat = 12.0
         let previewOriginX = originX + sideInset
         let availableWidth = max(0.0, contentWidth - sideInset * 2.0)
@@ -845,9 +684,6 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
             self.emptyBottomLabel.isHidden = false
             self.emptyBottomLabel.frame = CGRect(x: previewOriginX, y: 130.0, width: availableWidth, height: 64.0)
             self.tabBarComponentView.view?.isHidden = true
-            self.bottomFrame = self.emptyBottomLabel.frame
-            self.externalFrame = CGRect(x: previewOriginX + max(0.0, availableWidth - 64.0), y: 130.0, width: min(64.0, availableWidth), height: 64.0)
-            self.externalDropView.isHidden = true
             return
         } else {
             self.emptyBottomLabel.isHidden = true
@@ -892,121 +728,6 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
             tabBarView.frame = tabBarFrame
             tabBarView.isUserInteractionEnabled = false
             tabBarView.alpha = item.settings.isBottomBarVisible ? 1.0 : 0.45
-
-            for (componentId, itemId) in self.itemIdsByComponentId {
-                if let componentView = tabBarView as? TabBarComponent.View, let frame = componentView.frameForItem(id: componentId) {
-                    self.itemFrames[itemId] = self.backgroundView.convert(frame, from: componentView)
-                }
-            }
-
-            let bottomItemFrames = visibleBottomItems.compactMap { self.itemFrames[$0] }
-            self.bottomFrame = bottomItemFrames.reduce(CGRect.null) { partialResult, frame in
-                return partialResult.isNull ? frame : partialResult.union(frame)
-            }
-            if self.bottomFrame.isNull {
-                self.bottomFrame = CGRect(x: tabBarFrame.minX, y: tabBarFrame.minY, width: max(48.0, tabBarFrame.width - 72.0), height: 64.0)
-            }
-
-            let fixedExternalFrame = CGRect(x: previewOriginX + max(0.0, availableWidth - 64.0), y: tabBarFrame.minY, width: min(64.0, availableWidth), height: 64.0)
-            if let externalItem = previewSettings.externalItem, externalItem != .search, let frame = self.itemFrames[externalItem] {
-                self.externalFrame = frame
-            } else if let componentView = tabBarView as? TabBarComponent.View, let frame = componentView.frameForSearchButton() {
-                self.externalFrame = self.backgroundView.convert(frame, from: componentView)
-            } else {
-                self.externalFrame = fixedExternalFrame
-            }
-
-            let hasExternalSlotContent = searchIsVisible || externalComponentItem != nil
-            self.externalDropView.isHidden = true
-            self.externalDropView.frame = self.externalFrame
-            self.externalDropView.layer.cornerRadius = 32.0
-            self.externalDropView.layer.borderWidth = 1.0
-            self.externalDropView.layer.borderColor = theme.list.itemBlocksSeparatorColor.cgColor
-            self.externalDropView.backgroundColor = theme.list.itemInputField.backgroundColor.withAlphaComponent(0.55)
-            if !hasExternalSlotContent {
-                self.backgroundView.bringSubviewToFront(self.externalDropView)
-            }
         }
-    }
-
-    @objc private func panGesture(_ gesture: UIPanGestureRecognizer) {
-        let point = gesture.location(in: self.backgroundView)
-        switch gesture.state {
-        case .began:
-            self.draggingItem = self.itemId(at: point)
-        case .ended:
-            guard let draggingItem = self.draggingItem else {
-                return
-            }
-            self.draggingItem = nil
-            if self.externalFrame.insetBy(dx: -16.0, dy: -16.0).contains(point) {
-                self.item?.update { settings in
-                    settings.moveToExternal(draggingItem)
-                }
-            } else if self.bottomFrame.insetBy(dx: -16.0, dy: -16.0).contains(point) {
-                let visibleItems = self.previewVisibleBottomItems()
-                var targetIndex = self.targetBottomIndex(at: point, visibleItems: visibleItems)
-                if let sourceIndex = visibleItems.firstIndex(of: draggingItem), targetIndex > sourceIndex {
-                    targetIndex -= 1
-                }
-                self.item?.update { settings in
-                    settings.moveToBottom(draggingItem, at: targetIndex)
-                }
-            }
-        case .cancelled, .failed:
-            self.draggingItem = nil
-        default:
-            break
-        }
-    }
-
-    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        if let panGestureRecognizer = self.panGestureRecognizer, gestureRecognizer === panGestureRecognizer {
-            let point = gestureRecognizer.location(in: self.backgroundView)
-            return self.itemId(at: point) != nil
-        }
-        return true
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
-        let point = touch.location(in: self.backgroundView)
-        if self.topSearchView.frame.contains(point) || self.bottomBarTitleLabel.frame.contains(point) {
-            return false
-        }
-        return true
-    }
-
-    private func itemId(at point: CGPoint) -> NagramBottomBarItemId? {
-        if let item = self.item, item.settings.isVisible(.search), self.externalFrame.insetBy(dx: -8.0, dy: -8.0).contains(point) {
-            return .search
-        }
-        if let match = self.itemFrames.first(where: { $0.value.insetBy(dx: -8.0, dy: -8.0).contains(point) }) {
-            return match.key
-        }
-        return nil
-    }
-
-    private func previewVisibleBottomItems() -> [NagramBottomBarItemId] {
-        guard let item = self.item else {
-            return []
-        }
-        var settings = item.settings
-        settings.isBottomBarVisible = true
-        return settings.visibleBottomItems
-    }
-
-    private func targetBottomIndex(at point: CGPoint, visibleItems: [NagramBottomBarItemId]) -> Int {
-        guard !visibleItems.isEmpty else {
-            return 0
-        }
-        for (index, id) in visibleItems.enumerated() {
-            guard let frame = self.itemFrames[id] else {
-                continue
-            }
-            if point.x < frame.midX {
-                return index
-            }
-        }
-        return visibleItems.count
     }
 }

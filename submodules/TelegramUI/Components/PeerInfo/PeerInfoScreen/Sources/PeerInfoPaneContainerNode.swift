@@ -23,6 +23,7 @@ import UndoUI
 import HorizontalTabsComponent
 import GlassBackgroundComponent
 import EdgeEffect
+import NagramSettings // MARK: NEXTGRAM
 
 final class PeerInfoPaneWrapper {
     let key: PeerInfoPaneKey
@@ -981,7 +982,12 @@ final class PeerInfoPaneContainerNode: ASDisplayNode, ASGestureRecognizerDelegat
                 self.pendingSwitchToPaneKey = nil
             }
         } else if self.currentPaneKey == nil {
-            self.pendingSwitchToPaneKey = self.initialPaneKey ?? availablePanes.first
+            // MARK: NEXTGRAM — prefer mutual groups only when the profile has that pane.
+            if self.initialPaneKey == nil, !self.isMediaOnly, availablePanes.contains(.groupsInCommon), NagramSettings.shared.profileOpensMutualGroups {
+                self.pendingSwitchToPaneKey = .groupsInCommon
+            } else {
+                self.pendingSwitchToPaneKey = self.initialPaneKey ?? availablePanes.first
+            }
         }
         
         let currentIndex: Int?

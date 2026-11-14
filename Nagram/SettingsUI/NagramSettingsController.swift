@@ -449,20 +449,23 @@ private func nagramGroups(
     setLocalNotificationFallbackEnabled: @escaping (Bool) -> Void,
     notificationDiagnosticsAction: @escaping () -> Void,
     bottomBarLayoutAction: @escaping () -> Void,
+    fontsAction: @escaping () -> Void,
     appIconsAction: @escaping () -> Void,
     antiRecallRulesAction: @escaping () -> Void,
     exportDeletedMessagesAction: @escaping () -> Void,
     importDeletedMessagesAction: @escaping () -> Void,
     messageMenuAction: @escaping () -> Void,
     regexFiltersAction: @escaping () -> Void,
+    memberNotificationsAction: @escaping () -> Void,
     inlineBotRulesAction: @escaping () -> Void,
     llmTranslationSettingsAction: @escaping () -> Void,
+    summarySettingsAction: @escaping () -> Void,
     sttSettingsAction: @escaping () -> Void,
+    lyricsSourcesAction: @escaping () -> Void,
     groupProfileSettingsAction: @escaping () -> Void,
     sessionBackupAction: @escaping () -> Void,
     pluginsAction: @escaping () -> Void,
     appUpdateAction: @escaping () -> Void,
-    channelFeedAction: @escaping () -> Void,
     badgeStyleAction: @escaping () -> Void,
     settingsBackupAction: @escaping () -> Void,
     aboutAction: @escaping () -> Void,
@@ -480,6 +483,7 @@ private func nagramGroups(
     return [
         NagramGroup(tab: .chat, headerKey: nil, footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.ChatListQuickFilters", get: { NagramSettings.shared.chatListQuickFiltersEnabled }, set: { NagramSettings.shared.chatListQuickFiltersEnabled = $0 }),
+            .toggle(titleKey: "Nagram.ChannelFeed.AutoLoad", get: { NagramSettings.shared.channelFeedAutoLoad }, set: { NagramSettings.shared.channelFeedAutoLoad = $0 }),
             .toggle(titleKey: "Nagram.ChatSearchHideDuplicateRecents", get: { NagramSettings.shared.chatSearchHideRecentListWhenTopPeersVisible }, set: { NagramSettings.shared.chatSearchHideRecentListWhenTopPeersVisible = $0 }),
             .toggle(titleKey: "Nagram.ChatListUnreadFirst", get: { NagramSettings.shared.chatListUnreadFirst }, set: { value in
                 NagramSettings.shared.chatListUnreadFirst = value
@@ -509,6 +513,8 @@ private func nagramGroups(
                 }
             }),
             .choice(titleKey: "Nagram.ChatListSwipeAction", prefix: "Nagram.ChatListSwipeAction", options: ["both", "switch", "quick", "none"], current: { NagramSettings.shared.chatListSwipeActionMode.rawValue }, set: { NagramSettings.shared.chatListSwipeAction = $0 }),
+            .toggle(titleKey: "Nagram.HideChatListSwipeDelete", get: { NagramSettings.shared.hideChatListSwipeDelete }, set: { NagramSettings.shared.hideChatListSwipeDelete = $0 }, isVisible: { NagramSettings.shared.chatListSwipeActionMode.allowsQuickActions }),
+            .toggle(titleKey: "Nagram.HideChatListSeparators", get: { NagramSettings.shared.hideChatListSeparators }, set: { NagramSettings.shared.hideChatListSeparators = $0 }),
         ], page: 1),
         NagramGroup(tab: .chat, headerKey: nil, footerKey: nil, rows: [
             .startupFolder(titleKey: "Nagram.ChatListStartupFolder"),
@@ -521,14 +527,22 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.ShowArchiveInFolders", get: { NagramSettings.shared.showArchiveInFolders }, set: { NagramSettings.shared.showArchiveInFolders = $0 }),
             .toggle(titleKey: "Nagram.OpenArchiveOnPull", get: { NagramSettings.shared.openArchiveOnPull }, set: { NagramSettings.shared.openArchiveOnPull = $0 }),
         ], page: 2),
-        NagramGroup(tab: .media, headerKey: "Nagram.Settings.Tab.Playback", footerKey: nil, rows: [
+        NagramGroup(tab: .media, headerKey: "Nagram.Settings.Tab.Playback", footerKey: "Nagram.MusicPlayer.SystemNowPlayingHint", rows: [
             .toggle(titleKey: "Nagram.MusicPlaylistShowFileSize", get: { NagramSettings.shared.musicPlaylistShowFileSize }, set: { NagramSettings.shared.musicPlaylistShowFileSize = $0 }),
             .toggle(titleKey: "Nagram.MusicPlaylistShowDownloadStatus", get: { NagramSettings.shared.musicPlaylistShowDownloadStatus }, set: { NagramSettings.shared.musicPlaylistShowDownloadStatus = $0 }),
+            .choice(titleKey: "Nagram.MusicPlayer.SystemNowPlaying", prefix: "Nagram.MusicPlayer.SystemNowPlaying", options: ["always", "background", "never"], current: { NagramSettings.shared.musicSystemNowPlaying }, set: { NagramSettings.shared.musicSystemNowPlaying = $0 }),
             .toggle(titleKey: "Nagram.MusicPlayerModernUI", get: { NagramSettings.shared.musicPlayerModernUI }, set: { NagramSettings.shared.musicPlayerModernUI = $0 }),
             .toggle(titleKey: "Nagram.VideoPIPSwipeUp", get: { NagramSettings.shared.videoPIPSwipeDirection == "up" }, set: { NagramSettings.shared.videoPIPSwipeDirection = $0 ? "up" : "none" }),
+            .choice(titleKey: "Nagram.DefaultVideoQuality", prefix: "Nagram.DefaultVideoQuality", options: ["auto", "highest", "lowest"],
+                current: { NagramSettings.shared.defaultVideoQuality }, set: { NagramSettings.shared.defaultVideoQuality = $0 }),
         ]),
         NagramGroup(tab: .media, headerKey: "Nagram.MusicPlayerModernUI", footerKey: "Nagram.MusicPlayer.OnlineLyricsPrivacy", rows: [
             .choice(titleKey: "Nagram.MusicPlayer.CoverLayout", prefix: "Nagram.MusicPlayer.CoverLayout", options: NagramMusicPlayerCoverLayout.allCases.map { $0.rawValue }, current: { NagramSettings.shared.musicPlayerCoverLayoutValue.rawValue }, set: { NagramSettings.shared.musicPlayerCoverLayout = $0 }),
+            .choice(titleKey: "Nagram.MusicPlayer.Background", prefix: "Nagram.MusicPlayer.Background", options: NagramMusicPlayerBackground.allCases.map { $0.rawValue }, current: { NagramSettings.shared.musicPlayerBackgroundValue.rawValue }, set: { NagramSettings.shared.musicPlayerBackground = $0 }),
+            .choice(titleKey: "Nagram.MusicPlayer.Colors", prefix: "Nagram.MusicPlayer.Colors", options: NagramMusicPlayerColors.allCases.map { $0.rawValue }, current: { NagramSettings.shared.musicPlayerColorsValue.rawValue }, set: { NagramSettings.shared.musicPlayerColors = $0 }),
+            .input(titleKey: "Nagram.MusicPlayer.CustomColor", placeholderKey: "Nagram.MusicPlayer.CustomColor.Placeholder", get: { NagramSettings.shared.musicPlayerCustomColor }, set: {
+                NagramSettings.shared.musicPlayerCustomColor = String($0.trimmingCharacters(in: .whitespacesAndNewlines).prefix(7))
+            }, isSecret: false, isVisible: { NagramSettings.shared.musicPlayerColorsValue == .custom }),
             .slider(titleKey: "Nagram.MusicPlayer.CoverSize", minValue: 60, maxValue: 100, get: { NagramSettings.shared.musicPlayerCoverSizeValue }, set: { NagramSettings.shared.musicPlayerCoverSize = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .slider(titleKey: "Nagram.MusicPlayer.CoverCornerRadius", minValue: 0, maxValue: 48, get: { NagramSettings.shared.musicPlayerCoverCornerRadiusValue }, set: { NagramSettings.shared.musicPlayerCoverCornerRadius = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .choice(titleKey: "Nagram.MusicPlayer.TitleAlignment", prefix: "Nagram.MusicPlayer.TitleAlignment", options: ["left", "center"], current: { NagramSettings.shared.musicPlayerTitleAlignmentValue }, set: { NagramSettings.shared.musicPlayerTitleAlignment = $0 }),
@@ -536,16 +550,19 @@ private func nagramGroups(
             .slider(titleKey: "Nagram.MusicPlayer.ControlScale", minValue: 80, maxValue: 120, get: { NagramSettings.shared.musicPlayerControlScaleValue }, set: { NagramSettings.shared.musicPlayerControlScale = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.DiscRotation", get: { NagramSettings.shared.musicPlayerDiscRotation }, set: { NagramSettings.shared.musicPlayerDiscRotation = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerCoverLayoutValue == .disc }),
             .toggle(titleKey: "Nagram.MusicPlayer.SwipeToSkip", get: { NagramSettings.shared.musicPlayerSwipeToSkip }, set: { NagramSettings.shared.musicPlayerSwipeToSkip = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .toggle(titleKey: "Nagram.MusicPlayer.ArtworkMotion", get: { NagramSettings.shared.musicPlayerArtworkMotion }, set: { NagramSettings.shared.musicPlayerArtworkMotion = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.Lyrics", get: { NagramSettings.shared.musicPlayerLyricsEnabled }, set: { NagramSettings.shared.musicPlayerLyricsEnabled = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.OnlineLyrics", get: { NagramSettings.shared.musicPlayerOnlineLyricsEnabled }, set: { NagramSettings.shared.musicPlayerOnlineLyricsEnabled = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .navigation(titleKey: "Nagram.MusicPlayer.SourcePriority", action: lyricsSourcesAction),
             .toggle(titleKey: "Nagram.MusicPlayer.ShowVolume", get: { NagramSettings.shared.musicPlayerShowVolume }, set: { NagramSettings.shared.musicPlayerShowVolume = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.ShowRemainingTime", get: { NagramSettings.shared.musicPlayerShowRemainingTime }, set: { NagramSettings.shared.musicPlayerShowRemainingTime = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .slider(titleKey: "Nagram.MusicPlayer.LyricsFontSize", minValue: 20, maxValue: 40, get: { NagramSettings.shared.musicPlayerLyricsFontSizeValue }, set: { NagramSettings.shared.musicPlayerLyricsFontSize = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
-            .slider(titleKey: "Nagram.MusicPlayer.BlurIntensity", minValue: 0, maxValue: 60, get: { NagramSettings.shared.musicPlayerBlurIntensityValue }, set: { NagramSettings.shared.musicPlayerBlurIntensity = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .slider(titleKey: "Nagram.MusicPlayer.BlurIntensity", minValue: 0, maxValue: 60, get: { NagramSettings.shared.musicPlayerBlurIntensityValue }, set: { NagramSettings.shared.musicPlayerBlurIntensity = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerBackgroundValue == .blur }),
         ]),
         NagramGroup(tab: .appearance, headerKey: "Nagram.Section.Interface", footerKey: "Nagram.GlassTransparency.Footer", rows: [
             .navigation(titleKey: "Nagram.Settings.AppIcons", action: appIconsAction),
             .navigation(titleKey: "Nagram.BottomBarLayout", action: bottomBarLayoutAction),
+            .navigation(titleKey: "Nagram.Fonts.Title", action: fontsAction),
             .toggle(titleKey: "Nagram.HideTabBarPermissionWarnings", get: { NagramSettings.shared.hideTabBarPermissionWarnings }, set: { NagramSettings.shared.hideTabBarPermissionWarnings = $0 }),
             .choice(titleKey: "Nagram.GlassTransparency", prefix: "Nagram.GlassTransparency", options: ["system", "custom"], current: { NagramSettings.shared.glassTransparencyModeValue.rawValue }, set: { NagramSettings.shared.glassTransparencyMode = $0 }),
             .slider(titleKey: "Nagram.GlassTransparency.OverlayOpacity", minValue: 0, maxValue: 100, get: { NagramSettings.shared.glassTransparencyPercent }, set: { NagramSettings.shared.glassTransparencyPercent = $0 }, isVisible: { NagramSettings.shared.glassTransparencyModeValue == .custom }),
@@ -561,6 +578,8 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .privacy, headerKey: "Nagram.Section.Stories", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.HideStories", get: { NagramSettings.shared.hideStories }, set: { NagramSettings.shared.hideStories = $0 }),
+            .toggle(titleKey: "Nagram.Stories.Confirm", get: { NagramSettings.shared.confirmBeforeViewingStories }, set: { NagramSettings.shared.confirmBeforeViewingStories = $0 }),
+            .toggle(titleKey: "Nagram.HideRepostToStory", get: { NagramSettings.shared.hideRepostToStory }, set: { NagramSettings.shared.hideRepostToStory = $0 }, isVisible: { !NagramSettings.shared.hideStories }),
             .toggle(titleKey: "Nagram.HideTopStories", get: { NagramSettings.shared.hideTopStories }, set: { NagramSettings.shared.hideTopStories = $0 }, isVisible: { !NagramSettings.shared.hideStories }),
             .toggle(titleKey: "Nagram.DisableStoryCameraSwipe", get: { NagramSettings.shared.disableStoryCameraSwipe }, set: { NagramSettings.shared.disableStoryCameraSwipe = $0 }, isVisible: { !NagramSettings.shared.hideStories }),
             .toggle(titleKey: "Nagram.DisableChatAvatarStories", get: { NagramSettings.shared.disableChatAvatarStories }, set: { NagramSettings.shared.disableChatAvatarStories = $0 }, isVisible: { !NagramSettings.shared.hideStories }),
@@ -597,7 +616,13 @@ private func nagramGroups(
             }),
             .input(titleKey: "Nagram.DeletedMessageIndicatorColor", placeholderKey: "Nagram.DeletedMessageIndicatorColor.Placeholder", get: { NagramSettings.shared.deletedMessageIndicatorColor }, set: { NagramSettings.shared.deletedMessageIndicatorColor = $0 }, isSecret: false, isVisible: { true }),
             .toggle(titleKey: "Nagram.DeletedMessageSemiTransparent", get: { NagramSettings.shared.deletedMessageSemiTransparent }, set: { NagramSettings.shared.deletedMessageSemiTransparent = $0 }),
-            .toggle(titleKey: "Nagram.PreserveBotMessages", get: { NagramSettings.shared.preserveBotMessages }, set: { NagramSettings.shared.preserveBotMessages = $0 }),
+            .slider(titleKey: "Nagram.DeletedMessageOpacity", minValue: 20, maxValue: 100, get: { min(100, max(20, NagramSettings.shared.deletedMessageOpacity)) }, set: { NagramSettings.shared.deletedMessageOpacity = $0 }, isVisible: { NagramSettings.shared.deletedMessageSemiTransparent }),
+            .toggle(titleKey: "Nagram.DeletedMessageOverlay", get: { NagramSettings.shared.deletedMessageOverlayEnabled }, set: { NagramSettings.shared.deletedMessageOverlayEnabled = $0 }),
+            .input(titleKey: "Nagram.DeletedMessageOverlayColor", placeholderKey: "Nagram.DeletedMessageOverlayColor.Placeholder", get: { NagramSettings.shared.deletedMessageOverlayColor }, set: { NagramSettings.shared.deletedMessageOverlayColor = String($0.prefix(7)) }, isSecret: false, isVisible: { NagramSettings.shared.deletedMessageOverlayEnabled }),
+            .slider(titleKey: "Nagram.DeletedMessageOverlayOpacity", minValue: 0, maxValue: 65, get: { min(65, max(0, NagramSettings.shared.deletedMessageOverlayOpacity)) }, set: { NagramSettings.shared.deletedMessageOverlayOpacity = $0 }, isVisible: { NagramSettings.shared.deletedMessageOverlayEnabled }),
+            .toggle(titleKey: "Nagram.DeletedMessageDimAvatar", get: { NagramSettings.shared.deletedMessageDimAvatar }, set: { NagramSettings.shared.deletedMessageDimAvatar = $0 }),
+            .toggle(titleKey: "Nagram.PreserveBotMessages", get: { NagramSettings.shared.preserveBotMessages }, set: { NagramSettings.shared.preserveBotMessages = $0 }, isVisible: { !NagramSettings.shared.excludeBotMessagesFromInterception }),
+            .toggle(titleKey: "Nagram.ExcludeBotMessagesFromInterception", get: { NagramSettings.shared.excludeBotMessagesFromInterception }, set: { NagramSettings.shared.excludeBotMessagesFromInterception = $0 }),
             .toggle(titleKey: "Nagram.SaveMessageEditHistory", get: { NagramSettings.shared.saveMessageEditHistory }, set: { NagramSettings.shared.saveMessageEditHistory = $0 }),
             .navigation(titleKey: "Nagram.DeletedMessages.Export", action: exportDeletedMessagesAction),
             .navigation(titleKey: "Nagram.DeletedMessages.Import", action: importDeletedMessagesAction),
@@ -606,12 +631,12 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.StayAtLatestMessageAfterRefresh", get: { NagramSettings.shared.stayAtLatestMessageAfterRefresh }, set: { NagramSettings.shared.stayAtLatestMessageAfterRefresh = $0 }),
         ]),
         NagramGroup(tab: .chat, headerKey: "Nagram.Section.Channels", footerKey: "Nagram.HideChannelForwardButton.Footer", rows: [
-            .navigation(titleKey: "Nagram.ChannelFeed", action: channelFeedAction),
             .toggle(titleKey: "Nagram.HideChannelForwardButton", get: { NagramSettings.shared.wideChannelPosts }, set: { NagramSettings.shared.wideChannelPosts = $0 }),
         ]),
         NagramGroup(tab: .translation, headerKey: "Nagram.Section.Translation", footerKey: "Nagram.Section.Translation.Footer", rows: [
             .choice(titleKey: "Nagram.TranslationProvider", prefix: "Nagram.TranslationProvider", options: NagramTranslationProvider.allCases.map { $0.rawValue }, current: { NagramSettings.shared.translationProviderValue.rawValue }, set: { NagramSettings.shared.translationProvider = $0 }),
             .navigation(titleKey: "Nagram.TranslationLLMSettings", action: llmTranslationSettingsAction),
+            .navigation(titleKey: "Nagram.Summary.Settings", action: summarySettingsAction),
             .toggle(titleKey: "Nagram.TranslationKeepFormatting", get: { NagramSettings.shared.translationKeepFormatting }, set: { NagramSettings.shared.translationKeepFormatting = $0 }),
             .toggle(titleKey: "Nagram.TranslateBeforeSend", get: { NagramSettings.shared.translateBeforeSend }, set: { NagramSettings.shared.translateBeforeSend = $0 }),
             .choice(titleKey: "Nagram.TranslateBeforeSendTargetLang", prefix: "Nagram.TranslateBeforeSendTargetLang", options: ["en", "ar", "zh", "fr", "de", "it", "ja", "ko", "pt-BR", "ru", "es", "uk"], current: { NagramSettings.shared.translateBeforeSendTargetLang }, set: { NagramSettings.shared.translateBeforeSendTargetLang = $0 }),
@@ -642,6 +667,8 @@ private func nagramGroups(
         ], page: 2),
         NagramGroup(tab: .media, headerKey: "Nagram.Section.Stickers", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.StickerTimestamp", get: { NagramSettings.shared.stickerTimestamp }, set: { NagramSettings.shared.stickerTimestamp = $0 }),
+            .toggle(titleKey: "Nagram.Emoji.OpenFirst", get: { NagramSettings.shared.openEmojiTabFirst }, set: { NagramSettings.shared.openEmojiTabFirst = $0 }),
+            .toggle(titleKey: "Nagram.Emoji.SystemFirst", get: { NagramSettings.shared.systemEmojiBeforePacks }, set: { NagramSettings.shared.systemEmojiBeforePacks = $0 }),
             .choice(titleKey: "Nagram.RecentStickerLimit", prefix: "Nagram.RecentStickerLimit", options: NagramSettings.recentStickerLimitOptions.map { String($0) }, current: { String(NagramSettings.shared.recentStickerLimitValue) }, set: { value in
                 if let limit = Int32(value) {
                     NagramSettings.shared.recentStickerLimit = limit
@@ -693,6 +720,7 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .appearance, headerKey: "Nagram.Section.Profile", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.ShowProfileId", get: { NagramSettings.shared.showProfileId }, set: { NagramSettings.shared.showProfileId = $0 }),
+            .toggle(titleKey: "Nagram.ProfileOpensMutualGroups", get: { NagramSettings.shared.profileOpensMutualGroups }, set: { NagramSettings.shared.profileOpensMutualGroups = $0 }),
             .toggle(titleKey: "Nagram.ShowDC", get: { NagramSettings.shared.showDC }, set: { NagramSettings.shared.showDC = $0 }),
             .toggle(titleKey: "Nagram.ShowRegDate", get: { NagramSettings.shared.showRegDate }, set: { NagramSettings.shared.showRegDate = $0 }),
             .navigation(titleKey: "Nagram.GroupProfileSettings", action: groupProfileSettingsAction),
@@ -709,8 +737,12 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.DisableContactSyncToPhoneByDefault", get: { NagramSettings.shared.disableContactSyncToPhoneByDefault }, set: { NagramSettings.shared.disableContactSyncToPhoneByDefault = $0 }),
         ]),
         NagramGroup(tab: .notifications, headerKey: "Nagram.Section.Notifications", footerKey: "Nagram.LocalNotificationFallback.Footer", rows: [
+            .choice(titleKey: "Nagram.NotificationPolicy.Pin", prefix: "Nagram.NotificationPolicy.Mode", options: NextgramNotificationMode.allCases.map(\.rawValue), current: { NextgramNotificationPolicy.mode(for: "pin").rawValue }, set: { NextgramNotificationPolicy.setMode(NextgramNotificationMode(rawValue: $0) ?? .default, for: "pin") }),
+            .choice(titleKey: "Nagram.NotificationPolicy.Mention", prefix: "Nagram.NotificationPolicy.Mode", options: NextgramNotificationMode.allCases.map(\.rawValue), current: { NextgramNotificationPolicy.mode(for: "mention").rawValue }, set: { NextgramNotificationPolicy.setMode(NextgramNotificationMode(rawValue: $0) ?? .default, for: "mention") }),
+            .choice(titleKey: "Nagram.NotificationPolicy.Reply", prefix: "Nagram.NotificationPolicy.Mode", options: NextgramNotificationMode.allCases.map(\.rawValue), current: { NextgramNotificationPolicy.mode(for: "reply").rawValue }, set: { NextgramNotificationPolicy.setMode(NextgramNotificationMode(rawValue: $0) ?? .default, for: "reply") }),
             .toggle(titleKey: "Nagram.LocalNotificationFallback", get: { NagramSettings.shared.localNotificationFallbackEnabled }, set: setLocalNotificationFallbackEnabled),
             .navigation(titleKey: "Nagram.NotificationDiagnostics", action: notificationDiagnosticsAction),
+            .navigation(titleKey: "Nagram.MemberNotifications.Manage", action: memberNotificationsAction),
         ]),
         NagramGroup(tab: .privacy, headerKey: "Nagram.Section.Privacy", footerKey: "Nagram.DisableFiltering.Footer", rows: [
             .toggle(titleKey: "Nagram.IgnoreContentRestrictions", get: { NagramSettings.shared.ignoreContentRestrictions }, set: { NagramSettings.shared.ignoreContentRestrictions = $0 }),
@@ -720,6 +752,7 @@ private func nagramGroups(
         NagramGroup(tab: .privacy, headerKey: "Nagram.Section.GhostMode", footerKey: "Nagram.GhostMode.Footer", rows: [
             .toggle(titleKey: "Nagram.GhostMode", get: { NagramSettings.shared.ghostModeEnabled }, set: { NagramSettings.shared.ghostModeEnabled = $0 }),
             .toggle(titleKey: "Nagram.DisableReadReceipts", get: { NagramSettings.shared.disableReadReceipts }, set: { NagramSettings.shared.disableReadReceipts = $0 }),
+            .toggle(titleKey: "Nagram.DisableStoryReadReceipts", get: { NagramSettings.shared.disableStoryReadReceipts }, set: { NagramSettings.shared.disableStoryReadReceipts = $0 }),
             .toggle(titleKey: "Nagram.DisableTypingStatus", get: { NagramSettings.shared.disableTypingStatus }, set: { NagramSettings.shared.disableTypingStatus = $0 }),
             .toggle(titleKey: "Nagram.DisableOnlineStatus", get: { NagramSettings.shared.disableOnlineStatus }, set: { NagramSettings.shared.disableOnlineStatus = $0 }),
         ]),
@@ -1018,6 +1051,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         })
     }, bottomBarLayoutAction: {
         pushControllerImpl?(nagramBottomBarSettingsController(context: context))
+    }, fontsAction: {
+        context.sharedContext.applicationBindings.presentNativeController(UINavigationController(rootViewController: NextgramFontSettingsController(context: context)))
     }, appIconsAction: {
         pushControllerImpl?(nextgramAppIconsController(context: context))
     }, antiRecallRulesAction: {
@@ -1030,12 +1065,18 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nagramMessageMenuSettingsController(context: context))
     }, regexFiltersAction: {
         pushControllerImpl?(nagramRegexFilterSettingsController(context: context))
+    }, memberNotificationsAction: {
+        pushControllerImpl?(nextgramMemberNotificationsController(context: context))
     }, inlineBotRulesAction: {
         pushControllerImpl?(nagramInlineBotRulesController(context: context))
     }, llmTranslationSettingsAction: {
         pushControllerImpl?(nagramLLMTranslationSettingsController(context: context))
+    }, summarySettingsAction: {
+        context.sharedContext.applicationBindings.presentNativeController(UINavigationController(rootViewController: NextgramSummarySettingsController(context: context)))
     }, sttSettingsAction: {
         pushControllerImpl?(nagramSTTSettingsController(context: context))
+    }, lyricsSourcesAction: {
+        pushControllerImpl?(nextgramLyricsSourcesController(context: context))
     }, groupProfileSettingsAction: {
         pushControllerImpl?(nagramGroupProfileSettingsController(context: context))
     }, sessionBackupAction: {
@@ -1046,8 +1087,6 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         Task { @MainActor in
             pushControllerImpl?(nextgramUpdateController(context: context))
         }
-    }, channelFeedAction: {
-        pushControllerImpl?(nextgramChannelFeedController(context: context))
     }, badgeStyleAction: {
         pushControllerImpl?(nextgramBadgeSettingsController(context: context))
     }, settingsBackupAction: {

@@ -80,6 +80,7 @@ import StickerPackPreviewUI
 import TextNodeWithEntities
 // MARK: NAGRAM
 import NagramSettings
+import NagramMessageHistory // MARK: NEXTGRAM
 import NagramSettingsSignal
 import NagramStrings
 import EntityKeyboard
@@ -1617,6 +1618,10 @@ extension ChatControllerImpl {
             
             if let messageId = messageId {
                 let intrinsicCanSendMessagesHere = canSendMessagesToChat(strongSelf.presentationInterfaceState)
+                if strongSelf.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) == true { // MARK: NEXTGRAM
+                    completion(.immediate, {})
+                    return
+                }
                 var canSendMessagesHere = intrinsicCanSendMessagesHere
                 if case .standard(.embedded) = strongSelf.presentationInterfaceState.mode {
                     canSendMessagesHere = false
@@ -1627,7 +1632,8 @@ extension ChatControllerImpl {
                 
                 if canSendMessagesHere {
                     let _ = strongSelf.presentVoiceMessageDiscardAlert(action: {
-                        if let message = strongSelf.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage() {
+                        if let message = strongSelf.chatDisplayNode.historyNode.messageInCurrentHistoryView(messageId)?._asMessage(),
+                           !message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) { // MARK: NEXTGRAM
                             strongSelf.updateChatPresentationInterfaceState(animated: true, interactive: true, { $0.updatedInterfaceState({
                                 $0.withUpdatedReplyMessageSubject(ChatInterfaceState.ReplyMessageSubject(
                                     messageId: message.id,

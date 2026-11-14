@@ -285,8 +285,9 @@ private final class NagramRegexFilterEditArguments {
     let selectAction: (NagramRegexFilterAction) -> Void
     let updateScoped: (Bool) -> Void
     let delete: () -> Void
+    let test: () -> Void
 
-    init(updateTitle: @escaping (String) -> Void, updatePattern: @escaping (String) -> Void, updateAuthorPeerId: @escaping (String) -> Void, updateEnabled: @escaping (Bool) -> Void, selectAction: @escaping (NagramRegexFilterAction) -> Void, updateScoped: @escaping (Bool) -> Void, delete: @escaping () -> Void) {
+    init(updateTitle: @escaping (String) -> Void, updatePattern: @escaping (String) -> Void, updateAuthorPeerId: @escaping (String) -> Void, updateEnabled: @escaping (Bool) -> Void, selectAction: @escaping (NagramRegexFilterAction) -> Void, updateScoped: @escaping (Bool) -> Void, delete: @escaping () -> Void, test: @escaping () -> Void) {
         self.updateTitle = updateTitle
         self.updatePattern = updatePattern
         self.updateAuthorPeerId = updateAuthorPeerId
@@ -294,6 +295,7 @@ private final class NagramRegexFilterEditArguments {
         self.selectAction = selectAction
         self.updateScoped = updateScoped
         self.delete = delete
+        self.test = test
     }
 }
 
@@ -308,6 +310,7 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
     case error(stableId: Int32, section: Int32, text: String)
     case delete(stableId: Int32, section: Int32, title: String)
     case footer(stableId: Int32, section: Int32, text: String)
+    case test(stableId: Int32, section: Int32, title: String)
 
     var section: ItemListSectionId {
         switch self {
@@ -330,6 +333,8 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
         case let .delete(_, section, _):
             return section
         case let .footer(_, section, _):
+            return section
+        case let .test(_, section, _):
             return section
         }
     }
@@ -355,6 +360,8 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
         case let .delete(stableId, _, _):
             return stableId
         case let .footer(stableId, _, _):
+            return stableId
+        case let .test(stableId, _, _):
             return stableId
         }
     }
@@ -390,6 +397,9 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
             return false
         case let .footer(lId, lSection, lText):
             if case let .footer(rId, rSection, rText) = rhs { return lId == rId && lSection == rSection && lText == rText }
+            return false
+        case let .test(lId, lSection, lText):
+            if case let .test(rId, rSection, rText) = rhs { return lId == rId && lSection == rSection && lText == rText }
             return false
         }
     }
@@ -435,6 +445,8 @@ private enum NagramRegexFilterEditEntry: ItemListNodeEntry {
             })
         case let .footer(_, section, text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: section)
+        case let .test(_, section, title):
+            return ItemListActionItem(presentationData: presentationData, systemStyle: .glass, title: title, kind: .generic, alignment: .natural, sectionId: section, style: .blocks, action: arguments.test)
         }
     }
 }
@@ -473,8 +485,10 @@ private func nagramRegexFilterEditEntries(presentationData: PresentationData, st
         stableId += 1
     }
 
+    entries.append(.test(stableId: stableId, section: 1, title: ngI18n("Nagram.RegexFilters.Test", lang)))
+    stableId += 1
     if !isNew {
-        entries.append(.delete(stableId: stableId, section: 1, title: ngI18n("Nagram.RegexFilters.Delete", lang)))
+        entries.append(.delete(stableId: stableId, section: 2, title: ngI18n("Nagram.RegexFilters.Delete", lang)))
     }
 
     return entries
@@ -540,6 +554,25 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
         statePromise.set(updated)
     }, delete: {
         deleteImpl?()
+    }, test: {
+        let state = stateValue.with { $0 }
+        let language = context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode
+        let pattern = state.pattern.trimmingCharacters(in: .whitespacesAndNewlines)
+        let author = nagramRegexFilterAuthorPeerId(state.authorPeerId)
+        guard !nagramRegexFilterHasInvalidAuthorPeerId(state.authorPeerId) else {
+            nextgramRegexTestResult(context: context, text: ngI18n("Nagram.RegexFilters.InvalidAuthorPeerId", language))
+            return
+        }
+        if author == nil {
+            let validation = NagramRegexFilterRule.validatePattern(pattern)
+            guard validation.isValid else {
+                nextgramRegexTestResult(context: context, text: nagramRegexFilterValidationText(validation, lang: language))
+                return
+            }
+        }
+        let rule = NagramRegexFilterRule(title: state.title, pattern: author == nil ? pattern : "", isEnabled: state.isEnabled,
+            action: author == nil ? state.action : .hide, authorPeerId: author, peerIds: state.peerIds)
+        nextgramPresentRegexRuleTest(context: context, rule: rule)
     })
 
     let signal = combineLatest(queue: .mainQueue(),
@@ -659,4 +692,83 @@ private func nagramRegexFilterEditController(context: AccountContext, rule: Nagr
 public func nagramRegexFilterQuickAddController(context: AccountContext, text: String, peerId: Int64, peerTitle: String) -> ViewController {
     let prefill = NagramRegexFilterPrefill(pattern: NSRegularExpression.escapedPattern(for: text.trimmingCharacters(in: .whitespacesAndNewlines)), peerId: peerId, peerTitle: peerTitle)
     return nagramRegexFilterEditController(context: context, rule: nil, prefill: prefill, completion: {})
+}
+
+private func nextgramRegexTestResult(context: AccountContext, text: String) {
+    let presentation = context.sharedContext.currentPresentationData.with { $0 }
+    let alert = UIAlertController(title: ngI18n("Nagram.RegexFilters.Test", presentation.strings.baseLanguageCode), message: text, preferredStyle: .alert)
+    alert.addAction(UIAlertAction(title: presentation.strings.Common_OK, style: .default))
+    context.sharedContext.applicationBindings.presentNativeController(alert)
+}
+
+private func nextgramPresentRegexRuleTest(context: AccountContext, rule: NagramRegexFilterRule) {
+    let presentation = context.sharedContext.currentPresentationData.with { $0 }
+    let language = presentation.strings.baseLanguageCode
+    let alert = UIAlertController(title: ngI18n("Nagram.RegexFilters.Test", language), message: ngI18n("Nagram.RegexFilters.Test.Hint", language), preferredStyle: .alert)
+    alert.addTextField { field in
+        field.placeholder = ngI18n("Nagram.RegexFilters.Test.Text", language)
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+    }
+    alert.addTextField { field in
+        field.placeholder = ngI18n("Nagram.RegexFilters.AuthorPeerId", language)
+        field.keyboardType = .numbersAndPunctuation
+        field.text = rule.authorPeerId.map(String.init)
+    }
+    alert.addTextField { field in
+        field.placeholder = ngI18n("Nagram.RegexFilters.Test.ChatId", language)
+        field.keyboardType = .numbersAndPunctuation
+        field.text = rule.peerIds.first.map(String.init)
+    }
+    alert.addAction(UIAlertAction(title: presentation.strings.Common_Cancel, style: .cancel))
+    alert.addAction(UIAlertAction(title: ngI18n("Nagram.RegexFilters.Test", language), style: .default) { [weak alert] _ in
+        let text = alert?.textFields?[0].text ?? ""
+        let authorText = (alert?.textFields?[1].text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let peerText = (alert?.textFields?[2].text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.utf16.count <= 4096, (authorText.isEmpty || Int64(authorText) != nil), (peerText.isEmpty || Int64(peerText) != nil) else {
+            nextgramRegexTestResult(context: context, text: ngI18n("Nagram.RegexFilters.Test.InvalidInput", language))
+            return
+        }
+        let author = Int64(authorText)
+        let peer = Int64(peerText)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = NagramRegexFilterMatcher(rules: [rule], peerId: peer).apply(to: text, authorPeerId: author)
+            let output: String
+            if !rule.isEnabled {
+                output = ngI18n("Nagram.RegexFilters.Test.Disabled", language)
+            } else if !rule.applies(toPeerId: peer) {
+                output = ngI18n("Nagram.RegexFilters.Test.OutOfScope", language)
+            } else {
+                switch result {
+                case .hidden:
+                    output = ngI18n("Nagram.RegexFilters.Action.hide", language)
+                case .contentHidden:
+                    output = ngI18n("Nagram.RegexFilters.ContentHidden", language)
+                case let .visible(value, ranges):
+                    if ranges.isEmpty {
+                        output = ngI18n("Nagram.RegexFilters.Test.NoMatch", language)
+                    } else {
+                        let preview = NSMutableAttributedString(string: value)
+                        // Replacing from the end preserves UTF-16 offsets, including emoji.
+                        var merged: [Range<Int>] = []
+                        for range in ranges.sorted(by: { $0.lowerBound < $1.lowerBound }) {
+                            if let last = merged.last, range.lowerBound <= last.upperBound {
+                                merged[merged.count - 1] = last.lowerBound ..< max(last.upperBound, range.upperBound)
+                            } else {
+                                merged.append(range)
+                            }
+                        }
+                        for range in merged.reversed() {
+                            preview.replaceCharacters(in: NSRange(location: range.lowerBound, length: range.count), with: "▰")
+                        }
+                        output = ngI18n("Nagram.RegexFilters.Test.Masked", language) + "\n\n" + preview.string
+                    }
+                }
+            }
+            DispatchQueue.main.async {
+                nextgramRegexTestResult(context: context, text: output)
+            }
+        }
+    })
+    context.sharedContext.applicationBindings.presentNativeController(alert)
 }

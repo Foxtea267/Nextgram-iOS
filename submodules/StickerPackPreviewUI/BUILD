@@ -10,6 +10,9 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
+        # MARK: NEXTGRAM — Local original-file ZIP backup.
+        "//Nagram/MediaActions:NagramMediaActions",
+        "//Nagram/Strings:NagramStrings",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/Display:Display",

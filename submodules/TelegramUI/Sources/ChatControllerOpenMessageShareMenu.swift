@@ -122,7 +122,7 @@ extension ChatControllerImpl {
         if message.text.containsOnlyEmoji {
             canShareToStory = false
         }
-        if NagramSettings.shared.hideStories { // MARK: NAGRAM — 隐藏动态时移除聊天分享菜单里的发布到动态入口
+        if NagramSettings.shared.hideStories || NagramSettings.shared.hideRepostToStory { // MARK: NEXTGRAM
             canShareToStory = false
         }
 

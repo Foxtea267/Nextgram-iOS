@@ -1,12 +1,29 @@
 import Foundation
 
+public struct NextgramLyricWord: Equatable {
+    public let time: Double
+    public let end: Double
+    public let range: NSRange
+}
+
 public struct NextgramLyricLine: Equatable {
     public let time: Double?
     public let text: String
+    public let words: [NextgramLyricWord]
+    public let translation: String?
 
     public init(time: Double?, text: String) {
         self.time = time
         self.text = text
+        self.words = []
+        self.translation = nil
+    }
+
+    init(time: Double?, text: String, words: [NextgramLyricWord], translation: String? = nil) {
+        self.time = time
+        self.text = text
+        self.words = words
+        self.translation = translation
     }
 }
 
@@ -30,6 +47,10 @@ public struct NextgramLyrics: Equatable {
 
     public static func parse(_ text: String) -> NextgramLyrics? {
         guard !text.isEmpty, text.utf8.count <= Self.maximumFileSize else { return nil }
+        let start = text.prefix(200).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{feff}")))
+        if start.hasPrefix("<?xml") || start.hasPrefix("<tt ") || start.hasPrefix("<tt>") {
+            return NextgramTTMLParser.parse(text)?.lyrics
+        }
         let rows = text.replacingOccurrences(of: "\u{feff}", with: "")
             .replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
             .components(separatedBy: "\n")
@@ -114,158 +135,6 @@ public struct NextgramLyrics: Equatable {
             }
         }
         return lower == 0 ? nil : lower - 1
-    }
-}
-
-private final class NextgramLyricsCacheEntry {
-    let lyrics: NextgramLyrics
-
-    init(_ lyrics: NextgramLyrics) {
-        self.lyrics = lyrics
-    }
-}
-
-private final class NextgramLyricsSessionDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
-    weak var owner: NextgramLyricsService?
-
-    init(owner: NextgramLyricsService) {
-        self.owner = owner
-    }
-
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
-        completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        let allowed = (response as? HTTPURLResponse)?.statusCode == 200
-            && response.expectedContentLength <= Int64(NextgramLyrics.maximumFileSize)
-        completionHandler(allowed ? .allow : .cancel)
-    }
-
-    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-        self.owner?.received(data, task: dataTask)
-    }
-
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        self.owner?.completed(task: task, error: error)
-    }
-}
-
-public final class NextgramLyricsService {
-    public static let shared = NextgramLyricsService()
-
-    private struct Response: Decodable {
-        let trackName: String
-        let artistName: String
-        let duration: Double
-        let instrumental: Bool
-        let syncedLyrics: String?
-        let plainLyrics: String?
-    }
-
-    private struct Request {
-        let title: String
-        let artist: String
-        let duration: Double
-        let key: String
-        let completion: (NextgramLyrics?) -> Void
-        var data = Data()
-    }
-
-    private let lock = NSLock()
-    private var requests: [Int: Request] = [:]
-    private let cache = NSCache<NSString, NextgramLyricsCacheEntry>()
-    private lazy var session: URLSession = {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 15.0
-        configuration.timeoutIntervalForResource = 20.0
-        configuration.urlCache = nil
-        configuration.httpCookieStorage = nil
-        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        return URLSession(configuration: configuration, delegate: NextgramLyricsSessionDelegate(owner: self), delegateQueue: nil)
-    }()
-
-    private init() {
-        self.cache.countLimit = 32
-        self.cache.totalCostLimit = 8 * NextgramLyrics.maximumFileSize
-    }
-
-    private static func normalized(_ value: String) -> String {
-        return value.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: Locale(identifier: "en_US_POSIX"))
-            .split(whereSeparator: { $0.isWhitespace }).joined(separator: " ")
-    }
-
-    // The caller requests online lookup explicitly before sending track metadata to LRCLIB.
-    @discardableResult
-    public func fetch(title: String, artist: String, duration: Double,
-        completion: @escaping (NextgramLyrics?) -> Void) -> URLSessionDataTask? {
-        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
-        let normalizedTitle = Self.normalized(title)
-        let normalizedArtist = Self.normalized(artist)
-        let unknownTitles: Set<String> = ["unknown", "unknown title", "unknown track", "未知标题", "未知歌曲"]
-        let unknownArtists: Set<String> = ["unknown", "unknown artist", "未知艺术家", "未知歌手"]
-        guard !title.isEmpty, !artist.isEmpty, !unknownTitles.contains(normalizedTitle), !unknownArtists.contains(normalizedArtist),
-              title.utf8.count <= 512, artist.utf8.count <= 512, duration.isFinite, duration > 0.0, duration < 86400.0 else {
-            DispatchQueue.main.async { completion(nil) }
-            return nil
-        }
-        let key = normalizedTitle + "\u{1}" + normalizedArtist + "\u{1}" + String(Int(duration.rounded()))
-        if let cached = self.cache.object(forKey: key as NSString) {
-            DispatchQueue.main.async { completion(cached.lyrics) }
-            return nil
-        }
-        var components = URLComponents(string: "https://lrclib.net/api/get")!
-        components.queryItems = [URLQueryItem(name: "track_name", value: title),
-            URLQueryItem(name: "artist_name", value: artist), URLQueryItem(name: "duration", value: String(Int(duration.rounded())))]
-        guard let url = components.url else {
-            DispatchQueue.main.async { completion(nil) }
-            return nil
-        }
-        var request = URLRequest(url: url)
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("Nextgram (https://github.com/Foxtea267/Nextgram-iOS)", forHTTPHeaderField: "User-Agent")
-        self.lock.lock()
-        let task = self.session.dataTask(with: request)
-        self.requests[task.taskIdentifier] = Request(title: title, artist: artist, duration: duration, key: key, completion: completion)
-        self.lock.unlock()
-        task.resume()
-        return task
-    }
-
-    fileprivate func received(_ data: Data, task: URLSessionDataTask) {
-        self.lock.lock()
-        guard var request = self.requests[task.taskIdentifier] else {
-            self.lock.unlock()
-            return
-        }
-        let allowed = data.count <= NextgramLyrics.maximumFileSize - request.data.count
-        if allowed {
-            request.data.append(data)
-            self.requests[task.taskIdentifier] = request
-        }
-        self.lock.unlock()
-        if !allowed { task.cancel() }
-    }
-
-    fileprivate func completed(task: URLSessionTask, error: Error?) {
-        self.lock.lock()
-        let request = self.requests.removeValue(forKey: task.taskIdentifier)
-        self.lock.unlock()
-        guard let request else { return }
-        var lyrics: NextgramLyrics?
-        if error == nil, let response = try? JSONDecoder().decode(Response.self, from: request.data),
-           Self.normalized(response.trackName) == Self.normalized(request.title),
-           Self.normalized(response.artistName) == Self.normalized(request.artist),
-           response.duration.isFinite, abs(response.duration - request.duration) <= 3.0 {
-            if response.instrumental {
-                lyrics = NextgramLyrics(lines: [], isSynced: false, instrumental: true)
-            } else {
-                lyrics = response.syncedLyrics.flatMap(NextgramLyrics.parse) ?? response.plainLyrics.flatMap(NextgramLyrics.parse)
-            }
-        }
-        if let lyrics {
-            self.cache.setObject(NextgramLyricsCacheEntry(lyrics), forKey: request.key as NSString, cost: request.data.count)
-        }
-        let result = lyrics
-        DispatchQueue.main.async { request.completion(result) }
     }
 }
 

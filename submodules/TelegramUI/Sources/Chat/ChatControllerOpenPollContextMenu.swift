@@ -16,6 +16,7 @@ import TelegramStringFormatting
 import TelegramPresentationData
 import AvatarNode
 import ChatPresentationInterfaceState
+import NagramMessageHistory // MARK: NEXTGRAM
 
 private enum OptionsId: Hashable {
     case item
@@ -94,6 +95,9 @@ extension ChatControllerImpl {
             }
             
             var canReply = canReplyInChat(self.presentationInterfaceState, accountPeerId: self.context.account.peerId)
+            if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) { // MARK: NEXTGRAM
+                canReply = false
+            }
             if !canSendMessagesToChat(self.presentationInterfaceState) && (self.presentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) {
                 canReply = false
             }

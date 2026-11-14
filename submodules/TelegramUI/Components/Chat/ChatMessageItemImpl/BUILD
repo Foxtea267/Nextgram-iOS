@@ -40,6 +40,7 @@ swift_library(
         "//submodules/TelegramUI/Components/EmojiStatusComponent",
         # MARK: NAGRAM
         "//Nagram/Settings:NagramSettings",
+        "//Nagram/MessageHistory:NagramMessageHistory", # MARK: NEXTGRAM
     ],
     visibility = [
         "//visibility:public",

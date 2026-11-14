@@ -3,6 +3,7 @@ import Display
 import Foundation
 import ItemListUI
 import NagramSettings
+import NagramSettingsSignal
 import NagramStrings
 import SwiftSignalKit
 import TelegramCore
@@ -74,18 +75,52 @@ private final class ChannelFeed {
     private let channelsDisposable = MetaDisposable()
     private let postsDisposable = MetaDisposable()
     private var initialized = false
+    private var generation = UUID()
+    var active = false
+    private var applicationActive = UIApplication.shared.applicationState == .active
+    private var lifecycleObservers: [NSObjectProtocol] = []
+
+    func loadMoreIfNeeded() {
+        guard self.active, NagramSettings.shared.channelFeedAutoLoad, self.state.canLoadMore else { return }
+        self.loadMore()
+    }
+
+    func suspend() {
+        self.active = false
+        self.generation = UUID()
+        self.postsDisposable.set(nil)
+        self.state.loadingPosts = false
+        self.updates.set(self.state)
+    }
 
     init(context: AccountContext) {
         self.context = context
         let initial = State(preferences: NextgramChannelFeedPreferences.load(accountId: context.account.id.int64))
         self.state = initial
         self.updates = ValuePromise(initial)
+        self.lifecycleObservers.append(NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.applicationActive = false
+            self.generation = UUID()
+            self.postsDisposable.set(nil)
+            self.state.loadingPosts = false
+            self.updates.set(self.state)
+        })
+        self.lifecycleObservers.append(NotificationCenter.default.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.applicationActive = true
+            self.updates.set(self.state)
+        })
+    }
+
+    func start() {
         self.watchChannels(count: 128)
     }
 
     deinit {
         self.channelsDisposable.dispose()
         self.postsDisposable.dispose()
+        self.lifecycleObservers.forEach { NotificationCenter.default.removeObserver($0) }
     }
 
     private func watchChannels(count: Int) {
@@ -132,6 +167,7 @@ private final class ChannelFeed {
     }
 
     func refresh() {
+        self.generation = UUID()
         self.postsDisposable.set(nil)
         self.state.histories.removeAll()
         self.state.failedChannels.removeAll()
@@ -147,7 +183,7 @@ private final class ChannelFeed {
     }
 
     func loadMore() {
-        guard !self.state.loadingChannels && !self.state.loadingPosts else { return }
+        guard self.active, self.applicationActive, !self.state.loadingChannels && !self.state.loadingPosts else { return }
         // Fetch channels whose next page can contain the newest posts first.
         let channels = self.state.includedChannels.filter { self.state.shouldLoad($0) }
         let boundaries = Dictionary(uniqueKeysWithValues: channels.compactMap { channel in
@@ -168,6 +204,7 @@ private final class ChannelFeed {
         guard !batch.isEmpty else { return }
 
         self.state.loadingPosts = true
+        let generation = self.generation
         self.updates.set(self.state)
         let requests = batch.map { channel -> Signal<(SearchMessagesResult, SearchMessagesState)?, NoError> in
             let id = channel.peer.id
@@ -181,11 +218,11 @@ private final class ChannelFeed {
             |> timeout(12.0, queue: .mainQueue(), alternate: .single(nil))
         }
         self.postsDisposable.set((combineLatest(requests) |> deliverOnMainQueue).start(next: { [weak self] results in
-            guard let self else { return }
+            guard let self, self.generation == generation else { return }
             for (channel, result) in zip(batch, results) {
                 let id = channel.peer.id
                 guard self.state.channels.contains(where: { $0.peer.id == id }) else { continue }
-                guard let (page, cursor) = result, page.completed || self.state.histories[id]?.cursor != cursor,
+                guard let (page, cursor) = result, !page.nextgramRequestFailed, page.completed || self.state.histories[id]?.cursor != cursor,
                       !page.messages.isEmpty || channel.latest.isEmpty else {
                     self.state.failedChannels.insert(id)
                     continue
@@ -302,10 +339,27 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
     formatter.timeStyle = .short
     var openSources: (() -> Void)?
     var openPost: ((EngineMessage.Id, EnginePeer) -> Void)?
+    var nearBottom = false
+    var moreRowVisible = false
+    var autoLoadScheduled = false
 
-    let state = combineLatest(context.sharedContext.presentationData, feed.updates.get())
+    func scheduleAutoLoad() {
+        guard !autoLoadScheduled, nearBottom || moreRowVisible else { return }
+        autoLoadScheduled = true
+        Queue.mainQueue().async {
+            autoLoadScheduled = false
+            // Recheck after list layout: the user may have scrolled away before this callback runs.
+            if nearBottom || moreRowVisible { feed.loadMoreIfNeeded() }
+        }
+    }
+
+    let state = combineLatest(context.sharedContext.presentationData, feed.updates.get(), nagramBoolSignal("nagram.channelFeedAutoLoad", defaultValue: true))
     |> deliverOnMainQueue
-    |> map { presentationData, state -> (ItemListControllerState, (ItemListNodeState, FeedActions)) in
+    |> map { presentationData, state, autoLoad -> (ItemListControllerState, (ItemListNodeState, FeedActions)) in
+        // Queue after the current list update. A short result page should fill the viewport without requiring a tap.
+        if autoLoad && !state.loadingPosts && !state.loadingChannels && state.canLoadMore {
+            scheduleAutoLoad()
+        }
         let strings = presentationData.strings
         let language = strings.baseLanguageCode
         let data = ItemListPresentationData(presentationData)
@@ -374,6 +428,9 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
                                             enabled: !state.loadingChannels, action: {
             let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: ngI18n("Nagram.ChannelFeed.Refresh", language), style: .default) { _ in feed.refresh() })
+            alert.addAction(UIAlertAction(title: ngI18n("Nagram.ChannelFeed.AutoLoad", language) + (autoLoad ? " ✓" : ""), style: .default) { _ in
+                NagramSettings.shared.channelFeedAutoLoad = !autoLoad
+            })
             if channels.contains(where: { $0.readCounters?.isUnread == true }) && !NagramSettings.shared.suppressReadReceipts {
                 alert.addAction(UIAlertAction(title: ngI18n("Nagram.ChannelFeed.MarkRead", language), style: .default) { _ in
                     let confirmation = UIAlertController(title: ngI18n("Nagram.ChannelFeed.MarkRead", language),
@@ -392,6 +449,21 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
     }
     let controller = ItemListController(context: context, state: state)
     controller.navigationPresentation = .default
+    controller.didAppear = { firstTime in
+        feed.active = true
+        if firstTime { feed.start() }
+        scheduleAutoLoad()
+    }
+    controller.willDisappear = { _ in feed.suspend() }
+    controller.visibleBottomContentOffsetChanged = { offset in
+        if case let .known(value) = offset { nearBottom = value < 180 }
+        else { nearBottom = false }
+        scheduleAutoLoad()
+    }
+    controller.visibleEntriesUpdated = { entries in
+        moreRowVisible = entries.contains(where: { ($0 as? FeedEntry)?.stableId == .more })
+        scheduleAutoLoad()
+    }
     openSources = { [weak controller] in
         controller?.push(channelFeedSourcesController(feed: feed))
     }
