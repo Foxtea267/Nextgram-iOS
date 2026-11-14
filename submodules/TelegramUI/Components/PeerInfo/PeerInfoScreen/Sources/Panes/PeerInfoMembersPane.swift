@@ -331,6 +331,9 @@ final class PeerInfoMembersPaneNode: ASDisplayNode, PeerInfoPaneNode {
         self.listBackgroundView = UIImageView()
         self.listBackgroundView.image = generateStretchableFilledCircleImage(diameter: 26.0 * 2.0, color: .white)?.withRenderingMode(.alwaysTemplate)
         self.listMaskView = UIImageView()
+        // The rounded list background and its mask are decoration.
+        self.listBackgroundView.accessibilityElementsHidden = true
+        self.listMaskView.accessibilityElementsHidden = true
         self.listMaskView.image = generateImage(CGSize(width: 16.0 + 26.0 * 2.0 + 16.0, height: 26.0 * 2.0), rotatedContext: { size, context in
             context.clear(CGRect(origin: CGPoint(), size: size))
             context.setFillColor(UIColor.white.cgColor)
@@ -587,10 +590,10 @@ final class PeerInfoMemberExtractedContentSource: ContextExtractedContentSource 
     }
     
     func takeView() -> ContextControllerTakeViewInfo? {
-        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: mainWindowScreenBounds)
     }
     
     func putBack() -> ContextControllerPutBackViewInfo? {
-        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }

@@ -19,20 +19,24 @@ enum BrowserToolbarMode: Equatable {
 final class BrowserToolbarComponent: CombinedComponent {
     let theme: PresentationTheme
     let bottomInset: CGFloat
-    let sideInset: CGFloat
+    /// Per side: the toolbar's content is centered in the band between the insets (iPhone Duo's side strip).
+    let leftInset: CGFloat
+    let rightInset: CGFloat
     let item: AnyComponentWithIdentity<Empty>?
     let collapseFraction: CGFloat
     
     init(
         theme: PresentationTheme,
         bottomInset: CGFloat,
-        sideInset: CGFloat,
+        leftInset: CGFloat,
+        rightInset: CGFloat,
         item: AnyComponentWithIdentity<Empty>?,
         collapseFraction: CGFloat
     ) {
         self.theme = theme
         self.bottomInset = bottomInset
-        self.sideInset = sideInset
+        self.leftInset = leftInset
+        self.rightInset = rightInset
         self.item = item
         self.collapseFraction = collapseFraction
     }
@@ -44,7 +48,7 @@ final class BrowserToolbarComponent: CombinedComponent {
         if lhs.bottomInset != rhs.bottomInset {
             return false
         }
-        if lhs.sideInset != rhs.sideInset {
+        if lhs.leftInset != rhs.leftInset || lhs.rightInset != rhs.rightInset {
             return false
         }
         if lhs.item != rhs.item {
@@ -88,7 +92,7 @@ final class BrowserToolbarComponent: CombinedComponent {
             let item = context.component.item.flatMap { item in
                 return centerItems[item.id].update(
                     component: item.component,
-                    availableSize: CGSize(width: context.availableSize.width - context.component.sideInset * 2.0, height: backgroundHeight),
+                    availableSize: CGSize(width: context.availableSize.width - context.component.leftInset - context.component.rightInset, height: backgroundHeight),
                     transition: context.transition
                 )
             }
@@ -108,12 +112,12 @@ final class BrowserToolbarComponent: CombinedComponent {
                 transition: context.transition
             )
             context.add(background
-                .position(CGPoint(x: size.width / 2.0, y: backgroundSize.height / 2.0 + offset))
+                .position(CGPoint(x: context.component.leftInset + (size.width - context.component.leftInset - context.component.rightInset) / 2.0, y: backgroundSize.height / 2.0 + offset))
             )
             
             if let centerItem = item {
                 context.add(centerItem
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: backgroundSize.height / 2.0 + offset))
+                    .position(CGPoint(x: context.component.leftInset + (context.availableSize.width - context.component.leftInset - context.component.rightInset) / 2.0, y: backgroundSize.height / 2.0 + offset))
                     .appear(ComponentTransition.Appear({ _, view, transition in
                         transition.animateBlur(layer: view.layer, fromRadius: 10.0, toRadius: 0.0)
                         transition.animateAlpha(view: view, from: 0.0, to: 1.0)
@@ -134,6 +138,7 @@ final class BrowserToolbarComponent: CombinedComponent {
 
 final class NavigationToolbarContentComponent: CombinedComponent {
     let theme: PresentationTheme
+    let strings: PresentationStrings
     let canGoBack: Bool
     let canGoForward: Bool
     let canOpenIn: Bool
@@ -144,6 +149,7 @@ final class NavigationToolbarContentComponent: CombinedComponent {
     
     init(
         theme: PresentationTheme,
+        strings: PresentationStrings,
         canGoBack: Bool,
         canGoForward: Bool,
         canOpenIn: Bool,
@@ -153,6 +159,7 @@ final class NavigationToolbarContentComponent: CombinedComponent {
         performHoldAction: @escaping (UIView, ContextGesture?, BrowserScreen.Action) -> Void
     ) {
         self.theme = theme
+        self.strings = strings
         self.canGoBack = canGoBack
         self.canGoForward = canGoForward
         self.canOpenIn = canOpenIn
@@ -164,6 +171,9 @@ final class NavigationToolbarContentComponent: CombinedComponent {
     
     static func ==(lhs: NavigationToolbarContentComponent, rhs: NavigationToolbarContentComponent) -> Bool {
         if lhs.theme !== rhs.theme {
+            return false
+        }
+        if lhs.strings !== rhs.strings {
             return false
         }
         if lhs.canGoBack != rhs.canGoBack {
@@ -206,6 +216,7 @@ final class NavigationToolbarContentComponent: CombinedComponent {
             let textColor = context.component.theme.rootController.navigationBar.primaryTextColor
             
             let canShare = context.component.canShare
+            let strings = context.component.strings
             let share = share.update(
                 component: Button(
                     content: AnyComponent(
@@ -218,7 +229,8 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                         if canShare {
                             performAction.invoke(.share)
                         }
-                    }
+                    },
+                    accessibility: ComponentAccessibility(label: strings.WebBrowser_Share, isHidden: !canShare)
                 ).minSize(buttonSize),
                 availableSize: buttonSize,
                 transition: .easeInOut(duration: 0.2)
@@ -238,7 +250,8 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                         ),
                         action: {
                             performAction.invoke(.updateSearchActive(true))
-                        }
+                        },
+                        accessibility: ComponentAccessibility(label: strings.Common_Search)
                     ).minSize(buttonSize),
                     availableSize: buttonSize,
                     transition: .easeInOut(duration: 0.2)
@@ -269,7 +282,8 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                         ),
                         action: {
                             performAction.invoke(.openIn)
-                        }
+                        },
+                        accessibility: ComponentAccessibility(label: strings.Conversation_FileOpenIn)
                     ).minSize(buttonSize),
                     availableSize: buttonSize,
                     transition: .easeInOut(duration: 0.2)
@@ -302,7 +316,8 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                         ),
                         action: {
                             performAction.invoke(.openIn)
-                        }
+                        },
+                        accessibility: ComponentAccessibility(label: strings.Conversation_FileOpenIn)
                     ).minSize(buttonSize),
                     availableSize: buttonSize,
                     transition: .easeInOut(duration: 0.2)
@@ -324,6 +339,11 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                             )
                         ),
                         minSize: buttonSize,
+                        accessibility: ComponentAccessibility(label: strings.Common_Back, traits: canGoBack ? [] : .notEnabled),
+                        contextAccessibilityLabel: canGoBack ? strings.Common_More : nil,
+                        contextAccessibilityAction: canGoBack ? { view in
+                            performHoldAction(view, nil, .navigateBack)
+                        } : nil,
                         action: { view, gesture in
                             guard canGoBack else {
                                 return
@@ -353,6 +373,11 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                             )
                         ),
                         minSize: buttonSize,
+                        accessibility: ComponentAccessibility(label: strings.VoiceOver_Browser_Forward, traits: canGoForward ? [] : .notEnabled),
+                        contextAccessibilityLabel: canGoForward ? strings.Common_More : nil,
+                        contextAccessibilityAction: canGoForward ? { view in
+                            performHoldAction(view, nil, .navigateForward)
+                        } : nil,
                         action: { view, gesture in
                             guard canGoForward else {
                                 return
@@ -387,7 +412,8 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                         ),
                         action: {
                             performAction.invoke(.openBookmarks)
-                        }
+                        },
+                        accessibility: ComponentAccessibility(label: strings.WebBrowser_Bookmarks_Title)
                     ).minSize(buttonSize),
                     availableSize: buttonSize,
                     transition: .easeInOut(duration: 0.2)
@@ -409,7 +435,8 @@ final class NavigationToolbarContentComponent: CombinedComponent {
                             ),
                             action: {
                                 performAction.invoke(.openIn)
-                            }
+                            },
+                            accessibility: ComponentAccessibility(label: strings.InstantPage_OpenInBrowser("Safari").string)
                         ).minSize(buttonSize),
                         availableSize: buttonSize,
                         transition: .easeInOut(duration: 0.2)
@@ -495,7 +522,8 @@ final class SearchToolbarContentComponent: CombinedComponent {
                     isEnabled: context.component.count > 0,
                     action: {
                         performAction.invoke(.scrollToNextSearchResult)
-                    }
+                    },
+                    accessibility: ComponentAccessibility(label: context.component.strings.VoiceOver_Browser_NextResult)
                 ).minSize(buttonSize),
                 availableSize: buttonSize,
                 transition: .easeInOut(duration: 0.2)
@@ -515,7 +543,8 @@ final class SearchToolbarContentComponent: CombinedComponent {
                     isEnabled: context.component.count > 0,
                     action: {
                         performAction.invoke(.scrollToPreviousSearchResult)
-                    }
+                    },
+                    accessibility: ComponentAccessibility(label: context.component.strings.VoiceOver_Browser_PreviousResult)
                 ).minSize(buttonSize),
                 availableSize: buttonSize,
                 transition: .easeInOut(duration: 0.2)

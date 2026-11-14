@@ -13,6 +13,8 @@ import EmojiTextAttachmentView
 import LokiRng
 import TextFormat
 import HierarchyTrackingLayer
+import PeerInfoPaneNode
+import TelegramStringFormatting
 
 public final class PeerInfoGiftsCoverComponent: Component {
     public let context: AccountContext
@@ -27,6 +29,10 @@ public final class PeerInfoGiftsCoverComponent: Component {
     public let topLeftButtonsSize: CGSize
     public let topRightButtonsSize: CGSize
     public let titleWidth: CGFloat
+    /// The title's center on a layout with a side strip (iPhone Duo); nil centers on the full width.
+    public let titleCenterX: CGFloat?
+    /// Keeps the icons off the navigation buttons and out of a side strip (iPhone Duo).
+    public let sideInsets: PeerInfoSideInsets
     public let bottomHeight: CGFloat
     public let action: (ProfileGiftsContext.State.StarGift) -> Void
     
@@ -43,6 +49,8 @@ public final class PeerInfoGiftsCoverComponent: Component {
         topLeftButtonsSize: CGSize,
         topRightButtonsSize: CGSize,
         titleWidth: CGFloat,
+        titleCenterX: CGFloat?,
+        sideInsets: PeerInfoSideInsets,
         bottomHeight: CGFloat,
         action: @escaping (ProfileGiftsContext.State.StarGift) -> Void
     ) {
@@ -58,6 +66,8 @@ public final class PeerInfoGiftsCoverComponent: Component {
         self.topLeftButtonsSize = topLeftButtonsSize
         self.topRightButtonsSize = topRightButtonsSize
         self.titleWidth = titleWidth
+        self.titleCenterX = titleCenterX
+        self.sideInsets = sideInsets
         self.bottomHeight = bottomHeight
         self.action = action
     }
@@ -94,6 +104,12 @@ public final class PeerInfoGiftsCoverComponent: Component {
             return false
         }
         if lhs.titleWidth != rhs.titleWidth {
+            return false
+        }
+        if lhs.titleCenterX != rhs.titleCenterX {
+            return false
+        }
+        if lhs.sideInsets != rhs.sideInsets {
             return false
         }
         if lhs.bottomHeight != rhs.bottomHeight {
@@ -166,6 +182,57 @@ public final class PeerInfoGiftsCoverComponent: Component {
             }
         }
         
+        private var accessibilityGiftElements: [AnyHashable: GiftAccessibilityElement] = [:]
+        
+        /// VoiceOver: the collectible gifts on the cover are buttons (a tap opens the gift), named as the gift screen
+        /// names them ("Title #number"); other gifts are decoration. Elements are kept per gift so focus survives.
+        override public var accessibilityElements: [Any]? {
+            get {
+                guard let component = self.component else {
+                    return []
+                }
+                let dateTimeFormat = component.context.sharedContext.currentPresentationData.with { $0 }.dateTimeFormat
+                var elements: [(frame: CGRect, element: GiftAccessibilityElement)] = []
+                var validIds = Set<AnyHashable>()
+                for (id, iconLayer) in self.iconLayers {
+                    guard case let .unique(gift) = iconLayer.gift.gift, iconLayer.opacity > 0.01, self.bounds.intersects(iconLayer.frame) else {
+                        continue
+                    }
+                    validIds.insert(id)
+                    let element: GiftAccessibilityElement
+                    if let current = self.accessibilityGiftElements[id] {
+                        element = current
+                    } else {
+                        element = GiftAccessibilityElement(accessibilityContainer: self)
+                        self.accessibilityGiftElements[id] = element
+                    }
+                    element.accessibilityLabel = "\(gift.title) #\(formatCollectibleNumber(gift.number, dateTimeFormat: dateTimeFormat))"
+                    element.accessibilityTraits = .button
+                    element.accessibilityFrameInContainerSpace = iconLayer.frame
+                    let starGift = iconLayer.gift
+                    element.activate = { [weak self] in
+                        guard let self, let component = self.component else {
+                            return false
+                        }
+                        component.action(starGift)
+                        return true
+                    }
+                    elements.append((iconLayer.frame, element))
+                }
+                for id in self.accessibilityGiftElements.keys where !validIds.contains(id) {
+                    self.accessibilityGiftElements.removeValue(forKey: id)
+                }
+                elements.sort(by: { lhs, rhs in
+                    if lhs.frame.minY != rhs.frame.minY {
+                        return lhs.frame.minY < rhs.frame.minY
+                    }
+                    return lhs.frame.minX < rhs.frame.minX
+                })
+                return elements.map(\.element)
+            } set(value) {
+            }
+        }
+        
         public override func point(inside point: CGPoint, with event: UIEvent?) -> Bool {
             for (_, iconLayer) in self.iconLayers {
                 if iconLayer.frame.contains(point) {
@@ -233,7 +300,7 @@ public final class PeerInfoGiftsCoverComponent: Component {
                 }
             }
             
-            if !giftIds.isEmpty && (self.iconPositions.isEmpty || previousCurrentSize?.width != availableSize.width || (previousComponent != nil && previousComponent?.hasBackground != component.hasBackground) || self.appliedGiftIds != giftIds) {
+            if !giftIds.isEmpty && (self.iconPositions.isEmpty || previousCurrentSize?.width != availableSize.width || (previousComponent != nil && (previousComponent?.sideInsets.stripLeft != component.sideInsets.stripLeft || previousComponent?.sideInsets.stripRight != component.sideInsets.stripRight)) || (previousComponent != nil && previousComponent?.hasBackground != component.hasBackground) || self.appliedGiftIds != giftIds) {
                 var avatarCenter = component.avatarCenter
                 if avatarCenter.y < 0.0 {
                     avatarCenter.y = component.statusBarHeight + 75.0
@@ -243,9 +310,8 @@ public final class PeerInfoGiftsCoverComponent: Component {
                 if component.statusBarHeight > 0.0 {
                     excludeRects.append(CGRect(origin: .zero, size: CGSize(width: availableSize.width, height: component.statusBarHeight + 4.0)))
                 }
-                excludeRects.append(CGRect(origin: CGPoint(x: 0.0, y: component.statusBarHeight), size: component.topLeftButtonsSize))
-                excludeRects.append(CGRect(origin: CGPoint(x: availableSize.width - component.topRightButtonsSize.width, y: component.statusBarHeight), size: component.topRightButtonsSize))
-                excludeRects.append(CGRect(origin: CGPoint(x: floor((availableSize.width - component.titleWidth) / 2.0), y: avatarCenter.y + component.avatarSize.height / 2.0 + 6.0), size: CGSize(width: component.titleWidth, height: 100.0)))
+                excludeRects.append(contentsOf: peerInfoGiftsCoverSideExclusionRects(width: availableSize.width, height: component.defaultHeight, statusBarHeight: component.statusBarHeight, topLeftButtonsSize: component.topLeftButtonsSize, topRightButtonsSize: component.topRightButtonsSize, sideInsets: component.sideInsets))
+                excludeRects.append(CGRect(origin: CGPoint(x: component.titleCenterX.map { floor($0 - component.titleWidth / 2.0) } ?? floor((availableSize.width - component.titleWidth) / 2.0), y: avatarCenter.y + component.avatarSize.height / 2.0 + 6.0), size: CGSize(width: component.titleWidth, height: 100.0)))
                 if component.bottomHeight > 0.0 {
                     excludeRects.append(CGRect(origin: CGPoint(x: 0.0, y: component.defaultHeight - component.bottomHeight), size: CGSize(width: availableSize.width, height: component.bottomHeight)))
                 }
@@ -908,4 +974,12 @@ private func patternScaleValueAt(fraction: CGFloat, t: CGFloat, reverse: Bool) -
     let localT = 1.0 - windowFunction(t: windowT)
 
     return localT
+}
+
+private final class GiftAccessibilityElement: UIAccessibilityElement {
+    var activate: (() -> Bool)?
+    
+    override func accessibilityActivate() -> Bool {
+        return self.activate?() ?? false
+    }
 }

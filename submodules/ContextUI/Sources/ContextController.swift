@@ -142,6 +142,8 @@ public final class ContextMenuActionItem {
     public let textLinkAction: () -> Void
     public let action: ((Action) -> Void)?
     public let longPressAction: ((Action) -> Void)?
+    /// VoiceOver: the item is the current choice, shown only as a checkmark icon (a sort order, a mode).
+    public let accessibilityIsSelected: Bool
     
     convenience public init(
         id: AnyHashable? = nil,
@@ -164,7 +166,8 @@ public final class ContextMenuActionItem {
         textIcon: @escaping (PresentationTheme) -> UIImage? = { _ in return nil },
         textLinkAction: @escaping () -> Void = {},
         action: ((ContextControllerProtocol?, @escaping (ContextMenuActionResult) -> Void) -> Void)?,
-        longPressAction: ((ContextControllerProtocol?, @escaping (ContextMenuActionResult) -> Void) -> Void)? = nil
+        longPressAction: ((ContextControllerProtocol?, @escaping (ContextMenuActionResult) -> Void) -> Void)? = nil,
+        accessibilityIsSelected: Bool = false
     ) {
         self.init(
             id: id,
@@ -195,7 +198,8 @@ public final class ContextMenuActionItem {
                 return { impl in
                     longPressAction(impl.controller, impl.dismissWithResult)
                 }
-            }
+            },
+            accessibilityIsSelected: accessibilityIsSelected
         )
     }
 
@@ -220,7 +224,8 @@ public final class ContextMenuActionItem {
         textIcon: @escaping (PresentationTheme) -> UIImage? = { _ in return nil },
         textLinkAction: @escaping () -> Void = {},
         action: ((Action) -> Void)?,
-        longPressAction: ((Action) -> Void)? = nil
+        longPressAction: ((Action) -> Void)? = nil,
+        accessibilityIsSelected: Bool = false
     ) {
         self.id = id
         self.text = text
@@ -243,6 +248,7 @@ public final class ContextMenuActionItem {
         self.textLinkAction = textLinkAction
         self.action = action
         self.longPressAction = longPressAction
+        self.accessibilityIsSelected = accessibilityIsSelected
     }
 }
 
@@ -314,9 +320,20 @@ public final class ContextControllerReferenceViewInfo {
     public let insets: UIEdgeInsets
     public let customPosition: CGPoint?
     public let actionsPosition: ActionsPosition
+    public let centersMorphedActions: Bool
+    /// Which of the source's side edges a morphing menu keeps. `.automatic` takes the one nearer the screen edge.
+    public let morphedActionsAlignment: MorphedActionsAlignment
     
-    public init(referenceView: UIView, contentAreaInScreenSpace: CGRect, insets: UIEdgeInsets = UIEdgeInsets(), customPosition: CGPoint? = nil, actionsPosition: ActionsPosition = .bottom, sourcePath: UIBezierPath? = nil) {
+    public enum MorphedActionsAlignment {
+        case automatic
+        case leading
+        case trailing
+    }
+    
+    public init(referenceView: UIView, contentAreaInScreenSpace: CGRect, insets: UIEdgeInsets = UIEdgeInsets(), customPosition: CGPoint? = nil, actionsPosition: ActionsPosition = .bottom, sourcePath: UIBezierPath? = nil, centersMorphedActions: Bool = false, morphedActionsAlignment: MorphedActionsAlignment = .automatic) {
         self.sourcePath = sourcePath
+        self.centersMorphedActions = centersMorphedActions
+        self.morphedActionsAlignment = morphedActionsAlignment
         self.referenceView = referenceView
         self.contentAreaInScreenSpace = contentAreaInScreenSpace
         self.insets = insets
@@ -427,7 +444,7 @@ public extension ContextExtractedContentSource {
     var actionsHorizontalAlignment: ContextActionsHorizontalAlignment {
         return .default
     }
-
+    
     var shouldBeDismissed: Signal<Bool, NoError> {
         return .single(false)
     }
@@ -538,6 +555,10 @@ public struct ContextControllerItems {
     public var tip: ContextControllerTip?
     public var tipSignal: Signal<ContextControllerTip?, NoError>?
     public var dismissed: (() -> Void)?
+    public var usesClearGlass: Bool
+    public var glassBlurRadius: CGFloat?
+    /// A list menu is at least 220pt wide; a menu of short items can lower that floor. It still fits its widest item.
+    public var minimumListWidth: CGFloat?
 
     public init(
         id: AnyHashable? = nil,
@@ -555,8 +576,12 @@ public struct ContextControllerItems {
         previewReaction: TelegramMediaFile? = nil,
         tip: ContextControllerTip? = nil,
         tipSignal: Signal<ContextControllerTip?, NoError>? = nil,
-        dismissed: (() -> Void)? = nil
+        dismissed: (() -> Void)? = nil,
+        usesClearGlass: Bool = false,
+        glassBlurRadius: CGFloat? = nil
     ) {
+        self.usesClearGlass = usesClearGlass
+        self.glassBlurRadius = glassBlurRadius
         self.id = id
         self.content = content
         self.context = context
@@ -591,6 +616,8 @@ public struct ContextControllerItems {
         self.tip = nil
         self.tipSignal = nil
         self.dismissed = nil
+        self.usesClearGlass = false
+        self.glassBlurRadius = nil
     }
 }
 
@@ -726,6 +753,7 @@ public protocol ContextController: ViewController, StandalonePresentableControll
     var dismissed: (() -> Void)? { get set }
     var dismissedForCancel: (() -> Void)? { get set }
     var passthroughTouchEvent: ((UIView, CGPoint) -> HandledTouchEvent)? { get set }
+    var passthroughHitTest: ((CGPoint) -> UIView?)? { get set }
     var reactionSelected: ((UpdateMessageReaction, Bool) -> Void)? { get set }
     var premiumReactionsSelected: (() -> Void)? { get set }
     var getOverlayViews: (() -> [UIView])? { get set }

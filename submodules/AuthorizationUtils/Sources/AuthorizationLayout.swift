@@ -46,6 +46,16 @@ public final class SolvedAuthorizationLayoutItem {
     }
 }
 
+public func authorizationLayoutItemsFit(height: CGFloat, items: [AuthorizationLayoutItem]) -> Bool {
+    var minimumHeight: CGFloat = 0.0
+    for item in items {
+        minimumHeight += item.size.height
+        minimumHeight += min(item.spacingBefore.weight, item.spacingBefore.maxValue) * 0.5
+        minimumHeight += min(item.spacingAfter.weight, item.spacingAfter.maxValue) * 0.5
+    }
+    return minimumHeight <= height
+}
+
 public func layoutAuthorizationItems(bounds: CGRect, items: [AuthorizationLayoutItem], transition: ContainedViewLayoutTransition, failIfDoesNotFit: Bool) -> Bool {
     var fixedHeight: CGFloat = 0.0
     var totalSpacerWeight: CGFloat = 0.0
@@ -156,7 +166,8 @@ public func layoutAuthorizationItems(bounds: CGRect, items: [AuthorizationLayout
     for i in 0 ..< solvedItems.count {
         let item = solvedItems[i]
         verticalOrigin += item.spacingBefore!
-        let itemFrame = CGRect(origin: CGPoint(x: floor((bounds.size.width - item.item.size.width) / 2.0), y: verticalOrigin), size: item.item.size)
+        // Centered in `bounds` (every caller passed x = 0 until iPhone Duo's side strip needed a band).
+        let itemFrame = CGRect(origin: CGPoint(x: bounds.minX + floor((bounds.size.width - item.item.size.width) / 2.0), y: verticalOrigin), size: item.item.size)
         if let view = item.item.view {
             transition.updateFrame(view: view, frame: itemFrame)
         } else if let node = item.item.node {

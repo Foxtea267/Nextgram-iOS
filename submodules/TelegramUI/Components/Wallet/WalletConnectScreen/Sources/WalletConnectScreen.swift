@@ -2,6 +2,7 @@ import Foundation
 import UIKit
 import Display
 import AccountContext
+import AvatarComponent
 import TelegramCore
 import SwiftSignalKit
 import TelegramPresentationData
@@ -29,20 +30,25 @@ public final class WalletConnectAppIconComponent: Component {
     let icon: WalletTonConnectIcon?
     let size: CGFloat
     let cornerRadius: CGFloat?
+    /// A Telegram peer that asks instead of a dApp (a message widget's bot, widget-sandbox v0.5.0): its avatar replaces
+    /// the manifest's icon.
+    let peer: EnginePeer?
 
-    public init(context: AccountContext, applicationName: String, icon: WalletTonConnectIcon?, size: CGFloat = 88.0, cornerRadius: CGFloat? = nil) {
+    public init(context: AccountContext, applicationName: String, icon: WalletTonConnectIcon?, size: CGFloat = 88.0, cornerRadius: CGFloat? = nil, peer: EnginePeer? = nil) {
         self.applicationName = applicationName
         self.context = context
         self.icon = icon
         self.size = size
         self.cornerRadius = cornerRadius
+        self.peer = peer
     }
 
     public static func ==(lhs: WalletConnectAppIconComponent, rhs: WalletConnectAppIconComponent) -> Bool {
-        return lhs.applicationName == rhs.applicationName && lhs.context === rhs.context && lhs.icon == rhs.icon && lhs.size == rhs.size && lhs.cornerRadius == rhs.cornerRadius
+        return lhs.applicationName == rhs.applicationName && lhs.context === rhs.context && lhs.icon == rhs.icon && lhs.size == rhs.size && lhs.cornerRadius == rhs.cornerRadius && lhs.peer == rhs.peer
     }
 
     public final class View: UIView {
+        private let avatar = ComponentView<Empty>()
         private let imageView = UIImageView()
         private let fallbackLabel = UILabel()
         private var currentIcon: WalletTonConnectIcon?
@@ -80,6 +86,27 @@ public final class WalletConnectAppIconComponent: Component {
             self.fallbackLabel.frame = CGRect(origin: .zero, size: size)
             self.fallbackLabel.text = component.applicationName.first.map { String($0).uppercased() }
 
+            if let peer = component.peer {
+                let theme = component.context.sharedContext.currentPresentationData.with { $0 }.theme
+                let _ = self.avatar.update(
+                    transition: .immediate,
+                    component: AnyComponent(AvatarComponent(context: component.context, theme: theme, peer: peer, size: size)),
+                    environment: {},
+                    containerSize: size
+                )
+                if let avatarView = self.avatar.view {
+                    if avatarView.superview == nil {
+                        self.addSubview(avatarView)
+                    }
+                    avatarView.frame = CGRect(origin: .zero, size: size)
+                }
+                self.imageView.isHidden = true
+                self.fallbackLabel.isHidden = true
+                return size
+            }
+            self.avatar.view?.removeFromSuperview()
+            self.imageView.isHidden = false
+
             if self.currentIcon != component.icon || self.accountContext !== component.context {
                 self.currentIcon = component.icon
                 self.accountContext = component.context
@@ -90,11 +117,11 @@ public final class WalletConnectAppIconComponent: Component {
 
                 if let icon = component.icon, icon.size > 0, icon.size <= 2 * 1024 * 1024,
                    icon.mimeType.lowercased().hasPrefix("image/") {
-                    let mediaBox = component.context.account.postbox.mediaBox
+                    let resources = component.context.engine.resources
                     let resource = WebFileReferenceMediaResource(url: icon.url, size: Int64(icon.size), accessHash: icon.accessHash)
-                    self.dataDisposable.set((mediaBox.resourceData(resource)
+                    self.dataDisposable.set((resources.data(resource: EngineMediaResource(resource))
                     |> map { data -> UIImage? in
-                        guard data.complete, data.size <= 2 * 1024 * 1024 else { return nil }
+                        guard data.isComplete, data.availableSize <= 2 * 1024 * 1024 else { return nil }
                         return UIImage(contentsOfFile: data.path)
                     }
                     |> deliverOnMainQueue).start(next: { [weak self, weak context = component.context] image in
@@ -102,8 +129,8 @@ public final class WalletConnectAppIconComponent: Component {
                         self.imageView.image = image
                         self.fallbackLabel.isHidden = true
                     }))
-                    self.fetchDisposable.set(fetchedMediaResource(mediaBox: mediaBox, userLocation: .other,
-                        userContentType: .image, reference: .standalone(resource: resource), statsCategory: .image).start())
+                    self.fetchDisposable.set(resources.fetch(reference: .standalone(resource: resource), userLocation: .other,
+                        userContentType: .image, statsCategory: .image).start())
                 }
             }
             return size
@@ -468,7 +495,11 @@ private final class WalletConnectSheetContent: CombinedComponent {
                 innerDiameter: 52.0,
                 sideInset: 30.0
             )
-            let buttonsWidth = max(2.0, safeContentWidth - buttonInsets.left - buttonInsets.right)
+            // The bottom buttons span iPhone Duo's side strip; they keep clear only of a corner block at the bottom.
+            let buttonsSideInsets = environment.bottomEdgeSideInsets()
+            let buttonsBandWidth = max(0.0, context.availableSize.width - buttonsSideInsets.left - buttonsSideInsets.right)
+            let buttonsCenterX = buttonsSideInsets.left + buttonsBandWidth / 2.0
+            let buttonsWidth = max(2.0, buttonsBandWidth - buttonInsets.left - buttonInsets.right)
             let cancelButtonWidth = floorToScreenPixels((buttonsWidth - buttonSpacing) / 2.0)
             let connectButtonWidth = buttonsWidth - buttonSpacing - cancelButtonWidth
 
@@ -498,7 +529,7 @@ private final class WalletConnectSheetContent: CombinedComponent {
                 transition: context.transition
             )
             context.add(cancelButton.position(CGPoint(
-                x: contentCenterX - buttonSpacing / 2.0 - cancelButton.size.width / 2.0,
+                x: buttonsCenterX - buttonSpacing / 2.0 - cancelButton.size.width / 2.0,
                 y: contentHeight + cancelButton.size.height / 2.0
             )))
 
@@ -529,7 +560,7 @@ private final class WalletConnectSheetContent: CombinedComponent {
                 transition: context.transition
             )
             context.add(connectButton.position(CGPoint(
-                x: contentCenterX + buttonSpacing / 2.0 + connectButton.size.width / 2.0,
+                x: buttonsCenterX + buttonSpacing / 2.0 + connectButton.size.width / 2.0,
                 y: contentHeight + connectButton.size.height / 2.0
             )))
             contentHeight += max(cancelButton.size.height, connectButton.size.height)
@@ -638,7 +669,7 @@ private final class WalletConnectSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         hasInputHeight: !environment.inputHeight.isZero,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in
@@ -680,8 +711,10 @@ private final class WalletConnectSheetComponent: CombinedComponent {
                         bottom: 0.0,
                         right: max(sideInset, environment.safeInsets.right)
                     ),
+                    reservedCorners: environment.reservedCorners,
+                    division: nil,
                     additionalInsets: .zero,
-                    statusBarHeight: environment.statusBarHeight,
+                    statusBarHeight: environment.fullStatusBarHeight,
                     inputHeight: nil,
                     inputHeightIsInteractivellyChanging: false,
                     inVoiceOver: false,

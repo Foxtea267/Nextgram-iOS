@@ -125,6 +125,7 @@ public final class EntityKeyboardComponent: Component {
     public let useExternalSearchContainer: Bool
     public let hidePanels: Bool
     public let customTintColor: UIColor?
+    public let alwaysShowsTopPanel: Bool
     
     public init(
         theme: PresentationTheme,
@@ -160,7 +161,8 @@ public final class EntityKeyboardComponent: Component {
         clipContentToTopPanel: Bool,
         useExternalSearchContainer: Bool,
         hidePanels: Bool = false,
-        customTintColor: UIColor? = nil
+        customTintColor: UIColor? = nil,
+        alwaysShowsTopPanel: Bool = false
     ) {
         self.theme = theme
         self.strings = strings
@@ -196,6 +198,7 @@ public final class EntityKeyboardComponent: Component {
         self.useExternalSearchContainer = useExternalSearchContainer
         self.hidePanels = hidePanels
         self.customTintColor = customTintColor
+        self.alwaysShowsTopPanel = alwaysShowsTopPanel
     }
     
     public static func ==(lhs: EntityKeyboardComponent, rhs: EntityKeyboardComponent) -> Bool {
@@ -254,6 +257,9 @@ public final class EntityKeyboardComponent: Component {
             return false
         }
         if lhs.isExpanded != rhs.isExpanded {
+            return false
+        }
+        if lhs.alwaysShowsTopPanel != rhs.alwaysShowsTopPanel {
             return false
         }
         if lhs.clipContentToTopPanel != rhs.clipContentToTopPanel {
@@ -328,7 +334,10 @@ public final class EntityKeyboardComponent: Component {
             var contentIcons: [PagerComponentContentIcon] = []
             var contentAccessoryLeftButtons: [AnyComponentWithIdentity<Empty>] = []
             var contentAccessoryRightButtons: [AnyComponentWithIdentity<Empty>] = []
-            
+
+            // The pack rows are clipped to the band beside iPhone Duo's side strip and keep the other inset.
+            let sideStrips = entityKeyboardSideStrips(leftInset: component.containerInsets.left, rightInset: component.containerInsets.right)
+
             let gifsContentItemIdUpdated = ActionSlot<(AnyHashable, AnyHashable?, ComponentTransition)>()
             let stickersContentItemIdUpdated = ActionSlot<(AnyHashable, AnyHashable?, ComponentTransition)>()
             let masksContentItemIdUpdated = ActionSlot<(AnyHashable, AnyHashable?, ComponentTransition)>()
@@ -400,7 +409,7 @@ public final class EntityKeyboardComponent: Component {
                     theme: component.theme,
                     customTintColor: component.customTintColor,
                     items: topMaskItems,
-                    containerSideInset: component.containerInsets.left + component.topPanelInsets.left,
+                    containerSideInset: component.containerInsets.left - sideStrips.left + component.topPanelInsets.left,
                     defaultActiveItemId: maskContent.panelItemGroups.first?.groupId,
                     activeContentItemIdUpdated: masksContentItemIdUpdated,
                     reorderItems: { [weak self] items in
@@ -534,7 +543,7 @@ public final class EntityKeyboardComponent: Component {
                     theme: component.theme,
                     customTintColor: component.customTintColor,
                     items: topStickerItems,
-                    containerSideInset: component.containerInsets.left + component.topPanelInsets.left,
+                    containerSideInset: component.containerInsets.left - sideStrips.left + component.topPanelInsets.left,
                     defaultActiveItemId: stickerContent.panelItemGroups.first?.groupId,
                     activeContentItemIdUpdated: stickersContentItemIdUpdated,
                     reorderItems: { [weak self] items in
@@ -646,7 +655,7 @@ public final class EntityKeyboardComponent: Component {
                     theme: component.theme,
                     customTintColor: component.customTintColor,
                     items: topEmojiItems,
-                    containerSideInset: component.containerInsets.left + component.topPanelInsets.left,
+                    containerSideInset: component.containerInsets.left - sideStrips.left + component.topPanelInsets.left,
                     activeContentItemIdUpdated: emojiContentItemIdUpdated,
                     activeContentItemMapping: ["popular": "recent"],
                     reorderItems: { [weak self] items in
@@ -699,7 +708,7 @@ public final class EntityKeyboardComponent: Component {
                 panelHideBehavior = .hide
             } else if component.hidePanels {
                 panelHideBehavior = .disable
-            } else if component.isExpanded {
+            } else if component.isExpanded || component.alwaysShowsTopPanel {
                 panelHideBehavior = .show
             } else {
                 panelHideBehavior = .hideOnScroll
@@ -734,6 +743,7 @@ public final class EntityKeyboardComponent: Component {
                         overflowHeight: component.hiddenInputHeight,
                         topInset: component.externalTopPanelContainer == nil ? 8.0 : 0.0,
                         height: component.externalTopPanelContainer == nil ? 40.0 : 34.0,
+                        sideStrips: sideStrips,
                         displayBackground: component.externalTopPanelContainer != nil ? .none : component.displayTopPanelBackground
                     )),
                     externalTopPanelContainer: component.externalTopPanelContainer,
@@ -830,7 +840,8 @@ public final class EntityKeyboardComponent: Component {
                             context: accountContext,
                             theme: component.theme,
                             deviceMetrics: component.deviceMetrics,
-                            inputHeight: component.inputHeight
+                            inputHeight: component.inputHeight,
+                            sideStrips: sideStrips
                         )
                     },
                     containerSize: availableSize

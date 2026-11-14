@@ -105,7 +105,7 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
         messageText = ""
         for message in messages {
             if let richText = message.richText {
-                let preview = richText.instantPage.previewAttributedText(strings: strings, dateTimeFormat: dateTimeFormat, associatedMedia: message.associatedMedia)
+                let preview = richText.instantPage.previewAttributedText(strings: strings, dateTimeFormat: dateTimeFormat, associatedMedia: { message.associatedMedia[$0].map(EngineMedia.init) })
                 if !preview.string.isEmpty {
                     messageText = preview.string
                     richTextPreview = preview
@@ -515,6 +515,12 @@ public func chatListItemStrings(strings: PresentationStrings, nameDisplayOrder: 
                         if messageText.isEmpty, case let .Loaded(content) = webpage.content {
                             richTextPreview = nil
                             messageText = content.displayUrl
+                        }
+                    case _ as TelegramMediaWidget:
+                        // The caption is the preview text; without one, the "Widget" stub.
+                        if message.text.isEmpty {
+                            richTextPreview = nil
+                            messageText = strings.Message_Widget
                         }
                     case let todo as TelegramMediaTodo:
                         richTextPreview = nil

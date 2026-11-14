@@ -10,7 +10,8 @@ swift_library(
         "-warnings-as-errors",
     ],
     deps = [
-        "//submodules/Postbox",
+        "//submodules/TelegramUI/Components/StaticGlassBackground",
+        "//submodules/TelegramUI/Components/GlassBackgroundComponent",
         "//submodules/AsyncDisplayKit",
         "//submodules/Display",
         "//submodules/SSignalKit/SwiftSignalKit",

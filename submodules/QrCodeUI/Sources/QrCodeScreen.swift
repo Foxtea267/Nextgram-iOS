@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import ComponentFlow
@@ -99,8 +98,8 @@ private final class SheetContent: CombinedComponent {
             })
             self.animator?.isPaused = true
             
-            self.initialBrightness = UIScreen.main.brightness
-            self.brightnessArguments = (CACurrentMediaTime(), 0.3, UIScreen.main.brightness, 1.0)
+            self.initialBrightness = mainWindowScreen.brightness
+            self.brightnessArguments = (CACurrentMediaTime(), 0.3, mainWindowScreen.brightness, 1.0)
             self.updateBrightness()
         }
         
@@ -108,8 +107,8 @@ private final class SheetContent: CombinedComponent {
             self.idleTimerExtensionDisposable.dispose()
             self.animator?.invalidate()
             
-            if UIScreen.main.brightness > 0.99, let initialBrightness = self.initialBrightness {
-                self.brightnessArguments = (CACurrentMediaTime(), 0.3, UIScreen.main.brightness, initialBrightness)
+            if mainWindowScreen.brightness > 0.99, let initialBrightness = self.initialBrightness {
+                self.brightnessArguments = (CACurrentMediaTime(), 0.3, mainWindowScreen.brightness, initialBrightness)
                 self.updateBrightness()
             }
         }
@@ -121,7 +120,7 @@ private final class SheetContent: CombinedComponent {
                 let t = CGFloat(max(0.0, min(1.0, (CACurrentMediaTime() - startTime) / duration)))
                 let value = initial + (target - initial) * t
                 
-                UIScreen.main.brightness = value
+                mainWindowScreen.brightness = value
                 
                 if t >= 1.0 {
                     self.brightnessArguments = nil
@@ -140,7 +139,7 @@ private final class SheetContent: CombinedComponent {
     static var body: Body {
         let qrCode = Child(PlainButtonComponent.self)
         let closeButton = Child(GlassBarButtonComponent.self)
-        let title = Child(Text.self)
+        let title = Child(QrCodeTitleComponent.self)
         let segmentControl = Child(SegmentControlComponent.self)
         let text = Child(BalancedTextComponent.self)
         
@@ -252,7 +251,7 @@ private final class SheetContent: CombinedComponent {
                 contentSize.height += segmentControl.size.height
             } else {
                 let title = title.update(
-                    component: Text(text: titleString, font: Font.semibold(17.0), color: theme.list.itemPrimaryTextColor),
+                    component: QrCodeTitleComponent(text: titleString, font: Font.semibold(17.0), color: theme.list.itemPrimaryTextColor),
                     availableSize: CGSize(width: constrainedTitleWidth, height: context.availableSize.height),
                     transition: .immediate
                 )
@@ -275,7 +274,9 @@ private final class SheetContent: CombinedComponent {
                             shareQrCode(sharedContext: component.sharedContext, subject: effectiveSubject, asImage: true, view: view)
                         }
                     },
-                    animateScale: false
+                    animateScale: false,
+                    // The code's tap shares it, as the "Share QR Code" button under it does; VoiceOver reads that button.
+                    accessibility: ComponentAccessibility(isHidden: true)
                 ),
                 availableSize: CGSize(width: 260.0, height: 260.0),
                 transition: .immediate
@@ -382,6 +383,52 @@ private final class SheetContent: CombinedComponent {
     }
 }
 
+/// The sheet's title: the drawn text, read by VoiceOver as the sheet's heading.
+private final class QrCodeTitleComponent: Component {
+    let text: String
+    let font: UIFont
+    let color: UIColor
+    
+    init(text: String, font: UIFont, color: UIColor) {
+        self.text = text
+        self.font = font
+        self.color = color
+    }
+    
+    static func ==(lhs: QrCodeTitleComponent, rhs: QrCodeTitleComponent) -> Bool {
+        return lhs.text == rhs.text && lhs.font == rhs.font && lhs.color.isEqual(rhs.color)
+    }
+    
+    final class View: UIView {
+        private let text = ComponentView<Empty>()
+        
+        func update(component: QrCodeTitleComponent, availableSize: CGSize, transition: ComponentTransition) -> CGSize {
+            let size = self.text.update(
+                transition: transition,
+                component: AnyComponent(Text(text: component.text, font: component.font, color: component.color)),
+                environment: {},
+                containerSize: availableSize
+            )
+            if let textView = self.text.view {
+                if textView.superview == nil {
+                    self.addSubview(textView)
+                }
+                textView.frame = CGRect(origin: .zero, size: size)
+                textView.accessibilityTraits = [.staticText, .header]
+            }
+            return size
+        }
+    }
+    
+    func makeView() -> View {
+        return View(frame: .zero)
+    }
+    
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
+        return view.update(component: self, availableSize: availableSize, transition: transition)
+    }
+}
+
 private final class QrCodeSheetComponent: CombinedComponent {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
     
@@ -437,7 +484,7 @@ private final class QrCodeSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         hasInputHeight: !environment.inputHeight.isZero,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in
@@ -554,6 +601,8 @@ public final class QrCodeScreen: ViewControllerComponentContainer {
         )
         
         self.navigationPresentation = .flatModal
+        // VoiceOver: only the sheet is read while it is up (it may be presented over the window, outside a modal stack).
+        self.blocksBackgroundWhenInOverlay = true
     }
     
     public init(
@@ -574,6 +623,8 @@ public final class QrCodeScreen: ViewControllerComponentContainer {
         )
         
         self.navigationPresentation = .flatModal
+        // VoiceOver: only the sheet is read while it is up (it may be presented over the window, outside a modal stack).
+        self.blocksBackgroundWhenInOverlay = true
     }
         
     required public init(coder aDecoder: NSCoder) {
@@ -673,8 +724,7 @@ private final class QrCodeComponent: Component {
                     transition: .immediate,
                     component: AnyComponent(LottieComponent(
                         content: LottieComponent.AppBundleContent(name: "PlaneLogo"),
-                        loop: true,
-                        lottieSettings: .noAccountFallback
+                        loop: true
                     )),
                     environment: {},
                     containerSize: cutoutFrame.size

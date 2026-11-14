@@ -88,29 +88,37 @@ class DeleteAccountPeersItem: ListViewItem, ItemListItem {
     
     let context: AccountContext
     let theme: PresentationTheme
+    let systemStyle: ItemListSystemStyle
     let strings: PresentationStrings
     let peers: [EnginePeer]
     
-    init(context: AccountContext, theme: PresentationTheme, strings: PresentationStrings, peers: [EnginePeer], sectionId: ItemListSectionId) {
+    init(context: AccountContext, theme: PresentationTheme, systemStyle: ItemListSystemStyle = .legacy, strings: PresentationStrings, peers: [EnginePeer], sectionId: ItemListSectionId) {
         self.context = context
         self.theme = theme
+        self.systemStyle = systemStyle
         self.strings = strings
         self.peers = peers
         self.sectionId = sectionId
     }
     
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
-        async {
+        // The node holds a ListView, whose view is created in its init and so has to be created on the main thread; only
+        // the layout runs in `async`. (A row loaded while scrolling, rather than in the first layout, is configured on a
+        // background queue, as the Appearance accent colours were on iPhone Duo's shorter folded screen, and crashed.)
+        Queue.mainQueue().async {
             let node = DeleteAccountPeersItemNode()
-            let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
-            
-            node.contentSize = layout.contentSize
-            node.insets = layout.insets
-            
-            Queue.mainQueue().async {
-                completion(node, {
-                    return (nil, { _ in apply() })
-                })
+            let makeLayout = node.asyncLayout()
+            async {
+                let (layout, apply) = makeLayout(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
+                
+                node.contentSize = layout.contentSize
+                node.insets = layout.insets
+                
+                Queue.mainQueue().async {
+                    completion(node, {
+                        return (nil, { _ in apply() })
+                    })
+                }
             }
         }
     }
@@ -223,6 +231,7 @@ class DeleteAccountPeersItemNode: ListViewItemNode, ItemListItemNode {
             let contentSize: CGSize
             var insets: UIEdgeInsets
             let separatorHeight = UIScreenPixel
+            let separatorRightInset: CGFloat = item.systemStyle == .glass ? 16.0 : 0.0
                     
             contentSize = CGSize(width: params.width, height: 109.0)
             insets = itemListNeighborsGroupedInsets(neighbors, params)
@@ -278,12 +287,12 @@ class DeleteAccountPeersItemNode: ListViewItemNode, ItemListItemNode {
                             strongSelf.bottomStripeNode.isHidden = hasCorners
                     }
                     
-                    strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: hasTopCorners, bottom: hasBottomCorners) : nil
+                    strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: item.systemStyle == .glass) : nil
                     
                     strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                     strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
-                    strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width - bottomStripeInset, height: separatorHeight))
+                    strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width - bottomStripeInset - separatorRightInset, height: separatorHeight))
                     
                     let listInsets = UIEdgeInsets(top: params.leftInset, left: 0.0, bottom: params.rightInset, right: 0.0)
                     strongSelf.listView.bounds = CGRect(x: 0.0, y: 0.0, width: 92.0, height: params.width)

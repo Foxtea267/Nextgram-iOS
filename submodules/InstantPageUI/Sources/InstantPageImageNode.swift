@@ -159,7 +159,7 @@ final class InstantPageImageNode: ASDisplayNode, InstantPageNode, InstantPageExt
                 self.imageNode.setSignal(chatMessagePhoto(postbox: context.account.postbox, userLocation: sourceLocation.userLocation, photoReference: imageReference))
                 self.contentBlurredSignal = chatSecretPhoto(account: context.account, userLocation: sourceLocation.userLocation, photoReference: imageReference, ignoreFullSize: true)
 
-                let autoDownload = autoDownloadImage?(image) ?? shouldDownloadMediaAutomatically(settings: context.sharedContext.currentAutomaticMediaDownloadSettings, peerType: sourceLocation.peerType, networkType: MediaAutoDownloadNetworkType(context.account.immediateNetworkType), authorPeerId: nil, contactsPeerIds: Set(), media: image)
+                let autoDownload = autoDownloadImage?(image) ?? shouldDownloadMediaAutomatically(settings: context.sharedContext.currentAutomaticMediaDownloadSettings, peerType: sourceLocation.peerType, networkType: MediaAutoDownloadNetworkType(context.account.immediateNetworkType), authorPeerId: nil, contactsPeerIds: Set(), media: .image(image))
                 if !interactive || autoDownload {
                     self.fetchedDisposable.set(chatMessagePhotoInteractiveFetched(context: context, userLocation: sourceLocation.userLocation, photoReference: imageReference, displayAtSize: nil, storeToDownloadsPeerId: nil).start())
                 }
@@ -191,13 +191,15 @@ final class InstantPageImageNode: ASDisplayNode, InstantPageNode, InstantPageExt
             } else {
                 let fileReference = fileReferenceForMedia?(file) ?? FileMediaReference.webPage(webPage: WebpageReference(webPage), media: file)
                 if file.mimeType.hasPrefix("image/") {
-                    let autoDownload = autoDownloadFile?(file) ?? shouldDownloadMediaAutomatically(settings: context.sharedContext.currentAutomaticMediaDownloadSettings, peerType: sourceLocation.peerType, networkType: MediaAutoDownloadNetworkType(context.account.immediateNetworkType), authorPeerId: nil, contactsPeerIds: Set(), media: file)
+                    let autoDownload = autoDownloadFile?(file) ?? shouldDownloadMediaAutomatically(settings: context.sharedContext.currentAutomaticMediaDownloadSettings, peerType: sourceLocation.peerType, networkType: MediaAutoDownloadNetworkType(context.account.immediateNetworkType), authorPeerId: nil, contactsPeerIds: Set(), media: .file(file))
                     if !interactive || autoDownload {
                         _ = freeMediaFileInteractiveFetched(account: context.account, userLocation: sourceLocation.userLocation, fileReference: fileReference).start()
                     }
                     self.imageNode.setSignal(instantPageImageFile(account: context.account, userLocation: sourceLocation.userLocation, fileReference: fileReference, fetched: true))
                 } else {
-                    self.imageNode.setSignal(chatMessageVideo(postbox: context.account.postbox, userLocation: sourceLocation.userLocation, videoReference: fileReference))
+                    // `autoFetchFullSizeThumbnail` as in a standalone video message: without it a file that has a
+                    // stripped `immediateThumbnailData` never fetches its preview representation and stays blurred.
+                    self.imageNode.setSignal(mediaGridMessageVideo(postbox: context.account.postbox, userLocation: sourceLocation.userLocation, videoReference: fileReference, autoFetchFullSizeThumbnail: true))
                 }
                 self.contentBlurredSignal = chatSecretMessageVideo(account: context.account, userLocation: sourceLocation.userLocation, videoReference: fileReference)
                 if file.isVideo {

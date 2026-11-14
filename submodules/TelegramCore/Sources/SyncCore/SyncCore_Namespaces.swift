@@ -166,6 +166,12 @@ public struct Namespaces {
         public static let cachedExistingWaltBalance: Int8 = 57
         public static let notificationRequestMessageIds: Int8 = 58
         public static let cachedWalletUserAddresses: Int8 = 59
+        /// The News feed's caches, told apart by the first byte of the key (FeedCache.swift).
+        /// TelegramCore's ids must stay below 64, where applicationSpecificItemCacheCollectionId starts.
+        public static let feed: Int8 = 60
+        public static let shareThemeBackdrops: Int8 = 61
+        public static let cachedUniqueStarGifts: Int8 = 62
+        public static let cachedAgent: Int8 = 63
     }
     
     public struct UnorderedItemList {
@@ -348,6 +354,7 @@ private enum PreferencesKeyValues: Int32 {
     case webBrowserSettings = 49
     case communitiesState = 50
     case unreadCounterTagsState = 51
+    case stateSyncDebugSettings = 52
 }
 
 public func applicationSpecificPreferencesKey(_ value: Int32) -> ValueBoxKey {
@@ -634,6 +641,13 @@ public struct PreferencesKeys {
         key.setInt32(0, value: PreferencesKeyValues.emojiGameInfo.rawValue)
         return key
     }
+    
+    /// `StateSyncDebugSettings`: Debug Settings for state sync, honoured only in DEBUG builds.
+    public static let stateSyncDebugSettings: ValueBoxKey = {
+        let key = ValueBoxKey(length: 4)
+        key.setInt32(0, value: PreferencesKeyValues.stateSyncDebugSettings.rawValue)
+        return key
+    }()
 }
 
 private enum SharedDataKeyValues: Int32 {
@@ -648,6 +662,7 @@ private enum SharedDataKeyValues: Int32 {
     case chatThemes = 10
     case deviceContacts = 11
     case networkEngineSettings = 12
+    case networkEngineState = 13
 }
 
 public struct SharedDataKeys {
@@ -714,6 +729,12 @@ public struct SharedDataKeys {
     public static let networkEngineSettings: ValueBoxKey = {
         let key = ValueBoxKey(length: 4)
         key.setInt32(0, value: SharedDataKeyValues.networkEngineSettings.rawValue)
+        return key
+    }()
+    
+    public static let networkEngineState: ValueBoxKey = {
+        let key = ValueBoxKey(length: 4)
+        key.setInt32(0, value: SharedDataKeyValues.networkEngineState.rawValue)
         return key
     }()
 }

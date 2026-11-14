@@ -1,134 +1,113 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 import MtProtoKit
 
+private let appLogEventsBatchLimit = 50
+private let appLogEventsBatchDelay: Double = 30.0
+private let appLogEventsBatchMaxBytes = 256 * 1024
 
-private final class ManagedSynchronizeAppLogEventsOperationsHelper {
-    var operationDisposables: [Int32: Disposable] = [:]
-    
-    func update(_ entries: [PeerMergedOperationLogEntry]) -> (disposeOperations: [Disposable], beginOperations: [(PeerMergedOperationLogEntry, MetaDisposable)]) {
-        var disposeOperations: [Disposable] = []
-        var beginOperations: [(PeerMergedOperationLogEntry, MetaDisposable)] = []
-        
-        var hasRunningOperationForPeerId = Set<PeerId>()
-        var validMergedIndices = Set<Int32>()
-        for entry in entries {
-            if !hasRunningOperationForPeerId.contains(entry.peerId) {
-                hasRunningOperationForPeerId.insert(entry.peerId)
-                validMergedIndices.insert(entry.mergedIndex)
-                
-                if self.operationDisposables[entry.mergedIndex] == nil {
-                    let disposable = MetaDisposable()
-                    beginOperations.append((entry, disposable))
-                    self.operationDisposables[entry.mergedIndex] = disposable
-                }
+func readyAppLogEventsBatch(_ updates: Signal<[PeerMergedOperationLogEntry], NoError>, batchDelay: Double = appLogEventsBatchDelay, clock: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) -> Signal<[PeerMergedOperationLogEntry], NoError> {
+    return Signal { subscriber in
+        let firstPendingTime = Atomic<TimeInterval?>(value: nil)
+        let queue = Queue()
+        return (updates
+        |> mapToSignal { entries -> Signal<[PeerMergedOperationLogEntry], NoError> in
+            guard !entries.isEmpty else {
+                let _ = firstPendingTime.swap(nil)
+                return .never()
             }
-        }
-        
-        var removeMergedIndices: [Int32] = []
-        for (mergedIndex, disposable) in self.operationDisposables {
-            if !validMergedIndices.contains(mergedIndex) {
-                removeMergedIndices.append(mergedIndex)
-                disposeOperations.append(disposable)
+            let now = clock()
+            let start = firstPendingTime.modify { $0 ?? now } ?? now
+            let flush = entries.contains { entry in
+                guard let operation = entry.contents as? SynchronizeAppLogEventsOperation else { return false }
+                if case .sync = operation.content { return true }
+                return false
             }
+            let wait = entries.count >= appLogEventsBatchLimit || flush ? 0 : max(0, start + batchDelay - now)
+            if wait == 0 { return .single(entries) }
+            return Signal.single(entries) |> delay(wait, queue: queue)
         }
-        
-        for mergedIndex in removeMergedIndices {
-            self.operationDisposables.removeValue(forKey: mergedIndex)
-        }
-        
-        return (disposeOperations, beginOperations)
+        |> take(1)).start(next: { subscriber.putNext($0) }, completed: { subscriber.putCompletion() })
     }
-    
-    func reset() -> [Disposable] {
-        let disposables = Array(self.operationDisposables.values)
-        self.operationDisposables.removeAll()
-        return disposables
-    }
-}
-
-private func withTakenOperation(postbox: Postbox, peerId: PeerId, tag: PeerOperationLogTag, tagLocalIndex: Int32, _ f: @escaping (Transaction, PeerMergedOperationLogEntry?) -> Signal<Void, NoError>) -> Signal<Void, NoError> {
-    return postbox.transaction { transaction -> Signal<Void, NoError> in
-        var result: PeerMergedOperationLogEntry?
-        transaction.operationLogUpdateEntry(peerId: peerId, tag: tag, tagLocalIndex: tagLocalIndex, { entry in
-            if let entry = entry, let _ = entry.mergedIndex, entry.contents is SynchronizeAppLogEventsOperation  {
-                result = entry.mergedEntry!
-                return PeerOperationLogEntryUpdate(mergedIndex: .none, contents: .none)
-            } else {
-                return PeerOperationLogEntryUpdate(mergedIndex: .none, contents: .none)
-            }
-        })
-        
-        return f(transaction, result)
-    } |> switchToLatest
 }
 
 func managedSynchronizeAppLogEventsOperations(postbox: Postbox, network: Network) -> Signal<Void, NoError> {
-    return Signal { _ in
-        let tag: PeerOperationLogTag = OperationLogTags.SynchronizeAppLogEvents
-        
-        let helper = Atomic<ManagedSynchronizeAppLogEventsOperationsHelper>(value: ManagedSynchronizeAppLogEventsOperationsHelper())
-                
-        let disposable = postbox.mergedOperationLogView(tag: tag, limit: 50).start(next: { view in
-            let (disposeOperations, beginOperations) = helper.with { helper -> (disposeOperations: [Disposable], beginOperations: [(PeerMergedOperationLogEntry, MetaDisposable)]) in
-                return helper.update(view.entries)
-            }
-            
-            for disposable in disposeOperations {
-                disposable.dispose()
-            }
-            
-            for (entry, disposable) in beginOperations {
-                let signal = withTakenOperation(postbox: postbox, peerId: entry.peerId, tag: tag, tagLocalIndex: entry.tagLocalIndex, { transaction, entry -> Signal<Void, NoError> in
-                    if let entry = entry {
-                        if let operation = entry.contents as? SynchronizeAppLogEventsOperation {
-                            return synchronizeAppLogEvents(transaction: transaction, postbox: postbox, network: network, operations: [operation])
-                        } else {
-                            assertionFailure()
-                        }
-                    }
-                    return .complete()
-                })
-                |> then(postbox.transaction { transaction -> Void in
-                    let _ = transaction.operationLogRemoveEntry(peerId: entry.peerId, tag: tag, tagLocalIndex: entry.tagLocalIndex)
-                })
-                
-                disposable.set(signal.start())
-            }
-        })
-        
-        return ActionDisposable {
-            let disposables = helper.with { helper -> [Disposable] in
-                return helper.reset()
-            }
-            for disposable in disposables {
-                disposable.dispose()
-            }
-            disposable.dispose()
+    let tag = OperationLogTags.SynchronizeAppLogEvents
+    let updates = postbox.mergedOperationLogView(tag: tag, limit: appLogEventsBatchLimit)
+    |> map { $0.entries }
+    let batch = readyAppLogEventsBatch(updates)
+    |> mapToSignal { _ -> Signal<Void, NoError> in
+        return postbox.mergedOperationLogView(tag: tag, limit: appLogEventsBatchLimit)
+        |> take(1)
+        |> mapToSignal { view -> Signal<Void, NoError> in
+            return synchronizeAppLogEventsBatch(postbox: postbox, entries: view.entries, send: { events in
+                return network.request(Api.functions.help.saveAppLog(events: events))
+                |> `catch` { _ -> Signal<Api.Bool, NoError> in .complete() }
+                |> mapToSignal { _ -> Signal<Void, NoError> in .complete() }
+            })
         }
     }
+    if AppLogEventCollection.allowsLegacyEvents {
+        return batch |> restart
+    }
+    return purgeInvalidAppLogEvents(postbox: postbox) |> then(batch |> restart)
 }
 
-private func synchronizeAppLogEvents(transaction: Transaction, postbox: Postbox, network: Network, operations: [SynchronizeAppLogEventsOperation]) -> Signal<Void, NoError> {
+func synchronizeAppLogEventsBatch(postbox: Postbox, entries allEntries: [PeerMergedOperationLogEntry], clock: @escaping () -> Double = { Date().timeIntervalSince1970 }, requestTimeout: Double = AppLogEventLimits.requestTimeout, send: @escaping ([Api.InputAppEvent]) -> Signal<Void, NoError>) -> Signal<Void, NoError> {
     var events: [Api.InputAppEvent] = []
-    for operation in operations {
-        switch operation.content {
-            case let .add(time, type, peerId, data):
-                if let data = apiJson(data) {
-                    events.append(.inputAppEvent(.init(time: time, type: type, peer: peerId?.toInt64() ?? 0, data: data)))
+    var entries: [PeerMergedOperationLogEntry] = []
+    var collectionIds: [String?] = []
+    var validity: [(Double, Int)] = []
+    var totalBytes = 0
+    let now = clock()
+    AppLogEventCollection.sync {
+        for entry in allEntries {
+            guard let operation = entry.contents as? SynchronizeAppLogEventsOperation,
+                  case let .add(time, type, peerId, data) = operation.content,
+                  AppLogEventCollection.allows(owner: postbox, identifier: operation.collectionId) else {
+                entries.append(entry)
+                continue
+            }
+            let bytes = appLogEventSize(operation) ?? 0
+            if operation.collectionId != nil || !AppLogEventCollection.allowsLegacyEvents {
+                guard AppLogEventLimits.accepts(time: time, now: now, bytes: bytes) else {
+                    entries.append(entry)
+                    continue
                 }
-            default:
+            }
+            if events.count >= appLogEventsBatchLimit || (!events.isEmpty && totalBytes + bytes > appLogEventsBatchMaxBytes) {
                 break
+            }
+            entries.append(entry)
+            if let data = apiJson(data) {
+                totalBytes += bytes
+                collectionIds.append(operation.collectionId)
+                if operation.collectionId != nil || !AppLogEventCollection.allowsLegacyEvents {
+                    validity.append((time, bytes))
+                }
+                events.append(.inputAppEvent(.init(time: time, type: type, peer: operation.collectionId == nil ? peerId?.toInt64() ?? 0 : 0, data: data)))
+            }
         }
     }
-    
-    return network.request(Api.functions.help.saveAppLog(events: events))
-    |> `catch` { _ -> Signal<Api.Bool, NoError> in
-        return .complete()
+
+    let request = Signal<Void, NoError> { subscriber in
+        let now = clock()
+        guard !events.isEmpty, validity.allSatisfy({ AppLogEventLimits.accepts(time: $0.0, now: now, bytes: $0.1) }) else {
+            subscriber.putCompletion()
+            return EmptyDisposable
+        }
+        let remaining = validity.map { $0.0 + AppLogEventLimits.lifetime - now }.min()
+        let timeoutSeconds = remaining.map { min(requestTimeout, $0) }
+        return AppLogEventCollection.request(owner: postbox, identifiers: collectionIds, timeoutSeconds: timeoutSeconds, produce: {
+            send(events)
+        }).start(next: { subscriber.putNext($0) }, completed: { subscriber.putCompletion() })
     }
-    |> mapToSignal { _ -> Signal<Void, NoError> in
-        return .complete()
-    }
+    return request
+    |> then(postbox.transaction { transaction -> Void in
+        for entry in entries {
+            let _ = transaction.operationLogRemoveEntry(peerId: entry.peerId, tag: OperationLogTags.SynchronizeAppLogEvents, tagLocalIndex: entry.tagLocalIndex)
+        }
+    })
 }

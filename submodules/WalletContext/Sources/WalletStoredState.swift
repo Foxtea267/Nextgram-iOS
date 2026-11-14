@@ -9,6 +9,8 @@ import TelegramUIPreferences
 struct WalletStoredTransaction: Codable, Equatable, Sendable {
     enum Peer: Codable, Equatable, @unchecked Sendable {
         case user(id: EnginePeer.Id)
+        case channel(id: EnginePeer.Id)
+        case telegramGift(ownProfile: Bool)
         case address(String)
         case onramp(address: String, providerName: String)
         case unsupported
@@ -18,13 +20,17 @@ struct WalletStoredTransaction: Codable, Equatable, Sendable {
             case address = 1
             case unsupported = 2
             case onramp = 3
+            case channel = 4
+            case telegramGift = 5
         }
 
         private enum CodingKeys: String, CodingKey {
             case kind
             case userId
+            case channelId
             case address
             case providerName
+            case ownProfile
         }
 
         init(from decoder: Decoder) throws {
@@ -42,6 +48,12 @@ struct WalletStoredTransaction: Codable, Equatable, Sendable {
                 self = .user(
                     id: EnginePeer.Id(try container.decode(Int64.self, forKey: .userId))
                 )
+            case .channel:
+                self = .channel(
+                    id: EnginePeer.Id(try container.decodeIfPresent(Int64.self, forKey: .channelId) ?? container.decode(Int64.self, forKey: .userId))
+                )
+            case .telegramGift:
+                self = .telegramGift(ownProfile: try container.decodeIfPresent(Bool.self, forKey: .ownProfile) ?? false)
             case .address:
                 self = .address(try container.decode(String.self, forKey: .address))
             case .onramp:
@@ -60,6 +72,12 @@ struct WalletStoredTransaction: Codable, Equatable, Sendable {
             case let .user(id):
                 try container.encode(Kind.user.rawValue, forKey: .kind)
                 try container.encode(id.toInt64(), forKey: .userId)
+            case let .channel(id):
+                try container.encode(Kind.channel.rawValue, forKey: .kind)
+                try container.encode(id.toInt64(), forKey: .userId)
+            case let .telegramGift(ownProfile):
+                try container.encode(Kind.telegramGift.rawValue, forKey: .kind)
+                try container.encode(ownProfile, forKey: .ownProfile)
             case let .address(address):
                 try container.encode(Kind.address.rawValue, forKey: .kind)
                 try container.encode(address, forKey: .address)
@@ -72,11 +90,13 @@ struct WalletStoredTransaction: Codable, Equatable, Sendable {
             }
         }
 
-        var userId: EnginePeer.Id? {
-            if case let .user(id) = self {
+        var peerId: EnginePeer.Id? {
+            switch self {
+            case let .user(id), let .channel(id):
                 return id
+            case .telegramGift, .address, .onramp, .unsupported:
+                return nil
             }
-            return nil
         }
     }
 
@@ -115,6 +135,14 @@ struct WalletStoredTransaction: Codable, Equatable, Sendable {
             self.peer = .user(id: peer.id)
             self.peerAddress = address
             self.peerDomain = domain
+        case let .channel(peer, address, domain):
+            self.peer = .channel(id: peer.id)
+            self.peerAddress = address
+            self.peerDomain = domain
+        case let .telegramGift(ownProfile):
+            self.peer = .telegramGift(ownProfile: ownProfile)
+            self.peerAddress = nil
+            self.peerDomain = nil
         case let .address(address, domain):
             self.peer = .address(address)
             self.peerAddress = nil
@@ -146,6 +174,16 @@ struct WalletStoredTransaction: Codable, Equatable, Sendable {
             } else {
                 peer = .unsupported
             }
+        case let .channel(id):
+            if let value = peers[id] {
+                peer = .channel(value, address: self.peerAddress ?? "", domain: self.peerDomain)
+            } else if let peerAddress = self.peerAddress, !peerAddress.isEmpty {
+                peer = .address(peerAddress, domain: self.peerDomain)
+            } else {
+                peer = .unsupported
+            }
+        case let .telegramGift(ownProfile):
+            peer = .telegramGift(ownProfile: ownProfile)
         case let .address(address):
             peer = .address(address, domain: self.peerDomain)
         case let .onramp(address, providerName):
@@ -197,6 +235,15 @@ struct WalletStoredTonConnectRequest: Codable, Equatable, Sendable {
     var key: TonConnectMessageKey { TonConnectMessageKey(sessionId: self.envelope.sessionId, msgId: self.envelope.msgId) }
 }
 
+// JSON has no NaN or infinity, and the default strategy throws on them: one such value anywhere in the cache (a server
+// card's coordinates, say) would make the whole stored state unencodable, and every transfer waits for it to be stored.
+private var walletStoredStateNonConformingFloatEncoding: JSONEncoder.NonConformingFloatEncodingStrategy {
+    .convertToString(positiveInfinity: "+inf", negativeInfinity: "-inf", nan: "nan")
+}
+private var walletStoredStateNonConformingFloatDecoding: JSONDecoder.NonConformingFloatDecodingStrategy {
+    .convertFromString(positiveInfinity: "+inf", negativeInfinity: "-inf", nan: "nan")
+}
+
 @available(macOS 10.15, *)
 struct WalletStoredState: Codable, Equatable, Sendable {
     private struct Payload: Codable {
@@ -210,6 +257,9 @@ struct WalletStoredState: Codable, Equatable, Sendable {
         var selectedFiatCurrency: WalletContext.FiatCurrency
         var transactions: [WalletStoredTransaction]
         var collectibles: [WalletContext.Collectible]
+        var cardStickersByWallet: [String: [WalletContext.CardSticker]]?
+        var cardStickerDirtyWallets: Set<String>?
+        var serverCardsByWallet: [String: WalletCard]?
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -230,6 +280,9 @@ struct WalletStoredState: Codable, Equatable, Sendable {
     var selectedFiatCurrency: WalletContext.FiatCurrency = .usd
     var transactions: [WalletStoredTransaction] = []
     var collectibles: [WalletContext.Collectible] = []
+    var cardStickersByWallet: [String: [WalletContext.CardSticker]] = [:]
+    var cardStickerDirtyWallets: Set<String> = []
+    var serverCardsByWallet: [String: WalletCard] = [:]
 
     init() {
     }
@@ -238,7 +291,9 @@ struct WalletStoredState: Codable, Equatable, Sendable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.schemaVersion = try container.decode(Int32.self, forKey: .schemaVersion)
         let data = try container.decode(Data.self, forKey: .payload)
-        let payload = try JSONDecoder().decode(Payload.self, from: data)
+        let decoder = JSONDecoder()
+        decoder.nonConformingFloatDecodingStrategy = walletStoredStateNonConformingFloatDecoding
+        let payload = try decoder.decode(Payload.self, from: data)
         self.walletAddress = payload.walletAddress
         self.tonConnectRequests = payload.tonConnectRequests ?? []
         self.pendingTransfers = payload.pendingTransfers
@@ -249,6 +304,9 @@ struct WalletStoredState: Codable, Equatable, Sendable {
         self.selectedFiatCurrency = payload.selectedFiatCurrency
         self.transactions = payload.transactions
         self.collectibles = payload.collectibles
+        self.cardStickersByWallet = (payload.cardStickersByWallet ?? [:]).mapValues(WalletContext.CardSticker.validated)
+        self.cardStickerDirtyWallets = payload.cardStickerDirtyWallets ?? Set(self.cardStickersByWallet.filter { !$0.value.isEmpty }.keys)
+        self.serverCardsByWallet = payload.serverCardsByWallet ?? [:]
     }
 
     func encode(to encoder: Encoder) throws {
@@ -264,10 +322,26 @@ struct WalletStoredState: Codable, Equatable, Sendable {
             fiatRatesUpdatedAt: self.fiatRatesUpdatedAt,
             selectedFiatCurrency: self.selectedFiatCurrency,
             transactions: self.transactions,
-            collectibles: self.collectibles
+            collectibles: self.collectibles,
+            cardStickersByWallet: self.cardStickersByWallet,
+            cardStickerDirtyWallets: self.cardStickerDirtyWallets,
+            serverCardsByWallet: self.serverCardsByWallet
         )
-        try container.encode(try JSONEncoder().encode(payload), forKey: .payload)
+        let encoder = JSONEncoder()
+        encoder.nonConformingFloatEncodingStrategy = walletStoredStateNonConformingFloatEncoding
+        try container.encode(try encoder.encode(payload), forKey: .payload)
     }
+}
+
+/// Whether `entry` restores what a `storeAndWait` caller relies on after a restart: the pending transfer and TON Connect
+/// journals of the wallet. The rest of the stored state is a cache, and a cached value that decoding normalizes (a
+/// card sticker that `CardSticker.validated` drops) must not fail a send.
+@available(macOS 10.15, *)
+func walletStoredStateEntryKeepsJournals(_ entry: EnginePreferencesEntry, of state: WalletStoredState) -> Bool {
+    guard let stored = entry.get(WalletStoredState.self) else { return false }
+    return stored.walletAddress == state.walletAddress
+        && stored.pendingTransfers == state.pendingTransfers
+        && stored.tonConnectRequests == state.tonConnectRequests
 }
 
 @available(macOS 10.15, *)
@@ -305,7 +379,7 @@ actor WalletStoredStateWriter {
     }
 
     func storeAndWait(_ state: WalletStoredState, revision: UInt64) async -> Bool {
-        guard !self.isShutdown, let entry = EnginePreferencesEntry(state), entry.get(WalletStoredState.self) == state else { return false }
+        guard !self.isShutdown, let entry = EnginePreferencesEntry(state), walletStoredStateEntryKeepsJournals(entry, of: state) else { return false }
         self.enqueue(state, revision: revision)
         if self.completedRevision >= revision { return true }
         return await withCheckedContinuation { continuation in

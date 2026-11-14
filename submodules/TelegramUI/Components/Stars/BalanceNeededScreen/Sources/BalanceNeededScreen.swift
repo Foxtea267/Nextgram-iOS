@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import ComponentFlow
@@ -110,8 +109,7 @@ private final class BalanceNeededSheetContentComponent: Component {
                     color: nil,
                     startingPosition: .begin,
                     size: iconSize,
-                    loop: true,
-                    lottieSettings: component.context.lottieRenderingSettings
+                    loop: true
                 )),
                 environment: {},
                 containerSize: iconSize
@@ -263,7 +261,7 @@ private final class BalanceNeededScreenComponent: Component {
                 metrics: environment.metrics,
                 deviceMetrics: environment.deviceMetrics,
                 isDisplaying: environment.isVisible,
-                isCentered: environment.metrics.widthClass == .regular,
+                isCentered: environment.presentsFloatingPanels,
                 hasInputHeight: !environment.inputHeight.isZero,
                 regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                 dismiss: { [weak self] _ in

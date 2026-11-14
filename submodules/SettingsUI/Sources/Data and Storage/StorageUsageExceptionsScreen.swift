@@ -3,7 +3,6 @@ import UIKit
 import Display
 import AsyncDisplayKit
 import SwiftSignalKit
-import Postbox
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
@@ -392,7 +391,7 @@ public func storageUsageExceptionsScreen(
                 }, action: { _, f in
                     applyValue(value)
                     f(.default)
-                })))
+                }, accessibilityIsSelected: currentValue == value)))
             }
             
             subItems.append(.separator)
@@ -494,6 +493,6 @@ private final class StorageUsageExceptionsContextReferenceContentSource: Context
     }
     
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: UIScreen.main.bounds, insets: UIEdgeInsets(top: -4.0, left: 0.0, bottom: -4.0, right: 0.0))
+        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: mainWindowScreenBounds, insets: UIEdgeInsets(top: -4.0, left: 0.0, bottom: -4.0, right: 0.0))
     }
 }

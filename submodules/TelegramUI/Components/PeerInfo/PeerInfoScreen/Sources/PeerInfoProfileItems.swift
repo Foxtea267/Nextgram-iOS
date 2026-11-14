@@ -92,6 +92,7 @@ enum InfoSection: Int, CaseIterable {
     case calls
     case personalChannel
     case peerInfo
+    case agentProviders
     case balances
     case permissions
     case peerInfoTrailing
@@ -175,6 +176,9 @@ func infoItems(
         let ItemBotAddToChat = 9002
         let ItemBotAddToChatInfo = 9003
         let ItemVerification = 9004
+        let ItemAgentInfo = 9100
+        let ItemAgentAddProvider = 9101
+        let ItemAgentProvidersInfo = 9102
         let ItemCommunity = 10000
 
         // MARK: NEXTGRAM — Showcase values are rendered on the owner's profile only.
@@ -328,6 +332,13 @@ func infoItems(
                 hasWebApp = true
             }
             
+            // An agent bot asks for a key until one is connected, then lists the connected providers.
+            var agentKeys: [EngineAgentProviderKey]?
+            if data.agentSettingsContext != nil, let settings = data.agentState?.settings {
+                agentKeys = settings.keys
+            }
+            let hasAgentKeyButton = agentKeys?.isEmpty == true
+            
             if user.isFake {
                 items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemAbout, label: "", text: user.botInfo != nil ? presentationData.strings.UserInfo_FakeBotWarning : presentationData.strings.UserInfo_FakeUserWarning, textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: user.botInfo != nil ? enabledPrivateBioEntities : []), action: nil, requestLayout: { animated in
                     interaction.requestLayout(animated)
@@ -336,9 +347,13 @@ func infoItems(
                 items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemAbout, label: user.botInfo == nil ? presentationData.strings.Profile_About : presentationData.strings.Profile_BotInfo, text: user.botInfo != nil ? presentationData.strings.UserInfo_ScamBotWarning : presentationData.strings.UserInfo_ScamUserWarning, textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: user.botInfo != nil ? enabledPrivateBioEntities : []), action: nil, requestLayout: { animated in
                     interaction.requestLayout(animated)
                 }))
-            } else if hasAbout || hasNote || hasWebApp {
+            } else if hasAbout || hasNote || hasWebApp || hasAgentKeyButton {
                 var actionButton: PeerInfoScreenLabeledValueItem.Button?
-                if hasWebApp {
+                if hasAgentKeyButton {
+                    actionButton = PeerInfoScreenLabeledValueItem.Button(title: presentationData.strings.Agent_AddKey, action: {
+                        interaction.openAgentConnect()
+                    })
+                } else if hasWebApp {
                     actionButton = PeerInfoScreenLabeledValueItem.Button(title: presentationData.strings.PeerInfo_OpenAppButton, action: {
                         guard let parentController = interaction.getController() else {
                             return
@@ -371,7 +386,7 @@ func infoItems(
                     })
                 }
                 
-                if hasAbout || hasWebApp {
+                if hasAbout || hasWebApp || hasAgentKeyButton {
                     var label: String = ""
                     if let about = cachedData.about, !about.isEmpty {
                         label = user.botInfo == nil ? presentationData.strings.Profile_About : presentationData.strings.Profile_BotInfo
@@ -393,7 +408,11 @@ func infoItems(
                     }))
                 }
                 
-                if let botInfo = user.botInfo, botInfo.flags.contains(.canEdit) {
+                if hasAgentKeyButton {
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenCommentItem(id: ItemAgentInfo, text: presentationData.strings.Agent_AddKeyInfo))
+                    
+                    currentPeerInfoSection = .peerInfoTrailing
+                } else if let botInfo = user.botInfo, botInfo.flags.contains(.canEdit) {
                     items[currentPeerInfoSection]!.append(PeerInfoScreenCommentItem(id: ItemAppFooter, text: presentationData.strings.PeerInfo_AppFooterAdmin, linkAction: { action in
                         if case let .tap(url) = action {
                             context.sharedContext.applicationBindings.openUrl(url)
@@ -407,6 +426,28 @@ func infoItems(
                             context.sharedContext.applicationBindings.openUrl(url)
                         }
                     }))
+                    
+                    currentPeerInfoSection = .peerInfoTrailing
+                }
+                
+                if let agentKeys, !agentKeys.isEmpty {
+                    let providers = data.agentState?.providers ?? []
+                    for key in agentKeys {
+                        let provider = providers.first(where: { $0.id == key.provider }) ?? EngineAgentProvider(id: key.provider, title: key.provider, vendor: "", keyUrl: "", modelsSearchable: false, iconEmojiId: nil)
+                        let isActive = agentKeys.count > 1 && data.agentState?.settings?.activeProvider == key.provider
+                        items[.agentProviders]!.append(PeerInfoScreenAgentProviderItem(id: "agent_\(key.provider)", context: context, provider: provider, isActive: isActive, action: agentKeys.count > 1 ? {
+                            interaction.setAgentActiveProvider(key.provider)
+                        } : nil, contextAction: { node, gesture in
+                            interaction.openAgentProviderContextMenu(key.provider, node, gesture)
+                        }))
+                    }
+                    let connectedIds = Set(agentKeys.map(\.provider))
+                    if providers.contains(where: { !connectedIds.contains($0.id) }) {
+                        items[.agentProviders]!.append(PeerInfoScreenActionItem(id: ItemAgentAddProvider, text: presentationData.strings.Agent_AddAnotherProvider, color: .accent, icon: generateTintedImage(image: UIImage(bundleImageName: "Chat/Input/Text/InputAIIcon"), color: presentationData.theme.list.itemAccentColor), alignment: .peerList, action: {
+                            interaction.openAgentConnect()
+                        }))
+                    }
+                    items[.agentProviders]!.append(PeerInfoScreenCommentItem(id: ItemAgentProvidersInfo, text: presentationData.strings.Agent_ProvidersInfo))
                     
                     currentPeerInfoSection = .peerInfoTrailing
                 }
@@ -505,6 +546,18 @@ func infoItems(
                             }))
                         }
                     }
+                }
+                
+                // Report is in the More menu; a header without More (a secret chat with a non-contact) offers it as a
+                // row instead. On a secret chat it reports the user.
+                var isSecretChat = false
+                if let chatPeer = data.chatPeer, case .secretChat = chatPeer {
+                    isSecretChat = true
+                }
+                if !peerInfoUserHeaderHasMore(user, isSecretChat: isSecretChat, isContact: data.isContact) && peerInfoCanReportUser(user, accountPeerId: context.account.peerId) {
+                    items[currentPeerInfoSection]!.append(PeerInfoScreenActionItem(id: ItemReport, text: presentationData.strings.ReportPeer_Report, action: {
+                        interaction.openReport(.default)
+                    }))
                 }
                 
                 if let encryptionKeyFingerprint = data.encryptionKeyFingerprint {
@@ -676,6 +729,12 @@ func infoItems(
                 }
             ))
         }
+        // MARK: NAGRAM — 共同群里的近期发言
+        if NagramSettings.shared.showCommonGroupMessages && !isMyProfile && data.groupsInCommon != nil, let commonGroupCount = (data.cachedData as? CachedUserData)?.commonGroupCount, commonGroupCount > 0 {
+            items[.nagram]!.append(PeerInfoScreenDisclosureItem(id: 1, label: .text("\(commonGroupCount)"), text: ngI18n("Nagram.CommonGroupMessages", nagramLanguageCode), action: {
+                interaction.openNagramCommonGroupMessages()
+            }))
+        }
     } else if case let .channel(channel) = data.peer {
         let ItemUsername = 1
         let ItemUsernameInfo = 2
@@ -810,7 +869,7 @@ func infoItems(
                 
                 if let aboutText = aboutText {
                     var enabledEntities = enabledPublicBioEntities
-                    if case .group = channel.info {
+                    if case .group = channel.info, !NagramSettings.shared.groupDescriptionExternalLinks { // MARK: NAGRAM — 群简介外部网址可点
                         enabledEntities = enabledPrivateBioEntities
                     }
                     items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: ItemAbout, label: presentationData.strings.Channel_Info_Description, text: aboutText, textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: enabledEntities), action: isMyProfile ? { node, _ in
@@ -980,7 +1039,8 @@ func infoItems(
             }
             
             if let aboutText = aboutText {
-                items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 0, label: presentationData.strings.Channel_Info_Description, text: aboutText, textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: enabledPrivateBioEntities), action: isMyProfile ? { node, _ in
+                // MARK: NAGRAM — 普通群简介外部网址可点
+                items[currentPeerInfoSection]!.append(PeerInfoScreenLabeledValueItem(id: 0, label: presentationData.strings.Channel_Info_Description, text: aboutText, textColor: .primary, textBehavior: .multiLine(maxLines: 100, enabledEntities: NagramSettings.shared.groupDescriptionExternalLinks ? enabledPublicBioEntities : enabledPrivateBioEntities), action: isMyProfile ? { node, _ in
                     bioContextAction(node, nil, nil)
                 } : nil, linkItemAction: bioLinkAction, contextAction: bioContextAction, requestLayout: { animated in
                     interaction.requestLayout(animated)
@@ -1044,6 +1104,51 @@ func infoItems(
         }
     }
     
+    // MARK: NAGRAM — 群组和频道资料页的 ID/DC，ID 用 Bot API 的格式(-100… / -…)
+    if let peer = data.peer, NagramSettings.shared.showProfileId || NagramSettings.shared.showDC {
+        var chatId: String?
+        var chatPhoto: TelegramMediaImageRepresentation?
+        switch peer {
+        case let .channel(channel):
+            chatId = "-100\(channel.id.id._internalGetInt64Value())"
+            chatPhoto = channel.smallProfileImage
+        case let .legacyGroup(group):
+            chatId = "-\(group.id.id._internalGetInt64Value())"
+            chatPhoto = group.smallProfileImage
+        default:
+            break
+        }
+        if let chatId {
+            let nagramLanguageCode = presentationData.strings.baseLanguageCode
+            var textComponents: [String] = []
+            var copyItems: [PeerInfoNagramAccountInfoCopyItem] = []
+            if NagramSettings.shared.showProfileId {
+                textComponents.append(chatId)
+                copyItems.append(PeerInfoNagramAccountInfoCopyItem(title: ngI18n("Nagram.AccountInfo.CopyId", nagramLanguageCode), value: chatId))
+            }
+            if NagramSettings.shared.showDC, let cloudResource = chatPhoto?.resource as? CloudPeerPhotoSizeMediaResource {
+                let dataCenter = "DC\(cloudResource.datacenterId)"
+                textComponents.append(dataCenter)
+                copyItems.append(PeerInfoNagramAccountInfoCopyItem(title: ngI18n("Nagram.AccountInfo.CopyDC", nagramLanguageCode), value: dataCenter))
+            }
+            if !textComponents.isEmpty {
+                items[.nagram]!.append(PeerInfoScreenLabeledValueItem(
+                    id: AnyHashable("nagram_chat_info"),
+                    label: ngI18n("Nagram.AccountInfo", nagramLanguageCode),
+                    text: textComponents.joined(separator: " · "),
+                    textColor: .primary,
+                    action: nil,
+                    contextAction: { sourceNode, gesture, _ in
+                        interaction.openNagramAccountInfoContextMenu(copyItems, sourceNode, gesture)
+                    },
+                    requestLayout: { _ in
+                        interaction.requestLayout(false)
+                    }
+                ))
+            }
+        }
+    }
+
     // MARK: NAGRAM — 对话级增强，只影响当前聊天本地展示。
     if isOpenedFromChat, let peer = data.peer {
         let accountPeerId = context.account.peerId.toInt64()

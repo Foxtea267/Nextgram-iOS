@@ -2,7 +2,6 @@ import Foundation
 import UIKit
 import Display
 import SwiftSignalKit
-import Postbox
 import TelegramCore
 import TelegramPresentationData
 import TelegramUIPreferences
@@ -22,6 +21,8 @@ import AuthenticationServices
 import ChatTimerScreen
 import PasskeysScreen
 import ContextUI
+import NagramStrings // MARK: NAGRAM
+import NagramInAppSafari // MARK: NAGRAM
 
 private final class PrivacyAndSecurityControllerArguments {
     let account: Account
@@ -569,11 +570,11 @@ private final class PrivacyAndSecurityContextReferenceContentSource: ContextRefe
     }
 
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: UIScreen.main.bounds, insets: UIEdgeInsets(top: -4.0, left: 0.0, bottom: -4.0, right: 0.0))
+        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: mainWindowScreenBounds, insets: UIEdgeInsets(top: -4.0, left: 0.0, bottom: -4.0, right: 0.0))
     }
 }
 
-private func countForSelectivePeers(_ peers: [PeerId: SelectivePrivacyPeer]) -> Int {
+private func countForSelectivePeers(_ peers: [EnginePeer.Id: SelectivePrivacyPeer]) -> Int {
     var result = 0
     for (_, peer) in peers {
         result += peer.userCount
@@ -1400,7 +1401,7 @@ public func privacyAndSecurityController(
                     }, action: { _, f in
                         f(.default)
                         timeoutAction(value)
-                    }))
+                    }, accessibilityIsSelected: privacySettingsValue.accountRemovalTimeout == value))
                 }
                 timeoutItems.append(.separator)
                 timeoutItems.append(.action(ContextMenuActionItem(text: presentationData.strings.PrivacySettings_DeleteAccountNow, textColor: .destructive, icon: { _ in
@@ -1623,7 +1624,10 @@ public func privacyAndSecurityController(
 
         let options = availableOpenInOptions(context: context, item: .url(url: "https://telegram.org"))
         let defaultWebBrowser: String
-        if accountWebBrowserSettings.openExternalBrowser {
+        if accountWebBrowserSettings.openExternalBrowser, localWebBrowserSettings.defaultWebBrowser == nagramInAppSafariBrowserIdentifier {
+            // MARK: NAGRAM — "Safari (In-App)".
+            defaultWebBrowser = ngI18n("Nagram.WebBrowser.InAppSafari", presentationData.strings.baseLanguageCode)
+        } else if accountWebBrowserSettings.openExternalBrowser {
             var defaultExternalBrowser = localWebBrowserSettings.defaultWebBrowser
             if defaultExternalBrowser == nil || defaultExternalBrowser == "inApp" || defaultExternalBrowser == "inAppSafari" {
                 defaultExternalBrowser = "safari"

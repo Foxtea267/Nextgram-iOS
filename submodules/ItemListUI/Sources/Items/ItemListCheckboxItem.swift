@@ -219,6 +219,8 @@ public class ItemListCheckboxItemNode: ItemListRevealOptionsItemNode {
                 }
             }
             
+            let trailingInset: CGFloat = max(28.0, 28.0 + params.rightInset - params.leftInset)
+            
             let titleFont = Font.regular(item.presentationData.fontSize.itemListBaseFontSize)
             let subtitleFont = Font.regular(floor(item.presentationData.fontSize.itemListBaseFontSize * 15.0 / 17.0))
             
@@ -234,9 +236,9 @@ public class ItemListCheckboxItemNode: ItemListRevealOptionsItemNode {
                 titleColor = item.presentationData.theme.list.itemDisabledTextColor
             }
             
-            let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: item.title, font: titleFont, textColor: titleColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width - leftInset - 28.0, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+            let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: item.title, font: titleFont, textColor: titleColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width - leftInset - trailingInset, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             
-            let (subtitleLayout, subtitleApply) = makeSubtitleLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: item.subtitle ?? "", font: subtitleFont, textColor: subtitleColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width - leftInset - 28.0, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
+            let (subtitleLayout, subtitleApply) = makeSubtitleLayout(TextNodeLayoutArguments(attributedString: NSAttributedString(string: item.subtitle ?? "", font: subtitleFont, textColor: subtitleColor), backgroundColor: nil, maximumNumberOfLines: 1, truncationType: .end, constrainedSize: CGSize(width: params.width - leftInset - trailingInset, height: CGFloat.greatestFiniteMagnitude), alignment: .natural, cutout: nil, insets: UIEdgeInsets()))
             
             let separatorHeight = UIScreenPixel
             let separatorRightInset: CGFloat = item.systemStyle == .glass ? 16.0 : 0.0
@@ -285,16 +287,15 @@ public class ItemListCheckboxItemNode: ItemListRevealOptionsItemNode {
                     strongSelf.contentContainerNode.frame = CGRect(origin: CGPoint(x: strongSelf.contentContainerNode.frame.minX, y: 0.0), size: CGSize(width: params.width, height: layout.contentSize.height))
                     
                     strongSelf.activateArea.accessibilityLabel = item.title
+                    strongSelf.activateArea.accessibilityValue = nil
+                    var accessibilityTraits: UIAccessibilityTraits = [.button]
                     if item.checked {
-                        strongSelf.activateArea.accessibilityValue = "Selected"
-                    } else {
-                        strongSelf.activateArea.accessibilityValue = ""
+                        accessibilityTraits.insert(.selected)
                     }
-                    if item.enabled {
-                        strongSelf.activateArea.accessibilityTraits = []
-                    } else {
-                        strongSelf.activateArea.accessibilityTraits = [.notEnabled]
+                    if !item.enabled {
+                        accessibilityTraits.insert(.notEnabled)
                     }
+                    strongSelf.activateArea.accessibilityTraits = accessibilityTraits
                     
                     strongSelf.activateArea.frame = CGRect(origin: CGPoint(x: params.leftInset, y: 0.0), size: CGSize(width: params.width - params.leftInset - params.rightInset, height: layout.contentSize.height))
                     
@@ -366,7 +367,7 @@ public class ItemListCheckboxItemNode: ItemListRevealOptionsItemNode {
                     strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: item.systemStyle == .glass) : nil
                     
                     strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                     strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
                     strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - params.rightInset - bottomStripeInset - separatorRightInset, height: separatorHeight))
                     
@@ -389,12 +390,12 @@ public class ItemListCheckboxItemNode: ItemListRevealOptionsItemNode {
                         strongSelf.imageNode.image = nil
                     }
                     
-                    strongSelf.updateRevealOptionsHighlightedBackgroundFrame(strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -UIScreenPixel), size: CGSize(width: params.width, height: strongSelf.backgroundNode.frame.height + UIScreenPixel + UIScreenPixel)))
+                    strongSelf.updateRevealOptionsHighlightedBackgroundFrame(strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -UIScreenPixel), size: CGSize(width: params.width, height: strongSelf.backgroundNode.frame.height + UIScreenPixel + UIScreenPixel)), aboveNodes: [strongSelf.bottomStripeNode, strongSelf.topStripeNode, strongSelf.backgroundNode])
                     
                     strongSelf.updateLayout(size: layout.contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
                     
                     if item.deleteAction != nil {
-                        strongSelf.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.presentationData.strings.Common_Delete, icon: .none, color: item.presentationData.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.presentationData.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.presentationData.theme.list.itemSecondaryTextColor)]))
+                        strongSelf.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.presentationData.strings.Common_Delete, icon: .none, color: item.presentationData.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.presentationData.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.presentationData.theme.list.itemSecondaryTextColor, isDestructive: true)]))
                     } else {
                         strongSelf.setRevealOptions((left: [], right: []))
                     }
@@ -407,7 +408,7 @@ public class ItemListCheckboxItemNode: ItemListRevealOptionsItemNode {
         super.setHighlighted(highlighted, at: point, animated: animated)
         
         self.isHighlighted = highlighted && (self.item?.enabled ?? false)
-        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted || self.isRevealOptionsActive, transition: (animated && !highlighted) ? .animated(duration: 0.4, curve: .easeInOut) : .immediate, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
+        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted, transition: (animated && !highlighted) ? .animated(duration: 0.4, curve: .easeInOut) : .immediate, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
     }
     
     override public func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
@@ -427,7 +428,7 @@ public class ItemListCheckboxItemNode: ItemListRevealOptionsItemNode {
     override public func revealOptionsActiveStateUpdated(isActive: Bool, transition: ContainedViewLayoutTransition) {
         super.revealOptionsActiveStateUpdated(isActive: isActive, transition: transition)
 
-        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted || self.isRevealOptionsActive, transition: transition, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
+        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted, transition: transition, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
     }
 
     override public func revealOptionSelected(_ option: ItemListRevealOption, animated: Bool) {

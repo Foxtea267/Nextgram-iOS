@@ -624,7 +624,7 @@ private final class RecentSessionsContextReferenceContentSource: ContextReferenc
     }
 
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: UIScreen.main.bounds, insets: UIEdgeInsets(top: -4.0, left: 0.0, bottom: -4.0, right: 0.0))
+        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: mainWindowScreenBounds, insets: UIEdgeInsets(top: -4.0, left: 0.0, bottom: -4.0, right: 0.0))
     }
 }
 
@@ -717,8 +717,7 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
         }
         
         removeSessionDisposable.set(((webSessionsContext.remove(hash: sessionId)
-        |> mapToSignal { _ -> Signal<Void, NoError> in
-        })
+        |> ignoreValues)
         |> deliverOnMainQueue).start(error: { _ in
         }, completed: {
             updateState {
@@ -867,15 +866,12 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
         removeWebSessionImpl(sessionId)
     }, terminateAllWebSessions: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let controller = ActionSheetController(presentationData: presentationData)
-        let dismissAction: () -> Void = { [weak controller] in
-            controller?.dismissAnimated()
-        }
-        controller.setItemGroups([
-            ActionSheetItemGroup(items: [
-                ActionSheetButtonItem(title: presentationData.strings.AuthSessions_LogOutApplications, color: .destructive, action: {
-                    dismissAction()
-                    
+        let controller = AlertScreen(
+            context: context,
+            configuration: AlertScreen.Configuration(actionAlignment: .vertical),
+            text: presentationData.strings.AuthSessions_LogOutApplicationsText,
+            actions: [
+                .init(title: presentationData.strings.AuthSessions_LogOutApplications, type: .defaultDestructive, action: {
                     updateState {
                         return $0.withUpdatedTerminatingOtherSessions(true)
                     }
@@ -888,11 +884,11 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
                         }
                         mode.set(.sessions)
                     }))
-                })
-            ]),
-            ActionSheetItemGroup(items: [ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, action: { dismissAction() })])
-            ])
-        presentControllerImpl?(controller, ViewControllerPresentationArguments(presentationAnimation: .modalSheet))
+                }),
+                .init(title: presentationData.strings.Common_Cancel)
+            ]
+        )
+        presentControllerImpl?(controller, nil)
     }, addDevice: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
         DeviceAccess.authorizeAccess(to: .camera(.qrCode), presentationData: presentationData, present: { c, a in
@@ -929,7 +925,7 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
             }, action: { _, f in
                 f(.default)
                 ttlAction(value)
-            }))
+            }, accessibilityIsSelected: currentAuthorizationTTLDays == value))
         }
         guard let sourceNode = findAutoTerminateReferenceNode?() else {
             return
@@ -994,9 +990,9 @@ public func recentSessionsController(context: AccountContext, activeSessionsCont
         
         if sessionsState.sessions.count > 1 {
             if state.terminatingOtherSessions {
-                rightNavigationButton = ItemListNavigationButton(content: .none, style: .activity, enabled: true, action: {})
+                rightNavigationButton = ItemListNavigationButton(content: .none, style: .activity, enabled: true, staysInRow: true, action: {})
             } else if state.editing {
-                rightNavigationButton = ItemListNavigationButton(content: .icon(.done), style: .bold, enabled: true, action: {
+                rightNavigationButton = ItemListNavigationButton(content: .icon(.done), style: .bold, enabled: true, staysInRow: true, action: {
                     updateState { state in
                         return state.withUpdatedEditing(false)
                     }

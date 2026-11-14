@@ -10,6 +10,7 @@ import NagramStrings // MARK: NAGRAM
 
 enum ChatListNodeEntryId: Hashable {
     case Header
+    case SideListAllThreads
     case Hole(Int64)
     case PeerId(Int64)
     case ThreadId(Int64)
@@ -193,8 +194,14 @@ enum ChatListNodeEntry: Comparable, Identifiable {
             self.displayAsTopicList = displayAsTopicList
         }
         
+        /// The chat side list's "All Messages" row (`ChatListItemContent.PeerData.isSideListAllThreadsItem`).
+        var isSideListAllThreadsItem: Bool = false
+        
         static func ==(lhs: PeerEntryData, rhs: PeerEntryData) -> Bool {
             if lhs.index != rhs.index {
+                return false
+            }
+            if lhs.isSideListAllThreadsItem != rhs.isSideListAllThreadsItem {
                 return false
             }
             if lhs.presentationData !== rhs.presentationData {
@@ -472,6 +479,9 @@ enum ChatListNodeEntry: Comparable, Identifiable {
         case .HeaderEntry:
             return .Header
         case let .PeerEntry(peerEntry):
+            if peerEntry.isSideListAllThreadsItem {
+                return .SideListAllThreads
+            }
             switch peerEntry.index {
             case let .chatList(index):
                 return .PeerId(index.messageIndex.id.peerId.toInt64())
@@ -806,11 +816,28 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
     
     var hasPinned = false
     
+    // MARK: NAGRAM — 本地置顶的会话在 Postbox 视图里还会以未置顶身份出现一次；
+    // 同一会话也可能同时是服务端置顶。每个会话只保留 pinningIndex 最小的那一条。
+    var nagramPinnedIndexByPeerId: [EnginePeer.Id: UInt16] = [:]
+    for entry in view.items {
+        if case let .chatList(index) = entry.index, let pinningIndex = index.pinningIndex {
+            let entryPeerId = index.messageIndex.id.peerId
+            if let current = nagramPinnedIndexByPeerId[entryPeerId] {
+                nagramPinnedIndexByPeerId[entryPeerId] = min(current, pinningIndex)
+            } else {
+                nagramPinnedIndexByPeerId[entryPeerId] = pinningIndex
+            }
+        }
+    }
+    
     loop: for entry in view.items {
         var peerId: EnginePeer.Id?
         var threadId: Int64?
         var activityItemId: ChatListNodePeerInputActivities.ItemId?
         if case let .chatList(index) = entry.index {
+            if let keptPinningIndex = nagramPinnedIndexByPeerId[index.messageIndex.id.peerId], index.pinningIndex != keptPinningIndex {
+                continue loop
+            }
             peerId = index.messageIndex.id.peerId
             activityItemId = ChatListNodePeerInputActivities.ItemId(peerId: index.messageIndex.id.peerId, threadId: nil)
         } else if case let .forum(_, _, threadIdValue, _, _) = entry.index, case let .forum(peerIdValue) = chatListLocation {
@@ -1167,4 +1194,38 @@ func chatListNodeEntriesForView(view: EngineChatList, state: ChatListNodeState, 
         return ([.HeaderEntry], true)
     }
     return (result, view.isLoading)
+}
+
+/// The chat side list's "All Messages" row for a Saved Messages list: the parent's own chat, previewing the latest
+/// message of any of its sub-chats, placed first (just below the header entry).
+func chatListSideListAllThreadsEntry(entries: [ChatListNodeEntry], parentPeer: EngineRenderedPeer) -> ChatListNodeEntry? {
+    var latest: ChatListNodeEntry.PeerEntryData?
+    for entry in entries {
+        guard case let .PeerEntry(peerEntry) = entry, let message = peerEntry.messages.last else {
+            continue
+        }
+        if let current = latest, let currentMessage = current.messages.last, currentMessage.index >= message.index {
+            continue
+        }
+        latest = peerEntry
+    }
+    guard var data = latest else {
+        return nil
+    }
+    data.index = .chatList(EngineChatList.Item.Index.ChatList.absoluteUpperBound.predecessor)
+    data.peer = parentPeer
+    data.avatarPeer = nil
+    data.readState = nil
+    data.hasUnseenMentions = false
+    data.hasUnseenReactions = false
+    data.hasUnseenPollVotes = false
+    data.draftState = nil
+    data.mediaDraftContentType = nil
+    data.inputActivities = nil
+    data.editing = false
+    data.hasActiveRevealControls = false
+    data.selected = false
+    data.storyState = nil
+    data.isSideListAllThreadsItem = true
+    return .PeerEntry(data)
 }

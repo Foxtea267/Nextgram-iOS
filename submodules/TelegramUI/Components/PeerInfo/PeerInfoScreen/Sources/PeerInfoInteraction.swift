@@ -25,6 +25,9 @@ final class PeerInfoInteraction {
     let openDeleteReaction: (EngineMessage.Id) -> Void
     let openShareBot: () -> Void
     let openAddBotToGroup: () -> Void
+    let openAgentConnect: () -> Void
+    let setAgentActiveProvider: (String) -> Void
+    let openAgentProviderContextMenu: (String, ASDisplayNode, ContextGesture?) -> Void
     let performBotCommand: (PeerInfoBotCommand) -> Void
     let editingOpenPublicLinkSetup: () -> Void
     let editingOpenNameColorSetup: () -> Void
@@ -81,6 +84,7 @@ final class PeerInfoInteraction {
     let openBusinessLocationContextMenu: (ASDisplayNode, ContextGesture?) -> Void
     let openBirthdayContextMenu: (ASDisplayNode, ContextGesture?) -> Void
     let openNagramAccountInfoContextMenu: ([PeerInfoNagramAccountInfoCopyItem], ASDisplayNode, ContextGesture?) -> Void
+    let openNagramCommonGroupMessages: () -> Void // MARK: NAGRAM
     let openMemberContextMenu: (PeerInfoMember, ASDisplayNode, ContextGesture?) -> Void
     let editingOpenAffiliateProgram: () -> Void
     let editingOpenVerifyAccounts: () -> Void
@@ -107,6 +111,9 @@ final class PeerInfoInteraction {
         openDeleteReaction: @escaping (EngineMessage.Id) -> Void,
         openShareBot: @escaping () -> Void,
         openAddBotToGroup: @escaping () -> Void,
+        openAgentConnect: @escaping () -> Void,
+        setAgentActiveProvider: @escaping (String) -> Void,
+        openAgentProviderContextMenu: @escaping (String, ASDisplayNode, ContextGesture?) -> Void,
         performBotCommand: @escaping (PeerInfoBotCommand) -> Void,
         editingOpenPublicLinkSetup: @escaping () -> Void,
         editingOpenNameColorSetup: @escaping () -> Void,
@@ -163,6 +170,7 @@ final class PeerInfoInteraction {
         openBusinessLocationContextMenu: @escaping (ASDisplayNode, ContextGesture?) -> Void,
         openBirthdayContextMenu: @escaping (ASDisplayNode, ContextGesture?) -> Void,
         openNagramAccountInfoContextMenu: @escaping ([PeerInfoNagramAccountInfoCopyItem], ASDisplayNode, ContextGesture?) -> Void,
+        openNagramCommonGroupMessages: @escaping () -> Void, // MARK: NAGRAM
         openMemberContextMenu: @escaping (PeerInfoMember, ASDisplayNode, ContextGesture?) -> Void,
         editingOpenAffiliateProgram: @escaping () -> Void,
         editingOpenVerifyAccounts: @escaping () -> Void,
@@ -188,6 +196,9 @@ final class PeerInfoInteraction {
         self.openDeleteReaction = openDeleteReaction
         self.openShareBot = openShareBot
         self.openAddBotToGroup = openAddBotToGroup
+        self.openAgentConnect = openAgentConnect
+        self.setAgentActiveProvider = setAgentActiveProvider
+        self.openAgentProviderContextMenu = openAgentProviderContextMenu
         self.performBotCommand = performBotCommand
         self.editingOpenPublicLinkSetup = editingOpenPublicLinkSetup
         self.editingOpenNameColorSetup = editingOpenNameColorSetup
@@ -244,6 +255,7 @@ final class PeerInfoInteraction {
         self.openBusinessLocationContextMenu = openBusinessLocationContextMenu
         self.openBirthdayContextMenu = openBirthdayContextMenu
         self.openNagramAccountInfoContextMenu = openNagramAccountInfoContextMenu
+        self.openNagramCommonGroupMessages = openNagramCommonGroupMessages
         self.openMemberContextMenu = openMemberContextMenu
         self.editingOpenAffiliateProgram = editingOpenAffiliateProgram
         self.editingOpenVerifyAccounts = editingOpenVerifyAccounts

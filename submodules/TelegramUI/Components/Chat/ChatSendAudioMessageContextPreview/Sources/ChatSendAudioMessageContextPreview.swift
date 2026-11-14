@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import TelegramPresentationData
@@ -9,7 +8,6 @@ import ChatSendMessageActionUI
 import SwiftSignalKit
 import ComponentFlow
 import Display
-import Postbox
 import TelegramCore
 import WallpaperBackgroundNode
 import AudioWaveform
@@ -107,7 +105,7 @@ public final class ChatSendContactMessageContextPreview: UIView, ChatSendMessage
         
         var items: [ListViewItem] = []
         for contactMedia in contactsMedia {
-            let message = Message(stableId: 1, stableVersion: 0, id: MessageId(peerId: self.context.account.peerId, namespace: 0, id: 1), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: 0, flags: [.Incoming], tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: nil, text: "", attributes: [], media: [contactMedia], peers: SimpleDictionary(), associatedMessages: SimpleDictionary(), associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:])
+            let message = EngineMessage(stableId: 1, stableVersion: 0, id: EngineMessage.Id(peerId: self.context.account.peerId, namespace: 0, id: 1), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: 0, flags: [.Incoming], tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: nil, text: "", attributes: [], media: [.contact(contactMedia)], peers: [:], associatedMessages: [:], associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:])
             
             let item = self.context.sharedContext.makeChatMessagePreviewItem(
                 context: self.context,
@@ -130,7 +128,8 @@ public final class ChatSendContactMessageContextPreview: UIView, ChatSendMessage
                 isStandalone: true,
                 rank: nil,
                 rankRole: nil,
-                isGiftMessageComposerPreview: false
+                isGiftMessageComposerPreview: false,
+                activateGiftMessageInput: nil
             )
             items.append(item)
         }
@@ -261,9 +260,9 @@ public final class ChatSendAudioMessageContextPreview: UIView, ChatSendMessageCo
 
     public func update(containerSize: CGSize, transition: ComponentTransition) -> CGSize {
         let voiceAttributes: [TelegramMediaFileAttribute] = [.Audio(isVoice: true, duration: 23, title: nil, performer: nil, waveform: self.waveform.makeBitstream())]
-        let voiceMedia = TelegramMediaFile(fileId: MediaId(namespace: 0, id: 0), partialReference: nil, resource: LocalFileMediaResource(fileId: 0), previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "audio/ogg", size: 0, attributes: voiceAttributes, alternativeRepresentations: [])
+        let voiceMedia = TelegramMediaFile(fileId: EngineMedia.Id(namespace: 0, id: 0), partialReference: nil, resource: LocalFileMediaResource(fileId: 0), previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "audio/ogg", size: 0, attributes: voiceAttributes, alternativeRepresentations: [])
         
-        let message = Message(stableId: 1, stableVersion: 0, id: MessageId(peerId: self.context.account.peerId, namespace: 0, id: 1), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: 0, flags: [.Incoming], tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: nil, text: "", attributes: [], media: [voiceMedia], peers: SimpleDictionary(), associatedMessages: SimpleDictionary(), associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:])
+        let message = EngineMessage(stableId: 1, stableVersion: 0, id: EngineMessage.Id(peerId: self.context.account.peerId, namespace: 0, id: 1), globallyUniqueId: nil, groupingKey: nil, groupInfo: nil, threadId: nil, timestamp: 0, flags: [.Incoming], tags: [], globalTags: [], localTags: [], customTags: [], forwardInfo: nil, author: nil, text: "", attributes: [], media: [.file(voiceMedia)], peers: [:], associatedMessages: [:], associatedMessageIds: [], associatedMedia: [:], associatedThreadInfo: nil, associatedStories: [:])
         
         let item = self.context.sharedContext.makeChatMessagePreviewItem(
             context: self.context,
@@ -286,7 +285,8 @@ public final class ChatSendAudioMessageContextPreview: UIView, ChatSendMessageCo
             isStandalone: true,
             rank: nil,
             rankRole: nil,
-            isGiftMessageComposerPreview: false
+            isGiftMessageComposerPreview: false,
+            activateGiftMessageInput: nil
         )
         let items = [item]
         
@@ -337,7 +337,7 @@ public final class ChatSendGroupMediaMessageContextPreview: UIView, ChatSendMess
     private let context: AccountContext
     private let presentationData: PresentationData
     private let wallpaperBackgroundNode: WallpaperBackgroundNode?
-    private let messages: [Message]
+    private let messages: [EngineMessage]
     
     private var chatPresentationData: ChatPresentationData?
     
@@ -365,7 +365,7 @@ public final class ChatSendGroupMediaMessageContextPreview: UIView, ChatSendMess
         self.presentationData = presentationData
         self.wallpaperBackgroundNode = wallpaperBackgroundNode
         self.messages = messages.map { message in
-            return message._asMessage().withUpdatedTimestamp(0)
+            return EngineMessage(message._asMessage().withUpdatedTimestamp(0))
         }
         
         self.messagesContainer = UIView()
@@ -541,6 +541,7 @@ public final class ChatSendGroupMediaMessageContextPreview: UIView, ChatSendMess
         let entryAttributes = ChatMessageEntryAttributes(rank: nil, isContact: false, contentTypeHint: .generic, updatingMedia: nil, isPlaying: false, isCentered: false, authorStoryStats: nil, displayContinueThreadFooter: false, pinToTop: false)
         
         let items = self.messages.map { message -> ChatMessageBubbleContentItem in
+            let message = message._asMessage()
             return ChatMessageBubbleContentItem(
                 context: self.context,
                 controllerInteraction: controllerInteraction,
@@ -573,7 +574,7 @@ public final class ChatSendGroupMediaMessageContextPreview: UIView, ChatSendMess
             if let current = self.messageNodes[items[0].message.id] {
                 messageNode = current
             } else {
-                messageNode = ChatMessageMediaBubbleContentNode(lottieSettings: self.context.lottieRenderingSettings)
+                messageNode = ChatMessageMediaBubbleContentNode()
                 self.messageNodes[items[0].message.id] = messageNode
                 self.messagesContainer.addSubview(messageNode.view)
             }
@@ -643,7 +644,7 @@ public final class ChatSendGroupMediaMessageContextPreview: UIView, ChatSendMess
                 if let current = self.messageNodes[items[i].message.id] {
                     messageNode = current
                 } else {
-                    messageNode = ChatMessageMediaBubbleContentNode(lottieSettings: self.context.lottieRenderingSettings)
+                    messageNode = ChatMessageMediaBubbleContentNode()
                     self.messageNodes[items[i].message.id] = messageNode
                     self.messagesContainer.addSubview(messageNode.view)
                 }

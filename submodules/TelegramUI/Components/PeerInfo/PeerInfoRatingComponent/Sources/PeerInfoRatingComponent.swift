@@ -5,6 +5,28 @@ import ComponentFlow
 import MultilineTextComponent
 import Svg
 
+// The SVG badges have transparent margins inside their 26 pt image canvas.
+private func ratingImageLeftInset(_ image: UIImage?) -> CGFloat? {
+    guard let image, let cgImage = image.cgImage else { return nil }
+    let width = cgImage.width
+    let height = cgImage.height
+    var pixels = [UInt8](repeating: 0, count: width * height * 4)
+    return pixels.withUnsafeMutableBytes { buffer -> CGFloat? in
+        guard let context = CGContext(data: buffer.baseAddress, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue) else {
+            return nil
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        for x in 0 ..< width {
+            for y in 0 ..< height {
+                if buffer[(y * width + x) * 4 + 3] > 0 {
+                    return CGFloat(x) / image.scale
+                }
+            }
+        }
+        return nil
+    }
+}
+
 private func generateNumberOffsets() -> [CGPoint] {
     return [
         CGPoint(x: 0.25, y: -0.33),
@@ -118,6 +140,7 @@ public final class PeerInfoRatingComponent: Component {
     let level: Int
     let action: () -> Void
     let debugLevel: Bool
+    let accessibilityLabel: String?
     
     public init(
         backgroundColor: UIColor,
@@ -125,7 +148,8 @@ public final class PeerInfoRatingComponent: Component {
         foregroundColor: UIColor,
         level: Int,
         action: @escaping () -> Void,
-        debugLevel: Bool = false
+        debugLevel: Bool = false,
+        accessibilityLabel: String? = nil
     ) {
         self.backgroundColor = backgroundColor
         self.borderColor = borderColor
@@ -133,6 +157,7 @@ public final class PeerInfoRatingComponent: Component {
         self.level = level
         self.action = action
         self.debugLevel = debugLevel
+        self.accessibilityLabel = accessibilityLabel
     }
     
     public static func ==(lhs: PeerInfoRatingComponent, rhs: PeerInfoRatingComponent) -> Bool {
@@ -151,6 +176,9 @@ public final class PeerInfoRatingComponent: Component {
         if lhs.debugLevel != rhs.debugLevel {
             return false
         }
+        if lhs.accessibilityLabel != rhs.accessibilityLabel {
+            return false
+        }
         return true
     }
     
@@ -165,6 +193,7 @@ public final class PeerInfoRatingComponent: Component {
     }
     
     public final class View: UIView {
+        public private(set) var visibleLeftInset: CGFloat = 0.0
         private let borderLayer: SimpleLayer
         private let backgroundLayer: SimpleLayer
         
@@ -187,6 +216,14 @@ public final class PeerInfoRatingComponent: Component {
         
         required init?(coder: NSCoder) {
             fatalError("init(coder:) has not been implemented")
+        }
+        
+        override public func accessibilityActivate() -> Bool {
+            guard let component = self.component, !component.debugLevel else {
+                return false
+            }
+            component.action()
+            return true
         }
         
         @objc private func onTapGesture(_ recognizer: UITapGestureRecognizer) {
@@ -225,6 +262,12 @@ public final class PeerInfoRatingComponent: Component {
             } else {
                 level = component.level
             }
+            
+            // VoiceOver: one button, labelled by the host, whose value is the level the badge shows.
+            self.isAccessibilityElement = component.accessibilityLabel != nil
+            self.accessibilityLabel = component.accessibilityLabel
+            self.accessibilityValue = "\(level)"
+            self.accessibilityTraits = .button
             
             let iconSize = CGSize(width: 26.0, height: 26.0)
             
@@ -424,6 +467,9 @@ public final class PeerInfoRatingComponent: Component {
                         context.restoreGState()
                     }
                 })
+                let imageLeftInset = [ratingImageLeftInset(backgroundImage), ratingImageLeftInset(borderImage)].compactMap { $0 }.min() ?? 0.0
+                self.visibleLeftInset = floorToScreenPixels((size.width - iconSize.width) * 0.5) + imageLeftInset
+
                 if let previousContents = self.backgroundLayer.contents, CFGetTypeID(previousContents as CFTypeRef) == CGImage.typeID {
                     self.backgroundLayer.contents = backgroundImage!.cgImage
                     alphaTransition.animateContentsImage(layer: self.backgroundLayer, from: previousContents as! CGImage, to: backgroundImage!.cgImage!, duration: 0.2, curve: .easeInOut)

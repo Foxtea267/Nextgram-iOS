@@ -14,7 +14,6 @@ swift_library(
     deps = [
         "//Nagram/SettingsUI:NagramSettingsUI", # MARK: NAGRAM
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
-        "//submodules/LottieSettings:LottieSettings",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/Display:Display",
         "//submodules/DeviceLocationManager:DeviceLocationManager",  # MARK: NEXTGRAM
@@ -86,11 +85,14 @@ swift_library(
         "//submodules/TelegramUI/Components/EntityKeyboard",
         "//submodules/TelegramUI/Components/ForumCreateTopicScreen:ForumCreateTopicScreen",
         "//submodules/TelegramUI/Components/ChatTitleView",
+        "//submodules/TelegramUI/Components/NavigationExpansionTransition",
         "//submodules/TelegramUI/Components/ChatTimerScreen",
         "//submodules/TelegramUI/Components/NotificationPeerExceptionController",
         "//submodules/AnimationUI:AnimationUI",
         "//submodules/PeerInfoUI",
         "//submodules/TelegramUI/Components/ChatListHeaderComponent",
+        "//submodules/TelegramUI/Components/NavigationBarComponent",
+        "//submodules/TelegramUI/Components/SideColumnLayout",
         "//submodules/TelegramUI/Components/ChatListTitleView",
         "//submodules/AvatarNode:AvatarNode",
         "//submodules/AvatarVideoNode:AvatarVideoNode",
@@ -144,6 +146,8 @@ swift_library(
         # MARK: NEXTGRAM
         "//Nagram/ChatListFilters:NagramChatListFilters",
         "//Nagram/Strings:NagramStrings",
+        "//Nagram/SearchLink:NagramSearchLink",
+        "//Nagram/FlippedList:NagramFlippedList",
     ],
     visibility = [
         "//visibility:public",
@@ -156,6 +160,7 @@ swift_library(
     srcs = glob(["Tests/**/*.swift"]),
     deps = [
         ":ChatListUI",
+        "//submodules/Display:Display",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/Postbox:Postbox",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
@@ -163,6 +168,7 @@ swift_library(
         "//submodules/TelegramStringFormatting:TelegramStringFormatting",
         "//submodules/TextFormat:TextFormat",
         "//submodules/AppBundle:AppBundle",
+        "//Nagram/SearchLink:NagramSearchLink", # MARK: NAGRAM
     ],
 )
 

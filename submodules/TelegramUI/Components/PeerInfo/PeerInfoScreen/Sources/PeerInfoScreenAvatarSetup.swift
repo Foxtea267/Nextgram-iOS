@@ -18,6 +18,7 @@ import PeerAvatarGalleryUI
 import PresentationDataUtils
 import LegacyComponents
 import LegacyMediaPickerUI
+import MediaPickerUI
 
 private func sharedSetupProfilePhotoUpload(context: AccountContext, image: UIImage, mode: PeerInfoAvatarEditingMode) -> LocalFileMediaResource? {
     guard let data = image.jpegData(compressionQuality: 0.6) else {
@@ -62,6 +63,28 @@ public extension PeerInfoScreenImpl {
         completion: @escaping (UIImage?) -> Void = { _ in },
         completedWithUploadingImage: @escaping (UIImage, Signal<PeerInfoAvatarUploadStatus, NoError>) -> UIView? = { _, _ in nil }
     ) {
+        displaySetPhoto(
+            parentController: parentController,
+            context: context,
+            peer: peer,
+            canDelete: canDelete,
+            performDelete: performDelete,
+            options: SetPhotoOptions(forceDark: false, allowsEmojiAvatar: true),
+            completion: completion,
+            completedWithUploadingImage: completedWithUploadingImage
+        )
+    }
+    
+    static func displaySetPhoto(
+        parentController: ViewController,
+        context: AccountContext,
+        peer: EnginePeer,
+        canDelete: Bool?,
+        performDelete: @escaping () -> Void,
+        options: SetPhotoOptions,
+        completion: @escaping (UIImage?) -> Void,
+        completedWithUploadingImage: @escaping (UIImage, Signal<PeerInfoAvatarUploadStatus, NoError>) -> UIView?
+    ) {
         let avatarClipStyle = mediaEditorAvatarClipStyle(peer: peer)
         
         let emojiMarkup: TelegramMediaImage.EmojiMarkup? = nil
@@ -90,9 +113,9 @@ public extension PeerInfoScreenImpl {
         var avatarPickerHolder: Any?
         let _ = avatarPickerHolder
         
-        let (mainController, pickerHolder) = context.sharedContext.makeAvatarMediaPickerScreen(context: context, peerType: PeerType.getType(for: peer), getSourceRect: { return nil }, canDelete: hasDeleteButton, performDelete: {
+        let (mainController, pickerHolder) = avatarMediaPickerController(context: context, peerType: PeerType.getType(for: peer), getSourceRect: { return nil }, canDelete: hasDeleteButton, performDelete: {
             performDelete()
-        }, completion: { [weak parentController] result, transitionView, transitionRect, transitionImage, fromCamera, transitionOut, cancelled in
+        }, isDark: options.forceDark, allowsEmojiAvatar: options.allowsEmojiAvatar, completion: { [weak parentController] result, transitionView, transitionRect, transitionImage, fromCamera, transitionOut, cancelled in
             avatarPickerHolder = nil
             
             guard let parentController else {
@@ -215,7 +238,7 @@ public extension PeerInfoScreenImpl {
                     case let .video(video, coverImage, values, _, _):
                         if let coverImage {
                             resultImage = coverImage
-                            updateProfileVideo(parentController: parentController, context: context, peer: peer, image: coverImage, video: video, values: values, markup: nil, mode: mode, uploadStatus: uploadStatusPromise)
+                            updateProfileVideo(parentController: parentController, context: context, peer: peer, image: coverImage, video: video, values: values, markup: nil, mode: mode, uploadStatus: uploadStatusPromise, splitsExportProgress: options.splitsVideoExportProgress)
                         }
                         commit({})
                     default:
@@ -312,7 +335,7 @@ public extension PeerInfoScreenImpl {
         updateProfileVideo(parentController: parentController, context: context, peer: peer, image: image, video: video as? MediaEditorScreenImpl.MediaResult.VideoResult, values: values as? MediaEditorValues, markup: markup, mode: .generic, uploadStatus: nil)
     }
         
-    static func updateProfileVideo(parentController: ViewController, context: AccountContext, peer: EnginePeer, image: UIImage, video: MediaEditorScreenImpl.MediaResult.VideoResult?, values: MediaEditorValues?, markup: UploadPeerPhotoMarkup?, mode: PeerInfoAvatarEditingMode, uploadStatus: Promise<PeerInfoAvatarUploadStatus>?) {
+    static func updateProfileVideo(parentController: ViewController, context: AccountContext, peer: EnginePeer, image: UIImage, video: MediaEditorScreenImpl.MediaResult.VideoResult?, values: MediaEditorValues?, markup: UploadPeerPhotoMarkup?, mode: PeerInfoAvatarEditingMode, uploadStatus: Promise<PeerInfoAvatarUploadStatus>?, splitsExportProgress: Bool = false) {
         var uploadVideo = true
         if let _ = markup {
             if let data = context.currentAppConfiguration.with({ $0 }).data, let uploadVideoValue = data["upload_markup_video"] as? Bool, uploadVideoValue {
@@ -334,6 +357,7 @@ public extension PeerInfoScreenImpl {
         let account = context.account
         let context = context
         
+        var exportsVideo = false
         let videoResource: Signal<TelegramMediaResource?, UploadPeerPhotoError>
         if uploadVideo, let video, let values {
             var exportSubject: Signal<(MediaEditorVideoExport.Subject, Double), NoError>?
@@ -373,6 +397,7 @@ public extension PeerInfoScreenImpl {
             }
             
             if let exportSubject {
+                exportsVideo = true
                 videoResource = exportSubject
                 |> castError(UploadPeerPhotoError.self)
                 |> mapToSignal { exportSubject, duration in
@@ -386,13 +411,15 @@ public extension PeerInfoScreenImpl {
                             case .completed:
                                 if let data = try? Data(contentsOf: URL(fileURLWithPath: tempFile.path), options: .mappedIfSafe) {
                                     let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
-                                    account.postbox.mediaBox.storeResourceData(resource.id, data: data, synchronous: true)
+                                    TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data, synchronous: true)
                                     subscriber.putNext(resource)
                                     subscriber.putCompletion()
                                 }
                                 EngineTempBox.shared.dispose(tempFile)
-                            case .progress:
-                                break
+                            case let .progress(value):
+                                if splitsExportProgress {
+                                    uploadStatus?.set(.single(.progress(avatarVideoSplitProgress(.export(value)))))
+                                }
                             default:
                                 break
                             }
@@ -425,6 +452,7 @@ public extension PeerInfoScreenImpl {
         }
         
         let peerId = peer.id
+        let splitsUploadProgress = splitsExportProgress && exportsVideo
         let updateAvatarDisposable = MetaDisposable()
         updateAvatarDisposable.set((videoResource
         |> mapToSignal { videoResource -> Signal<UpdatePeerPhotoStatus, UploadPeerPhotoError> in
@@ -437,7 +465,11 @@ public extension PeerInfoScreenImpl {
             case .complete:
                 uploadStatus?.set(.single(.done))
             case let .progress(value):
-                uploadStatus?.set(.single(.progress(value)))
+                if splitsUploadProgress {
+                    uploadStatus?.set(.single(.progress(avatarVideoSplitProgress(.upload(value)))))
+                } else {
+                    uploadStatus?.set(.single(.progress(value)))
+                }
             }
 
             if case .complete = result {
@@ -802,7 +834,6 @@ extension PeerInfoScreenImpl {
         if self.controllerNode.headerNode.isAvatarExpanded {
             self.controllerNode.headerNode.ignoreCollapse = true
             self.controllerNode.headerNode.updateIsAvatarExpanded(false, transition: .immediate)
-            self.controllerNode.updateNavigationExpansionPresentation(isExpanded: false, animated: true)
         }
         self.controllerNode.scrollNode.view.setContentOffset(CGPoint(), animated: false)
         
@@ -1007,7 +1038,7 @@ extension PeerInfoScreenImpl {
                             case .completed:
                                 if let data = try? Data(contentsOf: URL(fileURLWithPath: tempFile.path), options: .mappedIfSafe) {
                                     let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
-                                    account.postbox.mediaBox.storeResourceData(resource.id, data: data, synchronous: true)
+                                    TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data, synchronous: true)
                                     subscriber.putNext(resource)
                                     subscriber.putCompletion()
                                 }
@@ -1197,7 +1228,7 @@ extension PeerInfoScreenImpl {
                 let signalDisposable = signal.start(next: { next in
                     if let result = next as? TGMediaVideoConversionResult {
                         if let image = result.coverImage, let data = image.jpegData(compressionQuality: 0.7) {
-                            account.postbox.mediaBox.storeResourceData(photoResource.id, data: data)
+                            TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(photoResource.id), data: data)
                         }
                         
                         if let timestamp = videoStartTimestamp {
@@ -1213,7 +1244,7 @@ extension PeerInfoScreenImpl {
                                 } else {
                                     resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
                                 }
-                                account.postbox.mediaBox.storeResourceData(resource.id, data: data, synchronous: true)
+                                TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: data, synchronous: true)
                                 subscriber.putNext(resource)
                                 
                                 EngineTempBox.shared.dispose(tempFile)

@@ -18,6 +18,12 @@ public extension ListSectionComponentChildView {
     }
 }
 
+// Swipe surfaces fade both bordering separators without relaying out the section.
+public protocol ListSectionComponentChildRevealView: ListSectionComponentChildView {
+    var revealOptionsSeparatorAlpha: CGFloat { get }
+    var revealOptionsSeparatorAlphaUpdated: (() -> Void)? { get set }
+}
+
 public final class ListSectionContentView: UIView {
     public final class ItemView: UIView {
         public let contents = ComponentView<Empty>()
@@ -93,6 +99,7 @@ public final class ListSectionContentView: UIView {
     public var automaticallyLayoutExternalContentBackgroundView = true
     
     public var itemViews: [AnyHashable: ItemView] = [:]
+    private var orderedItemIds: [AnyHashable] = []
     private var highlightedItemId: AnyHashable?
     
     private var configuration: Configuration?
@@ -147,9 +154,30 @@ public final class ListSectionContentView: UIView {
             }
         }
     }
+
+    private func revealSeparatorAlpha(at index: Int) -> CGFloat {
+        var alpha: CGFloat = 1.0
+        for adjacentIndex in index ... min(index + 1, self.orderedItemIds.count - 1) {
+            if let view = self.itemViews[self.orderedItemIds[adjacentIndex]]?.contents.view as? ListSectionComponentChildRevealView {
+                alpha = min(alpha, view.revealOptionsSeparatorAlpha)
+            }
+        }
+        return alpha
+    }
+
+    private func updateRevealSeparatorAlphas() {
+        guard let configuration = self.configuration else { return }
+        for (index, id) in self.orderedItemIds.enumerated() {
+            guard let itemView = self.itemViews[id] else { continue }
+            let baseAlpha = (itemView.contents.view as? ListSectionComponentChildView)?.separatorAlpha ?? 1.0
+            let alpha = configuration.displaySeparators && index != self.orderedItemIds.count - 1 ? baseAlpha * self.revealSeparatorAlpha(at: index) : 0.0
+            ComponentTransition.immediate.setAlpha(layer: itemView.separatorLayer, alpha: alpha)
+        }
+    }
     
     public func update(configuration: Configuration, width: CGFloat, leftInset: CGFloat, readyItems: [ReadyItem], transition: ComponentTransition) -> UpdateResult {
         self.configuration = configuration
+        self.orderedItemIds = readyItems.map(\.id)
         
         switch configuration.background {
         case .all, .range:
@@ -220,6 +248,11 @@ public final class ListSectionContentView: UIView {
                             }
                         }
                     }
+                    if let itemComponentView = itemComponentView as? ListSectionComponentChildRevealView {
+                        itemComponentView.revealOptionsSeparatorAlphaUpdated = { [weak self] in
+                            self?.updateRevealSeparatorAlphas()
+                        }
+                    }
                 }
                 var separatorInset: CGFloat = 0.0
                 var itemSeparatorAlpha: CGFloat = 1.0
@@ -258,7 +291,7 @@ public final class ListSectionContentView: UIView {
                 let separatorAlpha: CGFloat
                 if configuration.displaySeparators {
                     if index != readyItems.count - 1 {
-                        separatorAlpha = itemSeparatorAlpha
+                        separatorAlpha = itemSeparatorAlpha * self.revealSeparatorAlpha(at: index)
                     } else {
                         separatorAlpha = 0.0
                     }
@@ -275,6 +308,7 @@ public final class ListSectionContentView: UIView {
         for (id, itemView) in self.itemViews {
             if !validItemIds.contains(id) {
                 removedItemIds.append(id)
+                (itemView.contents.view as? ListSectionComponentChildRevealView)?.revealOptionsSeparatorAlphaUpdated = nil
                 
                 if let itemComponentView = itemView.contents.view, itemComponentView is ListSubSectionComponent.View {
                     itemView.clipsToBounds = true
@@ -461,6 +495,44 @@ public final class ListSectionComponent: Component {
             return self.contentView.itemViews[id]?.contents.view
         }
         
+        /// What `applyTextAccessibility` last described for the header and the footer.
+        private var headerAccessibilitySource: (component: AnyComponent<Empty>, view: UIView)?
+        private var footerAccessibilitySource: (component: AnyComponent<Empty>, view: UIView)?
+        
+        /// A header or footer shows text and VoiceOver reads it as one element, a header with the `.header` trait. A view
+        /// that holds something interactive (a link, a button) is left as it is.
+        fileprivate static func applyTextAccessibility(to view: UIView, traits: UIAccessibilityTraits) {
+            // A text with links ("… Invite >") is one element too: activating it follows its link, and with several
+            // links each is a custom action named by its words.
+            if let textView = view as? ImmediateTextView, textView.tapAttributeAction != nil {
+                let links = textView.accessibilityLinks()
+                textView.isAccessibilityElement = true
+                textView.accessibilityLabel = textView.accessibilityDisplayedText
+                textView.accessibilityTraits = links.isEmpty ? traits : traits.union(.link)
+                if links.count > 1 {
+                    textView.accessibilityCustomActions = links.map { link in
+                        return UIAccessibilityCustomAction(name: link.text, actionHandler: { [weak textView] _ in
+                            guard let textView, let tapAttributeAction = textView.tapAttributeAction else {
+                                return false
+                            }
+                            tapAttributeAction(link.attributes, link.index)
+                            return true
+                        })
+                    }
+                } else {
+                    textView.accessibilityCustomActions = nil
+                }
+                return
+            }
+            let content = view.accessibilityDisplayedContent()
+            if content.hasInteractiveContent || content.texts.isEmpty {
+                return
+            }
+            view.isAccessibilityElement = true
+            view.accessibilityLabel = content.texts.joined(separator: "\n")
+            view.accessibilityTraits = traits
+        }
+        
         func update(component: ListSectionComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             self.component = component
             
@@ -495,11 +567,17 @@ public final class ListSectionComponent: Component {
                         self.addSubview(headerView)
                     }
                     headerTransition.setFrame(view: headerView, frame: CGRect(origin: CGPoint(x: headerSideInset, y: contentHeight), size: headerSize))
+                    // Only when the header content or view changes, not on every update.
+                    if self.headerAccessibilitySource?.component != headerValue || self.headerAccessibilitySource?.view !== headerView {
+                        self.headerAccessibilitySource = (headerValue, headerView)
+                        View.applyTextAccessibility(to: headerView, traits: .header)
+                    }
                 }
                 contentHeight += headerSize.height
             } else {
                 if let header = self.header {
                     self.header = nil
+                    self.headerAccessibilitySource = nil
                     header.view?.removeFromSuperview()
                 }
             }
@@ -588,11 +666,16 @@ public final class ListSectionComponent: Component {
                         self.addSubview(footerView)
                     }
                     footerTransition.setFrame(view: footerView, frame: CGRect(origin: CGPoint(x: headerSideInset, y: contentHeight), size: footerSize))
+                    if self.footerAccessibilitySource?.component != footerValue || self.footerAccessibilitySource?.view !== footerView {
+                        self.footerAccessibilitySource = (footerValue, footerView)
+                        View.applyTextAccessibility(to: footerView, traits: .staticText)
+                    }
                 }
                 contentHeight += footerSize.height
             } else {
                 if let footer = self.footer {
                     self.footer = nil
+                    self.footerAccessibilitySource = nil
                     footer.view?.removeFromSuperview()
                 }
             }

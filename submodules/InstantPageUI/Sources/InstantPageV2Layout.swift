@@ -184,7 +184,8 @@ public struct InstantPageV2CodeBlockItem {
     public var frame: CGRect
     /// Plain, flat band fill. Sourced from `InstantPageTheme.codeBlockBackgroundColor`, which the
     /// message hosts set to the same value they give `tableHeaderColor` — a code block reads as a
-    /// highlighted table row, not as an accent-tinted quote.
+    /// highlighted table row, not as an accent-tinted quote — except in a dark theme's outgoing bubble,
+    /// where that is a white wash and the code takes a darker fill.
     public let backgroundColor: UIColor
     public let language: String?
     /// The language line, laid out at LAYOUT time in block-local coordinates. It used to be built by
@@ -193,6 +194,11 @@ public struct InstantPageV2CodeBlockItem {
     public let languageItem: InstantPageTextItem?
     public let textItem: InstantPageTextItem
     public let inset: UIEdgeInsets
+    /// Zero for a band whose corners a container clips (`InstantPageV2ContainerStyle.codeBlockCornerRadius`).
+    public var cornerRadius: CGFloat = 0.0
+    /// How much further than the paragraph inset the text sits from each side of a band that pads itself, so that a
+    /// page shrunk to its content keeps that room after the code too.
+    public var standalonePadding: CGFloat = 0.0
 }
 
 public struct InstantPageV2ThinkingItem {
@@ -343,6 +349,9 @@ public enum InstantPageV2MediaPlaceholderKind {
 public struct InstantPageV2MediaImageItem {
     public var frame: CGRect
     public let cornerRadius: CGFloat
+    /// The corners `cornerRadius` rounds: a collage cell without a container around it rounds only those on the
+    /// collage's outline.
+    public let roundedCorners: CACornerMask
     public let media: InstantPageMedia
     public let webPage: TelegramMediaWebpage
     public let attributes: [InstantPageImageAttribute]   // always empty for image; kept for symmetry
@@ -351,9 +360,10 @@ public struct InstantPageV2MediaImageItem {
     /// aspect-FILL crop (collage cells). See `InstantPageImageNode.fit`. Default false = crop.
     public let fit: Bool
 
-    public init(frame: CGRect, cornerRadius: CGFloat, media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute], spoiler: Bool = false, fit: Bool = false) {
+    public init(frame: CGRect, cornerRadius: CGFloat, roundedCorners: CACornerMask = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner], media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute], spoiler: Bool = false, fit: Bool = false) {
         self.frame = frame
         self.cornerRadius = cornerRadius
+        self.roundedCorners = roundedCorners
         self.media = media
         self.webPage = webPage
         self.attributes = attributes
@@ -377,6 +387,9 @@ public struct InstantPageV2MediaAudioItem {
 public struct InstantPageV2MediaVideoItem {
     public var frame: CGRect
     public let cornerRadius: CGFloat
+    /// The corners `cornerRadius` rounds: a collage cell without a container around it rounds only those on the
+    /// collage's outline.
+    public let roundedCorners: CACornerMask
     public let media: InstantPageMedia
     public let webPage: TelegramMediaWebpage
     public let attributes: [InstantPageImageAttribute]   // always empty
@@ -385,9 +398,10 @@ public struct InstantPageV2MediaVideoItem {
     /// aspect-FILL crop (collage cells). See `InstantPageImageNode.fit`. Default false = crop.
     public let fit: Bool
 
-    public init(frame: CGRect, cornerRadius: CGFloat, media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute], spoiler: Bool = false, fit: Bool = false) {
+    public init(frame: CGRect, cornerRadius: CGFloat, roundedCorners: CACornerMask = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner], media: InstantPageMedia, webPage: TelegramMediaWebpage, attributes: [InstantPageImageAttribute], spoiler: Bool = false, fit: Bool = false) {
         self.frame = frame
         self.cornerRadius = cornerRadius
+        self.roundedCorners = roundedCorners
         self.media = media
         self.webPage = webPage
         self.attributes = attributes
@@ -438,11 +452,14 @@ public struct InstantPageV2SlideshowItem {
     public var frame: CGRect
     public let medias: [InstantPageMedia]
     public let webPage: TelegramMediaWebpage
+    /// Zero inside a container that clips the page (`InstantPageV2ContainerStyle.minimumMediaCornerRadius`).
+    public let cornerRadius: CGFloat
 
-    public init(frame: CGRect, medias: [InstantPageMedia], webPage: TelegramMediaWebpage) {
+    public init(frame: CGRect, medias: [InstantPageMedia], webPage: TelegramMediaWebpage, cornerRadius: CGFloat = 0.0) {
         self.frame = frame
         self.medias = medias
         self.webPage = webPage
+        self.cornerRadius = cornerRadius
     }
 }
 
@@ -520,13 +537,16 @@ public func layoutInstantPageV2(
     /// `baseDisplaySize / 17` so a rich message follows Settings ▸ Appearance ▸ Text Size like a plain
     /// one. Applied ONCE, to fonts and geometry alike, in `InstantPageV2ScaledLayoutInputs`; `theme`
     /// must therefore be the UNSCALED theme. Default 1.0: every other V2 surface is unchanged.
-    contentScale: CGFloat = 1.0
+    contentScale: CGFloat = 1.0,
+    /// What surrounds the page. A chat message without a bubble has no rounded container to clip full-width media,
+    /// code bands and quotes, so it passes `.bubbleless(…)`. Default `.bubble`: every other V2 surface is unchanged.
+    containerStyle: InstantPageV2ContainerStyle = .bubble
 ) -> InstantPageV2Layout {
     guard case let .Loaded(loadedContent) = webpage.content else {
         return InstantPageV2Layout(contentSize: .zero, items: [], detailsIndices: [])
     }
 
-    var media = instantPage.media.mapValues(EngineMedia.init)
+    var media = instantPage.media
     if let image = loadedContent.image, let id = image.id {
         media[id] = .image(image)
     }
@@ -573,7 +593,8 @@ public func layoutInstantPageV2(
         mediaIndexCounter: 0,
         detailsIndexCounter: 0,
         expandedDetails: expandedDetails,
-        expandedQuotePaths: expandedQuotePaths
+        expandedQuotePaths: expandedQuotePaths,
+        containerStyle: containerStyle
     )
 
     var result = layoutBlockSequence(
@@ -769,6 +790,27 @@ private struct LayoutContext {
     /// Quotes the reader has expanded, keyed by structural block path. Mirrors `expandedDetails`, which
     /// is the same idea keyed by the details block's ordinal index.
     let expandedQuotePaths: Set<[Int]>
+    /// See `layoutInstantPageV2(containerStyle:)`.
+    let containerStyle: InstantPageV2ContainerStyle
+
+    /// The path of the block being laid out when the rich-quote spec lists it as a quote source
+    /// (`InstantPageBlock.isRichQuoteSource`), else nil: its text then carries no quote stamps.
+    var quoteBlockPath: [Int]? = nil
+    /// Set while a table lays out its title or a cell through `layoutBlockSequence`, whose paragraph
+    /// would otherwise be addressed by the sequence's own throwaway path.
+    var quoteNodeOverride: InstantPageTextNodeId? = nil
+
+    /// The cursor that stamps one quotable node's text (see `InstantPageQuoteSource.swift`), or nil
+    /// outside a quote source. Its ids must match `instantPageQuotableNodes`.
+    func quoteSource(_ part: InstantPageTextNodeId.Part, subpath: [Int] = []) -> InstantPageQuoteSourceCursor? {
+        if let quoteNodeOverride = self.quoteNodeOverride {
+            return InstantPageQuoteSourceCursor(node: quoteNodeOverride)
+        }
+        guard let quoteBlockPath = self.quoteBlockPath else {
+            return nil
+        }
+        return InstantPageQuoteSourceCursor(node: InstantPageTextNodeId(blockPath: quoteBlockPath + subpath, part: part))
+    }
 }
 
 // MARK: - Driver
@@ -807,6 +849,9 @@ private func layoutBlockSequence(
             continue
         }
         var spacing = spacingBetweenBlocks(upper: previousBlock, lower: block, kind: kind, metrics: context.metrics)
+        if context.containerStyle.minimumMediaCornerRadius > 0.0 {
+            spacing = instantPageV2BlockGap(spacing, upper: previousBlock, lower: block, style: context.containerStyle)
+        }
         // Leading page edge: give back the inset the host applied around the whole page. Clamped at
         // 0 — a flush first block (cover, anchor) has no padding here to give.
         if previousBlock == nil && kind == .topLevel {
@@ -954,6 +999,10 @@ private func layoutBlock(
     context: inout LayoutContext
 ) -> [InstantPageV2LaidOutItem] {
     let _ = isLast  // reserved for Tasks 7–9
+    // A cover's inner block is not a quote source: the spec's table does not list covers.
+    let savedQuoteBlockPath = context.quoteBlockPath
+    context.quoteBlockPath = (!isCover && block.isRichQuoteSource) ? pathPrefix : nil
+    defer { context.quoteBlockPath = savedQuoteBlockPath }
     switch block {
     case let .cover(inner):
         return layoutBlock(inner, boundingWidth: boundingWidth, horizontalInset: horizontalInset, kind: kind,
@@ -1481,7 +1530,7 @@ private func layoutDetails(
     // The header reads as a control, not body copy — semibold as a BASELINE weight, so an explicit
     // `.bold` inside the title still wins over it.
     titleStyleStack.push(.semibold)
-    let titleString = attributedStringForRichText(title, styleStack: titleStyleStack, formatDate: context.formatDate)
+    let titleString = attributedStringForRichText(title, styleStack: titleStyleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.title))
     let (measuredTitleTextItem, _, _) = layoutTextItem(
         titleString,
         boundingWidth: boundingWidth - horizontalInset * 2.0 - context.metrics.detailsChevronReserve,   // reserve right edge for chevron
@@ -1550,6 +1599,7 @@ private func layoutDetails(
 private struct V2TableRow {
     var minColumnWidths: [Int: CGFloat]
     var maxColumnWidths: [Int: CGFloat]
+    var unbreakableColumnWidths: [Int: CGFloat]
 }
 
 let v2TableCellInsets: UIEdgeInsets = {
@@ -1563,12 +1613,17 @@ let v2TableCornerRadius: CGFloat = 10.0
 // padding (v2TableCellInsets.left + .right), leaving ~34pt of text. Below this a column
 // is too narrow to read, so the table scrolls horizontally instead.
 let v2TableMinCompressedColumnWidth: CGFloat = 60.0
+// A column's compress-to-fit floor is its widest unbreakable segment (plus padding), but at most
+// this fraction of the width the columns may fill: one very long token (a URL) then wraps instead
+// of widening its column past half the bubble, so at least two columns are always in view.
+let v2TableMaxColumnFloorFraction: CGFloat = 0.5
 
 /// Second-pass column solver for a table whose columns' minimum (maximally-wrapped)
 /// widths overflow `target`. Compresses columns proportionally to their natural
-/// (`maxColumnWidths`) widths, clamping any column that would fall below `floor`
-/// (a column narrower than the floor keeps its natural width) and redistributing the
-/// remaining shrink among the still-scalable columns (water-filling).
+/// (`maxColumnWidths`) widths, clamping any column that would fall below its `floors` entry
+/// (a column narrower than its floor keeps its natural width) and redistributing the
+/// remaining shrink among the still-scalable columns (water-filling). Floors must be whole
+/// points: scaled widths are rounded down, which then can never cross one.
 ///
 /// Returns the per-column widths plus whether they fit within `target`:
 /// - `fits == true`: the widths sum exactly to `target` (caller shows a non-scrolling table).
@@ -1580,7 +1635,7 @@ private func compressTableColumnsToFit(
     maxColumnWidths: [Int: CGFloat],
     columnCount: Int,
     target: CGFloat,
-    floor: CGFloat
+    floors: [Int: CGFloat]
 ) -> (widths: [Int: CGFloat], fits: Bool)? {
     if columnCount <= 0 {
         return nil
@@ -1591,7 +1646,7 @@ private func compressTableColumnsToFit(
     var flooredTotal: CGFloat = 0.0
     for i in 0 ..< columnCount {
         let natural = maxColumnWidths[i] ?? 1.0
-        let f = min(floor, natural)
+        let f = min(floors[i] ?? 0.0, natural)
         effectiveFloor[i] = f
         flooredTotal += f
     }
@@ -1610,7 +1665,7 @@ private func compressTableColumnsToFit(
         var scalableNatural: CGFloat = 0.0
         for i in 0 ..< columnCount {
             if pinned.contains(i) {
-                fixedWidth += effectiveFloor[i] ?? floor
+                fixedWidth += effectiveFloor[i] ?? 0.0
             } else {
                 scalableNatural += maxColumnWidths[i] ?? 1.0
             }
@@ -1622,7 +1677,7 @@ private func compressTableColumnsToFit(
         var newlyPinned = Set<Int>()
         for i in 0 ..< columnCount where !pinned.contains(i) {
             let natural = maxColumnWidths[i] ?? 1.0
-            if natural * scale < (effectiveFloor[i] ?? floor) {
+            if natural * scale < (effectiveFloor[i] ?? 0.0) {
                 newlyPinned.insert(i)
             }
         }
@@ -1637,7 +1692,7 @@ private func compressTableColumnsToFit(
     var scalableNatural: CGFloat = 0.0
     for i in 0 ..< columnCount {
         if pinned.contains(i) {
-            fixedWidth += effectiveFloor[i] ?? floor
+            fixedWidth += effectiveFloor[i] ?? 0.0
         } else {
             scalableNatural += maxColumnWidths[i] ?? 1.0
         }
@@ -1650,18 +1705,18 @@ private func compressTableColumnsToFit(
     for i in 0 ..< columnCount {
         let width: CGFloat
         if pinned.contains(i) {
-            width = effectiveFloor[i] ?? floor
+            width = effectiveFloor[i] ?? 0.0
         } else {
-            width = round((maxColumnWidths[i] ?? 1.0) * scale)
+            width = floor((maxColumnWidths[i] ?? 1.0) * scale)
             lastScalableIndex = i
         }
         result[i] = width
         assigned += width
     }
 
-    // Correct sub-pixel rounding drift so the widths sum to exactly `target`. Dump it on
-    // the last scalable column (well above its floor) so no pinned column is pushed below
-    // the floor; fall back to the last column if every column was pinned.
+    // Correct sub-pixel rounding drift so the widths sum to exactly `target`. Rounding down
+    // makes it non-negative, so dumping it on the last scalable column never pushes any column
+    // below its floor; fall back to the last column if every column was pinned.
     let drift = target - assigned
     let driftIndex = lastScalableIndex ?? (columnCount - 1)
     if drift != 0.0, let current = result[driftIndex] {
@@ -1669,6 +1724,109 @@ private func compressTableColumnsToFit(
     }
 
     return (result, true)
+}
+
+/// Width allocation for a V2 table: per-column widths and the resulting grid width (`totalWidth`,
+/// borders included), from the columns' minimum (maximally-wrapped at spaces), natural and
+/// unbreakable (`v2WidestUnbreakableSegmentWidth`) widths, padding included, after the colspan
+/// constraints. `totalWidth > contentBoundingWidth` means the table scrolls horizontally.
+func v2TableColumnWidths(
+    minColumnWidths: [Int: CGFloat],
+    maxColumnWidths: [Int: CGFloat],
+    unbreakableColumnWidths: [Int: CGFloat],
+    columnCount: Int,
+    contentBoundingWidth: CGFloat,
+    borderWidth: CGFloat,
+    minCompressedColumnWidth: CGFloat
+) -> (widths: [Int: CGFloat], totalWidth: CGFloat) {
+    let maxContentWidth = contentBoundingWidth - borderWidth
+    var availableWidth = maxContentWidth
+    var maxTotalWidth: CGFloat = 0.0
+    for i in 0 ..< columnCount {
+        availableWidth -= minColumnWidths[i] ?? 0.0
+        maxTotalWidth += maxColumnWidths[i] ?? 0.0
+    }
+
+    // Compress-to-fit floor per column: its widest unbreakable segment plus padding, at least
+    // `minCompressedColumnWidth` and at most the cap. Whole points (the cap included, so two capped
+    // columns still fit), so the solver's rounding cannot leave a column a fraction short of its word.
+    // The natural widths the solver scales are held at the minimum and the unbreakable width, which
+    // colspan growth (rounded differently for each) can leave above the natural width; the floor would
+    // otherwise drop to it.
+    let floorCap = floor(maxContentWidth * v2TableMaxColumnFloorFraction)
+    var compressedFloors: [Int: CGFloat] = [:]
+    var compressedNaturalWidths: [Int: CGFloat] = [:]
+    for i in 0 ..< columnCount {
+        let unbreakable = unbreakableColumnWidths[i] ?? minColumnWidths[i] ?? 0.0
+        compressedFloors[i] = ceil(max(minCompressedColumnWidth, min(unbreakable, floorCap)))
+        compressedNaturalWidths[i] = max(maxColumnWidths[i] ?? 1.0, minColumnWidths[i] ?? 0.0, unbreakable)
+    }
+
+    var totalWidth: CGFloat
+    var finalColumnWidths: [Int: CGFloat]
+    if availableWidth > 0 {
+        // Case A: the columns' minimum widths fit; grow them from min toward their
+        // natural width (proportional to maxWidth) to fill the available width.
+        finalColumnWidths = minColumnWidths
+        var distributedWidth = availableWidth
+        for i in 0 ..< finalColumnWidths.count {
+            var width = finalColumnWidths[i]!
+            let maxWidth = maxColumnWidths[i]!
+            let growth = min(round(availableWidth * maxWidth / maxTotalWidth), distributedWidth)
+            width += growth
+            distributedWidth -= growth
+            finalColumnWidths[i] = width
+        }
+        totalWidth = contentBoundingWidth
+    } else if let compressed = compressTableColumnsToFit(
+        maxColumnWidths: compressedNaturalWidths,
+        columnCount: columnCount,
+        target: maxContentWidth,
+        floors: compressedFloors
+    ) {
+        // Case B, second pass: the minimum (maximally-wrapped) widths overflow, so compress
+        // columns proportionally down to their floors: each column's widest word (capped), so
+        // the table scrolls rather than break words mid-word.
+        finalColumnWidths = compressed.widths
+        if compressed.fits {
+            // Fits after compression → fill the content width, no horizontal scroll.
+            totalWidth = contentBoundingWidth
+        } else {
+            // Even at their floors the columns overflow: scroll at the floored width, every
+            // word whole, rather than at the wider natural widths.
+            var compressedTotal: CGFloat = 0.0
+            for i in 0 ..< columnCount {
+                compressedTotal += compressed.widths[i] ?? 0.0
+            }
+            totalWidth = compressedTotal + borderWidth
+        }
+    } else {
+        // Degenerate table with no columns: keep natural widths (unchanged behavior).
+        finalColumnWidths = maxColumnWidths
+        totalWidth = maxTotalWidth + borderWidth
+    }
+
+    return (finalColumnWidths, totalWidth)
+}
+
+/// The widest run of `string` between two line-break opportunities (UAX #14, the rules CoreText
+/// wraps by), trailing whitespace excluded: the narrowest width the text wraps to without breaking
+/// inside a word. Unlike `layoutTextItem(minimizeWidth: true)`, which splits at spaces only, this
+/// lets CJK text break between characters and Thai between dictionary words.
+func v2WidestUnbreakableSegmentWidth(_ string: NSAttributedString) -> CGFloat {
+    let text = string.string as CFString
+    let length = CFStringGetLength(text)
+    guard length > 0, let tokenizer = CFStringTokenizerCreate(kCFAllocatorDefault, text, CFRangeMake(0, length), kCFStringTokenizerUnitLineBreak, nil) else {
+        return 0.0
+    }
+    let typesetter = CTTypesetterCreateWithAttributedString(string)
+    var widest: CGFloat = 0.0
+    while !CFStringTokenizerAdvanceToNextToken(tokenizer).isEmpty {
+        let line = CTTypesetterCreateLine(typesetter, CFStringTokenizerGetCurrentTokenRange(tokenizer))
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil) - CTLineGetTrailingWhitespaceWidth(line)
+        widest = max(widest, CGFloat(width))
+    }
+    return widest
 }
 
 private func layoutTable(
@@ -1685,6 +1843,9 @@ private func layoutTable(
     // captured, and these are the only two table constants that scale with the content.
     let cellInsets = compact ? context.metrics.tableCompactCellInsets : context.metrics.tableCellInsets
     let minCompressedColumnWidth = context.metrics.tableMinCompressedColumnWidth
+    // The title and the cells are laid out through `layoutBlockSequence`, which addresses its
+    // paragraph by a path of its own; they are stamped with the table's ids instead.
+    let tableQuotePath = context.quoteBlockPath
 
     if rows.isEmpty {
         return []
@@ -1705,7 +1866,7 @@ private func layoutTable(
     var tableRows: [V2TableRow] = []
     var columnCount: Int = 0
 
-    var columnSpans: [Range<Int>: (CGFloat, CGFloat)] = [:]
+    var columnSpans: [Range<Int>: (CGFloat, CGFloat, CGFloat)] = [:]
     var rowSpans: [Int: [(Int, Int)]] = [:]
 
     // Pass 1: measure min/max intrinsic width per cell.
@@ -1713,6 +1874,7 @@ private func layoutTable(
     for row in rows {
         var minColumnWidths: [Int: CGFloat] = [:]
         var maxColumnWidths: [Int: CGFloat] = [:]
+        var unbreakableColumnWidths: [Int: CGFloat] = [:]
         var i: Int = 0
 
         for cell in row.cells {
@@ -1729,6 +1891,7 @@ private func layoutTable(
 
             var minCellWidth: CGFloat = 1.0
             var maxCellWidth: CGFloat = 1.0
+            var unbreakableCellWidth: CGFloat = 1.0
             if let text = cell.text {
                 // Mirror V1 (`InstantPageTableItem.layoutTableItem`): `attributedStringForRichText`'s
                 // boundingWidth sizes inline attachments to `cellWidthLimit - totalCellPadding`, while
@@ -1754,20 +1917,23 @@ private func layoutTable(
                 ).0 {
                     maxCellWidth = max(minCellWidth, longestItem.effectiveWidth() + totalCellPadding)
                 }
+                unbreakableCellWidth = min(minCellWidth, ceil(v2WidestUnbreakableSegmentWidth(attrStr)) + totalCellPadding)
             }
 
             if cell.colspan > 1 {
                 minColumnWidths[i] = 1.0
                 maxColumnWidths[i] = 1.0
+                unbreakableColumnWidths[i] = 1.0
                 let spanRange = i ..< i + Int(cell.colspan)
-                if let (minSW, maxSW) = columnSpans[spanRange] {
-                    columnSpans[spanRange] = (max(minSW, minCellWidth), max(maxSW, maxCellWidth))
+                if let (minSW, maxSW, unbreakableSW) = columnSpans[spanRange] {
+                    columnSpans[spanRange] = (max(minSW, minCellWidth), max(maxSW, maxCellWidth), max(unbreakableSW, unbreakableCellWidth))
                 } else {
-                    columnSpans[spanRange] = (minCellWidth, maxCellWidth)
+                    columnSpans[spanRange] = (minCellWidth, maxCellWidth, unbreakableCellWidth)
                 }
             } else {
                 minColumnWidths[i] = minCellWidth
                 maxColumnWidths[i] = maxCellWidth
+                unbreakableColumnWidths[i] = unbreakableCellWidth
             }
 
             let colspan = cell.colspan > 1 ? Int(clamping: cell.colspan) : 1
@@ -1783,38 +1949,39 @@ private func layoutTable(
 
             i += colspan
         }
-        tableRows.append(V2TableRow(minColumnWidths: minColumnWidths, maxColumnWidths: maxColumnWidths))
+        tableRows.append(V2TableRow(minColumnWidths: minColumnWidths, maxColumnWidths: maxColumnWidths, unbreakableColumnWidths: unbreakableColumnWidths))
         columnCount = max(columnCount, i)
         r += 1
     }
 
     // Aggregate column min/max across all rows.
-    let maxContentWidth = contentBoundingWidth - borderWidth
-    var availableWidth = maxContentWidth
     var minColumnWidths: [Int: CGFloat] = [:]
     var maxColumnWidths: [Int: CGFloat] = [:]
-    var maxTotalWidth: CGFloat = 0.0
+    var unbreakableColumnWidths: [Int: CGFloat] = [:]
     for i in 0 ..< columnCount {
         var minWidth: CGFloat = 1.0
         var maxWidth: CGFloat = 1.0
+        var unbreakableWidth: CGFloat = 1.0
         for row in tableRows {
             if let w = row.minColumnWidths[i] { minWidth = max(minWidth, w) }
             if let w = row.maxColumnWidths[i] { maxWidth = max(maxWidth, w) }
+            if let w = row.unbreakableColumnWidths[i] { unbreakableWidth = max(unbreakableWidth, w) }
         }
         minColumnWidths[i] = minWidth
         maxColumnWidths[i] = maxWidth
-        availableWidth -= minWidth
-        maxTotalWidth += maxWidth
+        unbreakableColumnWidths[i] = unbreakableWidth
     }
 
     // Apply colspan constraints.
     for (range, span) in columnSpans {
-        let (minSpanWidth, maxSpanWidth) = span
+        let (minSpanWidth, maxSpanWidth, unbreakableSpanWidth) = span
         var minWidth: CGFloat = 0.0
         var maxWidth: CGFloat = 0.0
+        var unbreakableWidth: CGFloat = 0.0
         for i in range {
             if let w = minColumnWidths[i] { minWidth += w }
             if let w = maxColumnWidths[i] { maxWidth += w }
+            if let w = unbreakableColumnWidths[i] { unbreakableWidth += w }
         }
         if minWidth < minSpanWidth {
             let delta = minSpanWidth - minWidth
@@ -1822,7 +1989,6 @@ private func layoutTable(
                 if let w = minColumnWidths[i] {
                     let growth = floor(delta / CGFloat(range.count))
                     minColumnWidths[i] = w + growth
-                    availableWidth -= growth
                 }
             }
         }
@@ -1832,55 +1998,30 @@ private func layoutTable(
                 if let w = maxColumnWidths[i] {
                     let growth = round(delta / CGFloat(range.count))
                     maxColumnWidths[i] = w + growth
-                    maxTotalWidth += growth
+                }
+            }
+        }
+        if unbreakableWidth < unbreakableSpanWidth {
+            // Rounded up, unlike the minimum's growth: the spanned columns' floors must cover the
+            // spanning cell's widest segment entirely.
+            let delta = unbreakableSpanWidth - unbreakableWidth
+            for i in range {
+                if let w = unbreakableColumnWidths[i] {
+                    unbreakableColumnWidths[i] = w + ceil(delta / CGFloat(range.count))
                 }
             }
         }
     }
 
-    // Width allocation: choose per-column widths and the resulting grid width.
-    var totalWidth: CGFloat
-    var finalColumnWidths: [Int: CGFloat]
-    if availableWidth > 0 {
-        // Case A: the columns' minimum widths fit; grow them from min toward their
-        // natural width (proportional to maxWidth) to fill the available width.
-        finalColumnWidths = minColumnWidths
-        var distributedWidth = availableWidth
-        for i in 0 ..< finalColumnWidths.count {
-            var width = finalColumnWidths[i]!
-            let maxWidth = maxColumnWidths[i]!
-            let growth = min(round(availableWidth * maxWidth / maxTotalWidth), distributedWidth)
-            width += growth
-            distributedWidth -= growth
-            finalColumnWidths[i] = width
-        }
-        totalWidth = contentBoundingWidth
-    } else if let compressed = compressTableColumnsToFit(
+    let (finalColumnWidths, totalWidth) = v2TableColumnWidths(
+        minColumnWidths: minColumnWidths,
         maxColumnWidths: maxColumnWidths,
+        unbreakableColumnWidths: unbreakableColumnWidths,
         columnCount: columnCount,
-        target: maxContentWidth,
-        floor: minCompressedColumnWidth
-    ) {
-        // Case B, second pass: the minimum (maximally-wrapped) widths overflow, so compress
-        // columns proportionally down to the floor.
-        finalColumnWidths = compressed.widths
-        if compressed.fits {
-            // Fits after compression → fill the content width, no horizontal scroll.
-            totalWidth = contentBoundingWidth
-        } else {
-            // Even at the floor the columns overflow: still scroll, but at the compressed
-            // (floored) width — far narrower than the natural widths.
-            var compressedTotal: CGFloat = 0.0
-            for i in 0 ..< columnCount {
-                compressedTotal += compressed.widths[i] ?? 0.0
-            }
-            totalWidth = compressedTotal + borderWidth
-        }
-    } else {
-        // Degenerate table with no columns: keep natural widths (unchanged behavior).
-        finalColumnWidths = maxColumnWidths
-        totalWidth = maxTotalWidth + borderWidth
-    }
+        contentBoundingWidth: contentBoundingWidth,
+        borderWidth: borderWidth,
+        minCompressedColumnWidth: minCompressedColumnWidth
+    )
 
     // Pass 2 & 3: produce per-cell frames + sub-layouts.
     // Private struct to hold an in-progress cell before row height is known.
@@ -1913,7 +2054,8 @@ private func layoutTable(
         var k: Int = 0
         var rowCells: [PendingCell] = []
 
-        for cell in row.cells {
+        // `cellIndex` (the index in `row.cells`) is the cell's quote id; `k` is its grid column.
+        for (cellIndex, cell) in row.cells.enumerated() {
             // Skip columns occupied by row spans.
             if let cells = awaitingSpanCells[i] {
                 for colAndCell in cells {
@@ -1946,6 +2088,8 @@ private func layoutTable(
             if let cellText = cell.text {
                 let cellContentWidth = cellWidth - totalCellPadding
                 if cellContentWidth > 0.0 {
+                    let savedQuoteNodeOverride = context.quoteNodeOverride
+                    context.quoteNodeOverride = tableQuotePath.flatMap { InstantPageTextNodeId(blockPath: $0, part: .cell(row: i, column: cellIndex)) }
                     let cellLayout = layoutBlockSequence(
                         [.paragraph(cellText)],
                         boundingWidth: cellContentWidth,
@@ -1953,6 +2097,7 @@ private func layoutTable(
                         kind: .cell,
                         context: &context
                     )
+                    context.quoteNodeOverride = savedQuoteNodeOverride
                     stampMarkdownContext(cellLayout.items, kind: .tableCell(row: i, column: k, isHeader: cell.header))
                     subLayout = cellLayout
                     subLayoutHeight = cellLayout.contentSize.height
@@ -2171,6 +2316,8 @@ private func layoutTable(
     if case .empty = title {
         // no title
     } else {
+        let savedQuoteNodeOverride = context.quoteNodeOverride
+        context.quoteNodeOverride = tableQuotePath.flatMap { InstantPageTextNodeId(blockPath: $0, part: .title) }
         let titleLayout = layoutBlockSequence(
             [.paragraph(title)],
             boundingWidth: totalWidth - cellInsets.left * 2.0,
@@ -2178,6 +2325,7 @@ private func layoutTable(
             kind: .cell,
             context: &context
         )
+        context.quoteNodeOverride = savedQuoteNodeOverride
         titleSubLayout = titleLayout
         let titleHeight = titleLayout.contentSize.height + cellInsets.top + cellInsets.bottom
         titleFrame = CGRect(x: 0.0, y: 0.0, width: totalWidth, height: titleHeight)
@@ -2246,7 +2394,7 @@ private func layoutCaptionAndCredit(
         y += metrics.captionTopPad
         let styleStack = InstantPageTextStyleStack()
         setupStyleStack(styleStack, theme: context.theme, category: .caption, link: false)
-        let attributedString = attributedStringForRichText(caption.text, styleStack: styleStack, formatDate: context.formatDate)
+        let attributedString = attributedStringForRichText(caption.text, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.captionText))
         let (textItem, captionItems, captionSize) = layoutTextItem(
             attributedString,
             boundingWidth: boundingWidth - horizontalInset * 2.0,
@@ -2272,7 +2420,7 @@ private func layoutCaptionAndCredit(
         }
         let styleStack = InstantPageTextStyleStack()
         setupStyleStack(styleStack, theme: context.theme, category: .credit, link: false)
-        let attributedString = attributedStringForRichText(caption.credit, styleStack: styleStack, formatDate: context.formatDate)
+        let attributedString = attributedStringForRichText(caption.credit, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.captionCredit))
         let (_, creditItems, creditSize) = layoutTextItem(
             attributedString,
             boundingWidth: boundingWidth - horizontalInset * 2.0,
@@ -2318,7 +2466,8 @@ private func instantPageV2MediaFrame(
     cornerRadius: CGFloat,
     boundingWidth: CGFloat,
     horizontalInset: CGFloat,
-    capHeight: Bool = false
+    capHeight: Bool = false,
+    bleeds: Bool = true
 ) -> (frame: CGRect, scaledSize: CGSize, cornerRadius: CGFloat) {
     let availableWidth = flush ? boundingWidth : (boundingWidth - horizontalInset * 2.0)
     var scaledSize: CGSize
@@ -2347,7 +2496,7 @@ private func instantPageV2MediaFrame(
         // always trips this; a genuinely smaller image does not. (availableWidth == boundingWidth
         // in the flush branch, so the bleed below extends past the full bounding width.)
         let fillsWidth = scaledSize.width >= availableWidth - 1.0
-        let frameWidth = fillsWidth ? boundingWidth + instantPageV2MediaEdgeBleed : scaledSize.width
+        let frameWidth = fillsWidth ? boundingWidth + (bleeds ? instantPageV2MediaEdgeBleed : 0.0) : scaledSize.width
         let frame = CGRect(x: 0.0, y: 0.0, width: frameWidth, height: scaledSize.height)
         return (frame, scaledSize, 0.0)
     } else {
@@ -2377,9 +2526,10 @@ private func layoutTypedMediaWithCaption(
         cornerRadius: cornerRadius,
         boundingWidth: boundingWidth,
         horizontalInset: horizontalInset,
-        capHeight: capHeight
+        capHeight: capHeight,
+        bleeds: context.containerStyle.mediaBleeds
     )
-    var result: [InstantPageV2LaidOutItem] = [produceItem(mediaFrame, effectiveCornerRadius)]
+    var result: [InstantPageV2LaidOutItem] = [produceItem(mediaFrame, instantPageV2MediaCornerRadius(effectiveCornerRadius, style: context.containerStyle))]
 
     let (captionItems, captionHeight) = layoutCaptionAndCredit(
         caption,
@@ -2451,9 +2601,12 @@ private func layoutCollage(
     for (i, block) in innerBlocks.enumerated() {
         guard i < mosaic.count else { break }
         let (cellFrame, position) = mosaic[i]
+        // With no rounded container around the page, the collage is rounded like an album in the chat: its outline as
+        // much as any other media block, the corners between its cells square, nothing bleeding past the right edge.
+        let cellRoundedCorners = instantPageV2CollageCellRoundedCorners(top: position.contains(.top), bottom: position.contains(.bottom), left: position.contains(.left), right: position.contains(.right))
         // Right-edge cells bleed 4pt so the bubble's rounded clip leaves no trailing sliver.
         var frame = cellFrame
-        if position.contains(.right) {
+        if position.contains(.right) && context.containerStyle.mediaBleeds {
             frame.size.width += instantPageV2MediaEdgeBleed
         }
         switch block {
@@ -2463,13 +2616,13 @@ private func layoutCollage(
             context.mediaIndexCounter += 1
             let mediaUrl: InstantPageUrlItem? = url.flatMap { InstantPageUrlItem(url: $0, webpageId: webpageId) }
             let media = InstantPageMedia(index: mediaIndex, media: .image(image), url: mediaUrl, caption: blockCaption.text, credit: blockCaption.credit)
-            result.append(.mediaImage(InstantPageV2MediaImageItem(frame: frame, cornerRadius: 0.0, media: media, webPage: webpage, attributes: [], spoiler: spoiler)))
+            result.append(.mediaImage(InstantPageV2MediaImageItem(frame: frame, cornerRadius: context.containerStyle.minimumMediaCornerRadius, roundedCorners: cellRoundedCorners, media: media, webPage: webpage, attributes: [], spoiler: spoiler)))
         case let .video(id, blockCaption, _, _, spoiler):
             guard case let .file(file) = context.media[id] else { continue }
             let mediaIndex = context.mediaIndexCounter
             context.mediaIndexCounter += 1
             let media = InstantPageMedia(index: mediaIndex, media: .file(file), url: nil, caption: blockCaption.text, credit: blockCaption.credit)
-            result.append(.mediaVideo(InstantPageV2MediaVideoItem(frame: frame, cornerRadius: 0.0, media: media, webPage: webpage, attributes: [], spoiler: spoiler)))
+            result.append(.mediaVideo(InstantPageV2MediaVideoItem(frame: frame, cornerRadius: context.containerStyle.minimumMediaCornerRadius, roundedCorners: cellRoundedCorners, media: media, webPage: webpage, attributes: [], spoiler: spoiler)))
         default:
             continue
         }
@@ -2542,7 +2695,8 @@ private func layoutSlideshow(
     result.append(.slideshow(InstantPageV2SlideshowItem(
         frame: CGRect(x: 0.0, y: 0.0, width: boundingWidth, height: height),
         medias: medias,
-        webPage: context.webpage
+        webPage: context.webpage,
+        cornerRadius: context.containerStyle.minimumMediaCornerRadius
     )))
 
     let (captionItems, _) = layoutCaptionAndCredit(caption, offset: height, boundingWidth: boundingWidth, horizontalInset: horizontalInset, context: &context)
@@ -2566,12 +2720,13 @@ private func layoutMediaWithCaption(
         flush: flush,
         cornerRadius: cornerRadius,
         boundingWidth: boundingWidth,
-        horizontalInset: horizontalInset
+        horizontalInset: horizontalInset,
+        bleeds: context.containerStyle.mediaBleeds
     )
     let placeholderItem = InstantPageV2MediaPlaceholderItem(
         frame: placeholderFrame,
         kind: kind,
-        cornerRadius: effectiveCornerRadius
+        cornerRadius: instantPageV2MediaCornerRadius(effectiveCornerRadius, style: context.containerStyle)
     )
 
     var result: [InstantPageV2LaidOutItem] = [.mediaPlaceholder(placeholderItem)]
@@ -2616,7 +2771,7 @@ private func layoutSimpleText(
 ) -> [InstantPageV2LaidOutItem] {
     let styleStack = InstantPageTextStyleStack()
     setupStyleStack(styleStack, theme: context.theme, category: category, link: false)
-    let attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
+    let attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.text))
     let (_, items, _) = layoutTextItem(
         attributedString,
         boundingWidth: boundingWidth - horizontalInset * 2.0,
@@ -2637,7 +2792,7 @@ private func layoutHeading(
 ) -> [InstantPageV2LaidOutItem] {
     let styleStack = InstantPageTextStyleStack()
     setupStyleStack(styleStack, theme: context.theme, attributes: context.theme.headingTextAttributes(level: level, link: false))
-    let attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
+    let attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.text))
     let (_, items, _) = layoutTextItem(
         attributedString,
         boundingWidth: boundingWidth - horizontalInset * 2.0,
@@ -2668,7 +2823,17 @@ private func layoutParagraph(
     // Deliberately NOT passed as `boundingWidth`: that parameter also drives the inline-IMAGE clamp
     // (`fittedToWidthOrSmaller`), which has never been active on this path, and switching it on would
     // silently resize existing inline images.
-    let attributedString = attributedStringForRichText(text, styleStack: styleStack, inlineButtonMaxWidth: boundingWidth - horizontalInset * 2.0, formatDate: context.formatDate)
+    let attributedString = attributedStringForRichText(text, styleStack: styleStack, inlineButtonMaxWidth: boundingWidth - horizontalInset * 2.0, formatDate: context.formatDate, quoteSource: context.quoteSource(.text))
+
+    if attributedString.length == 0 {
+        let lineString = attributedStringForRichText(.plain("\u{200b}"), styleStack: styleStack, formatDate: context.formatDate)
+        let (_, _, lineSize) = layoutTextItem(
+            lineString,
+            boundingWidth: boundingWidth - horizontalInset * 2.0,
+            offset: CGPoint(x: horizontalInset, y: 0.0)
+        )
+        return [.anchor(InstantPageV2AnchorItem(frame: CGRect(x: horizontalInset, y: 0.0, width: 0.0, height: lineSize.height), name: ""))]
+    }
 
     let (_, items, _) = layoutTextItem(
         attributedString,
@@ -2799,7 +2964,7 @@ private func layoutCodeBlock(
     styleStack.push(.fontSize(context.metrics.codeBlockFontSize))
     // `attributedStringForRichText` returns an immutable `NSAttributedString`, so take a mutable copy to
     // overlay onto — the same move V1's `attributedStringForPreformattedText` makes.
-    let highlightedString = (attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
+    let highlightedString = (attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.text))
         .mutableCopy() as! NSMutableAttributedString)
     // Overlay the cached syntax highlight. `cachedMessageSyntaxHighlight` has been stored on the layout
     // context — and read by nothing — since V2 was written, so V2 code blocks rendered plain while V1's
@@ -2808,9 +2973,18 @@ private func layoutCodeBlock(
                                     cache: context.cachedMessageSyntaxHighlight)
     let attributedString: NSAttributedString = highlightedString
 
+    // The code text's x is the PARAGRAPH inset measured from the band's leading edge, which the
+    // bleed moved outward.
+    let bandFrame = instantPageV2CodeBandFrame(boundingWidth: boundingWidth, horizontalInset: horizontalInset,
+                                               bleed: bleed, height: 0.0)
+    // A band that bleeds into no container and has no paragraph inset to give its text pads it itself, on both
+    // sides, and is rounded, since nothing clips it (`InstantPageV2ContainerStyle`).
+    let standalonePadding = instantPageV2CodeBandStandalonePadding(bleed: bleed, horizontalInset: horizontalInset, bandMinX: bandFrame.minX, style: context.containerStyle)
+    let localTextX = horizontalInset - bandFrame.minX + standalonePadding
+
     // The text measure is the paragraph measure at this level — the same width a sibling paragraph
     // gets, which is what makes the two align on BOTH edges.
-    let innerWidth = boundingWidth - horizontalInset * 2.0
+    let innerWidth = boundingWidth - horizontalInset * 2.0 - standalonePadding * 2.0
 
     // The bold language line, when present. It mirrors the QUOTE AUTHOR's derivation — the caption
     // category's family and colour, pushed to bold at the paragraph size — rather than carrying a
@@ -2857,12 +3031,7 @@ private func layoutCodeBlock(
     let topPad = max(0.0, verticalInset - (hasLanguageLine ? languageOverheadTop : codeOverheads.top))
     let bottomPad = max(0.0, verticalInset - codeOverheads.bottom)
 
-    // The code text's x is the PARAGRAPH inset measured from the band's leading edge, which the
-    // bleed moved outward. Both text items are in block-local coordinates.
-    let bandFrame = instantPageV2CodeBandFrame(boundingWidth: boundingWidth, horizontalInset: horizontalInset,
-                                               bleed: bleed, height: 0.0)
-    let localTextX = horizontalInset - bandFrame.minX
-
+    // Both text items are in block-local coordinates.
     var y = topPad
     if let item = languageItem {
         item.frame = CGRect(x: localTextX, y: y, width: item.frame.width, height: item.frame.height)
@@ -2880,7 +3049,9 @@ private func layoutCodeBlock(
         language: language,
         languageItem: languageItem,
         textItem: textItem,
-        inset: UIEdgeInsets(top: topPad, left: localTextX, bottom: bottomPad, right: localTextX)
+        inset: UIEdgeInsets(top: topPad, left: localTextX, bottom: bottomPad, right: localTextX),
+        cornerRadius: standalonePadding > 0.0 ? context.containerStyle.codeBlockCornerRadius : 0.0,
+        standalonePadding: standalonePadding
     ))]
 }
 
@@ -2922,7 +3093,7 @@ private func layoutThinking(
     )
     let styleStack = InstantPageTextStyleStack()
     setupStyleStack(styleStack, theme: context.theme, attributes: dimmedAttributes)
-    let attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
+    let attributedString = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.text))
 
     // Mirror a normal `.text` item's sizing: lay the text out flush (offset .zero) and put the page
     // inset onto the BLOCK frame, so the `.thinking` item's frame == a `.text` item's frame
@@ -3149,7 +3320,7 @@ private func layoutBlockQuote(
         // from the body again at the reader's larger font sizes. Pushed after `setupStyleStack`
         // because the stack resolves last-push-wins (see `textAttributes()`).
         captionStyleStack.push(.fontSize(context.theme.textCategories.paragraph.font.size))
-        let attributedCaption = attributedStringForRichText(caption, styleStack: captionStyleStack, formatDate: context.formatDate)
+        let attributedCaption = attributedStringForRichText(caption, styleStack: captionStyleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.captionText))
         let (_, captionItems, captionSize) = layoutTextItem(
             attributedCaption,
             boundingWidth: innerBoundingWidth,
@@ -3197,7 +3368,7 @@ private func layoutBlockQuote(
     // Accent bar + accent-tinted rounded fill spanning the whole quote band (behind child content).
     let frameItem = InstantPageV2QuoteFrameItem(
         frame: CGRect(x: horizontalInset, y: 0.0, width: boundingWidth - horizontalInset * 2.0, height: contentHeight),
-        accentColor: context.theme.quoteAccentColor, barWidth: instantPageV2QuoteBarWidth, cornerRadius: 6.0, fillAlpha: 0.10, barOnTrailing: context.rtl,
+        accentColor: context.theme.quoteAccentColor, barWidth: instantPageV2QuoteBarWidth, cornerRadius: context.containerStyle.quoteCornerRadius, fillAlpha: 0.10, barOnTrailing: context.rtl,
         collapseState: collapseState,
         path: pathPrefix)
     result.insert(.quoteFrame(frameItem), at: 0)
@@ -3256,7 +3427,7 @@ private func layoutQuoteText(
         : (context.rtl ? horizontalInset + trailingInset : horizontalInset + leadingInset)
     let textAlignment: NSTextAlignment = isPull ? .center : (context.rtl ? .right : .natural)
 
-    let attributedBody = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
+    let attributedBody = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.text))
     // Subtract the font-box overhead so the VISIBLE top/bottom padding equals verticalInset (6pt),
     // matching the geometric horizontal inset (see instantPageV2TextBoxOverheads).
     let bodyOverheads = instantPageV2TextBoxOverheads(attributedBody)
@@ -3307,7 +3478,7 @@ private func layoutQuoteText(
         if isPull {
             captionStyleStack.push(.italic)
         }
-        let attributedCaption = attributedStringForRichText(caption, styleStack: captionStyleStack, formatDate: context.formatDate)
+        let attributedCaption = attributedStringForRichText(caption, styleStack: captionStyleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.captionText))
         lastBottomOverhead = instantPageV2TextBoxOverheads(attributedCaption).bottom
         let (_, captionItems, captionSize) = layoutTextItem(
             attributedCaption,
@@ -3339,7 +3510,7 @@ private func layoutQuoteText(
         let pillX = (boundingWidth - pillWidth) / 2.0
         let pill = InstantPageV2ShapeItem(
             frame: CGRect(x: pillX, y: 0.0, width: pillWidth, height: contentHeight),
-            kind: .roundedRect(cornerRadius: 6.0),
+            kind: .roundedRect(cornerRadius: context.containerStyle.quoteCornerRadius),
             color: accent.withAlphaComponent(0.10))
         result.insert(.shape(pill), at: 0)
         result.append(.imageOrnament(InstantPageV2ImageOrnamentItem(
@@ -3356,7 +3527,7 @@ private func layoutQuoteText(
         // `layoutBlockQuote`, which is where the collapse budget lives.
         let frameItem = InstantPageV2QuoteFrameItem(
             frame: CGRect(x: horizontalInset, y: 0.0, width: boundingWidth - horizontalInset * 2.0, height: contentHeight),
-            accentColor: accent, barWidth: instantPageV2QuoteBarWidth, cornerRadius: 6.0, fillAlpha: 0.10, barOnTrailing: context.rtl,
+            accentColor: accent, barWidth: instantPageV2QuoteBarWidth, cornerRadius: context.containerStyle.quoteCornerRadius, fillAlpha: 0.10, barOnTrailing: context.rtl,
             collapseState: .notCollapsible, path: [])
         result.insert(.quoteFrame(frameItem), at: 0)
         result.append(instantPageV2BlockQuoteIcon(boundingWidth: boundingWidth, horizontalInset: horizontalInset, color: accent, rtl: context.rtl))
@@ -3563,7 +3734,7 @@ private func layoutList(
             // Layout text content.
             let styleStack = InstantPageTextStyleStack()
             setupStyleStack(styleStack, theme: context.theme, category: .paragraph, link: false)
-            let attrStr = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate)
+            let attrStr = attributedStringForRichText(text, styleStack: styleStack, formatDate: context.formatDate, quoteSource: context.quoteSource(.text, subpath: [i]))
             let textX = instantPageV2ContentColumnX(horizontalInset: horizontalInset, gutter: contentGutter, rtl: context.rtl)
             let textWidth = boundingWidth - horizontalInset * 2.0 - contentGutter
             let (textItem, textLaidOutItems, textSize) = layoutTextItem(

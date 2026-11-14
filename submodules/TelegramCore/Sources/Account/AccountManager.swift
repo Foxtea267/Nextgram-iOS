@@ -2,7 +2,7 @@ import Foundation
 import NagramMessageHistory // MARK: NAGRAM
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 
 // MARK: NEXTGRAM — 注册本地消息保留属性。
 import MtProtoKit
@@ -193,6 +193,7 @@ private var declaredEncodables: Void = {
     declareEncodable(SynchronizeAppLogEventsOperation.self, f: { SynchronizeAppLogEventsOperation(decoder: $0) })
     declareEncodable(TelegramMediaPoll.self, f: { TelegramMediaPoll(decoder: $0) })
     declareEncodable(TelegramMediaUnsupported.self, f: { TelegramMediaUnsupported(decoder: $0) })
+    declareEncodable(TelegramMediaWidget.self, f: { TelegramMediaWidget(decoder: $0) })
     declareEncodable(EmojiKeywordCollectionInfo.self, f: { EmojiKeywordCollectionInfo(decoder: $0) })
     declareEncodable(EmojiKeywordItem.self, f: { EmojiKeywordItem(decoder: $0) })
     declareEncodable(SynchronizeEmojiKeywordsOperation.self, f: { SynchronizeEmojiKeywordsOperation(decoder: $0) })

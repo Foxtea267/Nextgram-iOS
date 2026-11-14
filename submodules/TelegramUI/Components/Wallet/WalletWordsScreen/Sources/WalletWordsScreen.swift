@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AccountContext
@@ -128,8 +127,7 @@ private final class WalletWordsScreenComponent: Component {
                     startingPosition: .begin,
                     size: animationSize,
                     loop: false,
-                    playOnce: self.playAnimation,
-                    lottieSettings: component.context.lottieRenderingSettings
+                    playOnce: self.playAnimation
                 )),
                 environment: {},
                 containerSize: animationSize
@@ -493,7 +491,7 @@ private final class WalletWordsSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         screenSize: context.availableSize,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in

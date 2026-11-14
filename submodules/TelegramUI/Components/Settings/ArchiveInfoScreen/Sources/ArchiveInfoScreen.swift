@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import ComponentFlow
@@ -93,8 +92,7 @@ private final class ArchiveInfoSheetContentComponent: Component {
                 color: environment.theme.list.itemCheckColors.foregroundColor,
                 startingPosition: .begin,
                 size: CGSize(width: 28.0, height: 28.0),
-                playOnce: playButtonAnimation,
-                lottieSettings: component.context.lottieRenderingSettings
+                playOnce: playButtonAnimation
             ))))
             buttonTitle.append(AnyComponentWithIdentity(id: 1, component: AnyComponent(ButtonTextContentComponent(
                 text: environment.strings.ArchiveInfo_CloseAction,
@@ -206,7 +204,7 @@ private final class ArchiveInfoScreenComponent: Component {
                 metrics: environment.metrics,
                 deviceMetrics: environment.deviceMetrics,
                 isDisplaying: environment.isVisible,
-                isCentered: environment.metrics.widthClass == .regular,
+                isCentered: environment.presentsFloatingPanels,
                 hasInputHeight: !environment.inputHeight.isZero,
                 regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                 dismiss: { [weak self] _ in

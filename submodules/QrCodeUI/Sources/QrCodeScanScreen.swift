@@ -18,6 +18,7 @@ import LegacyUI
 import LegacyComponents
 import LegacyMediaPickerUI
 import ImageContentAnalysis
+import ChatMediaSend
 import PresentationDataUtils
 import BundleIconComponent
 import GlassBarButtonComponent
@@ -531,6 +532,10 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
             self.addSubnode(self.galleryButtonNode)
         }
         self.addSubnode(self.torchButtonNode)
+        self.galleryButtonNode.buttonAccessibilityLabel = presentationData.strings.Media_ChooseFromGallery
+        self.torchButtonNode.buttonAccessibilityLabel = presentationData.strings.VoiceOver_QrCodeScan_Flashlight
+        // The camera's picture is not content VoiceOver can read.
+        self.previewView.accessibilityElementsHidden = true
         self.addSubnode(self.titleNode)
         self.addSubnode(self.textNode)
         self.addSubnode(self.errorTextNode)
@@ -726,6 +731,9 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
         let titleSpacing: CGFloat = 48.0
         let bounds = CGRect(origin: CGPoint(), size: layout.size)
 
+        // The camera preview follows the device into landscape on an iPad. iPhone Duo's unfolded screen, where this
+        // screen rotates too, needs nothing here: the preview's connection already takes the body's orientation there
+        // (`CameraVideoOrientation`), and `UIDevice.orientation` is a quarter turn from that screen's.
         if case .tablet = layout.deviceMetrics.type {
             if UIDevice.current.orientation == .landscapeLeft {
                 self.previewView.layer.transform = CATransform3DMakeRotation(-CGFloat.pi / 2.0, 0.0, 0.0, 1.0)
@@ -781,7 +789,8 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
                     } else {
                         self.controller?.dismiss()
                     }
-                }
+                },
+                accessibility: ComponentAccessibility(label: isCustom ? self.presentationData.strings.Common_Close : self.presentationData.strings.Common_Back)
             )),
             environment: {},
             containerSize: topNavigationButtonSide
@@ -791,19 +800,44 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
             if topNavigationButtonView.superview == nil {
                 self.view.addSubview(topNavigationButtonView)
             }
-            transition.updateFrame(
-                view: topNavigationButtonView,
-                frame: CGRect(
+            let topNavigationButtonFrame: CGRect
+            if let sideColumnFrame = layout.sideColumnNavigationButtonFrame {
+                // iPhone Duo: the back / close button goes in the side strip, as every screen's does.
+                topNavigationButtonFrame = CGRect(origin: CGPoint(x: sideColumnFrame.midX - topNavigationButtonSize.width / 2.0, y: sideColumnFrame.midY - topNavigationButtonSize.height / 2.0), size: topNavigationButtonSize)
+            } else if layout.topBarStatusIsland != nil {
+                // iPhone Duo, unfolded portrait: on the status island's clock line, as the camera's and editors' top rows
+                // (the island is at the other end of the row).
+                topNavigationButtonFrame = CGRect(
+                    origin: CGPoint(
+                        x: 16.0 + layout.safeInsets.left,
+                        y: (layout.navigationBarStatusBarHeight ?? 0.0) + 31.0 - topNavigationButtonSize.height / 2.0
+                    ),
+                    size: topNavigationButtonSize
+                )
+            } else {
+                topNavigationButtonFrame = CGRect(
                     origin: CGPoint(
                         x: 16.0 + layout.safeInsets.left,
                         y: max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top) + topNavigationButtonTopInset
                     ),
                     size: topNavigationButtonSize
                 )
-            )
+            }
+            transition.updateFrame(view: topNavigationButtonView, frame: topNavigationButtonFrame)
         }
 
-        let frameSide = max(240.0, layout.size.width - sideInset * 2.0)
+        // The viewfinder, its buttons and texts center on the screen, or in the band between the side insets when
+        // they differ (iPhone Duo's side strip). Equal insets keep every frame unchanged.
+        let insetsDiffer = layout.safeInsets.left != layout.safeInsets.right
+        let bandMinX: CGFloat = insetsDiffer ? layout.safeInsets.left : 0.0
+        let bandWidth: CGFloat = insetsDiffer ? layout.size.width - layout.safeInsets.left - layout.safeInsets.right : layout.size.width
+
+        // On a landscape-shaped screen (iPhone Duo's unfolded screen, 951x669) it also fits the height, with room for the
+        // texts above it and the torch below.
+        var frameSide = max(240.0, bandWidth - sideInset * 2.0)
+        if layout.size.width > layout.size.height {
+            frameSide = max(240.0, min(frameSide, layout.size.height - 240.0))
+        }
         let animateInScale: CGFloat = 0.4
         var effectiveFrameSide = frameSide
         if prepareForAnimateIn {
@@ -812,8 +846,8 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
         
         let dimHeight = ceil((layout.size.height - frameSide) / 2.0)
         let effectiveDimHeight = ceil((layout.size.height - effectiveFrameSide) / 2.0)
-        let dimInset = (layout.size.width - frameSide) / 2.0
-        let effectiveDimInset = (layout.size.width - effectiveFrameSide) / 2.0
+        let dimInset = bandMinX + (bandWidth - frameSide) / 2.0
+        let effectiveDimInset = bandMinX + (bandWidth - effectiveFrameSide) / 2.0
         
         let dimAlpha: CGFloat
         let dimRect: CGRect
@@ -830,8 +864,8 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
         } else {
             controlsAlpha = 1.0
             dimAlpha = 0.625
-            dimRect = CGRect(x: effectiveDimInset, y: effectiveDimHeight, width: layout.size.width - effectiveDimInset * 2.0, height: layout.size.height - effectiveDimHeight * 2.0)
-            frameRect = CGRect(x: dimInset, y: dimHeight, width: layout.size.width - dimInset * 2.0, height: layout.size.height - dimHeight * 2.0)
+            dimRect = CGRect(x: effectiveDimInset, y: effectiveDimHeight, width: effectiveFrameSide, height: layout.size.height - effectiveDimHeight * 2.0)
+            frameRect = CGRect(x: dimInset, y: dimHeight, width: frameSide, height: layout.size.height - dimHeight * 2.0)
         }
     
         transition.updateAlpha(layer: self.dimLayer, alpha: dimAlpha)
@@ -856,7 +890,7 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
         }
         
         let buttonSize = CGSize(width: 72.0, height: 72.0)
-        var torchFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - buttonSize.width) / 2.0), y: dimHeight + frameSide + 98.0), size: buttonSize)
+        var torchFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - buttonSize.width) / 2.0), y: dimHeight + frameSide + 98.0), size: buttonSize)
         let updatedTorchY = min(torchFrame.minY, layout.size.height - torchFrame.height - 10.0)
         let additionalTorchOffset: CGFloat = updatedTorchY - torchFrame.minY
         torchFrame.origin.y = updatedTorchY
@@ -877,18 +911,18 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
             transition.updateAlpha(layer: view.layer, alpha: controlsAlpha)
         }
         
-        let titleSize = self.titleNode.updateLayout(CGSize(width: layout.size.width - 16.0, height: layout.size.height))
-        let textSize = self.textNode.updateLayout(CGSize(width: layout.size.width - 16.0, height: layout.size.height))
-        let errorTextSize = self.errorTextNode.updateLayout(CGSize(width: layout.size.width - 16.0, height: layout.size.height))
-        var textFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - textSize.width) / 2.0), y: max(dimHeight - textSize.height - titleSpacing, navigationHeight + floorToScreenPixels((dimHeight - navigationHeight - textSize.height) / 2.0) + 5.0)), size: textSize)
-        let titleFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - titleSize.width) / 2.0), y: textFrame.minY - 18.0 - titleSize.height), size: titleSize)
+        let titleSize = self.titleNode.updateLayout(CGSize(width: bandWidth - 16.0, height: layout.size.height))
+        let textSize = self.textNode.updateLayout(CGSize(width: bandWidth - 16.0, height: layout.size.height))
+        let errorTextSize = self.errorTextNode.updateLayout(CGSize(width: bandWidth - 16.0, height: layout.size.height))
+        var textFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - textSize.width) / 2.0), y: max(dimHeight - textSize.height - titleSpacing, navigationHeight + floorToScreenPixels((dimHeight - navigationHeight - textSize.height) / 2.0) + 5.0)), size: textSize)
+        let titleFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - titleSize.width) / 2.0), y: textFrame.minY - 18.0 - titleSize.height), size: titleSize)
         if titleFrame.minY < navigationHeight {
             transition.updateAlpha(node: self.titleNode, alpha: 0.0)
             textFrame = textFrame.offsetBy(dx: 0.0, dy: -5.0)
         } else {
             transition.updateAlpha(node: self.titleNode, alpha: controlsAlpha)
         }
-        var errorTextFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - errorTextSize.width) / 2.0), y: dimHeight + frameSide + 48.0), size: errorTextSize)
+        var errorTextFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - errorTextSize.width) / 2.0), y: dimHeight + frameSide + 48.0), size: errorTextSize)
         errorTextFrame.origin.y += floor(additionalTorchOffset / 2.0)
 
         transition.updateFrameAdditive(node: self.titleNode, frame: titleFrame)
@@ -921,6 +955,35 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
         let presentError = { [weak self] in
             let alertController = textAlertController(context: context, title: nil, text: presentationData.strings.Contacts_QrCode_NoCodeFound, actions: [TextAlertAction(type: .defaultAction, title: presentationData.strings.Common_OK, action: {})])
             self?.present(alertController)
+        }
+        
+        if context.routesToChatMediaEditorV2(.qrPhotoPicker) {
+            let pickerController = context.sharedContext.makeQrCodePhotoPickerScreen(context: context, completion: { [weak self] asset in
+                let _ = (chatMediaQrPhotoImage(asset: asset)
+                |> mapToSignal { image -> Signal<String?, NoError> in
+                    guard let image else {
+                        return .single(nil)
+                    }
+                    return recognizeQRCode(in: image)
+                }
+                |> deliverOnMainQueue).start(next: { result in
+                    if let result, let self {
+                        self.resolveCode(code: result, completion: { result in
+                            if !result {
+                                presentError()
+                            }
+                        })
+                    } else {
+                        presentError()
+                    }
+                })
+            })
+            if let controller = self.controller, controller.navigationController != nil {
+                controller.push(pickerController)
+            } else {
+                self.present(pickerController)
+            }
+            return
         }
         
         let _ = legacyWallpaperPicker(context: context, presentationData: presentationData, subject: .qrCode).start(next: { [weak self] generator in
@@ -991,7 +1054,7 @@ private final class QrCodeScanScreenNode: ViewControllerTracingNode, ASScrollVie
     
     private func openResolved(_ result: ResolvedUrl) -> Bool {
         switch result {
-            case .peer, .stickerPack, .join, .wallpaper, .theme:
+            case .peer, .stickerPack, .join, .wallpaper, .theme, .noPaidMessagesToken:
                 break
             default:
                 return false

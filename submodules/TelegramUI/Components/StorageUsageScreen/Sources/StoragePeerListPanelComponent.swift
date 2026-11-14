@@ -45,7 +45,7 @@ private final class PeerListItemComponent: Component {
     let selectionState: SelectionState
     let hasNext: Bool
     let action: (EnginePeer) -> Void
-    let contextAction: (EnginePeer, ContextExtractedContentContainingView, ContextGesture) -> Void
+    let contextAction: (EnginePeer, ContextExtractedContentContainingView, ContextGesture?) -> Void
     
     init(
         context: AccountContext,
@@ -57,7 +57,7 @@ private final class PeerListItemComponent: Component {
         selectionState: SelectionState,
         hasNext: Bool,
         action: @escaping (EnginePeer) -> Void,
-        contextAction: @escaping (EnginePeer, ContextExtractedContentContainingView, ContextGesture) -> Void
+        contextAction: @escaping (EnginePeer, ContextExtractedContentContainingView, ContextGesture?) -> Void
     ) {
         self.context = context
         self.theme = theme
@@ -211,6 +211,8 @@ private final class PeerListItemComponent: Component {
             component.action(peer)
         }
         
+        private var moreAccessibilityAction: UIAccessibilityCustomAction?
+        
         func update(component: PeerListItemComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             let themeUpdated = self.component?.theme !== component.theme
             
@@ -234,6 +236,33 @@ private final class PeerListItemComponent: Component {
             self.state = state
             
             let contextInset: CGFloat = self.isExtractedToContextMenu ? 12.0 : 0.0
+            
+            // VoiceOver: the row is one button (name, size; selected while picked in edit mode); its long-press menu
+            // is the "More" custom action, offered while that gesture is on.
+            self.containerButton.isAccessibilityElement = true
+            self.containerButton.accessibilityLabel = component.title
+            self.containerButton.accessibilityValue = component.label
+            if case .editing(true) = component.selectionState {
+                self.containerButton.accessibilityTraits = [.button, .selected]
+            } else {
+                self.containerButton.accessibilityTraits = .button
+            }
+            if component.peer != nil {
+                if self.moreAccessibilityAction == nil {
+                    // Created once per row view (the strings are read here, not on every update).
+                    let title = component.context.sharedContext.currentPresentationData.with { $0 }.strings.Common_More
+                    self.moreAccessibilityAction = UIAccessibilityCustomAction(name: title, actionHandler: { [weak self] _ in
+                        guard let self, self.isGestureEnabled, let component = self.component, let peer = component.peer else {
+                            return false
+                        }
+                        component.contextAction(peer, self.extractedContainerView, nil)
+                        return true
+                    })
+                }
+                self.containerButton.accessibilityCustomActions = self.moreAccessibilityAction.flatMap { [$0] }
+            } else {
+                self.containerButton.accessibilityCustomActions = nil
+            }
             
             let height: CGFloat = 52.0
             let verticalInset: CGFloat = 1.0
@@ -422,14 +451,14 @@ final class StoragePeerListPanelComponent: Component {
     let items: Items?
     let selectionState: StorageUsageScreenComponent.SelectionState?
     let peerAction: (EnginePeer) -> Void
-    let contextAction: (EnginePeer, ContextExtractedContentContainingView, ContextGesture) -> Void
+    let contextAction: (EnginePeer, ContextExtractedContentContainingView, ContextGesture?) -> Void
 
     init(
         context: AccountContext,
         items: Items?,
         selectionState: StorageUsageScreenComponent.SelectionState?,
         peerAction: @escaping (EnginePeer) -> Void,
-        contextAction: @escaping (EnginePeer, ContextExtractedContentContainingView, ContextGesture) -> Void
+        contextAction: @escaping (EnginePeer, ContextExtractedContentContainingView, ContextGesture?) -> Void
     ) {
         self.context = context
         self.items = items
@@ -455,6 +484,7 @@ final class StoragePeerListPanelComponent: Component {
         let containerInsets: UIEdgeInsets
         let containerWidth: CGFloat
         let sideInset: CGFloat
+        let rightSideInset: CGFloat
         let itemHeight: CGFloat
         let itemCount: Int
 
@@ -464,12 +494,14 @@ final class StoragePeerListPanelComponent: Component {
             containerInsets: UIEdgeInsets,
             containerWidth: CGFloat,
             sideInset: CGFloat,
+            rightSideInset: CGFloat,
             itemHeight: CGFloat,
             itemCount: Int
         ) {
             self.containerInsets = containerInsets
             self.containerWidth = containerWidth
             self.sideInset = sideInset
+            self.rightSideInset = rightSideInset
             self.itemHeight = itemHeight
             self.itemCount = itemCount
 
@@ -493,7 +525,7 @@ final class StoragePeerListPanelComponent: Component {
         }
 
         func itemFrame(for index: Int) -> CGRect {
-            return CGRect(origin: CGPoint(x: self.sideInset, y: self.containerInsets.top + CGFloat(index) * self.itemHeight), size: CGSize(width: self.containerWidth - self.sideInset * 2.0, height: self.itemHeight))
+            return CGRect(origin: CGPoint(x: self.sideInset, y: self.containerInsets.top + CGFloat(index) * self.itemHeight), size: CGSize(width: self.containerWidth - self.sideInset - self.rightSideInset, height: self.itemHeight))
         }
     }
     
@@ -521,8 +553,10 @@ final class StoragePeerListPanelComponent: Component {
             self.scrollView = ScrollViewImpl()
 
             self.listBackgroundView = UIImageView()
+            self.listBackgroundView.accessibilityElementsHidden = true // decoration
             self.listBackgroundView.image = generateStretchableFilledCircleImage(diameter: 26.0 * 2.0, color: .white)?.withRenderingMode(.alwaysTemplate)
             self.listMaskView = UIImageView()
+            self.listMaskView.accessibilityElementsHidden = true // decoration
             self.listMaskView.image = generateImage(CGSize(width: 16.0 + 26.0 * 2.0 + 16.0, height: 26.0 * 2.0), rotatedContext: { size, context in
                 context.clear(CGRect(origin: CGPoint(), size: size))
                 context.setFillColor(UIColor.white.cgColor)
@@ -589,8 +623,8 @@ final class StoragePeerListPanelComponent: Component {
             distanceToTop = max(-100.0, distanceToTop)
             distanceToBottom = max(-100.0, distanceToBottom)
 
-            let listBackgroundFrame = CGRect(origin: CGPoint(x: 16.0, y: distanceToTop), size: CGSize(width: max(1.0, size.width - 16.0 * 2.0), height: max(1.0, size.height - distanceToBottom - distanceToTop)))
-            let listMaskFrame = CGRect(origin: CGPoint(x: 0.0, y: listBackgroundFrame.minY), size: CGSize(width: listBackgroundFrame.width + 16.0 * 2.0, height: listBackgroundFrame.height))
+            let listBackgroundFrame = CGRect(origin: CGPoint(x: itemLayout.sideInset, y: distanceToTop), size: CGSize(width: max(1.0, size.width - itemLayout.sideInset - itemLayout.rightSideInset), height: max(1.0, size.height - distanceToBottom - distanceToTop)))
+            let listMaskFrame = CGRect(origin: CGPoint(x: listBackgroundFrame.minX - 16.0, y: listBackgroundFrame.minY), size: CGSize(width: listBackgroundFrame.width + 16.0 * 2.0, height: listBackgroundFrame.height))
             transition.setFrame(view: self.listBackgroundView, frame: listBackgroundFrame)
             transition.setFrame(view: self.listMaskView, frame: listMaskFrame)
         }
@@ -643,7 +677,7 @@ final class StoragePeerListPanelComponent: Component {
                         component: AnyComponent(PeerListItemComponent(
                             context: component.context,
                             theme: environment.theme,
-                            sideInset: environment.containerInsets.left,
+                            sideInset: min(environment.containerInsets.left, environment.containerInsets.right),
                             title: itemTitle,
                             peer: item.peer,
                             label: dataSizeString(item.size, formatting: dataSizeFormatting),
@@ -653,7 +687,7 @@ final class StoragePeerListPanelComponent: Component {
                             contextAction: component.contextAction
                         )),
                         environment: {},
-                        containerSize: CGSize(width: itemLayout.containerWidth - itemLayout.sideInset * 2.0, height: itemLayout.itemHeight)
+                        containerSize: CGSize(width: itemLayout.containerWidth - itemLayout.sideInset - itemLayout.rightSideInset, height: itemLayout.itemHeight)
                     )
                     let itemFrame = itemLayout.itemFrame(for: index)
                     if let itemComponentView = itemView.view {
@@ -695,7 +729,7 @@ final class StoragePeerListPanelComponent: Component {
                 component: AnyComponent(PeerListItemComponent(
                     context: component.context,
                     theme: environment.theme,
-                    sideInset: environment.containerInsets.left,
+                    sideInset: min(environment.containerInsets.left, environment.containerInsets.right),
                     title: "ABCDEF",
                     peer: nil,
                     label: "1000",
@@ -713,7 +747,11 @@ final class StoragePeerListPanelComponent: Component {
             let itemLayout = ItemLayout(
                 containerInsets: environment.containerInsets,
                 containerWidth: availableSize.width,
-                sideInset: 16.0,
+                // iPhone Duo: the part of one side's inset beyond the other's is the side strip; the list keeps 16pt
+                // clear of it, and the rows' own inset is the part both sides share. Equal insets give 16pt
+                // margins and the left inset in the rows, as before.
+                sideInset: 16.0 + max(0.0, environment.containerInsets.left - environment.containerInsets.right),
+                rightSideInset: 16.0 + max(0.0, environment.containerInsets.right - environment.containerInsets.left),
                 itemHeight: measureItemSize.height,
                 itemCount: component.items?.items.count ?? 0
             )

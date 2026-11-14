@@ -112,6 +112,79 @@ public extension CoreListItem {
 public enum CoreListAnchorMode: Equatable {
     case automatic
     case preserveVisibleContent
+    /// The loaded row crossing the OLD visible centre line (midway between the inset edges) keeps its
+    /// midpoint's distance from the line, placed from its NEW measured height, so a pass that changes
+    /// every row's height keeps what the user looks at in place. A row that crossed the line still
+    /// crosses it. The line is the new geometry's, or the old one when the pass declines inset
+    /// compensation. When that row leaves, the nearest survivor below it, then above it, keeps its
+    /// distance instead.
+    ///
+    /// The list's ends win: no loaded-top pin, and the window's underfill alignment closes any gap above
+    /// the first row or below the last. No momentum halt and no viewport track: the row's position and
+    /// height ride one curve and one clock. Yields to `scrollTo`, the pin latch and a scroll hold. Not
+    /// meant for a list with a bottom-edge pin.
+    case preserveCentredContent
+    /// The loaded row with this identity keeps its top's distance from the top inset edge, but never
+    /// sits above the edge: a row partly scrolled under it lands on it, so a row that shrinks stays in
+    /// view. A new height therefore grows or shrinks the row downward, and the row the user acted on (a
+    /// per-row expand or collapse) stays where it is.
+    ///
+    /// It is placed as `preserveVisibleContent` places its witness: an inset change in the same pass
+    /// carries it with the edge, the list's ends win, and there is no momentum halt and no viewport
+    /// track. A row the old window did not load, one wholly above the top inset edge, or one leaving the
+    /// collection makes the pass a `preserveVisibleContent` one. Yields to `scrollTo`, the pin latch and a
+    /// scroll hold.
+    case preserveItem(AnyHashable)
+}
+
+/// Keeps a scrolled-to row where it landed until a drag begins or the list scrolls elsewhere. Carried by
+/// a `CoreListScrollTarget`; the engine records, in the pass that lands the target, the distance between
+/// `rowPoint` and `edge` in settled geometry, and re-places the row at that distance on every later pass.
+///
+/// A landing the list CLAMPED against one of its ends is held against that end instead of this hold's
+/// reference: resting on the newest edge (index 0 loaded, offset on the natural minimum), by the row's
+/// minY from `.topInset`; resting on the oldest, by its maxY from `.bottomInset`. The newest edge wins
+/// when both hold. That end, not the request, decided where the row is, so a bar or panel appearing at
+/// the other edge must not move it off the end it rests on.
+///
+/// A hold that `yieldsToNewestEdge` is not armed at all by a landing resting on the newest edge: the
+/// list follows that edge from then on, exactly as it does when no scroll ran, so a row arriving there
+/// pushes the content away from it and a row under the landing grows away from it. Held instead, the
+/// arrival would land under the top inset and the growth would sink the newest rows under it.
+///
+/// Released when a drag begins (`ScrollEngine.onWillBeginDragging`: under `PhysicsScrollEngine` the
+/// pan's `.began` — after its movement hysteresis, or at once for a finger landing on moving content —
+/// and under `UIKitScrollEngine`, `scrollViewWillBeginDragging`; a tap that never becomes a drag keeps
+/// it), by a `scroll(by:)` that can move at the presented position, by any later `scrollTo` (a holding
+/// one arms a new hold), by the row leaving the collection, by a full replace, and by
+/// `releaseScrollHold()`.
+///
+/// Arming a hold on a row other than the pinned row releases the pin latch (`holdsPinnedRowAtBottomEdge`), which
+/// would otherwise put the pinned row back on the edge on the next pass.
+public struct CoreListScrollHold {
+    public enum Edge {
+        /// `viewportInsets.top` — under the chat's π rotation, the input-panel edge.
+        case topInset
+        /// `logicalSize.height - viewportInsets.bottom`.
+        case bottomInset
+        /// Midway between the two inset edges.
+        case visibleCenter
+    }
+
+    public let edge: Edge
+    /// Arm nothing when the landing rests on the newest edge (see above).
+    public let yieldsToNewestEdge: Bool
+    /// A point inside the row, in the row's own coordinates (0 = its minY), for its current measured
+    /// height and view. Evaluated on every held pass, so the row's re-measure keeps THIS point still.
+    public let rowPoint: (_ measuredHeight: CGFloat, _ view: UIView & CoreListItemView) -> CGFloat
+
+    public init(edge: Edge,
+                yieldsToNewestEdge: Bool = false,
+                rowPoint: @escaping (_ measuredHeight: CGFloat, _ view: UIView & CoreListItemView) -> CGFloat) {
+        self.edge = edge
+        self.yieldsToNewestEdge = yieldsToNewestEdge
+        self.rowPoint = rowPoint
+    }
 }
 
 /// Where a programmatic scroll should place one row.
@@ -137,19 +210,31 @@ public struct CoreListScrollTarget {
     public let index: Int
     public let resolve: (_ measuredHeight: CGFloat, _ view: UIView & CoreListItemView) -> CGFloat
     public let direction: Direction?
+    /// Non-nil to hold the target where this scroll lands it — see `CoreListScrollHold`.
+    public let hold: CoreListScrollHold?
+    /// Whether this is a scroll TO the pinned row, which arms the pin latch (`holdsPinnedRow`) when it targets the lowest
+    /// `pinsToBottomEdge` row. A target that only keeps a row where it is passes false: aimed at the pinned row after a
+    /// drag released the latch, it would arm it again, and the next pass would pull the row back to the edge.
+    public let pinsRow: Bool
 
     public init(index: Int, pointOffset: CGFloat) {
         self.index = index
         self.resolve = { _, _ in pointOffset }
         self.direction = nil
+        self.hold = nil
+        self.pinsRow = true
     }
 
     public init(index: Int,
                 direction: Direction? = nil,
+                hold: CoreListScrollHold? = nil,
+                pinsRow: Bool = true,
                 resolve: @escaping (CGFloat, UIView & CoreListItemView) -> CGFloat) {
         self.index = index
         self.resolve = resolve
         self.direction = direction
+        self.hold = hold
+        self.pinsRow = pinsRow
     }
 }
 
@@ -175,6 +260,15 @@ public enum CoreListBlockOrigin: Hashable {
     case beforeBlock
     /// The block starts one block-height away from index 0 and travels back into place.
     case afterBlock
+}
+
+/// How an embedded list plays a flick or an edge bounce after release — the embedding seam onto
+/// `PhysicsScrollEngine.decelerationMode`, which stays module-internal.
+public enum CoreListDeceleration: Hashable {
+    /// Integrated on the main thread once per frame.
+    case stepped
+    /// Baked once and played by the render server as a `CAKeyframeAnimation` (the default).
+    case keyframe
 }
 
 public final class CoreVirtualListView: UIView {
@@ -260,8 +354,10 @@ public final class CoreVirtualListView: UIView {
     }
 
     private struct ResolvedAnchor {
-        /// `.resolved` is produced by `resolveAnchor`'s `scrollTo` branch and by nothing else, so the
-        /// two cases are exactly the old `hasScrollTo` split in the offset composition below.
+        /// `.resolved`: placed from the measured height of the row this pass builds, against the
+        /// geometry it builds (`scrollTo`, the pin latch, a scroll hold, the centred anchor). `.fixed`:
+        /// a screen position read from the old geometry (every other branch), which the offset
+        /// composition below projects onto the new top edge.
         enum Offset {
             case fixed(CGFloat)
             case resolved((CGFloat, UIView & CoreListItemView) -> CGFloat)
@@ -278,6 +374,10 @@ public final class CoreVirtualListView: UIView {
         /// Stored rather than re-derived as `index == lowestPinnedItemIndex`: an explicit `scrollTo`
         /// to the pinned row is a DIFFERENT case that keeps its own behaviour.
         let isPin: Bool
+        /// Set only by `resolveAnchor`'s scroll-hold branch. Like `isPin`, read by `pinsLoadedTop`
+        /// (resting at the newest edge must not hand the anchor to index 0), and by `applyChanges`,
+        /// which measures the hold's slack from the window this anchor built.
+        let isHeld: Bool
 
         // Every non-scrollTo branch of resolveAnchor computes a plain point offset, so they keep
         // their existing call shape.
@@ -286,13 +386,19 @@ public final class CoreVirtualListView: UIView {
             self.offset = .fixed(pointOffset)
             self.preservesVisibleContent = preservesVisibleContent
             self.isPin = false
+            self.isHeld = false
         }
 
-        init(index: Int, offset: Offset, preservesVisibleContent: Bool, isPin: Bool = false) {
+        init(index: Int,
+             offset: Offset,
+             preservesVisibleContent: Bool,
+             isPin: Bool = false,
+             isHeld: Bool = false) {
             self.index = index
             self.offset = offset
             self.preservesVisibleContent = preservesVisibleContent
             self.isPin = isPin
+            self.isHeld = isHeld
         }
     }
 
@@ -343,6 +449,12 @@ public final class CoreVirtualListView: UIView {
     }
 
     static func firstDuplicatePair(in items: [CoreListItem]) -> (first: Int, second: Int)? {
+        // Every pass with new items runs this on the main thread: answer the common case (no duplicate) in linear
+        // time, and search for the pair the precondition reports only when there is one.
+        var identities = Set<AnyHashable>(minimumCapacity: items.count)
+        guard items.contains(where: { !identities.insert($0.identity).inserted }) else {
+            return nil
+        }
         for first in items.indices {
             for second in items.indices where second > first {
                 if items[first].identity == items[second].identity {
@@ -470,13 +582,143 @@ public final class CoreVirtualListView: UIView {
     /// row's index shifts every time a message arrives, and `lowestPinnedItemIndex` is already
     /// re-derived per pass, so there is nothing here to go stale.
     ///
-    /// Engaged by an explicit `scrollTo` at the pinned index; released on finger-down, on the pinned
-    /// row leaving the collection, and on a full replace. Release is PERMANENT for that pin —
-    /// scrolling back to the edge does not re-engage it, matching `ListViewImpl`.
+    /// Engaged by an explicit `scrollTo` at the pinned index whose `pinsRow` is set (the default; a
+    /// target that only keeps a row in place clears it); released on finger-down, by a `scroll(by:)`
+    /// that can move at the presented position, by a holding `scrollTo` that arms its hold on another
+    /// row, on the pinned row leaving the collection, and on a full replace. Release is PERMANENT for
+    /// that pin — scrolling back to the edge does not re-engage it, matching `ListViewImpl`.
     ///
     /// This answers WHERE the pinned row goes. `bottomEdgePinSlack` answers whether the list has
     /// scroll ROOM to rest there, and is deliberately independent of this flag.
     private var holdsPinnedRow = false
+
+    /// The row a holding `scrollTo` landed, and where — see `CoreListScrollHold`. Keyed by identity,
+    /// never index: rows arriving below it shift its index on every pass.
+    private struct HeldRow {
+        let identity: AnyHashable
+        let hold: CoreListScrollHold
+        /// `rowPoint − edge` in settled screen coordinates, measured in the pass that landed the row:
+        /// where it actually ended up after that pass's edge alignment, not where it was asked to go.
+        let distance: CGFloat
+    }
+
+    private var heldRow: HeldRow?
+
+    /// Scroll room the held row's placement needs beyond each loaded edge. While held it is measured
+    /// from every window the held anchor builds (`heldWindowSlack(_:)`); after release it only ever
+    /// shrinks, to what the current offset still needs (`retireHoldSlack()`), so release — which
+    /// happens at finger-down — never moves content under the finger. Folded into `loadedEdgeRange`.
+    private var holdSlack: (min: CGFloat, max: CGFloat) = (0, 0)
+
+    public var isHoldingScrollTarget: Bool { heldRow != nil }
+
+    /// Makes `view` move exactly as the content does: every model write of the content host's `bounds.origin.y` and
+    /// every animation of it (a `.keyframe` flight and its brake on the render server, a pass's viewport track) is
+    /// repeated on its layer. For a view outside the list that must ride the content but not take what the list's own
+    /// view takes (its mask): a follower placed from per-frame callbacks trails a render-server flight by the commit's
+    /// frame or two. Give `view` the list's bounds in a shared superview and place its content at
+    /// `contentFrame(of:)`. `PhysicsScrollEngine` only; with another engine it does nothing and returns false.
+    @discardableResult
+    public func addContentMotionMirror(_ view: UIView) -> Bool {
+        guard let host = engine.contentHost as? ContentMotionHostView, let layer = host.mirroringLayer else {
+            return false
+        }
+        layer.addMirror(view.layer)
+        return true
+    }
+
+    public func removeContentMotionMirror(_ view: UIView) {
+        (engine.contentHost as? ContentMotionHostView)?.mirroringLayer?.removeMirror(view.layer)
+    }
+
+    /// Whether the latest touch landed on moving content (a flight or a deceleration), which it stopped: that touch is the
+    /// scroll's, not a tap on a row. Set at touch-down and kept until the next one, so it answers for a touch at its
+    /// lift whatever order the touch reached the list's recognizers in. `PhysicsScrollEngine` only; false otherwise.
+    public var lastTouchCaughtMovingContent: Bool {
+        (engine as? PhysicsScrollEngine)?.lastTouchCaughtMovingContent ?? false
+    }
+
+    /// A row's frame in the content's own coordinates, where it stays put while the content scrolls: those of a
+    /// content motion mirror (`addContentMotionMirror`). Settled (model) geometry.
+    public func contentFrame(of view: UIView) -> CGRect {
+        engine.contentHost.convert(view.bounds, from: view)
+    }
+
+    /// Ends the hold without moving anything. The chat calls it from scroll-to-end, which issues no
+    /// scroll when the list already rests at its newest edge.
+    public func releaseScrollHold() {
+        heldRow = nil
+    }
+
+    /// A scroll the user drives without dragging the list: the chat's two-finger message selection
+    /// auto-scrolls while the fingers hold near an edge (`ListViewImpl.scrollWithDirection` on the other
+    /// backend). Moves content by `distance` points, positive DOWN as for `additionalScrollDistance`,
+    /// stopping at the declared edges, and returns whether it moved. One call travels at most
+    /// `preloadMargin`, the distance loaded content reaches past the viewport, so a step cannot pass an
+    /// edge the window has not loaded and declared yet (up to one frame of flight travel when the step
+    /// catches a keyframe flight, since the window was last rebalanced at the previous sampling tick).
+    ///
+    /// It is a drag frame without the finger: the offset write goes through `handleUserScroll`, exactly as
+    /// `engine.onScroll` does, so the window rebalances, slack retires and `onVisibleWindowChanged` fires
+    /// as they do under a drag. A mutation pass with
+    /// `additionalScrollDistance` is NOT equivalent: once the pin latch is released it re-anchors onto the
+    /// natural newest edge and drops a short reply's pin slack in one jump. And like a drag's start
+    /// (`engine.onWillBeginDragging`) it releases the pin latch and the scroll hold, which would otherwise
+    /// own placement and leave the bounds pinned around their row.
+    ///
+    /// A step that cannot move at the presented position (held against an edge, called every frame)
+    /// changes nothing, as ListViewImpl writes nothing when it cannot scroll: the latch and hold stay, and a
+    /// spring-back keeps playing. If ending a flight moves an edge onto the caught offset (hold slack
+    /// retiring), the step returns false with the release and the halt standing, as a drag's start would
+    /// leave them. A step INTO content from an overscroll does halt the spring-back, and
+    /// nothing restarts it if the steps stop while still overscrolled (until the next touch); accepted, as
+    /// the chat's selection rarely starts inside a bounce.
+    @discardableResult
+    public func scroll(by distance: CGFloat) -> Bool {
+        guard distance != 0.0, !isApplyingChanges, !activeWindow.isEmpty else { return false }
+        let distance = max(-preloadMargin, min(preloadMargin, distance))
+        // Never further past an edge than the offset already is, and never pulled back from overscroll.
+        func target(from current: CGFloat) -> CGFloat {
+            var target = current - distance
+            if let minimum = declaredEdges.min {
+                target = max(target, min(minimum, current))
+            }
+            if let maximum = declaredEdges.max {
+                target = min(target, max(maximum, current))
+            }
+            return target
+        }
+        // The presented position, so a keyframe flight is judged where it is on screen.
+        engine.syncToPresentedPosition()
+        guard abs(target(from: engine.offset) - engine.offset) > 1e-6 else { return false }
+        holdsPinnedRow = false
+        heldRow = nil
+        if engine.isDecelerating || activeScrollFlight != nil {
+            // Ending a flight retires hold slack, which can move an edge, so the target is taken after it.
+            engine.haltMotionInPlace()
+        }
+        let current = engine.offset
+        let target = target(from: current)
+        guard abs(target - current) > 1e-6 else { return false }
+        // The presented-position sync and the halt above move the engine offset without a scroll frame, so
+        // `previousOffset` can trail it; the step must be measured from where the list is.
+        previousOffset = current
+        engine.setOffset(target)
+        handleUserScroll(engine.offset)
+        return true
+    }
+
+    /// The settled screen Y of a hold's edge under the CURRENT geometry.
+    private func holdEdgeY(_ edge: CoreListScrollHold.Edge) -> CGFloat {
+        switch edge {
+        case .topInset:
+            return viewportInsets.top
+        case .bottomInset:
+            return logicalSize.height - viewportInsets.bottom
+        case .visibleCenter:
+            return (viewportInsets.top + logicalSize.height - viewportInsets.bottom) * 0.5
+        }
+    }
 
     var items: [CoreListItem] {
         get { _items }
@@ -491,6 +733,20 @@ public final class CoreVirtualListView: UIView {
         didSet {
             guard loadedEdgeMargin != oldValue else { return }
             refreshReachedLoadedEdges()
+        }
+    }
+    /// A whole collection that fits between the insets rests on the BOTTOM inset edge instead of the top one, and its
+    /// scroll range is that offset (`ListViewImpl.stackFromBottom`). A collection taller than that area, or not wholly
+    /// loaded, is placed as without it. Set it before the first rows: a pass measures the old placement with the
+    /// current value, so flipping it under rows misreads where they were.
+    public var stacksFromBottom = false
+    /// Ends the band rows are visible in (`CoreListItemView.visibleRectUpdated`) this far inside the viewport, for a host
+    /// whose list runs on under something opaque (the keyboard). Default none: the insets are visible, interactive list
+    /// space, and the band is the whole viewport.
+    public var visibleRectInsets: UIEdgeInsets = .zero {
+        didSet {
+            guard visibleRectInsets != oldValue, !isApplyingChanges else { return }
+            notifyVisibleRects()
         }
     }
     let engine: ScrollEngine
@@ -523,6 +779,12 @@ public final class CoreVirtualListView: UIView {
     /// itself at their final frames and travel on one additive `sublayerTransform`
     /// (`Display/Source/ListView.swift:3625-3634`, `:3803`), so scrolling never repositions them.
     let carouselExitOverlay = UIView()
+    /// A zero-size view whose model `bounds.origin.x` changes once per transaction that writes row
+    /// bases (`beginModelWrites`): while its presentation still shows the previous value, nothing
+    /// written since has been committed, and the bases recorded at the first write still describe what
+    /// is rendered.
+    private let commitSentinel = UIView()
+    private var commitSentinelSerial: CGFloat = 0
     let animationController: ListAnimationController
     let scheduler: Scheduler
     private(set) var logicalSize: CGSize = .zero
@@ -591,6 +853,11 @@ public final class CoreVirtualListView: UIView {
     public var onUserScrollDelta: ((_ delta: CGFloat, _ timestamp: CFTimeInterval) -> Void)?
     // Fired after each user-scroll rebalance so a host can recompute its visible index range.
     public var onVisibleWindowChanged: (() -> Void)?
+    /// The display area floating attachments are clamped into, when it is not the content insets: a header
+    /// whose lower part scrolls away with the content keeps the content insets at rest (`insets`), but wants
+    /// its floating attachments under what is still on screen. nil means the content insets. Set through
+    /// `updateAttachmentDisplayInsets(_:)`, which re-solves the attachments.
+    var attachmentDisplayInsets: UIEdgeInsets?
     // Fired when the user starts an interactive drag (the scroll engine's pan reaches `.began`); not
     // fired for programmatic scrolls or momentum/bounce. Analogous to ListViewImpl's
     // `beganInteractiveDragging`.
@@ -620,15 +887,25 @@ public final class CoreVirtualListView: UIView {
     // `onWillBeginDragging` is emitted BEFORE the catch (PhysicsScrollEngine.swift:163-167), so its
     // tracking flag is already true by the time this arrives.
     //
-    // A drag released with no momentum produces NO flight and therefore never reaches here. That case
-    // is the host's to read off `didEndDragging` + `isScrollFlightActive`, mirroring how ListViewImpl
-    // splits the same two cases across `willDecelerate`.
+    // A `.stepped` or UIKit deceleration publishes no flight; its end arrives here too, through
+    // `engine.onDidEndDecelerating`. A drag released with no momentum produces neither and never reaches
+    // here. That case is the host's to read off `didEndDragging` + `isScrollDecelerating`, mirroring how
+    // ListViewImpl splits the same two cases across `willDecelerate`.
     public var didEndScrolling: (() -> Void)?
     // True while the render server is carrying a momentum flight. Read at `didEndDragging` to learn
     // whether momentum followed the release: the engine emits that callback AFTER launching
     // deceleration, precisely so an observer sees the post-release truth
     // (PhysicsScrollEngine.swift:194-197).
     public var isScrollFlightActive: Bool { activeScrollFlight != nil }
+    // True while momentum moves the list after a release, in every deceleration mode. Read at `didEndDragging`
+    // to learn whether momentum follows the release: `isScrollFlightActive` answers that only for `.keyframe`,
+    // since `.stepped` and UIKit decelerations publish no flight.
+    public var isScrollDecelerating: Bool { engine.isDecelerating }
+    // What a pass's viewport animation (a `scrollTo`'s travel, a size or inset pass's correction) still adds to the
+    // content host's `bounds.origin.y`, on the model clock: zero when none runs. A flight's motion is not in it. A view
+    // riding the content motion mirror tells the two apart by it: a later pass folds this part into its own track, while
+    // a flight carries on.
+    public var viewportAnimationOffset: CGFloat { animationController.viewportOffset(at: animationController.now()) }
     // Signed distance the engine offset sits beyond its declared edges — negative past `min`, positive
     // past `max`, zero within. The analogue of reading `scrollView.contentOffset.y` against its content
     // bounds, and correct to sample at `didEndDragging`: `launchFlight` parks the LAYER at the settled
@@ -741,6 +1018,12 @@ public final class CoreVirtualListView: UIView {
     /// scroll pan to `self.view`, and everything that must arbitrate with it goes on that same view);
     /// the difference is only that there the pan's view and the list's view coincide.
     public var scrollGestureHostView: UIView { engine.contentHost }
+
+    /// Whether the latch holds a `pinsToBottomEdge` row (`holdsPinnedRow`): every pass without a
+    /// `scrollTo` re-places that row against the bottom edge, so a host's own target that moves it is
+    /// undone on the next pass, and a host keeping rows in place leaves the pass to the latch. The latch
+    /// alone, landed or not (`isStrictlyPinnedToBottomEdge` also asks whether its animation has landed).
+    public var holdsPinnedRowAtBottomEdge: Bool { holdsPinnedRow }
 
     /// Whether a `pinsToBottomEdge` row is currently HELD against the bottom edge, as opposed to
     /// merely happening to be near it. `ListViewImpl.isStrictlyScrolledToPinToEdgeItem()`
@@ -913,9 +1196,14 @@ public final class CoreVirtualListView: UIView {
     // Uses a distinct argument label so it does not collide with the all-defaulted
     // internal designated initializer, and keeps the ScrollEngine/Scheduler types
     // module-internal.
-    public convenience init(forEmbedding frame: CGRect) {
+    public convenience init(forEmbedding frame: CGRect, deceleration: CoreListDeceleration = .keyframe) {
         let engine = PhysicsScrollEngine()
-        engine.decelerationMode = .keyframe
+        switch deceleration {
+        case .stepped:
+            engine.decelerationMode = .stepped
+        case .keyframe:
+            engine.decelerationMode = .keyframe
+        }
         self.init(frame: frame, engine: engine, animationController: ListAnimationController(), scheduler: MainQueueScheduler())
     }
 
@@ -928,18 +1216,31 @@ public final class CoreVirtualListView: UIView {
         }
         engine.onWillBeginDragging = { [weak self] in
             // Mirrors `ListViewImpl.scrollViewWillBeginDragging` (`Display/Source/ListView.swift:879`).
-            // The TOUCH releases the pin, not the movement: a programmatic offset write keeps it, which
-            // is what every self-update flush and inset change is.
+            // The USER releases the pin, not the movement: a programmatic offset write keeps it, which
+            // is what every self-update flush and inset change is. The touch is one release, `scroll(by:)`
+            // the other. The scroll hold releases the same way.
             self?.holdsPinnedRow = false
+            self?.heldRow = nil
             self?.willBeginDragging?()
         }
         engine.onDidEndDragging = { [weak self] in
             self?.didEndDragging?()
         }
+        // A `.stepped` or UIKit deceleration publishes no flight, so it ends here rather than in
+        // `onFlightChanged(nil)` below.
+        engine.onDidEndDecelerating = { [weak self] in
+            self?.didEndScrolling?()
+        }
         engine.onFlightChanged = { [weak self] flight in
             guard let self else { return }
             let wasFlying = self.activeScrollFlight != nil
             self.activeScrollFlight = flight
+            if wasFlying && flight == nil && !self.isApplyingChanges {
+                // The one retire a flight gets (`handleUserScroll` skips its ticks), at the offset it
+                // came to rest at or was caught at. Inside a pass — a scroll's halt catching a flight —
+                // the pass's own retire at its end covers it, against the geometry it settles.
+                self.retireHoldSlack()
+            }
             self.renderAttachments()
             // After renderAttachments, so a host reading geometry from this callback sees the solve for
             // the state it is being told about rather than the one it replaced.
@@ -960,6 +1261,8 @@ public final class CoreVirtualListView: UIView {
         carouselExitOverlay.isUserInteractionEnabled = false
         attachmentContainer.backgroundColor = .clear
         attachmentContainer.clipsToBounds = false
+        commitSentinel.isUserInteractionEnabled = false
+        addSubview(commitSentinel)
         // BELOW the content host, matching ListViewImpl's `insertSubnode(_:belowSubnode:)` for its
         // temporary previous nodes. Nothing paints over the strip during a correct travel — the
         // incoming rows are off-screen at t=0 and `container` has no background — so this changes
@@ -1032,10 +1335,12 @@ public final class CoreVirtualListView: UIView {
             return
         }
         isApplyingChanges = true
-        // BEFORE anything this pass writes. Every bound layer's model position is still the base its
-        // render tree was committed against, which is the only moment `presented - model` means the
-        // additive contribution — `render()` overwrites it ~570 lines below. Re-entrant calls are
-        // deferred to the scheduler above rather than nested, so one pass owns this snapshot.
+        // BEFORE anything this pass writes: the transaction's first writer records the bases the render
+        // tree was committed against, and this pass samples each animating row's rendered contribution
+        // against them. That is the one form that stays right after a pass or rebalance earlier in the
+        // same transaction re-based the rows (`beginModelWrites`). Re-entrant calls are deferred to the
+        // scheduler above, so one pass owns the sample.
+        beginModelWrites()
         animationController.capturePresentedPositionOffsets()
         defer {
             animationController.clearPresentedPositionOffsets()
@@ -1098,7 +1403,9 @@ public final class CoreVirtualListView: UIView {
         // same reason — and `ListViewImpl` halts on it identically (`ListView.swift:3238`). The
         // `.automatic` guard is that halt's else-if chain: ListViewImpl reaches it only when the pass
         // did not position content itself, i.e. no `scrollToItem` (halted just above) and no stationary
-        // item range, whose analogue here is `.preserveVisibleContent`.
+        // item range, whose analogue here is `.preserveVisibleContent`. `.preserveCentredContent` and
+        // `.preserveItem` keep content in place as that mode does, so they skip the halt too: a fling
+        // carries on through the pass.
         if !hasScrollTo, hasAdditionalScrollDistance, anchorMode == .automatic {
             engine.haltMotionInPlace()
         }
@@ -1285,11 +1592,28 @@ public final class CoreVirtualListView: UIView {
             // The row left the collection, or this is a full replace — a chat switch or hole reload,
             // whose incoming collection must not inherit a hold from the outgoing one.
             holdsPinnedRow = false
-        } else if let scrollTo, scrollTo.index == lowestPinnedItemIndex {
+        } else if let scrollTo, scrollTo.pinsRow, scrollTo.index == lowestPinnedItemIndex {
             // `ListView.swift:2737`. The chat produces exactly one of these per streamed answer, from
             // `scrollToPinToTopStableId` (`ChatHistoryListNode.swift:2244-2246`), which fires only when
             // the pinned stableId CHANGES.
             holdsPinnedRow = true
+        }
+        // The scroll hold, resolved against THIS pass's collection. Any explicit scroll ends it (a
+        // holding one arms a new hold once it has landed, below), as does a full replace and the row
+        // leaving the collection — deleted, or the history window moved past it.
+        var heldIndex: Int?
+        if isNoOverlapSwap {
+            heldRow = nil
+            holdSlack = (0, 0)
+        } else if scrollTo != nil {
+            heldRow = nil
+            // A scroll lands inside the natural range (`buildWindow` aligns it), so no slack applies.
+            holdSlack = (0, 0)
+        } else if let held = heldRow {
+            heldIndex = effectiveItems.firstIndex(where: { $0.identity == held.identity })
+            if heldIndex == nil {
+                heldRow = nil
+            }
         }
         let resolvedAnchor: ResolvedAnchor?
         if effectiveItems.isEmpty {
@@ -1297,14 +1621,17 @@ public final class CoreVirtualListView: UIView {
         } else {
             guard let anchor = resolveAnchor(
                 scrollTo: scrollTo,
+                heldIndex: heldIndex,
                 anchorMode: anchorMode,
                 isNoOverlapSwap: isNoOverlapSwap,
                 diff: diff,
                 oldWindow: oldWindow,
                 oldContainerOriginY: oldContainerOriginY,
                 oldSettledOffset: oldSettledOffset,
-                oldTopInset: oldViewportInsets.top,
-                oldItemCount: oldItems.count
+                oldViewportInsets: oldViewportInsets,
+                oldLogicalHeight: oldLogicalSize.height,
+                compensatesInsetChange: compensatesInsetChange,
+                oldItems: oldItems
             )
             else {
                 rebuildFromScratch()
@@ -1339,10 +1666,9 @@ public final class CoreVirtualListView: UIView {
             // positions content first, then the displacement moves it.
             //
             // The two branches below are the two halves of what used to be one `projectedPointOffset`
-            // expression; only the `scrollTo` half is deferred, because only it needs the anchor's
-            // measured height. `.resolved` is produced by resolveAnchor's `scrollTo` branch and by
-            // nothing else, so the branch split here is exactly the old `hasScrollTo` split — note
-            // in particular that it does NOT add `topInsetDelta`.
+            // expression; only the `.resolved` half is deferred, because only it needs the anchor's
+            // measured height. A `.resolved` anchor computes its placement from the geometry this
+            // pass is building, so it does NOT add `topInsetDelta`.
             let resolveY: (CGFloat, UIView & CoreListItemView) -> CGFloat
             switch resolvedAnchor.offset {
             case let .fixed(pointOffset):
@@ -1359,14 +1685,16 @@ public final class CoreVirtualListView: UIView {
             // scrolls down into content, which ListViewImpl honours and the pin would discard.
             let pinsLoadedTop = !resolvedAnchor.preservesVisibleContent
                 && !resolvedAnchor.isPin
+                && !resolvedAnchor.isHeld
                 && !hasScrollTo
                 && !hasAdditionalScrollDistance
                 && oldWindow.startIndex == 0
                 && oldEdges.min.map { abs(oldSettledOffset - $0) <= 1e-6 } == true
             // Only a `.fixed` anchor was placed against the OLD effective top edge, so only it needs
-            // re-projecting onto the new one. A `.resolved` anchor — an explicit `scrollTo`, or the pin
-            // latch itself — computes its placement from the geometry this pass is building, and the
-            // `pinsLoadedTop` branch translates the window onto `topEdge` outright.
+            // re-projecting onto the new one. A `.resolved` anchor — an explicit `scrollTo`, the pin
+            // latch itself, a scroll hold or the centred anchor — computes its placement from the
+            // geometry this pass is building, and the `pinsLoadedTop` branch translates the window onto
+            // `topEdge` outright.
             //
             // And only an anchor ABOVE the pinned row. The absorption invariant is that the pinned row
             // and everything below it hold still while the content above spends the slack: an anchor
@@ -1391,9 +1719,15 @@ public final class CoreVirtualListView: UIView {
                                     resolveY: resolveY,
                                     pinsLoadedTop: pinsLoadedTop,
                                     pinSlackBaseline: pinSlackBaseline,
+                                    holdsAnchor: resolvedAnchor.isHeld,
                                     sourceWindow: oldWindow,
                                     survivorMapNewToOld: survivorMapNewToOld,
                                     moveReuseNewToOld: moveReuseNewToOld)
+            if resolvedAnchor.isHeld {
+                // Before `render()` and the settle clamp below: both read `loadedEdgeRange`, which must
+                // already carry the room this placement needs.
+                holdSlack = heldWindowSlack(newWindow)
+            }
         } else {
             newWindow = Window()
         }
@@ -1656,6 +1990,56 @@ public final class CoreVirtualListView: UIView {
             newBoundsOriginY = newSettledOffset + presentationOverscroll
         }
         setBoundsOriginY(newBoundsOriginY)
+        if let scrollTo, let requestedHold = scrollTo.hold,
+           effectiveItems.indices.contains(scrollTo.index),
+           let landed = newWindow.items.first(where: { $0.index == scrollTo.index }) {
+            // A landing the list CLAMPED against one of its ends is held against that end, not against
+            // the edge the request named: that end, not the request, decided where it is. Resting on
+            // the newest edge (window from index 0, settled offset on the natural minimum), the row
+            // keeps its minY's distance from the top inset edge, so the rows under it ride the input
+            // panel — a `.bottom` hold there would keep its distance from the bars instead, and a
+            // keyboard would cover the newest rows (or a top-inset shrink open a gap under them).
+            // Resting on the oldest edge, it keeps its maxY's distance from the bottom inset edge, so
+            // it follows the bars. The newest edge wins when both hold (a collection shorter than the
+            // viewport). Natural edges: a scroll pass has reset `holdSlack` and skips the settle clamp,
+            // so only `buildWindow`'s underfill alignments can have clamped it, and those align onto
+            // exactly these edges (the pin slack included).
+            let naturalEdges = loadedEdgeRange(for: newWindow, originY: containerOriginY, includesHoldSlack: false)
+            var naturalMaximum = naturalEdges.max
+            if let minimum = naturalEdges.min, let rawMaximum = naturalMaximum, rawMaximum < minimum {
+                naturalMaximum = minimum
+            }
+            // A hold that yields to the newest edge arms nothing there: this pass is a scroll, so no
+            // earlier hold survives it and `holdSlack` is already zero — not arming IS the unheld state.
+            let hold: CoreListScrollHold?
+            if newWindow.startIndex == 0,
+               let minimum = naturalEdges.min,
+               abs(newSettledOffset - minimum) <= 1e-6 {
+                hold = requestedHold.yieldsToNewestEdge ? nil : CoreListScrollHold(edge: .topInset) { _, _ in 0 }
+            } else if newWindow.endIndex == effectiveItems.count - 1,
+                      let maximum = naturalMaximum,
+                      abs(newSettledOffset - maximum) <= 1e-6 {
+                hold = CoreListScrollHold(edge: .bottomInset) { height, _ in height }
+            } else {
+                hold = requestedHold
+            }
+            if let hold {
+                // Measured from THIS pass's settled geometry, i.e. after `buildWindow`'s edge alignment:
+                // a scroll the edges clamped is held where it landed, not where it was asked to go.
+                let landedMinY = containerOriginY - newWindow.minY + landed.frame.minY - newSettledOffset
+                heldRow = HeldRow(identity: effectiveItems[scrollTo.index].identity,
+                                  hold: hold,
+                                  distance: landedMinY + hold.rowPoint(landed.frame.height, landed.view)
+                                      - holdEdgeY(hold.edge))
+                // A held jump to another row ends the pin: the user went somewhere else, and the latch, which
+                // `resolveAnchor` ranks above the hold, would put the pinned row back on the edge on the next pass.
+                // Only where a hold arms: a landing that yields to the newest edge holds nothing and keeps the pin.
+                if scrollTo.index != lowestPinnedItemIndex {
+                    holdsPinnedRow = false
+                }
+            }
+        }
+        retireHoldSlack()
         if absorbsEdgeChangeIntoOverscroll {
             // Holding the engine offset is only half of holding the CONTENT. A drag in progress maps
             // finger travel to content through the rubber band, and this pass just moved an edge, so
@@ -2293,11 +2677,12 @@ public final class CoreVirtualListView: UIView {
     ///
     /// **Why this is a list-owned track and not something a host can install itself.** Position tracks
     /// here are additive offsets decaying to zero, and `capturePresentedPositionOffsets()` reads
-    /// `presented − model` on every bound live layer at the start of the NEXT pass to recover exactly
-    /// that quantity. A raw `CAAnimation` a host added would be indistinguishable from a track this
-    /// model owns, so a second pass landing mid-slide would resume against a displacement the model
-    /// never issued. Going through `transitionPosition` also means an overlapping slide composes with
-    /// the one in flight (`transitionPositionOffset` folds in `currentOffset`) rather than fighting it.
+    /// `presented − committed base` on every animating live layer at the start of the NEXT pass to
+    /// recover exactly that quantity. A raw `CAAnimation` a host added would be misread as part of such
+    /// a track, or not read at all on a row with none, so a second pass landing mid-slide would not
+    /// resume from where the row is drawn. Going through `transitionPosition` also means an
+    /// overlapping slide composes with the one in flight (`transitionPositionOffset` folds in
+    /// `currentOffset`) rather than fighting it.
     ///
     /// Rows not currently loaded are skipped: an unloaded row has no layer, and it is off-screen, so
     /// there is nothing to see travel.
@@ -2387,6 +2772,9 @@ public final class CoreVirtualListView: UIView {
             notifyVisibleRects()
             refreshReachedLoadedEdges()
         }
+        // A rebuild re-anchors at index 0, like a full replace: nothing it builds is held.
+        heldRow = nil
+        holdSlack = (0, 0)
         engine.haltMotionInPlace()
         resetViewportCarries()
         animationController.reset()
@@ -2416,6 +2804,9 @@ public final class CoreVirtualListView: UIView {
                                    pinsLoadedTop: true,
                                    sourceWindow: nil)
         priorItems = _items
+        // Every `render()` caller marks the transaction first. Nothing is tracked after the reset above, so
+        // this records nothing; it keeps a later pass in the same turn from reading the rebuild as committed.
+        beginModelWrites()
         render()
         var initialOffset = containerOriginY - activeWindow.minY
         let edges = loadedEdgeRange(for: activeWindow, originY: containerOriginY)
@@ -2436,14 +2827,17 @@ public final class CoreVirtualListView: UIView {
     }
 
     private func resolveAnchor(scrollTo: CoreListScrollTarget?,
+                               heldIndex: Int?,
                                anchorMode: CoreListAnchorMode,
                                isNoOverlapSwap: Bool,
                                diff: ItemDiff,
                                oldWindow: Window,
                                oldContainerOriginY: CGFloat,
                                oldSettledOffset: CGFloat,
-                               oldTopInset: CGFloat,
-                               oldItemCount: Int) -> ResolvedAnchor? {
+                               oldViewportInsets: UIEdgeInsets,
+                               oldLogicalHeight: CGFloat,
+                               compensatesInsetChange: Bool,
+                               oldItems: [CoreListItem]) -> ResolvedAnchor? {
         if let scrollTo {
             // Momentum was already halted at pass entry (see applyChanges) — deliberately, so this pass's
             // geometry is built against the caught position rather than a stale sample.
@@ -2454,7 +2848,7 @@ public final class CoreVirtualListView: UIView {
         if holdsPinnedRow, let pinnedIndex = lowestPinnedItemIndex {
             // Above `preserveVisibleContent`: loading older history above a held pin must not move it.
             // Below `scrollTo`: an explicit jump still wins, and re-arms the latch when it targets the
-            // pin.
+            // pin with `pinsRow`.
             //
             // Reads ONLY the pinned row's own height — no span, no window membership, no loading
             // precondition, because anchoring on a row loads it. That is the whole reason this is an
@@ -2483,13 +2877,63 @@ public final class CoreVirtualListView: UIView {
                 isPin: true
             )
         }
-        if anchorMode == .preserveVisibleContent,
+        if let heldIndex, let held = heldRow {
+            // Below the pin latch, above `preserveVisibleContent`: loading history around a held row
+            // must not move it, and an explicit `scrollTo` (handled above) ends the hold anyway.
+            //
+            // `.resolved` reads the geometry this pass is building — new insets, new size, the row's
+            // new height — exactly as the pin latch's closure does; `resolveY` adds `viewportInsets.top`.
+            return ResolvedAnchor(
+                index: heldIndex,
+                offset: .resolved { [weak self] height, view in
+                    guard let self else { return 0 }
+                    return self.holdEdgeY(held.hold.edge) + held.distance
+                        - held.hold.rowPoint(height, view) - self.viewportInsets.top
+                },
+                preservesVisibleContent: false,
+                isHeld: true
+            )
+        }
+        if anchorMode == .preserveCentredContent,
+           let centred = resolveCentredAnchor(
+               diff: diff,
+               oldWindow: oldWindow,
+               oldContainerOriginY: oldContainerOriginY,
+               oldSettledOffset: oldSettledOffset,
+               oldCentreLineY: (oldViewportInsets.top + oldLogicalHeight - oldViewportInsets.bottom) * 0.5,
+               followsNewCentreLine: compensatesInsetChange
+           ) {
+            return centred
+        }
+        if case let .preserveItem(identity) = anchorMode,
+           let preserved = resolvePreservedItemAnchor(
+               identity: identity,
+               diff: diff,
+               oldItems: oldItems,
+               oldWindow: oldWindow,
+               oldContainerOriginY: oldContainerOriginY,
+               oldSettledOffset: oldSettledOffset,
+               oldTopInset: oldViewportInsets.top
+           ) {
+            return preserved
+        }
+        // `.preserveItem` comes here when the old window did not load its row, the row lies wholly above
+        // the top inset edge or the row is leaving, which makes the pass exactly a `.preserveVisibleContent`
+        // one.
+        let resolvesTopInsetWitness: Bool
+        switch anchorMode {
+        case .preserveVisibleContent, .preserveItem:
+            resolvesTopInsetWitness = true
+        case .automatic, .preserveCentredContent:
+            resolvesTopInsetWitness = false
+        }
+        if resolvesTopInsetWitness,
            let preserved = resolvePreservedAnchor(
                diff: diff,
                oldWindow: oldWindow,
                oldContainerOriginY: oldContainerOriginY,
                oldSettledOffset: oldSettledOffset,
-               oldTopInset: oldTopInset
+               oldTopInset: oldViewportInsets.top
            ) {
             return preserved
         }
@@ -2499,9 +2943,16 @@ public final class CoreVirtualListView: UIView {
                                   pointOffset: 0,
                                   preservesVisibleContent: false)
         }
+        // The NATURAL edge, not the declared one: an offset resting on a released hold's extended
+        // minimum is not resting where index 0 belongs. That matters only when `pinsLoadedTop` declines
+        // this pass — a nonzero `additionalScrollDistance`; otherwise it reads the declared edge and
+        // translates the window onto `topEdge`, which carries the slack, whatever anchor this returns.
+        // Declined, matching the extended edge here would hand the anchor to index 0 at point offset 0,
+        // which ignores the slack and moves everything by it.
         let oldEdges = loadedEdgeRange(for: oldWindow,
                                        originY: oldContainerOriginY,
-                                       itemCount: oldItemCount)
+                                       itemCount: oldItems.count,
+                                       includesHoldSlack: false)
         if oldWindow.startIndex == 0,
            let minimum = oldEdges.min,
            abs(oldSettledOffset - minimum) <= 1e-6 {
@@ -2587,6 +3038,97 @@ public final class CoreVirtualListView: UIView {
         ))
     }
 
+    /// `.preserveCentredContent`: the loaded row crossing the old visible centre line, else the nearest
+    /// survivor below it, then above it (`resolvePreservedAnchor`'s order), keeps its midpoint's
+    /// distance from the line. A row that crossed the line still crosses it once re-measured (a tall row
+    /// shrinking near one of its ends): its top stays at or above the line and its bottom below it, on
+    /// the pixel grid, so a reversal finds the same row. The line is the new geometry's
+    /// (`holdEdgeY(.visibleCenter)`, read when `buildWindow` resolves the anchor), or the old one when
+    /// the caller declined inset compensation. Settled geometry, as for every anchor: a rubber band or a
+    /// viewport track in flight does not count.
+    private func resolveCentredAnchor(diff: ItemDiff,
+                                      oldWindow: Window,
+                                      oldContainerOriginY: CGFloat,
+                                      oldSettledOffset: CGFloat,
+                                      oldCentreLineY: CGFloat,
+                                      followsNewCentreLine: Bool) -> ResolvedAnchor? {
+        guard !oldWindow.isEmpty else { return nil }
+        let absoluteBase = oldContainerOriginY - oldWindow.minY
+        func screenMinY(_ item: Window.Item) -> CGFloat {
+            absoluteBase + item.frame.minY - oldSettledOffset
+        }
+        let witnessPosition = oldWindow.items.firstIndex {
+            screenMinY($0) + $0.frame.height > oldCentreLineY
+        } ?? oldWindow.items.count - 1
+
+        func resolved(_ positions: [Int]) -> ResolvedAnchor? {
+            for position in positions {
+                let item = oldWindow.items[position]
+                guard let newIndex = diff.survivingNewIndex(forOldIndex: item.index) else { continue }
+                let minY = screenMinY(item)
+                let crosses = minY <= oldCentreLineY && minY + item.frame.height > oldCentreLineY
+                let midDistance = minY + item.frame.height * 0.5 - oldCentreLineY
+                return ResolvedAnchor(
+                    index: newIndex,
+                    offset: .resolved { [weak self] height, _ in
+                        guard let self else { return 0 }
+                        let line = followsNewCentreLine ? self.holdEdgeY(.visibleCenter) : oldCentreLineY
+                        var top = self.alignedToPixels(line + midDistance - height * 0.5)
+                        if crosses {
+                            let pixel = 1.0 / max(1.0, self.traitCollection.displayScale)
+                            top = min(top, self.alignedToPixels(line, .down))
+                            top = max(top, self.alignedToPixels(line - height, .down) + pixel)
+                        }
+                        return top - self.viewportInsets.top
+                    },
+                    preservesVisibleContent: true
+                )
+            }
+            return nil
+        }
+
+        if let below = resolved(Array(witnessPosition..<oldWindow.items.endIndex)) {
+            return below
+        }
+        return resolved(Array(oldWindow.items.indices[..<witnessPosition].reversed()))
+    }
+
+    /// `.preserveItem`: the named row keeps its old settled screen top, lowered onto the old top inset
+    /// edge when it sat above it. A `.fixed` anchor, because the placement does not depend on the row's
+    /// new height, and so the offset composition projects it exactly as it does
+    /// `resolvePreservedAnchor`'s witness (inset compensation, pin slack, `additionalScrollDistance`).
+    /// Nil when the old window did not load the row, the row lies wholly above the edge, or the row is
+    /// leaving the collection.
+    private func resolvePreservedItemAnchor(identity: AnyHashable,
+                                            diff: ItemDiff,
+                                            oldItems: [CoreListItem],
+                                            oldWindow: Window,
+                                            oldContainerOriginY: CGFloat,
+                                            oldSettledOffset: CGFloat,
+                                            oldTopInset: CGFloat) -> ResolvedAnchor? {
+        guard let item = oldWindow.items.first(where: {
+                  oldItems.indices.contains($0.index) && oldItems[$0.index].identity == identity
+              }),
+              let newIndex = diff.survivingNewIndex(forOldIndex: item.index)
+        else { return nil }
+        let screenMinY = oldContainerOriginY - oldWindow.minY + item.frame.minY - oldSettledOffset
+        // Wholly above the edge (loaded in the preload band, or under the top inset): pulling it onto the
+        // edge would jump the content by its height and more. The pass keeps what is on screen instead.
+        guard screenMinY + item.frame.height > oldTopInset else { return nil }
+        return ResolvedAnchor(index: newIndex,
+                              pointOffset: max(screenMinY, oldTopInset),
+                              preservesVisibleContent: true)
+    }
+
+    /// `value` on the display's pixel grid, rounded by `rule`; unchanged while the scale is unknown (a
+    /// list outside a window can report 0).
+    private func alignedToPixels(_ value: CGFloat,
+                                 _ rule: FloatingPointRoundingRule = .toNearestOrAwayFromZero) -> CGFloat {
+        let scale = traitCollection.displayScale
+        guard scale > 0 else { return value }
+        return (value * scale).rounded(rule) / scale
+    }
+
     fileprivate func markDirty(_ view: UIView, animated: Bool) {
         guard let item = activeWindow.items.first(where: { $0.view === view }) else { return }
         dirtyIndices.insert(item.index)
@@ -2628,6 +3170,14 @@ public final class CoreVirtualListView: UIView {
         previousOffset = engine.offset
         onUserScrollDelta?(delta, timestamp)
         rebalanceActiveWindow()
+        // On frames the user drives, never on a flight's ticks: each retire re-declares the edge at the
+        // live offset, an edge on the remaining path, so `KeyframeFlight` would rebake every frame. A
+        // flight inside the slack plays against the extended edge and the slack retires once, when the
+        // flight ends (`engine.onFlightChanged`). Only `.keyframe` publishes flights; a stepped or UIKit
+        // deceleration keeps retiring here.
+        if activeScrollFlight == nil {
+            retireHoldSlack()
+        }
         refreshReachedLoadedEdges()
         // The floating clamp is viewport-dependent, and `rebalanceActiveWindow` runs `render()` only
         // when the window actually changed — so a scroll that leaves the window untouched would
@@ -2692,6 +3242,9 @@ public final class CoreVirtualListView: UIView {
         }
 
         guard changed else { return }
+        // `render()` below re-bases the surviving rows when the window's top moved; a pass later in
+        // this transaction must not read that as motion.
+        beginModelWrites()
         let promotedCrossingIdentities = Set(window.items.map {
             _items[$0.index].identity
         }).intersection(crossingCarries.keys)
@@ -2731,7 +3284,7 @@ public final class CoreVirtualListView: UIView {
     /// Reports each loaded row the part of itself inside the viewport. Uses the same projection
     /// `rebalanceActiveWindow` uses, against the FULL viewport rect — insets stay visible space.
     private func notifyVisibleRects() {
-        let viewportRect = CGRect(origin: .zero, size: logicalSize)
+        let viewportRect = CGRect(origin: .zero, size: logicalSize).inset(by: visibleRectInsets)
         let contentBaseY = containerOriginY - activeWindow.minY
         let scrollY = engine.offset
 
@@ -2819,6 +3372,7 @@ public final class CoreVirtualListView: UIView {
                              resolveY: (CGFloat, UIView & CoreListItemView) -> CGFloat,
                              pinsLoadedTop: Bool = false,
                              pinSlackBaseline: CGFloat? = nil,
+                             holdsAnchor: Bool = false,
                              sourceWindow: Window?,
                              survivorMapNewToOld: [Int: Int]? = nil,
                              moveReuseNewToOld: [Int: Int]? = nil) -> Window {
@@ -2849,7 +3403,13 @@ public final class CoreVirtualListView: UIView {
         // the loaded-top pin, both underfill alignments, the whole-collection underfill test — uses
         // the same value.
         var topEdge = viewportInsets.top
-        let bottomEdge = logicalSize.height - viewportInsets.bottom
+        // A released hold's slack at the oldest edge, the counterpart of the `holdSlack.min` addend in
+        // `topEdge` below: a positive maximum slack means the oldest row may rest that far ABOVE the
+        // bottom inset edge, so it is subtracted. Inert on a held build (the bottom underfill block is
+        // skipped) and zero on every scroll and full-replace pass; after release it keeps a pass from
+        // aligning the oldest row onto the inset edge, which would move everything by the slack.
+        // `heldWindowSlack` measures against the unfolded edge, or the slack would feed itself.
+        let bottomEdge = logicalSize.height - viewportInsets.bottom - holdSlack.max
 
         func alignTopIfUnderfilled() -> Bool {
             guard window.startIndex == 0, window.minY > topEdge else { return false }
@@ -2924,7 +3484,15 @@ public final class CoreVirtualListView: UIView {
         // Ordering is safe in one direction only, and this is that direction: the slack pushes the
         // window DOWN, so the append below needs no more rows than it would have without it.
         let pinSlack = bottomEdgePinSlack(for: window)
-        topEdge = viewportInsets.top + pinSlack
+        // A released hold's slack is the third addend (spec §2: it folds in wherever the pin slack
+        // does). While held it is inert here — a held build skips both underfill alignments and never
+        // pins the loaded top — but after release it is what keeps a pass from closing the gap the
+        // user is looking at: `loadedEdgeRange` still declares the extended minimum, so without it the
+        // loaded-top pin and the top underfill alignment would place the newest row on the NATURAL
+        // edge, moving everything by the slack. Zero on every scroll and full-replace pass, which reset
+        // it before building. `heldWindowSlack` measures against its own edge without this addend, or
+        // the slack would feed itself.
+        topEdge = viewportInsets.top + pinSlack + holdSlack.min
         if pinsLoadedTop, window.startIndex == 0 {
             translate(&window, by: topEdge - window.minY)
         } else {
@@ -2947,23 +3515,44 @@ public final class CoreVirtualListView: UIView {
                 // movement still wants growth absorbed rather than pushed under its finger.
                 translate(&window, by: pinSlack - pinSlackBaseline)
             }
-            _ = alignTopIfUnderfilled()
+            if !holdsAnchor {
+                _ = alignTopIfUnderfilled()
+            }
         }
         appendUntilCoveredOrAtBottom()
 
-        if window.endIndex == _items.count - 1,
+        // A whole collection that fits between the insets rests on the top inset edge, or with `stacksFromBottom` on
+        // the bottom one (the pin's slack, which brings the pinned row to that edge too, wins when larger). Matched by
+        // construction with `loadedEdgeRange`'s minimum, which declares the same slack.
+        func placeWholeCollection() {
+            let stackSlack = stackFromBottomSlack(for: window, itemCount: _items.count)
+            guard stackSlack > 0 else {
+                translate(&window, by: topEdge - window.minY)
+                return
+            }
+            // `loadedEdgeRange`'s minimum, term for term: the larger of the two slacks, then a released hold's.
+            translate(&window, by: viewportInsets.top + max(bottomEdgePinSlack(for: window), stackSlack) + holdSlack.min - window.minY)
+        }
+
+        // Stacked wherever the anchor put it: a row that grew can have pushed the last one past the bottom edge with
+        // room above still, which the branch below, keyed on room below, does not see. A held build skips this as it
+        // skips both underfill alignments.
+        if !holdsAnchor, stackFromBottomSlack(for: window, itemCount: _items.count) > 0 {
+            placeWholeCollection()
+        } else if !holdsAnchor,
+           window.endIndex == _items.count - 1,
            window.maxY < bottomEdge {
             let wholeCollectionIsUnderfilled = window.startIndex == 0
                 && window.height + viewportInsets.top + viewportInsets.bottom
                     <= logicalSize.height
             if wholeCollectionIsUnderfilled {
-                translate(&window, by: topEdge - window.minY)
+                placeWholeCollection()
             } else if alignBottomIfUnderfilled() {
                 prependUntilCoveredOrAtTop()
                 if window.startIndex == 0,
                    window.height + viewportInsets.top + viewportInsets.bottom
                         <= logicalSize.height {
-                    translate(&window, by: topEdge - window.minY)
+                    placeWholeCollection()
                 } else {
                     _ = alignTopIfUnderfilled()
                 }
@@ -3099,21 +3688,72 @@ public final class CoreVirtualListView: UIView {
                       - (viewportInsets.top + span))
     }
 
+    /// How far `stacksFromBottom` rests a whole collection below the top inset edge: the room between it and the bottom
+    /// inset edge. Zero unless the option is on and the whole collection is loaded and fits between the insets. Folded
+    /// into `buildWindow`'s placement of that collection and `loadedEdgeRange`'s minimum, which must agree, as the pin's
+    /// slack and its placement do (`max` of the two: the pin's is the larger when both apply).
+    private func stackFromBottomSlack(for window: Window, itemCount: Int) -> CGFloat {
+        guard stacksFromBottom, !window.isEmpty, window.startIndex == 0, window.endIndex == itemCount - 1 else { return 0 }
+        return max(0, logicalSize.height - viewportInsets.bottom - (viewportInsets.top + window.height))
+    }
+
+    /// How far a held placement puts the window short of each loaded edge: the gap between the newest
+    /// row and the top edge (pin slack included), and between the oldest row and the bottom inset edge.
+    /// Zero for an edge that is not loaded, and clamped at zero, like the pin slack — never placement
+    /// leaking into the scroll range.
+    private func heldWindowSlack(_ window: Window) -> (min: CGFloat, max: CGFloat) {
+        let topEdge = viewportInsets.top + max(bottomEdgePinSlack(for: window),
+                                               stackFromBottomSlack(for: window, itemCount: _items.count))
+        let bottomEdge = logicalSize.height - viewportInsets.bottom
+        let minimum = window.startIndex == 0 ? max(0, window.minY - topEdge) : 0
+        let maximum = window.endIndex == _items.count - 1 ? max(0, bottomEdge - window.maxY) : 0
+        return (minimum, maximum)
+    }
+
+    /// After release, shrinks the hold's slack to what the current offset still needs, so content in
+    /// the slack region stays put and the extra room disappears only as the user scrolls back into the
+    /// natural range. Never grows it. Re-declares the engine edges when it changed; that never moves the
+    /// offset, because the shrunk edge lands exactly on it.
+    private func retireHoldSlack() {
+        guard heldRow == nil, holdSlack.min > 0 || holdSlack.max > 0, !activeWindow.isEmpty else { return }
+        let natural = loadedEdgeRange(for: activeWindow, originY: containerOriginY, includesHoldSlack: false)
+        var naturalMax = natural.max
+        if let minimum = natural.min, let maximum = naturalMax, maximum < minimum {
+            naturalMax = minimum
+        }
+        let offset = engine.offset
+        let neededMin = natural.min.map { max(0, $0 - offset) } ?? 0
+        let neededMax = naturalMax.map { max(0, offset - $0) } ?? 0
+        let retired = (min: min(holdSlack.min, neededMin), max: min(holdSlack.max, neededMax))
+        guard retired.min != holdSlack.min || retired.max != holdSlack.max else { return }
+        holdSlack = retired
+        let edges = loadedEdgeRange(for: activeWindow, originY: containerOriginY)
+        engine.setEdges(min: edges.min, max: edges.max)
+        declaredEdges = (edges.min, edges.max)
+    }
+
     private func loadedEdgeRange(for window: Window,
                                  originY: CGFloat,
-                                 itemCount: Int? = nil) -> (min: CGFloat?, max: CGFloat?) {
+                                 itemCount: Int? = nil,
+                                 includesHoldSlack: Bool = true) -> (min: CGFloat?, max: CGFloat?) {
         guard !window.isEmpty else { return (0, 0) }
         let count = itemCount ?? _items.count
+        let slack = includesHoldSlack ? holdSlack : (min: 0, max: 0)
         // The pin's slack rides the MINIMUM edge, which is what makes it stick: `render()` and
         // `refreshReachedLoadedEdges()` both come through here and `rebalanceActiveWindow()` re-renders,
-        // so user scrolling, momentum and self-update flushes all see it with no extra plumbing.
+        // so user scrolling, momentum and self-update flushes all see it with no extra plumbing. The
+        // scroll hold's slack rides both edges the same way.
+        // The bottom stack's slack takes the pin's place when larger (see `buildWindow`): for a collection that fits,
+        // this minimum is then exactly the natural maximum, so the range is the one resting offset.
         let minimum: CGFloat? = window.startIndex == 0
-            ? viewportGeometry.minimumOffset - bottomEdgePinSlack(for: window)
+            ? viewportGeometry.minimumOffset
+                - max(bottomEdgePinSlack(for: window), stackFromBottomSlack(for: window, itemCount: count))
+                - slack.min
             : nil
         let maximum: CGFloat? = window.endIndex == count - 1
             ? viewportGeometry.maximumOffset(
                 contentBottom: originY - window.minY + window.maxY
-            )
+            ) + slack.max
             : nil
         return (minimum, maximum)
     }
@@ -3166,6 +3806,26 @@ public final class CoreVirtualListView: UIView {
                                       bottomLoaded: window.endIndex == _items.count - 1)
     }
 
+    /// Runs before a pass or a window-changing rebalance first writes a row base. The first call after a
+    /// commit records the committed bases and marks the transaction; later ones in the same transaction
+    /// keep that record. A sentinel with no presentation (a list outside a window) counts as committed:
+    /// its rows have none either, so nothing is sampled against the record.
+    private func beginModelWrites() {
+        let layer = commitSentinel.layer
+        let isCommitted = layer.presentation().map { $0.bounds.origin.x == layer.bounds.origin.x }
+            ?? true
+        animationController.beginModelWrites(isCommitted: isCommitted)
+        if isCommitted {
+            commitSentinelSerial += 1
+            UIView.performWithoutAnimation {
+                layer.bounds.origin.x = commitSentinelSerial
+            }
+        }
+    }
+
+    /// Re-bases every loaded row's position. A caller calls `beginModelWrites()` first in the same
+    /// transaction (a pass's entry, a window-changing `rebalanceActiveWindow`, `rebuildFromScratch`):
+    /// without it a later pass in the turn samples this re-base as motion.
     private func render() {
         let window = activeWindow
         let newOriginY = computeContainerOriginY(for: window)

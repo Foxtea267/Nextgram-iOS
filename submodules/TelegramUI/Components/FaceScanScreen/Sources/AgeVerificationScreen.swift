@@ -28,7 +28,7 @@ public func requireAgeVerification(context: AccountContext) -> Bool {
 }
 
 public func requireAgeVerification(context: AccountContext, peer: EnginePeer) -> Signal<Bool, NoError> {
-    if requireAgeVerification(context: context), peer.hasSensitiveContent(platform: "ios") {
+    if requireAgeVerification(context: context), peer.hasSensitiveContent(platform: "ios", contentSettings: context.currentContentSettings.with { $0 }) {
         return context.engine.data.get(TelegramEngine.EngineData.Item.Configuration.ContentSettings())
         |> map { contentSettings in
             if !contentSettings.ignoreContentRestrictionReasons.contains("sensitive") {
@@ -267,7 +267,7 @@ private final class AgeVerificationSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         hasInputHeight: !environment.inputHeight.isZero,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in

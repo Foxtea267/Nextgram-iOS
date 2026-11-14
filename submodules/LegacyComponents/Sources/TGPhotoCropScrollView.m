@@ -193,14 +193,11 @@ typedef struct {
     _snapshotView.superview.transform = _wrapperView.transform;
 }
 
-- (void)fitContentInsideBoundsAllowScale:(bool)allowScale animated:(bool)animated completion:(void (^)(void))completion
+// MARK: NAGRAM
+// The content's rectangle in the frame where it is axis-aligned, to compare with the bounding box of
+// the rotated bounds.
+- (CGRect)_contentRectForBoundsRect:(CGRect)boundsRect
 {
-    [self fitContentInsideBoundsAllowScale:allowScale maximize:false animated:animated completion:completion];
-}
-
-- (void)fitContentInsideBoundsAllowScale:(bool)allowScale maximize:(bool)maximize animated:(bool)animated completion:(void (^)(void))completion
-{
-    CGRect boundsRect = [self boundingBoxForRect:self.bounds withRotation:self.contentRotation];
     CGRect initialRect = CGRectMake(0, 0, _contentSize.width, _contentSize.height);
     CGPoint initialOffset = CGPointMake((self.bounds.size.width - _contentSize.width) / 2, (self.bounds.size.height - _contentSize.height) / 2);
     
@@ -223,7 +220,42 @@ typedef struct {
     t = CGAffineTransformTranslate(t, -_contentSize.width / 2, -_contentSize.height / 2);
     
     TGPhotoCropRectangle r3 = [self applyTransform:t toRectangle:r2];
-    __block CGRect contentRect = [self CGRectFromRectangle:r3];
+    return [self CGRectFromRectangle:r3];
+}
+
+- (bool)contentCoversBounds
+{
+    CGRect boundsRect = [self boundingBoxForRect:self.bounds withRotation:self.contentRotation];
+    CGRect contentRect = [self _contentRectForBoundsRect:boundsRect];
+    return CGRectContainsRect(CGRectInset(contentRect, -0.05f, -0.05f), boundsRect);
+}
+
+// MARK: NAGRAM
+- (void)scaleContentBy:(CGFloat)ratio aroundPoint:(CGPoint)point
+{
+    CGPoint scaleCenter = [self convertPoint:point toView:_wrapperView];
+    CGPoint delta = CGPointMake(scaleCenter.x - _wrapperView.bounds.size.width / 2,
+                                scaleCenter.y - _wrapperView.bounds.size.height / 2);
+    
+    CATransform3D transform = CATransform3DTranslate(_wrapperView.layer.transform, delta.x, delta.y, 0.0f);
+    transform = CATransform3DScale(transform, ratio, ratio, 1.0f);
+    transform = CATransform3DTranslate(transform, -delta.x, -delta.y, 0.0f);
+    
+    _wrapperView.layer.transform = transform;
+    _snapshotView.superview.layer.transform = transform;
+}
+
+- (void)fitContentInsideBoundsAllowScale:(bool)allowScale animated:(bool)animated completion:(void (^)(void))completion
+{
+    [self fitContentInsideBoundsAllowScale:allowScale maximize:false animated:animated completion:completion];
+}
+
+- (void)fitContentInsideBoundsAllowScale:(bool)allowScale maximize:(bool)maximize animated:(bool)animated completion:(void (^)(void))completion
+{
+    CGRect boundsRect = [self boundingBoxForRect:self.bounds withRotation:self.contentRotation];
+    // MARK: NAGRAM
+    __block CGRect contentRect = [self _contentRectForBoundsRect:boundsRect];
+    CGFloat contentScale = self.contentScale;
     
     __block CGPoint targetTranslation = [[_wrapperView.layer valueForKeyPath:@"transform.translation"] CGPointValue];
     __block CGFloat targetScale = contentScale;

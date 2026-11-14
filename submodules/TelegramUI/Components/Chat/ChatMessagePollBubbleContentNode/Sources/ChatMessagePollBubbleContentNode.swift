@@ -1,11 +1,9 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Crc32
 import Display
 import TelegramCore
-import Postbox
 import TextFormat
 import UrlEscaping
 import SwiftSignalKit
@@ -449,7 +447,7 @@ private struct ChatMessagePollOptionResult: Equatable {
     let normalized: CGFloat
     let percent: Int
     let count: Int32
-    let recentVoterPeerIds: [PeerId]
+    let recentVoterPeerIds: [EnginePeer.Id]
 }
 
 private struct ChatMessagePollOptionSelection: Equatable {
@@ -491,8 +489,8 @@ private final class ChatMessagePollOptionNode: ASDisplayNode {
     private var stickerMediaLayer: InlineStickerItemLayer?
     private var mediaHidden = false
     private(set) var mediaFrame: CGRect?
-    private var currentMedia: Media?
-    private var currentRecentVoterPeerIds: [PeerId] = []
+    private var currentMedia: EngineRawMedia?
+    private var currentRecentVoterPeerIds: [EnginePeer.Id] = []
     private var fetchDisposable = MetaDisposable()
     
     var option: TelegramMediaPollOption?
@@ -504,7 +502,7 @@ private final class ChatMessagePollOptionNode: ASDisplayNode {
     var resultPressed: (() -> Void)?
     var longTapped: (() -> Void)?
     var context: AccountContext?
-    var message: Message?
+    var message: EngineRawMessage?
     private var theme: PresentationTheme?
     private var presentationData: ChatPresentationData?
     private var presentationContext: ChatPresentationContext?
@@ -840,7 +838,7 @@ private final class ChatMessagePollOptionNode: ASDisplayNode {
         }
     }
 
-    func transitionNode(media: Media) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))? {
+    func transitionNode(media: EngineRawMedia) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))? {
         guard let currentMedia = self.currentMedia, currentMedia.isEqual(to: media), let mediaNode = self.mediaNode, !mediaNode.isHidden else {
             return nil
         }
@@ -849,7 +847,7 @@ private final class ChatMessagePollOptionNode: ASDisplayNode {
         })
     }
 
-    static func asyncLayout(_ maybeNode: ChatMessagePollOptionNode?) -> (_ context: AccountContext, _ presentationData: ChatPresentationData, _ presentationContext: ChatPresentationContext, _ message: Message, _ poll: TelegramMediaPoll, _ option: TelegramMediaPollOption, _ translation: TranslationMessageAttribute.Additional?, _ optionResult: ChatMessagePollOptionResult?, _ forceSelected: Bool?, _ hasAnyMedia: Bool, _ constrainedWidth: CGFloat) -> (minimumWidth: CGFloat, layout: ((CGFloat) -> (CGSize, (Bool, Bool, Bool) -> ChatMessagePollOptionNode))) {
+    static func asyncLayout(_ maybeNode: ChatMessagePollOptionNode?) -> (_ context: AccountContext, _ presentationData: ChatPresentationData, _ presentationContext: ChatPresentationContext, _ message: EngineRawMessage, _ poll: TelegramMediaPoll, _ option: TelegramMediaPollOption, _ translation: TranslationMessageAttribute.Additional?, _ optionResult: ChatMessagePollOptionResult?, _ forceSelected: Bool?, _ hasAnyMedia: Bool, _ constrainedWidth: CGFloat) -> (minimumWidth: CGFloat, layout: ((CGFloat) -> (CGSize, (Bool, Bool, Bool) -> ChatMessagePollOptionNode))) {
         let makeTitleLayout = TextNodeWithEntities.asyncLayout(maybeNode?.titleNode)
         let currentResult = maybeNode?.currentResult
         let currentSelection = maybeNode?.currentSelection
@@ -1291,11 +1289,10 @@ private final class ChatMessagePollOptionNode: ASDisplayNode {
                                     mediaNode.setSignal(chatMessagePhoto(postbox: context.account.postbox, userLocation: .peer(message.id.peerId), photoReference: .webPage(webPage: webpageReference, media: image)))
 
                                     if let smallest = smallestImageRepresentation(image.representations) {
-                                        updatedFetchSignal = fetchedMediaResource(
-                                            mediaBox: context.account.postbox.mediaBox,
+                                        updatedFetchSignal = context.engine.resources.fetch(
+                                            reference: .media(media: .webPage(webPage: webpageReference, media: image), resource: smallest.resource),
                                             userLocation: .peer(message.id.peerId),
                                             userContentType: .image,
-                                            reference: .media(media: .webPage(webPage: webpageReference, media: image), resource: smallest.resource),
                                             statsCategory: .image
                                         )
                                         |> map { _ -> Void in
@@ -1559,10 +1556,8 @@ private final class ChatMessagePollAddOptionNode: ASDisplayNode {
     private static let minHeight: CGFloat = 52.0
     private static let attachmentInset: CGFloat = 52.0
     
-    private let lottieSettings: LottieRenderingSettings
 
-    init(lottieSettings: LottieRenderingSettings) {
-        self.lottieSettings = lottieSettings
+    override init() {
 
         self.leftAccessoryButton = HighlightableButtonNode()
         
@@ -1746,7 +1741,7 @@ private final class ChatMessagePollAddOptionNode: ASDisplayNode {
                 let metrics = ChatMessagePollAddOptionNode.layoutMetrics(measureTextNode: currentMeasureTextNode, constrainedWidth: width, text: text, font: font)
                 let size = CGSize(width: width, height: metrics.contentHeight)
                 return (size, { _, _ in
-                    let node = maybeNode ?? ChatMessagePollAddOptionNode(lottieSettings: context.lottieRenderingSettings)
+                    let node = maybeNode ?? ChatMessagePollAddOptionNode()
                     
                     node.currentFont = font
                     node.currentTextColor = textColor
@@ -1894,8 +1889,7 @@ private final class ChatMessagePollAddOptionNode: ASDisplayNode {
                     content: AnyComponent(LottieComponent(
                         content: LottieComponent.AppBundleContent(name: animationName),
                         color: secondaryTextColor,
-                        size: modeSelectorSize,
-                        lottieSettings: self.lottieSettings
+                        size: modeSelectorSize
                     )),
                     effectAlignment: .center,
                     action: { [weak self] in
@@ -2051,7 +2045,7 @@ private final class ChatMessagePollAddOptionNode: ASDisplayNode {
                     if updateMedia {
                         imageNode.setSignal(chatMessagePhoto(postbox: context.account.postbox, userLocation: .other, photoReference: .webPage(webPage: webpageReference, media: image)))
                         if let representation = smallestImageRepresentation(image.representations) {
-                            let _ = fetchedMediaResource(mediaBox: context.account.postbox.mediaBox, userLocation: .other, userContentType: .image, reference: .media(media: .webPage(webPage: webpageReference, media: image), resource: representation.resource)).startStandalone()
+                            let _ = context.engine.resources.fetch(reference: .media(media: .webPage(webPage: webpageReference, media: image), resource: representation.resource), userLocation: .other, userContentType: .image).startStandalone()
                         }
                     }
                     self.appliedWebpagePlaceholderColor = nil
@@ -2277,7 +2271,7 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
         }
     }
 
-    required public init(lottieSettings: LottieRenderingSettings) {
+    required public init() {
         self.textNode = TextNodeWithEntities()
         self.textNode.textNode.isUserInteractionEnabled = false
         self.textNode.textNode.contentMode = .topLeft
@@ -2333,7 +2327,7 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
 
         self.statusNode = ChatMessageDateAndStatusNode()
 
-        super.init(lottieSettings: lottieSettings)
+        super.init()
 
         self.addSubnode(self.textNode.textNode)
         self.addSubnode(self.typeNode)
@@ -2388,7 +2382,7 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
         self.temporaryHiddenMediaDisposable.dispose()
     }
 
-    private func optionNodeForMedia(_ media: Media) -> ChatMessagePollOptionNode? {
+    private func optionNodeForMedia(_ media: EngineRawMedia) -> ChatMessagePollOptionNode? {
         for optionNode in self.optionNodes {
             if let optionMedia = optionNode.option?.media, optionMedia.isEqual(to: media) {
                 return optionNode
@@ -2662,7 +2656,7 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
             }
         }
 
-        var previousOptionNodeLayouts: [Data: (_ contet: AccountContext, _ presentationData: ChatPresentationData, _ presentationContext: ChatPresentationContext, _ message: Message, _ poll: TelegramMediaPoll, _ option: TelegramMediaPollOption, _ translation: TranslationMessageAttribute.Additional?, _ optionResult: ChatMessagePollOptionResult?, _ forceSelected: Bool?, _ hasAnyMedia: Bool, _ constrainedWidth: CGFloat) -> (minimumWidth: CGFloat, layout: ((CGFloat) -> (CGSize, (Bool, Bool, Bool) -> ChatMessagePollOptionNode)))] = [:]
+        var previousOptionNodeLayouts: [Data: (_ contet: AccountContext, _ presentationData: ChatPresentationData, _ presentationContext: ChatPresentationContext, _ message: EngineRawMessage, _ poll: TelegramMediaPoll, _ option: TelegramMediaPollOption, _ translation: TranslationMessageAttribute.Additional?, _ optionResult: ChatMessagePollOptionResult?, _ forceSelected: Bool?, _ hasAnyMedia: Bool, _ constrainedWidth: CGFloat) -> (minimumWidth: CGFloat, layout: ((CGFloat) -> (CGSize, (Bool, Bool, Bool) -> ChatMessagePollOptionNode)))] = [:]
         for optionNode in self.optionNodes {
             if let option = optionNode.option {
                 previousOptionNodeLayouts[option.opaqueIdentifier] = ChatMessagePollOptionNode.asyncLayout(optionNode)
@@ -2728,7 +2722,7 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
                     switch position {
                     case .linear(_, .None), .linear(_, .Neighbour(true, _, _)):
                         if incoming {
-                            statusType = .BubbleIncoming
+                            statusType = item.bubbleStyle.hidesIncomingStatus ? nil : .BubbleIncoming
                         } else {
                             if message.flags.contains(.Failed) {
                                 statusType = .BubbleOutgoing(.Failed)
@@ -2996,14 +2990,14 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
                     let hasAnyOptionMedia = orderedPollOptions.contains(where: { $0.1.media != nil })
                     
                     for (i, option) in orderedPollOptions {
-                        let makeLayout: (_ context: AccountContext, _ presentationData: ChatPresentationData, _ presentationContext: ChatPresentationContext, _ message: Message, _ poll: TelegramMediaPoll, _ option: TelegramMediaPollOption, _ translation: TranslationMessageAttribute.Additional?, _ optionResult: ChatMessagePollOptionResult?, _ forceSelected: Bool?, _ hasAnyMedia: Bool, _ constrainedWidth: CGFloat) -> (minimumWidth: CGFloat, layout: ((CGFloat) -> (CGSize, (Bool, Bool, Bool) -> ChatMessagePollOptionNode)))
+                        let makeLayout: (_ context: AccountContext, _ presentationData: ChatPresentationData, _ presentationContext: ChatPresentationContext, _ message: EngineRawMessage, _ poll: TelegramMediaPoll, _ option: TelegramMediaPollOption, _ translation: TranslationMessageAttribute.Additional?, _ optionResult: ChatMessagePollOptionResult?, _ forceSelected: Bool?, _ hasAnyMedia: Bool, _ constrainedWidth: CGFloat) -> (minimumWidth: CGFloat, layout: ((CGFloat) -> (CGSize, (Bool, Bool, Bool) -> ChatMessagePollOptionNode)))
                         if let previous = previousOptionNodeLayouts[option.opaqueIdentifier] {
                             makeLayout = previous
                         } else {
                             makeLayout = ChatMessagePollOptionNode.asyncLayout(nil)
                         }
                         var optionResult: ChatMessagePollOptionResult?
-                        var recentVoterPeerIds: [PeerId] = []
+                        var recentVoterPeerIds: [EnginePeer.Id] = []
                         if case .public = poll.publicity, let voters = voters {
                             for optionVoters in voters where optionVoters.opaqueIdentifier == option.opaqueIdentifier {
                                 recentVoterPeerIds = optionVoters.recentVoters
@@ -3777,14 +3771,14 @@ public class ChatMessagePollBubbleContentNode: ChatMessageBubbleContentNode {
         }
     }
 
-    override public func transitionNode(messageId: MessageId, media: Media, adjustRect: Bool) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))? {
+    override public func transitionNode(messageId: EngineMessage.Id, media: EngineRawMedia, adjustRect: Bool) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))? {
         guard let item = self.item, item.message.id == messageId, let optionNode = self.optionNodeForMedia(media), let transitionNode = optionNode.transitionNode(media: media) else {
             return nil
         }
         return (transitionNode.0, transitionNode.1, transitionNode.2)
     }
 
-    override public func updateHiddenMedia(_ media: [Media]?) -> Bool {
+    override public func updateHiddenMedia(_ media: [EngineRawMedia]?) -> Bool {
         var updated = false
         for optionNode in self.optionNodes {
             let shouldHide = media?.contains(where: { hiddenMedia in

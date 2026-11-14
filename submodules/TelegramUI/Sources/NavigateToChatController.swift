@@ -143,7 +143,9 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
             return
         }
         
-        if !params.forceOpenChat, !viewForumAsMessages, params.subject == nil, case let .peer(peer) = params.chatLocation, peer.id == params.context.account.peerId {
+        // With the chat side list, Saved Messages opens its own chat and lists its sub-chats in the side list.
+        let opensSavedMessagesAsChat = params.context.usesChatSideList && params.navigationController.traitCollection.horizontalSizeClass != .regular
+        if !params.forceOpenChat, !viewForumAsMessages, !opensSavedMessagesAsChat, params.subject == nil, case let .peer(peer) = params.chatLocation, peer.id == params.context.account.peerId {
             if let controller = params.context.sharedContext.makePeerInfoController(context: params.context, updatedPresentationData: nil, peer: peer, mode: .generic, avatarInitiallyExpanded: false, fromChat: false, requestsContext: nil) {
                 params.navigationController.pushViewController(controller, animated: params.animated, completion: {
                 })
@@ -180,7 +182,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
                     }
                     var popAndComplete = true
                     var switchToThreadHandled = false
-                    if let subject = params.subject, case let .message(messageSubject, highlight, timecode, setupReply) = subject {
+                    if let subject = params.subject, case let .message(messageSubject, highlight, timecode, setupReply, _) = subject {
                         if case let .id(messageId) = messageSubject {
                             let navigationController = params.navigationController
                             let animated = params.animated
@@ -306,7 +308,7 @@ public func navigateToChatControllerImpl(_ params: NavigateToChatControllerParam
                     }
                 }
             } else {
-                controller = ChatControllerImpl(context: params.context, chatLocation: params.chatLocation.asChatLocation, chatLocationContextHolder: params.chatLocationContextHolder, subject: params.subject, botStart: params.botStart, attachBotStart: params.attachBotStart, botAppStart: params.botAppStart, peekData: params.peekData, chatListFilter: params.chatListFilter, chatNavigationStack: params.chatNavigationStack, customChatNavigationStack: params.customChatNavigationStack, initialTextInputState: params.updateTextInputState)
+                controller = ChatControllerImpl(context: params.context, chatLocation: params.chatLocation.asChatLocation, chatLocationContextHolder: params.chatLocationContextHolder, subject: params.subject, botStart: params.botStart, attachBotStart: params.attachBotStart, botAppStart: params.botAppStart, peekData: params.peekData, chatListFilter: params.chatListFilter, chatNavigationStack: params.chatNavigationStack, customChatNavigationStack: params.customChatNavigationStack, showsUnreadChatsBackBadge: params.showsUnreadChatsBackBadge, initialTextInputState: params.updateTextInputState)
                 
                 if let botAppStart = params.botAppStart, case let .peer(peer) = params.chatLocation {
                     Queue.mainQueue().after(0.1) {
@@ -461,6 +463,7 @@ public func isOverlayControllerForChatNotificationOverlayPresentation(_ controll
 }
 
 public func navigateToForumThreadImpl(context: AccountContext, peerId: EnginePeer.Id, threadId: Int64, messageId: EngineMessage.Id?, navigationController: NavigationController, activateInput: ChatControllerActivateInput?, scrollToEndIfExists: Bool, keepStack: NavigateToChatKeepStack, animated: Bool) -> Signal<Never, NoError> {
+    Logger.shared.log("ReplyThreadOpen", "forum open start peer=\(peerId.id._internalGetInt64Value()) thread=\(threadId) message=\(String(describing: messageId))")
     return fetchAndPreloadReplyThreadInfo(context: context, subject: .groupMessage(EngineMessage.Id(peerId: peerId, namespace: Namespaces.Message.Cloud, id: Int32(clamping: threadId))), atMessageId: messageId, preload: false)
     |> deliverOnMainQueue
     |> beforeNext { [weak context, weak navigationController] result in
@@ -473,6 +476,7 @@ public func navigateToForumThreadImpl(context: AccountContext, peerId: EnginePee
             actualActivateInput = activateInput
         }
         
+        Logger.shared.log("ReplyThreadOpen", "forum push thread=\(threadId)")
         context.sharedContext.navigateToChatController(
             NavigateToChatControllerParams(
                 navigationController: navigationController,

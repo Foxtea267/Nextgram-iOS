@@ -330,6 +330,12 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                 }
             }
             
+            // Without bubbles a person's messages in a chat with them carry their avatar (see `ChatMessageItemImpl`): the row
+            // keeps the avatar column clear.
+            if item.bubbleStyle.isBubbleless, chatMessageBubblelessPrivateChatHasAvatar(style: item.bubbleStyle, isPreview: item.presentationData.isPreview, chatPeer: item.message.peers[item.message.id.peerId].flatMap({ EnginePeer($0) })) {
+                hasAvatar = true
+            }
+            
             if hasAvatar {
                 avatarInset = layoutConstants.avatarInset
             } else {
@@ -386,6 +392,10 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                 }
             }
             
+            // Without bubbles there is no share button beside an incoming round video: sharing stays in the menu.
+            if item.bubbleStyle.isBubbleless {
+                needsShareButton = false
+            }
             if let subject = item.associatedData.subject, case .messageOptions = subject {
                 needsShareButton = false
             }
@@ -425,7 +435,7 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
             var automaticDownload = true
             for media in item.message.media {
                 if let file = media as? TelegramMediaFile {
-                    automaticDownload = shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: file)
+                    automaticDownload = shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .file(file))
                 }
             }
             
@@ -434,7 +444,7 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                 isReplyThread = true
             }
             
-            let (videoLayout, videoApply) = makeVideoLayout(ChatMessageBubbleContentItem(context: item.context, controllerInteraction: item.controllerInteraction, message: item.message, topMessage: item.content.firstMessage, content: item.content, read: item.read, chatLocation: item.chatLocation, presentationData: item.presentationData, associatedData: item.associatedData, attributes: item.content.firstMessageAttributes, isItemPinned: item.message.tags.contains(.pinned) && !isReplyThread, isItemEdited: false), params.width - params.leftInset - params.rightInset - avatarInset, displaySize, maximumDisplaySize, isPlaying ? 1.0 : 0.0, .free, automaticDownload, 0.0)
+            let (videoLayout, videoApply) = makeVideoLayout(ChatMessageBubbleContentItem(context: item.context, controllerInteraction: item.controllerInteraction, message: item.message, topMessage: item.content.firstMessage, content: item.content, read: item.read, chatLocation: item.chatLocation, presentationData: item.presentationData, associatedData: item.associatedData, attributes: item.content.firstMessageAttributes, isItemPinned: item.message.tags.contains(.pinned) && !isReplyThread, isItemEdited: false, bubbleStyle: item.bubbleStyle), params.width - params.leftInset - params.rightInset - avatarInset, displaySize, maximumDisplaySize, isPlaying ? 1.0 : 0.0, .free, automaticDownload, 0.0)
             
             let videoFrame = CGRect(origin: CGPoint(x: (incoming ? (params.leftInset + layoutConstants.bubble.edgeInset + effectiveAvatarInset + layoutConstants.bubble.contentInsets.left) : (params.width - params.rightInset - videoLayout.contentSize.width - layoutConstants.bubble.edgeInset - layoutConstants.bubble.contentInsets.left - deliveryFailedInset)), y: 0.0), size: videoLayout.contentSize)
             
@@ -470,6 +480,7 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
             var replyQuote: (quote: EngineMessageReplyQuote, isQuote: Bool)?
             var replyInnerSubject: EngineMessageReplyInnerSubject?
             var replyStory: EngineStoryId?
+            var replyIsLoading = false
             var inlineBotNameString: String?
             for attribute in item.message.attributes {
                 if let attribute = attribute as? InlineBotMessageAttribute {
@@ -512,6 +523,9 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                     if case let .replyThread(replyThreadMessage) = item.chatLocation, Int32(clamping: replyThreadMessage.threadId) == replyAttribute.messageId.id {
                     } else {
                         replyMessage = item.message.associatedMessages[replyAttribute.messageId]
+                        if replyMessage == nil {
+                            replyIsLoading = item.context.account.viewTracker.pendingMessageReferences.hasLoadingReferences(messageId: item.message.id)
+                        }
                     }
                     replyQuote = replyAttribute.quote.flatMap { ($0, replyAttribute.isQuote) }
                     replyInnerSubject = replyAttribute.innerSubject
@@ -519,13 +533,21 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                     replyForward = attribute
                 } else if let attribute = attribute as? ReplyStoryAttribute {
                     replyStory = attribute.storyId
+                    if item.message.associatedStories[attribute.storyId] == nil {
+                        replyIsLoading = item.context.account.viewTracker.pendingMessageReferences.hasLoadingReferences(messageId: item.message.id)
+                    }
                 } else if let _ = attribute as? InlineBotMessageAttribute {
                 } else if let attribute = attribute as? ReplyMarkupMessageAttribute, attribute.flags.contains(.inline), !attribute.rows.isEmpty {
                     replyMarkup = attribute
                 }
             }
             
-            if replyMessage != nil || replyForward != nil || replyStory != nil {
+            // A suspicious sender's buttons are not shown, as their links are not.
+            if item.associatedData.isSuspiciousPeer && item.message.effectivelyIncoming(item.context.account.peerId) {
+                replyMarkup = nil
+            }
+            
+            if replyMessage != nil || replyForward != nil || replyStory != nil || replyIsLoading {
                 replyInfoApply = makeReplyInfoLayout(ChatMessageReplyInfoNode.Arguments(
                     presentationData: item.presentationData,
                     strings: item.presentationData.strings,
@@ -537,6 +559,7 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                     innerSubject: replyInnerSubject,
                     story: replyStory,
                     isSummarized: false,
+                    isLoading: replyIsLoading,
                     parentMessage: item.message,
                     constrainedSize: CGSize(width: max(0, availableWidth), height: CGFloat.greatestFiniteMagnitude),
                     animationCache: item.controllerInteraction.presentationContext.animationCache,
@@ -557,7 +580,7 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
             
             let availableContentWidth = params.width - params.leftInset - params.rightInset - layoutConstants.bubble.edgeInset * 2.0 - avatarInset - layoutConstants.bubble.contentInsets.left
             
-            var forwardSource: EngineRawPeer?
+            var forwardSource: EnginePeer?
             var forwardAuthorSignature: String?
             
             var forwardInfoSizeApply: (CGSize, (CGFloat) -> ChatMessageForwardInfoNode)?
@@ -566,13 +589,13 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                 let forwardPsaType = forwardInfo.psaType
                 
                 let resolvedForwardInfo = chatMessageForwardInfoDisplay(forwardInfo: forwardInfo, messageId: item.message.id, previouslyApplied: currentForwardInfo, peerDisplayTitle: { peer in
-                    return EnginePeer(peer).displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
+                    return peer.displayTitle(strings: item.presentationData.strings, displayOrder: item.presentationData.nameDisplayOrder)
                 })
                 forwardSource = resolvedForwardInfo.source
                 forwardAuthorSignature = resolvedForwardInfo.authorSignature
                 let availableWidth = max(60.0, availableContentWidth - normalDisplaySize.width + 6.0)
                 // MARK: NAGRAM — Include the original timestamp in the shared forward header.
-                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource.flatMap(EnginePeer.init), forwardAuthorSignature, forwardPsaType == nil ? inlineBotNameString : nil, forwardPsaType, nil, forwardInfo.date, CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude))
+                forwardInfoSizeApply = makeForwardInfoLayout(item.context, item.presentationData, item.presentationData.strings, .standalone, forwardSource, forwardAuthorSignature, forwardPsaType == nil ? inlineBotNameString : nil, forwardPsaType, nil, forwardInfo.date, CGSize(width: availableWidth, height: CGFloat.greatestFiniteMagnitude))
             }
             
             if replyInfoApply != nil || viaBotApply != nil || forwardInfoSizeApply != nil {
@@ -622,7 +645,8 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                     accountPeer: item.associatedData.accountPeer,
                     isIncoming: item.message.effectivelyIncoming(item.context.account.peerId),
                     constrainedWidth: maxReactionsWidth,
-                    centerAligned: false
+                    centerAligned: false,
+                    colorType: item.presentationData.chatBubbleCorners.bubbleMode ? .freeform : .incoming
                 ))
                 maxContentWidth = max(maxContentWidth, minWidth)
                 reactionButtonsFinalize = buttonsLayout
@@ -1285,9 +1309,10 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
                 selectionNode.frame = selectionFrame
                 selectionNode.updateLayout(size: selectionFrame.size, leftInset: self.safeInsets.left)
                 selectionNode.updateSelected(selected, animated: animated)
+                selectionNode.updateTheme(wallpaper: item.presentationData.theme.wallpaper, theme: item.presentationData.theme.theme, bubbleMode: item.presentationData.chatBubbleCorners.bubbleMode)
                 self.subnodeTransform = CATransform3DMakeTranslation(offset, 0.0, 0.0);
             } else {
-                let selectionNode = ChatMessageSelectionNode(wallpaper: item.presentationData.theme.wallpaper, theme: item.presentationData.theme.theme, toggle: { [weak self] value in
+                let selectionNode = ChatMessageSelectionNode(wallpaper: item.presentationData.theme.wallpaper, theme: item.presentationData.theme.theme, bubbleMode: item.presentationData.chatBubbleCorners.bubbleMode, toggle: { [weak self] value in
                     if let strongSelf = self, let item = strongSelf.item {
                         item.controllerInteraction.toggleMessagesSelection([item.message.id], value)
                     }
@@ -1444,7 +1469,7 @@ public class ChatMessageInstantVideoItemNode: ChatMessageItemView, ASGestureReco
         effectiveAvatarInset *= (1.0 - scaleProgress)
         displaySize = CGSize(width: initialSize.width + (targetSize.width - initialSize.width) * animationProgress, height: initialSize.height + (targetSize.height - initialSize.height) * animationProgress)
         
-        let (videoLayout, videoApply) = makeVideoLayout(ChatMessageBubbleContentItem(context: item.context, controllerInteraction: item.controllerInteraction, message: item.message, topMessage: item.message, content: item.content, read: item.read, chatLocation: item.chatLocation, presentationData: item.presentationData, associatedData: item.associatedData, attributes: item.content.firstMessageAttributes, isItemPinned: item.message.tags.contains(.pinned) && !isReplyThread, isItemEdited: false), params.width - params.leftInset - params.rightInset - avatarInset, displaySize, maximumDisplaySize, scaleProgress, .free, self.appliedAutomaticDownload, 0.0)
+        let (videoLayout, videoApply) = makeVideoLayout(ChatMessageBubbleContentItem(context: item.context, controllerInteraction: item.controllerInteraction, message: item.message, topMessage: item.message, content: item.content, read: item.read, chatLocation: item.chatLocation, presentationData: item.presentationData, associatedData: item.associatedData, attributes: item.content.firstMessageAttributes, isItemPinned: item.message.tags.contains(.pinned) && !isReplyThread, isItemEdited: false, bubbleStyle: item.bubbleStyle), params.width - params.leftInset - params.rightInset - avatarInset, displaySize, maximumDisplaySize, scaleProgress, .free, self.appliedAutomaticDownload, 0.0)
         
         let availableContentWidth = params.width - params.leftInset - params.rightInset - layoutConstants.bubble.edgeInset * 2.0 - avatarInset - layoutConstants.bubble.contentInsets.left
         let videoFrame = CGRect(origin: CGPoint(x: (incoming ? (params.leftInset + layoutConstants.bubble.edgeInset + effectiveAvatarInset + layoutConstants.bubble.contentInsets.left) : (params.width - params.rightInset - videoLayout.contentSize.width - layoutConstants.bubble.edgeInset - layoutConstants.bubble.contentInsets.left - deliveryFailedInset)), y: 0.0), size: videoLayout.contentSize)

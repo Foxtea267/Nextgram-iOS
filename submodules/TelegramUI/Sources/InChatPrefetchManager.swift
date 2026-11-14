@@ -7,6 +7,7 @@ import AccountContext
 import PhotoResources
 import UniversalMediaPlayer
 import ChatMessageInteractiveMediaNode
+import TelegramUniversalVideoContent
 
 private final class PrefetchMediaContext {
     let fetchDisposable = MetaDisposable()
@@ -81,14 +82,18 @@ final class InChatPrefetchManager {
             
             if let telegramImage = media as? TelegramMediaImage {
                 mediaResource = largestRepresentationForPhoto(telegramImage)?.resource
-                if shouldDownloadMediaAutomatically(settings: self.settings, peerType: options.peerType, networkType: options.networkType, authorPeerId: nil, contactsPeerIds: [], media: telegramImage) {
+                if shouldDownloadMediaAutomatically(settings: self.settings, peerType: options.peerType, networkType: options.networkType, authorPeerId: nil, contactsPeerIds: [], media: .image(telegramImage)) {
                     automaticDownload = .full
                 }
             } else if let telegramFile = media as? TelegramMediaFile {
                 mediaResource = telegramFile.resource
-                if shouldDownloadMediaAutomatically(settings: self.settings, peerType: options.peerType, networkType: options.networkType, authorPeerId: nil, contactsPeerIds: [], media: telegramFile) {
+                // An adaptive (HLS) video plays from its quality files, never from the original: prefetching the original
+                // (its first seconds, or all of it) only costs data. The bubble preloads the HLS preload quality when it is
+                // shown.
+                if NativeVideoContent.isHLSVideo(file: telegramFile) {
+                } else if shouldDownloadMediaAutomatically(settings: self.settings, peerType: options.peerType, networkType: options.networkType, authorPeerId: nil, contactsPeerIds: [], media: .file(telegramFile)) {
                     automaticDownload = .full
-                } else if shouldPredownloadMedia(settings: self.settings, peerType: options.peerType, networkType: options.networkType, media: telegramFile) {
+                } else if shouldPredownloadMedia(settings: self.settings, peerType: options.peerType, networkType: options.networkType, media: .file(telegramFile)) {
                     automaticDownload = .prefetch
                 }
             }

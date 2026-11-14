@@ -1,6 +1,6 @@
 # CoreList chat-history backend
 
-`CoreListChatHistoryBackend` (`submodules/TelegramUI/Sources/CoreListChatHistoryBackend.swift`) is an
+`CoreListChatHistoryBackend` (`submodules/TelegramUI/Components/Chat/ChatHistoryListViewBackend/Sources/CoreListChatHistoryBackend.swift`) is an
 alternative chat-history list backend built on the vendored `CoreList` module's `CoreVirtualListView`
 (a from-scratch UIKit virtualized list — see `submodules/TelegramUI/Components/CoreList/CLAUDE.md`).
 
@@ -24,8 +24,26 @@ The chosen backend is published as `ChatHistoryListNodeImpl.usesCoreListBackend`
 that is deliberately CoreList-only must read that**, not re-derive the policy — one site already
 drifted when the default moved and the Debug Settings switch stopped being the whole answer.
 
-See the "ChatHistoryListNode composition" section of the root `CLAUDE.md` for the backend seam
+See the "ChatHistoryListNode composition" section of `submodules/TelegramUI/Sources/CLAUDE.md` for the backend seam
 (`ChatHistoryListViewBackend`) this conforms to.
+
+## Scroll trace
+
+Debug Settings ▸ "Chat: CoreList scroll trace" (`ExperimentalUISettings.coreListScrollTrace`) switches CoreList's
+`FlightTrace` on for the app whenever a chat's list is made (`makeCoreListChatHistoryBackend(rotated:scrollTrace:)`), so
+reopen the chat after toggling it. Lines go to the app's log (tag `CoreListScroll`, so they arrive with Send Logs) and
+to `Documents/flight-trace.txt` in the app's own container (moved to `flight-trace.1.txt` past 8 MB), each starting with
+the media time, the clock touch timestamps share:
+
+- the engine: `TOUCH-DOWN`, every `PAN` event, `RELEASE` (the velocity it decelerates at, the repeated-flick multiplier
+  and streak), the flight (`launch`, `CATCH`, `shift`, `REBAKE`, `FINALIZE`), and each programmatic offset write
+  (`SET-OFFSET`, `HALT`, `REANCHOR-DRAG`) with the functions that called it (mangled: `xcrun swift-demangle`);
+- the backend: each `TX` with what the chat asked for (scroll target, stationary range, options in hex) and its `TX-END`,
+  `RANGE` changes, overscroll holds, each with the offset, the displayed range and the timestamps of the messages at
+  its two ends, which is what tells a jump from a scroll.
+
+From a device: `xcrun devicectl device copy from --device <id> --domain-type appDataContainer --domain-identifier
+ph.telegra.Telegraph --source Documents/flight-trace.txt --destination <file>`.
 
 ## Scope
 
@@ -524,6 +542,13 @@ gutter avatars (`ChatMessageDateHeader.swift:676,1220`) stay tappable while the 
 this backend they are absorbed like any other tap. That has never worked here, so it is not a
 regression — it needs a host-supplied predicate seam, deferred deliberately. Not runtime-confirmed.
 
+What stays is the 0.3s after content stops, while a parked date pill is still flashing and hittable. A
+touch there that slides less than the scroll pan's 10pt hysteresis never begins the pan, so a plain
+`UITapGestureRecognizer` (which tolerates far more movement) took a slight swipe off the pill as a tap and
+`navigateToFirstDateMessage` jumped the chat to that date. `ListViewTapGestureRecognizer` therefore fails a
+touch that moves more than 2pt, the slop `TapLongTapOrDoubleTapGestureRecognizer` gives message bubbles
+(`ListViewTapGestureRecognizerTests`); a still tap on the pill or a gutter avatar works as before.
+
 ## Item-node enumeration
 
 `forEachItemNode` / `enumerateItemNodes` / `forEachVisibleItemNode` are real (they were no-op stubs
@@ -709,6 +734,27 @@ chat reads `abs(offset) <= 0.9` as "pinned to the newest message"
   Settled is self-correcting in the one case where the two disagree for a reason — a transaction landing
   mid-fling, where settled is the flight's destination — because the next scroll frame re-reports
   presented, and the consumer's own alpha change is animated anyway.
+- **A third emission point: when the last animated pass in flight lands, `.presented`.** The chat
+  reads the messages it finds on screen inside `visibleContentOffsetChanged` (the max visible message
+  index, through `forEachVisibleItemNode` and `itemNodeFrame`, both presented geometry), so the
+  transaction emission carries the right offset but its read sees the rows where the pass *started*.
+  Tapping the go-down button in a quiet chat therefore scrolled to the newest messages and left them
+  unread until a drag or an unrelated later transaction (a new message, a read-state update). The
+  backend counts its animated passes (`animatedPassesInFlight`) and, when the last one's duration has
+  elapsed, reports the offset again. Only the last: until then the presented geometry is part-way
+  through a later pass whose transaction already reported its settled offset, and a mid-flight sample
+  would move the chrome (the go-down button, the overscroll control). With nothing in flight the two
+  geometries agree, or a drag is under way and the scroll path reports presented every frame anyway.
+  The landing comes when the pass's whole duration has elapsed: 1.15s for the go-down button's
+  smooth-deceleration scroll, which looks finished after about 0.4s. A chat left in between (Back to a
+  forum's topic list, about 0.75s after the tap in the report) stopped reading at `viewWillDisappear`
+  before the landing, so the topic kept its unread count. `ChatController.viewWillDisappear` therefore
+  calls `ChatHistoryListNodeImpl.readVisibleMessagesBeforeLeaving()` before it turns `canReadHistory`
+  off: the same read of the rows on screen, in presented geometry. Switching in place to another chat
+  location (another topic from a forum's side list or tabs) skips `viewWillDisappear` and removes the
+  old history node after its 0.4s slide-out, usually before its landing, so `ChatControllerNode` makes
+  the same call on the outgoing node when it swaps them. Which rows count is
+  `chatHistoryMaxVisibleReadIndex` (`ChatControllerInteraction`, with its tests).
 
 **Why `ListViewImpl` needs no such distinction:** its model *is* its presented geometry.
 `replayOperations` writes final item-node frames immediately and animates the layers additively, so the
@@ -1209,14 +1255,18 @@ when that stableId changes**. `:2521-2530` turns that into a `.top(0.0)` scroll,
 `pointOffset(for:index:height:view:)` (`:369-372`) replaces the requested position wholesale for a
 lowest-pin-to-edge index — `ListViewImpl` does the same at `ListView.swift:3146-3170`, and the chat
 relies on the list to know better. CoreList engages `holdsPinnedRow` when a `scrollTo` names
-`lowestPinnedItemIndex`, so this one scroll is the entire engagement path. Cold start is covered: a
+`lowestPinnedItemIndex` with `pinsRow` set: this scroll, and any other chat jump that lands on that row (the default,
+as `ListViewImpl` arms on any scroll to a pin-to-edge item); the backend's message-widget resize targets clear it. Cold start is covered: a
 fresh history node has `pinToTopStableId == nil`, so opening a chat with an answer already streaming
 fires it on the first view.
 
 **Release is permanent for that answer**, and is an event rather than a measurement: finger-down
-(`engine.onWillBeginDragging`), the pinned row leaving the collection, or a full replace. Dragging away
-mid-stream and scrolling back does **not** re-pin — only a new pinned message does. That is
-`ListViewImpl`'s behaviour, and it is why nothing here infers release from geometry.
+(`engine.onWillBeginDragging`), a jump the list holds landing on another message (a tap on a reply), the pinned row
+leaving the collection, or a full replace. Dragging away mid-stream and scrolling back does **not** re-pin — only a
+new pinned message does. That is `ListViewImpl`'s behaviour, and it is why nothing here infers release from geometry.
+The held jump is not: `ListViewImpl` keeps no jump (the chat never sets `experimentalSnapScrollToItem`), so there the
+next pass after any jump re-snaps to the pin. Here a held jump ends it (the user, 2026-10-29: while a scrolled-to
+message is held, a widget resizing keeps its own edge, which a pin pulling the list back would undo).
 
 **The slack still has to be computed inside the pass, and that is why it lives in CoreList.** It
 depends on the measured heights of the rows above the pin, which change on every streamed token — and
@@ -1299,6 +1349,44 @@ existing CoreList suite applies its geometry *after* `VirtualListDriver.init` an
 `BottomEdgePinTests` introduces the pin in a pass for the same reason (which is also how it arrives in
 reality). Whether this reaches the app — where a layout pass can land between `applyChanges` and the
 next frame — has not been established.
+
+## Holding a scrolled-to message
+
+Every chat scroll to a message holds it where it lands until a drag begins or the chat scrolls elsewhere
+(`ListViewScrollToItem.hold`, set in `preparedChatHistoryViewTransition` for `.unread`,
+`.positionRestoration`, `.pinnedAnchor` and `.index` to a message; also the feed post's tall-post
+re-align and `requestMessageUpdate(andScrollToItem:)`). The playing-message follow scroll (round-video
+autoplay) and the `scrollToMessageId` scroll are scrolls to a message, so they hold too. The backend
+maps the position to a `CoreListScrollHold` (`scrollHold(for:)`: `rowPoint = edge − placement`, so
+`.top` holds the row's minY against the input-panel edge, `.bottom` its maxY against the bars,
+`.center` the point that sat on the visible centre). A scroll that sets
+`ListViewScrollToItem.excludesAttachedHeaderSpace` (the feed post's tall-post re-align) places and
+holds the message rather than its row: `placementOffset` leaves out
+`ChatMessageItemView.attachedDateHeaderInset`, re-read on every held pass, at the row end the node's
+top inset is on (maxY under the rotated chat, so `.bottom`), so the content stays put when the date
+header moves to an older row. A landing CoreList clamped against one of its ends is held against that
+end instead, by its minY from the input-panel edge at the newest edge, so the keyboard carries the
+newest messages rather than covering them. **The unread line is the exception
+(`ListViewScrollHold.yieldingToNewestEdge`, 2026-10-16):** opening at it with a few unread lands the
+separator's `.bottom` resting on the newest edge, and that landing holds nothing. The chat is then at
+the bottom, so a message arriving pushes it up, and a message under the line that grows (a reaction)
+grows upward instead of sinking the newest messages under the input panel, which also made the
+context menu's close animation land the message somewhere it had not grown towards. Nothing is lost
+at the keyboard: an unheld list resting on the newest edge follows it the same way. An unread line
+that lands off the newest edge still holds. Jumps to a message and position restoration still hold at
+the newest edge, and so does the feed's cached post, whose sponsored-message fix depends on it.
+Node-issued scrolls never
+hold (the first sponsored message, a join, the bot-reply pin), scroll to either end releases explicitly
+(`releaseScrollHold()`, because scroll-to-end issues no scroll at the newest edge), and three scrolls
+are skipped while `isHoldingScrollTarget`: keep-in-place, the first-sponsored-message tuck, and the
+unread-separator re-pin. The hold is strict: a message arriving below a held row lands under the input
+panel. Its cue is the scroll-to-bottom button, so while held its threshold in `contentPositionChanged`
+(`ChatControllerLoadDisplayNode`) drops from 40pt to 0.5pt (ad heights still added, read through
+`ChatHistoryListNodeImpl.isHoldingScrollTarget`): a one-line arrival (~37pt) hidden under the panel
+shows the button, an ad alone does not. A released hold's slack retires on drag frames and once when
+a fling ends, never on the fling's own frames, where it rebaked the `KeyframeFlight` every frame.
+`ListViewImpl` ignores the flag.
+The engine half is `submodules/TelegramUI/Components/CoreList/CLAUDE.md`, "The scroll hold".
 
 ## Trailing item space
 
@@ -1436,13 +1524,14 @@ host-layer fade CoreList already installs.)
 
 **The track must be list-owned, not a raw CA animation on the row's layer.** Position tracks in
 `ListAnimationModel` are additive offsets decaying to zero, and `capturePresentedPositionOffsets()`
-reads `presented − model` on every bound live layer at the START of the next pass to recover exactly
-that quantity. An animation the backend added itself is indistinguishable from a track the model owns,
-so a second message landing mid-slide would resume against a displacement the model never issued —
-the same class of double-count that shipped once as every row snapping a whole growth backwards (see
-"Granular animation contract" in the CoreList `CLAUDE.md`). Going through
-`CoreVirtualListView.animateInsertedBlock(identities:origin:transition:)` also makes an overlapping
-arrival compose: `transitionPositionOffset` folds the in-flight `currentOffset` into the new track.
+reads presented minus the committed base on every live row with a running position track at the START
+of the next pass to recover exactly that quantity. On such a row an animation the backend added itself
+is indistinguishable from the track the model owns, so a second message landing mid-slide would resume
+against a displacement the model never issued — the same class of double-count that shipped once as
+every row snapping a whole growth backwards (see "Granular animation contract" in the CoreList
+`CLAUDE.md`). Going through `CoreVirtualListView.animateInsertedBlock(identities:origin:transition:)`
+also makes an overlapping arrival compose: `transitionPositionOffset` folds the in-flight
+`currentOffset` into the new track.
 
 **The block, not the row, is the unit.** Every named row takes the SAME offset — the run's total
 settled height, reserved space included — so a run arriving together keeps its spacing for the whole

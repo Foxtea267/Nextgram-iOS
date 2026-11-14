@@ -314,25 +314,17 @@ final class StickerAttachmentScreenComponent: Component {
                         }
                     })
                 },
-                clearGroup: { [weak self] groupId in
+                clearGroup: { [weak self] groupId, sourceView, sourceRect in
                     guard let self, let component = self.component else {
                         return
                     }
                     let context = component.context
                     let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
                     if groupId == AnyHashable("recent") {
-                        let actionSheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationTheme: presentationData.theme, fontSize: presentationData.listsFontSize))
-                        var items: [ActionSheetItem] = []
-                        items.append(ActionSheetButtonItem(title: presentationData.strings.Emoji_ClearRecent, color: .destructive, action: { [weak actionSheet] in
-                            actionSheet?.dismissAnimated()
+                        let contextController = makeEmojiClearGroupContextController(presentationData: presentationData, title: presentationData.strings.Emoji_ClearRecent, sourceView: sourceView, sourceRect: sourceRect, action: {
                             let _ = context.engine.stickers.clearRecentlyUsedEmoji().start()
-                        }))
-                        actionSheet.setItemGroups([ActionSheetItemGroup(items: items), ActionSheetItemGroup(items: [
-                            ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                                actionSheet?.dismissAnimated()
-                            })
-                        ])])
-                        context.sharedContext.mainWindow?.presentInGlobalOverlay(actionSheet)
+                        })
+                        context.sharedContext.mainWindow?.presentInGlobalOverlay(contextController)
                     } else if groupId == AnyHashable("popular") {
                         let actionSheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationTheme: presentationData.theme, fontSize: presentationData.listsFontSize))
                         var items: [ActionSheetItem] = []
@@ -719,25 +711,17 @@ final class StickerAttachmentScreenComponent: Component {
                         }
                     })
                 },
-                clearGroup: { [weak self] groupId in
+                clearGroup: { [weak self] groupId, sourceView, sourceRect in
                     guard let strongSelf = self, let component = strongSelf.component else {
                         return
                     }
                     let context = component.context
                     if groupId == AnyHashable("recent") {
                         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-                        let actionSheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationTheme: presentationData.theme, fontSize: presentationData.listsFontSize))
-                        var items: [ActionSheetItem] = []
-                        items.append(ActionSheetButtonItem(title: presentationData.strings.Stickers_ClearRecent, color: .destructive, action: { [weak actionSheet] in
-                            actionSheet?.dismissAnimated()
+                        let contextController = makeEmojiClearGroupContextController(presentationData: presentationData, title: presentationData.strings.Stickers_ClearRecent, sourceView: sourceView, sourceRect: sourceRect, action: {
                             let _ = context.engine.stickers.clearRecentlyUsedStickers().start()
-                        }))
-                        actionSheet.setItemGroups([ActionSheetItemGroup(items: items), ActionSheetItemGroup(items: [
-                            ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                                actionSheet?.dismissAnimated()
-                            })
-                        ])])
-                        context.sharedContext.mainWindow?.presentInGlobalOverlay(actionSheet)
+                        })
+                        context.sharedContext.mainWindow?.presentInGlobalOverlay(contextController)
                     } else if groupId == AnyHashable("featuredTop") {
                         let _ = (context.engine.data.subscribe(TelegramEngine.EngineData.Item.OrderedLists.ListItems(collectionId: Namespaces.OrderedItemList.CloudFeaturedStickerPacks))
                         |> take(1)
@@ -947,7 +931,14 @@ final class StickerAttachmentScreenComponent: Component {
             
             let topPanelHeight: CGFloat = 42.0
             let topInset: CGFloat = 64.0 //component.topInset
-                        
+
+            // iPhone Duo: the keyboard (grid, tab panel and its search) is laid out in the band beside the side strip, so
+            // the tab panel and the grid stay clear of the strip's status corner. The keyboard sizes its tab strip to its
+            // own width, so it is the keyboard that is narrowed, not its insets. With equal side insets the band is the
+            // whole width, as before.
+            let keyboardBandMinX: CGFloat = environment.safeInsets.left != environment.safeInsets.right ? environment.safeInsets.left : 0.0
+            let keyboardBandWidth: CGFloat = environment.safeInsets.left != environment.safeInsets.right ? availableSize.width - environment.safeInsets.left - environment.safeInsets.right : availableSize.width
+
             let context = component.context
             let stickerPeekBehavior = EmojiContentPeekBehaviorImpl(
                 context: context,
@@ -1057,7 +1048,7 @@ final class StickerAttachmentScreenComponent: Component {
                 )),
                 environment: {},
                 forceUpdate: self.forceUpdate,
-                containerSize: availableSize
+                containerSize: CGSize(width: keyboardBandWidth, height: availableSize.height)
             )
             self.forceUpdate = false
             if let keyboardComponentView = self.keyboardView.view {
@@ -1067,10 +1058,10 @@ final class StickerAttachmentScreenComponent: Component {
                 
                 self.keyboardClippingView.clipsToBounds = false
                 
-                transition.setFrame(view: self.keyboardClippingView, frame: CGRect(origin: CGPoint(x: 0.0, y: topPanelHeight + topInset), size: CGSize(width: availableSize.width, height: availableSize.height - topPanelHeight - topInset)))
+                transition.setFrame(view: self.keyboardClippingView, frame: CGRect(origin: CGPoint(x: keyboardBandMinX, y: topPanelHeight + topInset), size: CGSize(width: keyboardBandWidth, height: availableSize.height - topPanelHeight - topInset)))
                 self.keyboardClippingView.hitEdgeInsets = UIEdgeInsets(top: -topPanelHeight - topInset, left: 0.0, bottom: 0.0, right: 0.0)
-                
-                let panelBackgroundFrame = CGRect(origin: CGPoint(x: 12.0, y: topPanelHeight + topInset - 29.0), size: CGSize(width: availableSize.width - 24.0, height: 44.0))
+
+                let panelBackgroundFrame = CGRect(origin: CGPoint(x: keyboardBandMinX + 12.0, y: topPanelHeight + topInset - 29.0), size: CGSize(width: keyboardBandWidth - 24.0, height: 44.0))
                 
                 self.panelClippingView.clipsToBounds = true
                 self.panelClippingView.layer.cornerRadius = panelBackgroundFrame.height * 0.5
@@ -1107,7 +1098,14 @@ final class StickerAttachmentScreenComponent: Component {
                 environment: {},
                 containerSize: barButtonSize
             )
-            let cancelButtonFrame = CGRect(origin: CGPoint(x: 16.0, y: 16.0), size: cancelButtonSize)
+            // iPhone Duo: with a side strip the screen's own Close goes to the strip, centred where a standard bar's back or
+            // close goes, rather than into the corner of the row (in landscape-right that corner is the status block).
+            let cancelButtonFrame: CGRect
+            if let sideColumnButtonFrame = environment.sideColumnNavigationButtonFrame {
+                cancelButtonFrame = CGRect(origin: CGPoint(x: floorToScreenPixels(sideColumnButtonFrame.midX - cancelButtonSize.width * 0.5), y: floorToScreenPixels(sideColumnButtonFrame.midY - cancelButtonSize.height * 0.5)), size: cancelButtonSize)
+            } else {
+                cancelButtonFrame = CGRect(origin: CGPoint(x: 16.0, y: 16.0), size: cancelButtonSize)
+            }
             if let cancelButtonView = self.cancelButton.view {
                 if cancelButtonView.superview == nil {
                     self.addSubview(cancelButtonView)

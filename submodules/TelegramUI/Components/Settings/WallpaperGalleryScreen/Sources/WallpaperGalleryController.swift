@@ -165,14 +165,14 @@ private func updatedFileWallpaper(id: Int64? = nil, accessHash: Int64? = nil, sl
 }
 
 class WallpaperGalleryInteraction {
-    let editMedia: (PHAsset, UIImage, CGRect, TGMediaEditAdjustments?, UIView, @escaping (UIImage?, TGMediaEditAdjustments?) -> Void, @escaping (UIImage?) -> Void) -> Void
+    let editMedia: (PHAsset, UIImage, CGRect, Any?, UIView, @escaping (UIImage?, Any?) -> Void, @escaping (UIImage?) -> Void) -> Void
     let beginTransitionToEditor: () -> Void
     let beginTransitionFromEditor: (Bool) -> Void
     let finishTransitionFromEditor: () -> Void
     let toolbarCancel: () -> Void
     let toolbarDone: (Bool) -> Void
     
-    init(editMedia: @escaping (PHAsset, UIImage, CGRect, TGMediaEditAdjustments?, UIView, @escaping (UIImage?, TGMediaEditAdjustments?) -> Void, @escaping (UIImage?) -> Void) -> Void, beginTransitionToEditor: @escaping () -> Void, beginTransitionFromEditor: @escaping (Bool) -> Void, finishTransitionFromEditor: @escaping () -> Void, toolbarCancel: @escaping () -> Void, toolbarDone: @escaping (Bool) -> Void) {
+    init(editMedia: @escaping (PHAsset, UIImage, CGRect, Any?, UIView, @escaping (UIImage?, Any?) -> Void, @escaping (UIImage?) -> Void) -> Void, beginTransitionToEditor: @escaping () -> Void, beginTransitionFromEditor: @escaping (Bool) -> Void, finishTransitionFromEditor: @escaping () -> Void, toolbarCancel: @escaping () -> Void, toolbarDone: @escaping (Bool) -> Void) {
         self.editMedia = editMedia
         self.beginTransitionToEditor = beginTransitionToEditor
         self.beginTransitionFromEditor = beginTransitionFromEditor
@@ -257,8 +257,21 @@ public class WallpaperGalleryController: ViewController {
             guard let self else {
                 return
             }
+            if context.routesToChatMediaEditorV2(.wallpaperEditor) {
+                let controller = context.sharedContext.makeWallpaperMediaEditor(context: context, asset: asset, screenImage: image, cropRect: cropRect, previousState: adjustments, referenceView: referenceView, apply: { image, state in
+                    apply(image, state)
+                }, fullSizeApply: { image in
+                    fullSizeApply(image)
+                }, beginTransitionOut: { [weak self] saving in
+                    self?.interaction?.beginTransitionFromEditor(saving)
+                }, finishTransitionOut: { [weak self] in
+                    self?.interaction?.finishTransitionFromEditor()
+                })
+                self.present(controller, in: .window(.root))
+                return
+            }
             let item = LegacyWallpaperItem(asset: asset, screenImage: image, dimensions: CGSize(width: asset.pixelWidth, height: asset.pixelHeight))
-            legacyWallpaperEditor(context: context, item: item, cropRect: cropRect, adjustments: adjustments, referenceView: referenceView, beginTransitionOut: { [weak self] saving in
+            legacyWallpaperEditor(context: context, item: item, cropRect: cropRect, adjustments: adjustments as? TGMediaEditAdjustments, referenceView: referenceView, beginTransitionOut: { [weak self] saving in
                 self?.interaction?.beginTransitionFromEditor(saving)
             }, finishTransitionOut: { [weak self] in
                 self?.interaction?.finishTransitionFromEditor()
@@ -1133,7 +1146,7 @@ public class WallpaperGalleryController: ViewController {
                             optionsString = "?\(options.joined(separator: "&"))"
                         }
 
-                        let shareController = context.sharedContext.makeShareController(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(file.slug)\(optionsString)"), actionCompleted: actionCompleted))
+                        let shareController = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(file.slug)\(optionsString)"), actionCompleted: actionCompleted))
                         self?.present(shareController, in: .window(.root), blockInteraction: true)
                     }
                 })
@@ -1168,10 +1181,10 @@ public class WallpaperGalleryController: ViewController {
                     optionsString = "?\(options.joined(separator: "&"))"
                 }
 
-                let controller = context.sharedContext.makeShareController(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(file.slug)\(optionsString)"), actionCompleted: actionCompleted))
+                let controller = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(file.slug)\(optionsString)"), actionCompleted: actionCompleted))
                 self.present(controller, in: .window(.root), blockInteraction: true)
             case let .color(color):
-                let controller = context.sharedContext.makeShareController(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(UIColor(rgb: color).hexString)"), actionCompleted: actionCompleted))
+                let controller = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(UIColor(rgb: color).hexString)"), actionCompleted: actionCompleted))
                 self.present(controller, in: .window(.root), blockInteraction: true)
             case let .gradient(gradient):
                 var colorsString = ""
@@ -1187,7 +1200,7 @@ public class WallpaperGalleryController: ViewController {
                     colorsString.append(UIColor(rgb: color).hexString)
                 }
 
-                let controller = context.sharedContext.makeShareController(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(colorsString)"), actionCompleted: actionCompleted))
+                let controller = context.sharedContext.makeShareScreen(context: context, params: ShareControllerParams(subject: .url("https://t.me/bg/\(colorsString)"), actionCompleted: actionCompleted))
                 self.present(controller, in: .window(.root), blockInteraction: true)
             default:
                 break

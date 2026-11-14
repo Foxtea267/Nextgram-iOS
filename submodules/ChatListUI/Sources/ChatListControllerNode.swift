@@ -29,6 +29,7 @@ import LiveLocationHeaderPanelComponent
 import ChatListHeaderNoticeComponent
 import ChatListFilterTabContainerNode
 import GlassControls
+import SideColumnLayout
 import NagramSettings
 import NagramChatListFilters // MARK: NEXTGRAM
 
@@ -57,7 +58,6 @@ private func nagramFolderTabTitle(
         return HorizontalTabsComponent.Tab.Title(text: prefix + text, entities: shiftedEntities, enableAnimations: enableAnimations)
     }
 }
-
 public enum ChatListContainerNodeFilter: Equatable {
     case all
     case filter(ChatListFilter)
@@ -232,6 +232,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
             previousItemNode.listNode.setPeerThreadPinned = nil
             previousItemNode.listNode.setPeerThreadHidden = nil
             previousItemNode.listNode.peerSelected = nil
+            previousItemNode.listNode.sideListAllThreadsSelected = nil
             previousItemNode.listNode.disabledPeerSelected = nil
             previousItemNode.listNode.groupSelected = nil
             previousItemNode.listNode.updatePeerGrouping = nil
@@ -289,6 +290,9 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
         }
         itemNode.listNode.peerSelected = { [weak self] peerId, threadId, animated, activateInput, promoInfo in
             self?.peerSelected?(peerId, threadId, animated, activateInput, promoInfo)
+        }
+        itemNode.listNode.sideListAllThreadsSelected = { [weak self] in
+            self?.sideListAllThreadsSelected?()
         }
         itemNode.listNode.disabledPeerSelected = { [weak self] peerId, threadId, reason in
             self?.disabledPeerSelected?(peerId, threadId, reason)
@@ -503,6 +507,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     var setPeerThreadPinned: ((EnginePeer.Id, Int64, Bool) -> Void)?
     var setPeerThreadHidden: ((EnginePeer.Id, Int64, Bool) -> Void)?
     public var peerSelected: ((EnginePeer, Int64?, Bool, Bool, ChatListNodeEntryPromoInfo?) -> Void)?
+    public var sideListAllThreadsSelected: (() -> Void)?
     public var disabledPeerSelected: ((EnginePeer, Int64?, ChatListDisabledPeerReason) -> Void)?
     var groupSelected: ((EngineChatList.Group) -> Void)?
     var openCommunity: ((EnginePeer.Id) -> Void)?
@@ -687,6 +692,8 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
     @objc private func panGesture(_ recognizer: InteractiveTransitionGestureRecognizer) {
         let filtersLimit = self.filtersLimit.flatMap({ $0 + 1 }) ?? Int32(self.availableFilters.count)
         let maxFilterIndex = min(Int(filtersLimit), self.availableFilters.count) - 1
+        // MARK: NAGRAM — 在最后一个可用分组继续左滑回到第一个分组，取代 Premium 分组上限提示
+        let nagramSwipeWraps = NagramSettings.shared.chatListFolderSwipeWraps && maxFilterIndex > 0
 
         let canOpenStoryCamera = self.validLayout?.0.metrics.widthClass == .compact
             && self.availableFilters.first?.id == self.selectedId
@@ -781,7 +788,7 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                     let overscroll = -translation.x
                     transitionFraction = -rubberBandingOffset(offset: overscroll, bandingStart: 0.0) / layout.size.width
                     
-                    if let filtersLimit = self.filtersLimit, selectedIndex >= filtersLimit - 1 {
+                    if !nagramSwipeWraps, let filtersLimit = self.filtersLimit, selectedIndex >= filtersLimit - 1 { // MARK: NAGRAM
                         transitionFraction = 0.0
                         self.transitionFractionOffset = 0.0
                         recognizer.isEnabled = false
@@ -793,10 +800,16 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                 }
                 self.transitionFraction = transitionFraction + self.transitionFractionOffset
                 if let currentItemNode = self.currentItemNodeValue {
-                    let isNavigationHidden = currentItemNode.listNode.isNavigationHidden
+                    // From the header when it has an offset, so that this and the matching below agree (they differ from
+                    // the current list's own while it is still loading).
+                    let isNavigationHidden = currentItemNode.listNode.isNavigationHidden // MARK: NAGRAM — the header's collapsed height varies with Nagram's search bar setting
                     for (_, itemNode) in self.itemNodes {
                         if itemNode !== currentItemNode {
                             itemNode.listNode.adjustScrollOffsetForNavigation(isNavigationHidden: isNavigationHidden)
+                            // On every change, not once: a list's rows can load, reload at its top (a folder update) or
+                            // come back to its top (above) at any point of the swipe, and the header can move with the
+                            // current list.
+                            self.scrollToNavigationBarOffset(itemNode: itemNode)
                         }
                     }
                 }
@@ -847,17 +860,21 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                     return
                 }
                 var applyNodeAsCurrent: ChatListFilterTabEntryId?
+                var nagramWrapToFirstId: ChatListFilterTabEntryId? // MARK: NAGRAM
                 
                 if let directionIsToRight = directionIsToRight {
                     var updatedIndex = selectedIndex
-                    if directionIsToRight {
+                    if directionIsToRight && nagramSwipeWraps && selectedIndex >= maxFilterIndex { // MARK: NAGRAM
+                        nagramWrapToFirstId = self.availableFilters[0].id
+                    } else if directionIsToRight {
                         updatedIndex = min(updatedIndex + 1, maxFilterIndex)
                     } else {
                         updatedIndex = max(updatedIndex - 1, 0)
                     }
                     let switchToId = self.availableFilters[updatedIndex].id
                     if switchToId != self.selectedId, let itemNode = self.itemNodes[switchToId] {
-                        let _ = itemNode
+                        // It may have loaded or reloaded after the last change of the swipe.
+                        self.scrollToNavigationBarOffset(itemNode: itemNode)
                         self.selectedId = switchToId
                         applyNodeAsCurrent = switchToId
                     }
@@ -879,10 +896,31 @@ public final class ChatListContainerNode: ASDisplayNode, ASGestureRecognizerDele
                 self.isSwitchingCurrentItemFilterByDragging = false
                 self.currentItemFilterUpdated?(self.currentItemFilter, self.transitionFraction, transition, false)
                 self.pinnedHeaderDisplayFractionUpdated?(transition)
+                if let nagramWrapToFirstId { // MARK: NAGRAM
+                    self.switchToFilter(id: nagramWrapToFirstId)
+                }
             }
         default:
             break
         }
+    }
+    
+    // The header shows the current list's scroll state, and switching lists does not change it: a list that may become
+    // current is scrolled to match it (the search field and an expanded stories row stay as they are). A list without its
+    // first row (still loading, or scrolled past it) cannot be. A list that is not current does not move the header, so
+    // nothing else corrects a list that was matched and then moved: it is matched again until it becomes current.
+    // `adjustScrollOffsetForNavigation` agrees with this (both stop at the header's collapsed offset), so the two never
+    // move a list back and forth.
+    private func scrollToNavigationBarOffset(itemNode: ChatListContainerItemNode) {
+        // MARK: NAGRAM — match the current list's offset, which also covers an expanded stories row and a hidden search bar.
+        self.syncItemNodeNavigationOffset(itemNode)
+    }
+    
+    private var navigationBarScrollOffset: CGFloat? {
+        if let controller = self.controller, let chatListDisplayNode = controller.displayNode as? ChatListControllerNode, let navigationBarComponentView = chatListDisplayNode.navigationBarView.view as? ChatListNavigationBar.View {
+            return navigationBarComponentView.clippedScrollOffset
+        }
+        return nil
     }
     
     func fixContentOffset(offset: CGFloat) {
@@ -1287,6 +1325,9 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
     
     private(set) var inlineStackContainerTransitionFraction: CGFloat = 0.0
     private(set) var inlineStackContainerNode: ChatListContainerNode?
+    // How far below its place a pushed inline list starts: the header is still that much taller (an expanded stories
+    // row), and collapses in the same transition.
+    private var inlineStackContainerAppearanceOffset: CGFloat = 0.0
     private var inlineContentPanRecognizer: InteractiveTransitionGestureRecognizer?
     var temporaryContentOffsetChangeTransition: ContainedViewLayoutTransition?
     
@@ -1294,6 +1335,29 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
     var navigationBar: NavigationBar?
     let navigationBarView = ComponentView<Empty>()
     weak var controller: ChatListControllerImpl?
+    
+    // MARK: NAGRAM — 文件夹标签放在底栏上方时的容器，与顶部同一个玻璃胶囊组件。
+    private let nagramBottomFolderTabsView = ComponentView<Empty>()
+    private var nagramBottomFolderTabs: AnyComponent<Empty>?
+    
+    /// 只有主聊天列表（全部聊天的根列表，非侧栏、非预览）把文件夹标签放到底部。
+    var nagramFolderTabsAtBottom: Bool {
+        guard NagramSettings.shared.chatListFolderTabsAtBottom, let controller = self.controller else {
+            return false
+        }
+        guard case .chatList(.root) = controller.location, !controller.isSideList, !controller.previewing else {
+            return false
+        }
+        return true
+    }
+    
+    /// 文件夹标签当前所在的视图（顶部标题栏或底部容器）。
+    var nagramFolderTabsView: HorizontalTabsComponent.View? {
+        if self.nagramFolderTabsAtBottom {
+            return (self.nagramBottomFolderTabsView.view as? HeaderPanelContainerComponent.View)?.tabs as? HorizontalTabsComponent.View
+        }
+        return ((self.navigationBarView.view as? ChatListNavigationBar.View)?.headerPanels as? HeaderPanelContainerComponent.View)?.tabs as? HorizontalTabsComponent.View
+    }
     
     private var toolbar: ComponentView<Empty>?
     var toolbarData: Toolbar?
@@ -1347,7 +1411,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         var filterEmptyAction: ((ChatListFilter?) -> Void)?
         var secondaryEmptyAction: (() -> Void)?
         var openArchiveSettings: (() -> Void)?
-        self.mainContainerNode = ChatListContainerNode(context: context, controller: controller, location: location, previewing: previewing, controlsHistoryPreload: controlsHistoryPreload, isInlineMode: false, presentationData: presentationData, animationCache: animationCache, animationRenderer: animationRenderer, filterBecameEmpty: { filter in
+        self.mainContainerNode = ChatListContainerNode(context: context, controller: controller, location: location, previewing: previewing, controlsHistoryPreload: controlsHistoryPreload, isInlineMode: controller.isSideList, presentationData: presentationData, animationCache: animationCache, animationRenderer: animationRenderer, filterBecameEmpty: { filter in
             filterBecameEmpty?(filter)
         }, filterEmptyAction: { filter in
             filterEmptyAction?(filter)
@@ -1664,6 +1728,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }
         
         var navigationHeaderPanels: AnyComponent<Empty>?
+        self.nagramBottomFolderTabs = nil // MARK: NAGRAM
         if self.controller?.tabContainerData != nil || !panels.isEmpty {
             var tabs: AnyComponent<Empty>?
             if let tabContainerData = self.controller?.tabContainerData, tabContainerData.0.count > 1 {
@@ -1706,6 +1771,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                         let id: HorizontalTabsComponent.Tab.Id
                         let title: HorizontalTabsComponent.Tab.Title
                         var badge: HorizontalTabsComponent.Tab.Badge?
+                        var accessibilityValue: String?
                         var isMainTab = false
                         switch entry {
                         case .all:
@@ -1732,6 +1798,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                                     title: "\(unread.value)",
                                     isAccent: unread.hasUnmuted
                                 )
+                                accessibilityValue = self.presentationData.strings.VoiceOver_Chat_UnreadMessages(Int32(clamping: unread.value))
                             }
                         }
                         
@@ -1809,7 +1876,10 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                                 if case let .filter(id) = entry.id {
                                     self.controller?.askForFilterRemoval(id: id)
                                 }
-                            }
+                            },
+                            accessibilityValue: accessibilityValue,
+                            deleteAccessibilityLabel: self.presentationData.strings.Common_Delete,
+                            contextAccessibilityLabel: self.presentationData.strings.Common_More
                         )
                     },
                     selectedTab: selectedTab,
@@ -1819,15 +1889,23 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 ))
             }
                 
+            // MARK: NAGRAM — 文件夹标签在底部时，顶部只保留其他面板（通知、播放器、实时位置）。
+            let nagramFolderTabsAtBottom = self.nagramFolderTabsAtBottom
+            if nagramFolderTabsAtBottom {
+                self.nagramBottomFolderTabs = tabs
+            }
             navigationHeaderPanels = AnyComponent(HeaderPanelContainerComponent(
                 theme: self.presentationData.theme,
-                tabs: tabs,
+                tabs: nagramFolderTabsAtBottom ? nil : tabs,
                 panels: panels
             ))
         }
         
         var effectiveStorySubscriptions: EngineStorySubscriptions?
         if let controller = self.controller, case .forum = controller.location {
+            effectiveStorySubscriptions = nil
+        } else if let controller = self.controller, case .savedMessagesChats = controller.location {
+            // A thread list, like a forum's: stories would take the header's title.
             effectiveStorySubscriptions = nil
         } else {
             if let controller = self.controller, let storySubscriptions = controller.orderedStorySubscriptions, shouldDisplayStoriesInChatListHeader(storySubscriptions: storySubscriptions, isHidden: controller.location == .chatList(groupId: .archive)) {
@@ -1854,15 +1932,25 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             nagramTitlePressed = nil
         }
         
+        // iPhone Duo: the header's back and icon buttons go into the side strip, above the vertical tab
+        // bar when this list is a tab (spec 2026-10-06). A preview's layout is not the screen's.
+        var sideColumn: SideColumnRegion?
+        if let controller = self.controller, !controller.previewing {
+            let reservedBelow = (controller.parent as? TabBarController)?.verticalTabBarFrame(for: layout)
+            sideColumn = sideColumnRegion(layout: layout, minY: (layout.statusBarHeight ?? 0.0) + 8.0, reservedBelow: reservedBelow)
+        }
+        
         let navigationBarSize = self.navigationBarView.update(
             transition: transition,
             component: AnyComponent(ChatListNavigationBar(
                 context: self.context,
                 theme: self.presentationData.theme,
                 strings: self.presentationData.strings,
-                statusBarHeight: layout.statusBarHeight ?? 0.0,
+                // Beside iPhone Duo's status island the header stays near the top, its right buttons clear of it.
+                statusBarHeight: layout.navigationBarStatusBarHeight ?? 0.0,
                 leftInset: layout.safeInsets.left,
                 rightInset: layout.safeInsets.right,
+                trailingButtonsInset: layout.navigationBarTrailingButtonsInset,
                 search: shouldHideHomeSearchBar ? nil : ChatListNavigationBar.Search(isEnabled: true), // MARK: NAGRAM
                 activeSearch: self.isSearchDisplayControllerActive,
                 primaryContent: headerContent?.primaryContent,
@@ -1877,6 +1965,9 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 tabsNodeIsSearch: false,
                 accessoryPanelContainer: self.controller?.accessoryPanelContainer,
                 accessoryPanelContainerHeight: self.controller?.accessoryPanelContainerHeight ?? 0.0,
+                // The chat side list's header fades into the list's own background, whatever row is first (a pinned
+                // row's tint would colour the header).
+                edgeEffectColor: (self.controller?.isSideList ?? false) ? self.presentationData.theme.chatList.backgroundColor : nil,
                 activateSearch: { [weak self] searchContentNode in
                     guard let self, let controller = self.controller else {
                         return
@@ -1908,7 +1999,14 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                     }
                     controller.allowAutomaticOrder()
                 },
-                titlePressed: nagramTitlePressed
+                titlePressed: nagramTitlePressed,
+                sideColumn: sideColumn,
+                openSideColumnOverflow: { [weak self] sourceView, items in
+                    guard let self, let controller = self.controller else {
+                        return
+                    }
+                    controller.openSideColumnOverflowMenu(sourceView: sourceView, items: items)
+                }
             )),
             environment: {},
             containerSize: layout.size
@@ -1949,6 +2047,10 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             var inlineOffset: CGFloat
             if let contentOffset = inlineStackContainerNode.contentOffset, case let .known(value) = contentOffset {
                 inlineOffset = value
+            } else if inlineStackContainerNode.contentOffset == nil, let initialScrollingOffset = inlineStackContainerNode.initialScrollingOffset {
+                // A list being pushed has not laid out yet: the header moves straight to where it will start, rather than
+                // hiding the search field until its first layout (with the stories row expanded it would then reappear).
+                inlineOffset = initialScrollingOffset
             } else {
                 inlineOffset = navigationHeight
             }
@@ -2024,7 +2126,8 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         var storiesInset = storiesInset
         
         let navigationBarLayout = self.updateNavigationBar(layout: layout, deferScrollApplication: true, transition: ComponentTransition(transition))
-        self.mainContainerNode.initialScrollingOffset = self.mainContainerNode.currentScrollHeightTopInset() // MARK: NAGRAM
+        // The chat side list opens with its search shown, not scrolled under the header.
+        self.mainContainerNode.initialScrollingOffset = (self.controller?.isSideList ?? false) ? navigationBarLayout.storiesInset : self.mainContainerNode.currentScrollHeightTopInset() // MARK: NAGRAM
         
         navigationBarHeight = navigationBarLayout.navigationHeight
         visualNavigationHeight = navigationBarLayout.navigationHeight
@@ -2038,6 +2141,9 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         insets.left += layout.safeInsets.left
         insets.right += layout.safeInsets.right
         
+        // MARK: NAGRAM — 底栏上方的文件夹标签；列表底部内边距让出它的高度。
+        insets.bottom += self.updateNagramBottomFolderTabs(layout: layout, transition: transition)
+        
         if let toolbarData = self.toolbarData {
             var panelsBottomInset: CGFloat = layout.insets(options: []).bottom
             if layout.metrics.widthClass == .regular, let inputHeight = layout.inputHeight, inputHeight != 0.0 {
@@ -2050,8 +2156,14 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             }
             
             let sideInset: CGFloat = 20.0
+            // The bottom toolbar spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom, as the
+            // root list's toolbar does (`tabBarSideToolbarFrame`). Equal insets keep the 20pt margins.
+            let toolbarInsetsDiffer = layout.safeInsets.left != layout.safeInsets.right
+            let toolbarBottomInsets = layout.bottomEdgeSideInsets()
+            let toolbarLeftInset = toolbarInsetsDiffer ? max(sideInset, toolbarBottomInsets.left) : sideInset
+            let toolbarRightInset = toolbarInsetsDiffer ? max(sideInset, toolbarBottomInsets.right) : sideInset
             let toolbarHeight = 44.0
-            let toolbarFrame = CGRect(origin: CGPoint(x: sideInset, y: layout.size.height - panelsBottomInset - toolbarHeight), size: CGSize(width: layout.size.width - sideInset * 2.0, height: toolbarHeight))
+            let toolbarFrame = CGRect(origin: CGPoint(x: toolbarLeftInset, y: layout.size.height - panelsBottomInset - toolbarHeight), size: CGSize(width: layout.size.width - toolbarLeftInset - toolbarRightInset, height: toolbarHeight))
             
             let toolbar: ComponentView<Empty>
             var toolbarTransition = ComponentTransition(transition)
@@ -2072,6 +2184,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                             items: [GlassControlGroupComponent.Item(
                                 id: "left_" + value.title,
                                 content: .text(value.title),
+                                foregroundColor: value.customTitleColor,
                                 action: value.isEnabled ? { [weak self] in
                                     guard let self else {
                                         return
@@ -2087,6 +2200,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                             items: [GlassControlGroupComponent.Item(
                                 id: "right_" + value.title,
                                 content: .text(value.title),
+                                foregroundColor: value.customTitleColor,
                                 action: value.isEnabled ? { [weak self] in
                                     guard let self else {
                                         return
@@ -2102,6 +2216,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                             items: [GlassControlGroupComponent.Item(
                                 id: "right_" + value.title,
                                 content: .text(value.title),
+                                foregroundColor: value.customTitleColor,
                                 action: value.isEnabled ? { [weak self] in
                                     guard let self else {
                                         return
@@ -2177,7 +2292,8 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
             inlineStackContainerNode.update(layout: inlineLayout, navigationBarHeight: inlineNavigationHeight, visualNavigationHeight: inlineNavigationHeight, originalNavigationHeight: inlineNavigationHeight, cleanNavigationBarHeight: inlineNavigationHeight, insets: inlineInsets, isReorderingFilters: self.isReorderingFilters, isEditing: self.isEditing, inlineNavigationLocation: nil, inlineNavigationTransitionFraction: 0.0, storiesInset: storiesInset, transition: inlineStackContainerNodeTransition)
             
             if animateIn {
-                transition.animatePosition(node: inlineStackContainerNode, from: CGPoint(x: inlineStackContainerNode.position.x + inlineStackContainerNode.bounds.width + UIScreenPixel, y: inlineStackContainerNode.position.y))
+                transition.animatePosition(node: inlineStackContainerNode, from: CGPoint(x: inlineStackContainerNode.position.x + inlineStackContainerNode.bounds.width + UIScreenPixel, y: inlineStackContainerNode.position.y + self.inlineStackContainerAppearanceOffset))
+                self.inlineStackContainerAppearanceOffset = 0.0
             }
         }
         
@@ -2200,6 +2316,54 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }
     }
     
+    // MARK: NAGRAM — 放置底部文件夹标签，返回列表需要让出的高度（不显示时为 0）。
+    private func updateNagramBottomFolderTabs(layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) -> CGFloat {
+        let gap: CGFloat = 8.0
+        guard let tabs = self.nagramBottomFolderTabs, self.isSearchDisplayControllerActive == nil, self.toolbarData == nil else {
+            if let view = self.nagramBottomFolderTabsView.view, view.superview != nil {
+                ComponentTransition(transition).setAlpha(view: view, alpha: 0.0, completion: { [weak view] finished in
+                    if finished {
+                        view?.removeFromSuperview()
+                    }
+                })
+            }
+            return 0.0
+        }
+        let bottomInset = layout.insets(options: []).bottom
+        let estimatedHeight: CGFloat = 40.0
+        let estimatedMinY = layout.size.height - bottomInset - gap - estimatedHeight
+        let sideInsets = layout.sideInsets(forBandFrom: estimatedMinY, to: estimatedMinY + estimatedHeight)
+        let width = layout.size.width - sideInsets.left - sideInsets.right
+        
+        let size = self.nagramBottomFolderTabsView.update(
+            transition: ComponentTransition(transition),
+            component: AnyComponent(HeaderPanelContainerComponent(
+                theme: self.presentationData.theme,
+                tabs: tabs,
+                panels: []
+            )),
+            environment: {},
+            containerSize: CGSize(width: width, height: 1000.0)
+        )
+        guard let view = self.nagramBottomFolderTabsView.view else {
+            return 0.0
+        }
+        let frame = CGRect(origin: CGPoint(x: sideInsets.left, y: layout.size.height - bottomInset - gap - size.height), size: size)
+        if view.superview !== self.view {
+            view.alpha = 0.0
+            self.view.addSubview(view)
+            view.frame = frame
+            ComponentTransition(transition).setAlpha(view: view, alpha: 1.0)
+        } else {
+            view.layer.removeAllAnimations()
+            ComponentTransition(transition).setAlpha(view: view, alpha: 1.0)
+            ComponentTransition(transition).setFrame(view: view, frame: frame)
+        }
+        // 保持在列表和内联列表之上。
+        self.view.bringSubviewToFront(view)
+        return size.height + gap
+    }
+    
     @MainActor
     func activateSearch(placeholderNode: SearchBarPlaceholderNode?, displaySearchFilters: Bool, hasDownloads: Bool, initialFilter: ChatListSearchFilter, navigationController: NavigationController?, searchBarIsExternal: Bool) async -> ((Bool) -> Void)? {
         guard let (containerLayout, _, _, cleanNavigationBarHeight, _) = self.containerLayout, self.searchDisplayController == nil else {
@@ -2208,9 +2372,17 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         
         let effectiveLocation = self.inlineStackContainerNode?.location ?? self.location
         
-        let filter: ChatListNodePeersFilter = []
+        var filter: ChatListNodePeersFilter = []
         if case .forum = effectiveLocation {
             //filter.insert(.excludeRecent)
+        }
+        if self.controller?.isSideList == true {
+            // Only the listed chat's threads and messages; Saved Messages and direct messages as their profile searches.
+            filter.insert(.onlyLocationResults)
+            filter.insert(.excludeRecent)
+            if case .savedMessagesChats = effectiveLocation {
+                filter.insert(.removeSearchHeader)
+            }
         }
         
         var folder: (Int32, String)?
@@ -2247,6 +2419,7 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         }, navigationController: navigationController, parentController: { [weak self] in
             return self?.controller
         })
+        contentNode.nagramBottomUp = searchBarIsExternal // MARK: NAGRAM
         contentNode.dismissSearch = { [weak self] in
             self?.dismissSearch?()
         }
@@ -2597,9 +2770,11 @@ final class ChatListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 
                 let previousInlineStackContainerNode = self.inlineStackContainerNode
                 
+                self.inlineStackContainerAppearanceOffset = 0.0
                 if let navigationBarComponentView = self.navigationBarView.view as? ChatListNavigationBar.View, let clippedScrollOffset = navigationBarComponentView.clippedScrollOffset {
                     let scrollOffset = max(0.0, clippedScrollOffset)
                     inlineStackContainerNode.initialScrollingOffset = scrollOffset
+                    self.inlineStackContainerAppearanceOffset = scrollOffset - clippedScrollOffset
                 }
                 
                 self.inlineStackContainerNode = inlineStackContainerNode

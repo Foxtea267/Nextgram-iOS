@@ -15,6 +15,7 @@ import ChatFolderLinkPreviewScreen
 import EdgeEffect
 import ComponentDisplayAdapters
 import NagramChatListFilters // MARK: NEXTGRAM
+import NagramSettings // MARK: NAGRAM
 
 final class ChatListContainerItemNode: ASDisplayNode {
     private final class TopPanelItem {
@@ -36,6 +37,9 @@ final class ChatListContainerItemNode: ASDisplayNode {
     private let secondaryEmptyAction: () -> Void
     private let openArchiveSettings: () -> Void
     private let isInlineMode: Bool
+    // A `ChatListControllerImpl` host lays out under `ChatListNavigationBar` and passes its expanded height as
+    // `visualNavigationHeight`; other hosts (the peer selection screen) pass the bar's visible bottom.
+    private let isUnderChatListNavigationBar: Bool
     
     private var floatingHeaderOffset: CGFloat?
     
@@ -71,12 +75,17 @@ final class ChatListContainerItemNode: ASDisplayNode {
         self.secondaryEmptyAction = secondaryEmptyAction
         self.openArchiveSettings = openArchiveSettings
         self.isInlineMode = isInlineMode
+        self.isUnderChatListNavigationBar = controller != nil
         
-        self.listNode = ChatListNode(context: context, location: location, chatListFilter: filter, previewing: previewing, fillPreloadItems: controlsHistoryPreload, mode: chatListMode, theme: presentationData.theme, fontSize: presentationData.listsFontSize, strings: presentationData.strings, dateTimeFormat: presentationData.dateTimeFormat, nameSortOrder: presentationData.nameSortOrder, nameDisplayOrder: presentationData.nameDisplayOrder, animationCache: animationCache, animationRenderer: animationRenderer, disableAnimations: true, isInlineMode: isInlineMode, autoSetReady: autoSetReady, isMainTab: isMainTab)
+        self.listNode = ChatListNode(context: context, location: location, chatListFilter: filter, previewing: previewing, fillPreloadItems: controlsHistoryPreload, mode: chatListMode, theme: presentationData.theme, fontSize: presentationData.listsFontSize, strings: presentationData.strings, dateTimeFormat: presentationData.dateTimeFormat, nameSortOrder: presentationData.nameSortOrder, nameDisplayOrder: presentationData.nameDisplayOrder, animationCache: animationCache, animationRenderer: animationRenderer, disableAnimations: true, isInlineMode: isInlineMode, isSideList: isInlineMode && (controller?.isSideList ?? false), autoSetReady: autoSetReady, isMainTab: isMainTab)
         
         // MARK: NAGRAM
         // ChatListContainerNode keeps this in sync with the currently visible header.
-        
+        if isInlineMode && (controller?.isSideList ?? false) {
+            // The chat side list scrolls only as far as its rows reach: a short list does not pad itself out so its
+            // search can hide under the header.
+            self.listNode.keepMinimalScrollHeightWithTopInset = nil
+        }
         self.edgeEffectView = EdgeEffectView()
         
         super.init()
@@ -145,7 +154,7 @@ final class ChatListContainerItemNode: ASDisplayNode {
                         }
                     }
                     
-                    let emptyNode = ChatListEmptyNode(context: context, subject: subject, isLoading: isLoading, theme: strongSelf.presentationData.theme, strings: strongSelf.presentationData.strings, action: {
+                    let emptyNode = ChatListEmptyNode(context: context, subject: subject, isLoading: isLoading, hidesButton: strongSelf.isInlineMode && (strongSelf.controller?.isSideList ?? false), theme: strongSelf.presentationData.theme, strings: strongSelf.presentationData.strings, action: {
                         self?.emptyAction(filter)
                     }, secondaryAction: {
                         self?.secondaryEmptyAction()
@@ -275,7 +284,19 @@ final class ChatListContainerItemNode: ASDisplayNode {
         let _ = insets
         
         if let topPanel = self.topPanel, let topPanelSize = topPanel.size {
-            let minY: CGFloat = visualNavigationHeight - 44.0 + topPanelSize.height
+            // The panel pins to the navigation bar's visible bottom. Under `ChatListNavigationBar`,
+            // `visualNavigationHeight` is the bar's expanded height; the bar collapses its search field by the list's
+            // offset, up to `searchScrollHeight` (`ChatListControllerNode.updateNavigationScrolling`), so pinning to
+            // the expanded height would leave the panel floating over the rows below a collapsed bar.
+            let navigationCollapse: CGFloat
+            if !self.isUnderChatListNavigationBar {
+                navigationCollapse = 0.0
+            } else if case let .known(value) = self.listNode.visibleContentOffset() {
+                navigationCollapse = min(value, ChatListNavigationBar.searchScrollHeight)
+            } else {
+                navigationCollapse = ChatListNavigationBar.searchScrollHeight
+            }
+            let minY: CGFloat = visualNavigationHeight - navigationCollapse
             
             if let topPanelView = topPanel.view.view {
                 var animateIn = false
@@ -286,7 +307,10 @@ final class ChatListContainerItemNode: ASDisplayNode {
                 }
                 topPanelTransition.updateFrame(view: topPanelView, frame: CGRect(origin: CGPoint(x: 0.0, y: max(minY, offset - topPanelSize.height)), size: topPanelSize))
                 if animateIn {
+                    // The panel slides out from behind the folder tabs, whose glass would show it: fade it as well
+                    // (as `HeaderPanelContainerComponent` does with its panels).
                     transition.animatePositionAdditive(layer: topPanelView.layer, offset: CGPoint(x: 0.0, y: -topPanelView.bounds.height))
+                    ComponentTransition(transition).animateAlpha(view: topPanelView, from: 0.0, to: 1.0)
                 }
             }
         }
@@ -309,6 +333,9 @@ final class ChatListContainerItemNode: ASDisplayNode {
         
         var listInsets = insets
         var additionalTopInset: CGFloat = 0.0
+        // The top panel's capsule keeps to the safe insets, as the navigation bar's folder tabs above it do (and so to the
+        // band beside iPhone Duo's side strip).
+        let topPanelSideInsets = UIEdgeInsets(top: 0.0, left: insets.left, bottom: 0.0, right: insets.right)
         
         if let chatFolderUpdates = self.chatFolderUpdates {
             let topPanel: TopPanelItem
@@ -331,6 +358,7 @@ final class ChatListContainerItemNode: ASDisplayNode {
                     theme: self.presentationData.theme,
                     title: title,
                     color: .accent,
+                    sideInsets: topPanelSideInsets,
                     action: { [weak self] in
                         guard let self, let chatFolderUpdates = self.chatFolderUpdates else {
                             return
@@ -378,6 +406,7 @@ final class ChatListContainerItemNode: ASDisplayNode {
                     theme: self.presentationData.theme,
                     title: title,
                     color: .destructive,
+                    sideInsets: topPanelSideInsets,
                     action: { [weak self] in
                         guard let self, case let .forum(peerId) = self.location else {
                             return
@@ -430,6 +459,7 @@ final class ChatListContainerItemNode: ASDisplayNode {
                     transition.updatePosition(layer: topPanelView.layer, position: CGPoint(x: topPanelView.layer.position.x, y: topPanelView.layer.position.y - topPanelView.layer.bounds.height), completion: { [weak topPanelView] _ in
                         topPanelView?.removeFromSuperview()
                     })
+                    transition.updateAlpha(layer: topPanelView.layer, alpha: 0.0)
                 }
             }
         }
@@ -456,7 +486,9 @@ final class ChatListContainerItemNode: ASDisplayNode {
         let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: size.height - edgeEffectHeight), size: CGSize(width: size.width, height: edgeEffectHeight))
         transition.updateFrame(view: self.edgeEffectView, frame: edgeEffectFrame)
         self.edgeEffectView.update(content: self.presentationData.theme.list.plainBackgroundColor, alpha: 0.6, rect: edgeEffectFrame, edge: .bottom, edgeSize: min(edgeEffectFrame.height, 40.0), transition: ComponentTransition(transition))
-        transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 ? 1.0 : 0.0)
+        // MARK: NAGRAM — a lone search button leaves the rest of this strip over tappable chats.
+        let hidesEdgeEffect = NagramSettings.shared.bottomBarSettings.showsOnlySearchButton
+        transition.updateAlpha(layer: self.edgeEffectView.layer, alpha: edgeEffectHeight > 21.0 && !hidesEdgeEffect ? 1.0 : 0.0)
     }
     
     func updateScrollingOffset(navigationHeight: CGFloat, offset: CGFloat, transition: ContainedViewLayoutTransition) {

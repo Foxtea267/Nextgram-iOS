@@ -14,10 +14,10 @@ import UIKit
 /// while the content is moved by Core Animation, so the two run on different clocks. Composing against
 /// the trajectory's OWN vertices — rather than resampling it — is what keeps a composed animation in
 /// exact phase with the content's.
-struct ScrollFlight {
+public struct ScrollFlight {
     let trajectory: Trajectory
     /// Layer-local time at which the trajectory's `t = 0` plays.
-    let beginTime: CFTimeInterval
+    public let beginTime: CFTimeInterval
     /// Coordinate shift accrued since the trajectory was baked.
     ///
     /// The trajectory's own offsets are in the base it was baked in. Window rebalancing re-bases the
@@ -28,7 +28,7 @@ struct ScrollFlight {
     var coordinateShift: CGFloat = 0
 
     /// The flight's resting place in CURRENT list coordinates.
-    var settledOffset: CGFloat { trajectory.finalOffset + coordinateShift }
+    public var settledOffset: CGFloat { trajectory.finalOffset + coordinateShift }
 
     /// A trajectory sample's offset in CURRENT list coordinates.
     func offset(atSampleIndex index: Int) -> CGFloat {
@@ -61,6 +61,16 @@ protocol ScrollEngine: AnyObject {
     /// when deceleration or a bounce finishes. The UIKit analogue is
     /// `UIScrollViewDelegate.scrollViewDidEndDragging(_:willDecelerate:)`.
     var onDidEndDragging: (() -> Void)? { get set }
+
+    /// True while momentum (a fling's deceleration or an edge bounce) moves the offset after a release. Read at
+    /// `onDidEndDragging` it says whether momentum follows the release, which `.stepped` and UIKit cannot say
+    /// through `onFlightChanged` (only `.keyframe` publishes flights).
+    var isDecelerating: Bool { get }
+
+    /// Fired once when a momentum phase that publishes no flight comes to rest by itself: a `.stepped`
+    /// deceleration or bounce, or UIKit's (`scrollViewDidEndDecelerating`). A `.keyframe` flight reports its end
+    /// through `onFlightChanged(nil)` instead. Not fired when a touch catches the motion.
+    var onDidEndDecelerating: (() -> Void)? { get set }
 
     /// Consulted once per interactive release, BEFORE the engine decides whether momentum follows,
     /// with the recognizer's release velocity. Returning `true` releases as if the finger had come to

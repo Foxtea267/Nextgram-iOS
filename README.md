@@ -127,7 +127,7 @@ API ID 已在变体配置中指定，不再读取旧的 `TELEGRAM_API_ID` / `TEL
 
 兼容身份来自维护者指定的配置，不代表相关客户端的授权或背书。企业重签后的通知效果仍需真机验证，不保证通知恢复；详见[通知排查](docs/notifications.md)。
 
-Release 和“关于 Nextgram”使用 **Nagram 基础版本 + Nextgram 修订号**，例如基础版本为 `12.1.0` 时，第 2 个 Nextgram 版本为 `12.1.0.2`。当前代码基础版本为 `12.9.3`，新格式从 `12.9.3.1` 开始。Actions 根据同一基础版本已发布的 Release 自动递增末段；失败构建不占用修订号，四种兼容包共用同一版本号。基础版本变更后，修订号重新从 1 开始。`versions.json` 的 `app` 保存基础版本，`nextgram_revision` 保存修订号的起始值或最低值。
+Release 和“关于 Nextgram”使用 **Nagram 基础版本 + Nextgram 修订号**，例如基础版本为 `12.1.0` 时，第 2 个 Nextgram 版本为 `12.1.0.2`。当前代码基础版本为 `13.2.0`，从 `13.2.0.1` 开始。Actions 根据同一基础版本已发布的 Release 自动递增末段；失败构建不占用修订号，四种兼容包共用同一版本号。基础版本变更后，修订号重新从 1 开始。`versions.json` 的 `app` 保存基础版本，`nextgram_revision` 保存修订号的起始值或最低值。
 
 按 [Apple 的版本字段要求](https://developer.apple.com/documentation/bundleresources/information-property-list/cfbundleshortversionstring)，IPA 的 `CFBundleShortVersionString` 保留三段基础版本，完整四段版本保存为 `NextgramVersion`，系统构建号 `CFBundleVersion` 继续递增。Release 说明会列出上一个发布版本以来的提交、基础版本、Nextgram 版本与安装包选择表。
 
@@ -161,4 +161,4 @@ Nextgram is an unofficial Telegram client. Telegram is a trademark of Telegram M
 Nextgram is not affiliated with, endorsed by, or sponsored by Telegram Messenger Inc., Nagram, or AyuGram.
 # 上游同步
 
-当前同步至 Nagram / Telegram 13.0，Nextgram 版本从 `13.0.0.1` 开始。同步范围及构建说明见 [上游同步记录](docs/upstream-sync.md)。
+当前同步至 Nagram / Telegram 13.2，包含从对话打开群组或个人资料时的展开和返回动画。同步范围及构建说明见 [上游同步记录](docs/upstream-sync.md)。

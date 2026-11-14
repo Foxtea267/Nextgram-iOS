@@ -174,14 +174,16 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         var interfaceOrientation: UIInterfaceOrientation
         var deviceOrientation: UIDeviceOrientation
         var screenCornerRadius: CGFloat
+        var fold: CGRect?
         var state: State
         
-        init(size: CGSize, insets: UIEdgeInsets, interfaceOrientation: UIInterfaceOrientation, deviceOrientation: UIDeviceOrientation, screenCornerRadius: CGFloat, state: State) {
+        init(size: CGSize, insets: UIEdgeInsets, interfaceOrientation: UIInterfaceOrientation, deviceOrientation: UIDeviceOrientation, screenCornerRadius: CGFloat, fold: CGRect?, state: State) {
             self.size = size
             self.insets = insets
             self.interfaceOrientation = interfaceOrientation
             self.deviceOrientation = deviceOrientation
             self.screenCornerRadius = screenCornerRadius
+            self.fold = fold
             self.state = state
         }
     }
@@ -199,6 +201,10 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
     private let titleView: TextView
     private let backButtonView: BackButtonView
     private var conferenceButtonView: ConferenceButtonView?
+    
+    /// Where the back button goes in a side strip (iPhone Duo), in this view's coordinates; nil keeps it in the
+    /// top-left corner. Set by the controller from its layout before `update`.
+    public var sideColumnBackButtonFrame: CGRect?
     
     private var statusView: StatusView
     private var weakSignalView: WeakSignalView?
@@ -227,6 +233,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
     private var displayEmojiTooltip: Bool = false
     private var isEmojiKeyExpanded: Bool = false
     private var areControlsHidden: Bool = false
+    private var cameraOffNoticeState = PrivateCallCameraOffNoticeState()
     private var swapLocalAndRemoteVideo: Bool = false
     public private(set) var isPictureInPictureRequested: Bool = false
     private var isPictureInPictureActive: Bool = false
@@ -243,6 +250,11 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
     private var audioLevelUpdateSubscription: SharedDisplayLinkDriver.Link?
     
     public var speakerAction: (() -> Void)?
+    
+    public var speakerButtonView: UIView? {
+        return self.buttonGroupView.buttonView(key: .speaker)
+    }
+    
     public var flipCameraAction: (() -> Void)?
     public var videoAction: (() -> Void)?
     public var microhoneMuteAction: (() -> Void)?
@@ -467,7 +479,8 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                 update = true
             }
             
-            if self.activeRemoteVideoSource != nil || self.activeLocalVideoSource != nil {
+            // The controls stay up under the camera-off notice.
+            if (self.activeRemoteVideoSource != nil || self.activeLocalVideoSource != nil) && !self.cameraOffNoticeState.isVisible {
                 self.areControlsHidden = !self.areControlsHidden
                 update = true
                 
@@ -548,8 +561,11 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
     ///   - deviceOrientation: how far the device is turned away from gravity. Where the interface
     ///     follows the device the two cancel for remote video; where it is locked (iPhone) remote
     ///     video is counter-rotated by the device. See `resolveCallVideoRotationAngle`.
-    public func update(size: CGSize, insets: UIEdgeInsets, interfaceOrientation: UIInterfaceOrientation, deviceOrientation: UIDeviceOrientation, screenCornerRadius: CGFloat, state: State, transition: ComponentTransition) {
-        let params = Params(size: size, insets: insets, interfaceOrientation: interfaceOrientation, deviceOrientation: deviceOrientation, screenCornerRadius: screenCornerRadius, state: state)
+    ///   - fold: the half-folded screen's fold, in this view's coordinates, when it runs across the screen (iPhone
+    ///     Duo's inner screen in portrait, half open). The main video is centered in the half above it, and the minimized
+    ///     video and the buttons share the half below it. Nil lays out the whole screen.
+    public func update(size: CGSize, insets: UIEdgeInsets, interfaceOrientation: UIInterfaceOrientation, deviceOrientation: UIDeviceOrientation, screenCornerRadius: CGFloat, fold: CGRect?, state: State, transition: ComponentTransition) {
+        let params = Params(size: size, insets: insets, interfaceOrientation: interfaceOrientation, deviceOrientation: deviceOrientation, screenCornerRadius: screenCornerRadius, fold: fold, state: state)
         if self.params == params {
             return
         }
@@ -629,6 +645,15 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             self.areControlsHidden = false
         }
         
+        let wasCameraOffNoticeVisible = self.cameraOffNoticeState.isVisible
+        self.cameraOffNoticeState.update(hasRemoteVideo: params.state.remoteVideo != nil, hasLocalVideo: params.state.localVideo != nil)
+        if self.cameraOffNoticeState.isVisible && !wasCameraOffNoticeVisible {
+            // The controls stay up while the notice is; the auto-hide timer starts again once it is dismissed.
+            self.areControlsHidden = false
+            self.hideControlsTimer?.invalidate()
+            self.hideControlsTimer = nil
+        }
+        
         if let previousParams = self.params, case .active = params.state.lifecycleState {
             switch previousParams.state.lifecycleState {
             case .requesting, .ringing, .connecting, .reconnecting:
@@ -652,6 +677,16 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         
         self.params = params
         self.updateInternal(params: params, transition: transition)
+    }
+    
+    private func dismissCameraOffNotice() {
+        if !self.cameraOffNoticeState.isVisible {
+            return
+        }
+        self.cameraOffNoticeState.dismiss()
+        if !self.isUpdating {
+            self.update(transition: .spring(duration: 0.4))
+        }
     }
     
     private func update(transition: ComponentTransition) {
@@ -702,7 +737,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         }
         let havePrimaryVideo = !activeVideoSources.isEmpty
         
-        if havePrimaryVideo && self.hideControlsTimer == nil {
+        if havePrimaryVideo && self.hideControlsTimer == nil && !self.cameraOffNoticeState.isVisible {
             self.hideControlsTimer = Foundation.Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false, block: { [weak self] _ in
                 guard let self else {
                     return
@@ -812,6 +847,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                 guard let self else {
                     return
                 }
+                self.dismissCameraOffNotice()
                 self.videoAction?()
             }),
             ButtonGroupView.Button(content: .microphone(isMuted: params.state.isLocalAudioMuted), isEnabled: !isTerminated, action: { [weak self] in
@@ -851,8 +887,21 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             if params.state.isRemoteAudioMuted {
                 notices.append(ButtonGroupView.Notice(id: AnyHashable(1 as Int), icon: "Call/CallToastMicrophone", text: params.state.strings.Call_MicrophoneOff(params.state.shortName).string))
             }
-            if params.state.remoteVideo != nil && params.state.localVideo == nil {
-                notices.append(ButtonGroupView.Notice(id: AnyHashable(2 as Int), icon: "Call/CallToastCamera", text: params.state.strings.Call_YourCameraOff))
+            if self.cameraOffNoticeState.isVisible {
+                let isVideoButtonActionable = isVideoButtonEnabled && !isTerminated
+                notices.append(ButtonGroupView.Notice(id: AnyHashable(2 as Int), icon: "Call/CallToastCamera", text: params.state.strings.Call_CameraTooltip, closeAction: { [weak self] in
+                    guard let self else {
+                        return
+                    }
+                    self.dismissCameraOffNotice()
+                }, action: { [weak self] in
+                    // "Tap here to turn on your camera": the video button's action, while that button can be pressed.
+                    guard let self, isVideoButtonActionable else {
+                        return
+                    }
+                    self.dismissCameraOffNotice()
+                    self.videoAction?()
+                }, tailTarget: .video))
             }
             if params.state.isRemoteBatteryLow {
                 notices.append(ButtonGroupView.Notice(id: AnyHashable(3 as Int), icon: "Call/CallToastBattery", text: params.state.strings.Call_BatteryLow(params.state.shortName).string))
@@ -865,6 +914,9 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         }*/
         let displayClose = false
         
+        // The avatar, title, status and emoji key center in the band between the side insets when they differ (iPhone
+        // Duo's side strip); the screen's center otherwise.
+        let contentCenterX: CGFloat = params.insets.left != params.insets.right ? params.insets.left + (params.size.width - params.insets.left - params.insets.right) * 0.5 : params.size.width * 0.5
         let contentBottomInset = self.buttonGroupView.update(size: params.size, insets: params.insets, minWidth: wideContentWidth, controlsHidden: currentAreControlsHidden, displayClose: displayClose, strings: params.state.strings, buttons: buttons, notices: notices, isAnimatedOutToGroupCall: self.isAnimatedOutToGroupCall, transition: transition)
         
         var expandedEmojiKeyRect: CGRect?
@@ -904,7 +956,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             }
             
             let emojiExpandedInfoSize = emojiExpandedInfoView.update(width: wideContentWidth, transition: emojiExpandedInfoTransition)
-            let emojiExpandedInfoFrame = CGRect(origin: CGPoint(x: floor((params.size.width - emojiExpandedInfoSize.width) * 0.5), y: params.insets.top + 73.0), size: emojiExpandedInfoSize)
+            let emojiExpandedInfoFrame = CGRect(origin: CGPoint(x: floor(contentCenterX - emojiExpandedInfoSize.width * 0.5), y: params.insets.top + 73.0), size: emojiExpandedInfoSize)
             emojiExpandedInfoTransition.setPosition(view: emojiExpandedInfoView, position: CGPoint(x: emojiExpandedInfoFrame.minX + emojiExpandedInfoView.layer.anchorPoint.x * emojiExpandedInfoFrame.width, y: emojiExpandedInfoFrame.minY + emojiExpandedInfoView.layer.anchorPoint.y * emojiExpandedInfoFrame.height))
             emojiExpandedInfoTransition.setBounds(view: emojiExpandedInfoView, bounds: CGRect(origin: CGPoint(), size: emojiExpandedInfoFrame.size))
             
@@ -930,15 +982,22 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             }
         }
         
-        let backButtonSize = self.backButtonView.update(text: params.state.strings.Common_Back)
-        
-        let backButtonY: CGFloat
-        if currentAreControlsHidden {
-            backButtonY = -backButtonSize.height - 12.0
+        let backButtonFrame: CGRect
+        if let sideColumnBackButtonFrame = self.sideColumnBackButtonFrame {
+            // iPhone Duo: the back button is a circle in the side strip, as every screen's is.
+            let backButtonSize = self.backButtonView.updateCircle(text: params.state.strings.Common_Back, diameter: sideColumnBackButtonFrame.width)
+            backButtonFrame = CGRect(origin: sideColumnBackButtonFrame.origin, size: backButtonSize)
         } else {
-            backButtonY = params.insets.top + 12.0
+            let backButtonSize = self.backButtonView.update(text: params.state.strings.Common_Back)
+            
+            let backButtonY: CGFloat
+            if currentAreControlsHidden {
+                backButtonY = -backButtonSize.height - 12.0
+            } else {
+                backButtonY = params.insets.top + 12.0
+            }
+            backButtonFrame = CGRect(origin: CGPoint(x: params.insets.left + 10.0, y: backButtonY), size: backButtonSize)
         }
-        let backButtonFrame = CGRect(origin: CGPoint(x: params.insets.left + 10.0, y: backButtonY), size: backButtonSize)
         transition.setFrame(view: self.backButtonView, frame: backButtonFrame)
         genericAlphaTransition.setAlpha(view: self.backButtonView, alpha: (currentAreControlsHidden || self.isAnimatedOutToGroupCall) ? 0.0 : 1.0)
         
@@ -990,9 +1049,17 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         let collapsedAvatarSize: CGFloat = 136.0
         let blobSize: CGFloat = collapsedAvatarSize + 40.0
         
-        let collapsedAvatarFrame = CGRect(origin: CGPoint(x: floor((params.size.width - collapsedAvatarSize) * 0.5), y: max(params.insets.top + 8.0, floor(params.size.height * 0.49) - 39.0 - collapsedAvatarSize)), size: CGSize(width: collapsedAvatarSize, height: collapsedAvatarSize))
+        let collapsedAvatarFrame = CGRect(origin: CGPoint(x: floor(contentCenterX - collapsedAvatarSize * 0.5), y: max(params.insets.top + 8.0, floor(params.size.height * 0.49) - 39.0 - collapsedAvatarSize)), size: CGSize(width: collapsedAvatarSize, height: collapsedAvatarSize))
         let expandedAvatarFrame = CGRect(origin: CGPoint(), size: params.size)
-        let expandedVideoFrame = CGRect(origin: CGPoint(), size: params.size)
+        // The main video's frame: the screen, or the half above the fold. A minimized video lays itself out inside a
+        // frame of the whole screen, kept to its part by `minimizedVideoInsets`.
+        let screenVideoFrame = CGRect(origin: CGPoint(), size: params.size)
+        let expandedVideoFrame: CGRect
+        if let fold = params.fold {
+            expandedVideoFrame = CGRect(origin: CGPoint(), size: CGSize(width: params.size.width, height: max(1.0, fold.minY)))
+        } else {
+            expandedVideoFrame = screenVideoFrame
+        }
         let avatarFrame = havePrimaryVideo ? expandedAvatarFrame : collapsedAvatarFrame
         let avatarCornerRadius = havePrimaryVideo ? params.screenCornerRadius : collapsedAvatarSize * 0.5
         
@@ -1001,6 +1068,10 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         minimizedVideoInsets.left = params.insets.left + 12.0
         minimizedVideoInsets.right = params.insets.right + 12.0
         minimizedVideoInsets.bottom = contentBottomInset + 12.0
+        if let fold = params.fold {
+            minimizedVideoInsets.top = fold.maxY + 12.0
+        }
+        let isMinimizedVideoCentered = params.fold != nil
         
         var validVideoContainerKeys: [VideoContainerView.Key] = []
         for i in 0 ..< activeVideoSources.count {
@@ -1047,6 +1118,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                 videoContainerView.video = videoSource
             }
             
+            let videoContainerFrame = i == 0 ? expandedVideoFrame : screenVideoFrame
             let videoContainerTransition = transition
             if animateIn {
                 if i == 0 && self.videoContainerViews.count == 1 {
@@ -1056,27 +1128,27 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                     videoContainerView.blurredContainerLayer.position = self.avatarTransformLayer.position
                     videoContainerView.blurredContainerLayer.bounds = self.avatarTransformLayer.bounds
                     videoContainerView.blurredContainerLayer.opacity = 0.0
-                    videoContainerView.update(size: self.avatarTransformLayer.bounds.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: self.avatarLayer.params?.cornerRadius ?? 0.0, controlsHidden: currentAreControlsHidden, isMinimized: false, isAnimatedOut: true, transition: .immediate)
+                    videoContainerView.update(size: self.avatarTransformLayer.bounds.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: self.avatarLayer.params?.cornerRadius ?? 0.0, controlsHidden: currentAreControlsHidden, isMinimized: false, isAnimatedOut: true, isMinimizedCentered: isMinimizedVideoCentered, transition: .immediate)
                     ComponentTransition.immediate.setScale(view: videoContainerView, scale: self.currentAvatarAudioScale)
                     ComponentTransition.immediate.setScale(view: self.videoContainerBackgroundView, scale: self.currentAvatarAudioScale)
                 } else {
-                    videoContainerView.layer.position = expandedVideoFrame.center
-                    videoContainerView.layer.bounds = CGRect(origin: CGPoint(), size: expandedVideoFrame.size)
+                    videoContainerView.layer.position = videoContainerFrame.center
+                    videoContainerView.layer.bounds = CGRect(origin: CGPoint(), size: videoContainerFrame.size)
                     videoContainerView.alpha = 0.0
-                    videoContainerView.blurredContainerLayer.position = expandedVideoFrame.center
-                    videoContainerView.blurredContainerLayer.bounds = CGRect(origin: CGPoint(), size: expandedVideoFrame.size)
+                    videoContainerView.blurredContainerLayer.position = videoContainerFrame.center
+                    videoContainerView.blurredContainerLayer.bounds = CGRect(origin: CGPoint(), size: videoContainerFrame.size)
                     videoContainerView.blurredContainerLayer.opacity = 0.0
-                    videoContainerView.update(size: self.avatarTransformLayer.bounds.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: params.screenCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: i != 0, isAnimatedOut: i != 0, transition: .immediate)
+                    videoContainerView.update(size: self.avatarTransformLayer.bounds.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: params.screenCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: i != 0, isAnimatedOut: i != 0, isMinimizedCentered: isMinimizedVideoCentered, transition: .immediate)
                 }
             }
             
-            videoContainerTransition.setPosition(view: videoContainerView, position: expandedVideoFrame.center)
-            videoContainerTransition.setBounds(view: videoContainerView, bounds: CGRect(origin: CGPoint(), size: expandedVideoFrame.size))
+            videoContainerTransition.setPosition(view: videoContainerView, position: videoContainerFrame.center)
+            videoContainerTransition.setBounds(view: videoContainerView, bounds: CGRect(origin: CGPoint(), size: videoContainerFrame.size))
             videoContainerTransition.setScale(view: videoContainerView, scale: 1.0)
-            videoContainerTransition.setPosition(layer: videoContainerView.blurredContainerLayer, position: expandedVideoFrame.center)
-            videoContainerTransition.setBounds(layer: videoContainerView.blurredContainerLayer, bounds: CGRect(origin: CGPoint(), size: expandedVideoFrame.size))
+            videoContainerTransition.setPosition(layer: videoContainerView.blurredContainerLayer, position: videoContainerFrame.center)
+            videoContainerTransition.setBounds(layer: videoContainerView.blurredContainerLayer, bounds: CGRect(origin: CGPoint(), size: videoContainerFrame.size))
             videoContainerTransition.setScale(layer: videoContainerView.blurredContainerLayer, scale: 1.0)
-            videoContainerView.update(size: expandedVideoFrame.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: params.screenCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: i != 0, isAnimatedOut: false, transition: videoContainerTransition)
+            videoContainerView.update(size: videoContainerFrame.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: params.screenCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: i != 0, isAnimatedOut: false, isMinimizedCentered: isMinimizedVideoCentered, transition: videoContainerTransition)
             
             let alphaTransition: ComponentTransition
             switch transition.animation {
@@ -1112,7 +1184,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                 if self.videoContainerViews.count == 1 || (i == 0 && !havePrimaryVideo) {
                     let alphaTransition: ComponentTransition = genericAlphaTransition
                     
-                    videoContainerView.update(size: avatarFrame.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: avatarCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: false, isAnimatedOut: true, transition: transition)
+                    videoContainerView.update(size: avatarFrame.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: avatarCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: false, isAnimatedOut: true, isMinimizedCentered: isMinimizedVideoCentered, transition: transition)
                     transition.setPosition(layer: videoContainerView.blurredContainerLayer, position: avatarFrame.center)
                     transition.setBounds(layer: videoContainerView.blurredContainerLayer, bounds: CGRect(origin: CGPoint(), size: avatarFrame.size))
                     transition.setAlpha(layer: videoContainerView.blurredContainerLayer, alpha: 0.0)
@@ -1151,7 +1223,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                     })
                     alphaTransition.setAlpha(layer: videoContainerView.blurredContainerLayer, alpha: 0.0)
                     
-                    videoContainerView.update(size: params.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: params.screenCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: true, isAnimatedOut: true, transition: transition)
+                    videoContainerView.update(size: params.size, insets: minimizedVideoInsets, interfaceOrientation: params.interfaceOrientation, deviceOrientation: params.deviceOrientation, cornerRadius: params.screenCornerRadius, controlsHidden: currentAreControlsHidden, isMinimized: true, isAnimatedOut: true, isMinimizedCentered: isMinimizedVideoCentered, transition: transition)
                 }
             }
         }
@@ -1269,7 +1341,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             fontSize: 28.0,
             fontWeight: 0.0,
             color: .white,
-            constrainedWidth: params.size.width - 16.0 * 2.0,
+            constrainedWidth: (params.insets.left != params.insets.right ? params.size.width - params.insets.left - params.insets.right : params.size.width) - 16.0 * 2.0,
             transition: transition
         )
         
@@ -1326,17 +1398,17 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         if currentAreControlsHidden {
             titleY = -8.0 - titleSize.height - statusSize.height
         } else if havePrimaryVideo {
+            var isActive = false
             if case .active = params.state.lifecycleState {
-                titleY = params.insets.top + 2.0 + 54.0
-            } else {
-                titleY = params.insets.top + 2.0
+                isActive = true
             }
+            titleY = privateCallScreenVideoTitleY(insetTop: params.insets.top, isActive: isActive, isBackButtonInTopRow: self.sideColumnBackButtonFrame == nil)
         } else {
             titleY = collapsedAvatarFrame.maxY + 39.0
         }
         let titleFrame = CGRect(
             origin: CGPoint(
-                x: (params.size.width - titleSize.width) * 0.5,
+                x: contentCenterX - titleSize.width * 0.5,
                 y: titleY
             ),
             size: titleSize
@@ -1380,7 +1452,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             emojiViewSizeValue = emojiViewSize
             
             if self.isEmojiKeyExpanded {
-                let emojiViewFrame = CGRect(origin: CGPoint(x: floor((params.size.width - emojiViewSize.width) * 0.5), y: params.insets.top + 93.0), size: emojiViewSize)
+                let emojiViewFrame = CGRect(origin: CGPoint(x: floor(contentCenterX - emojiViewSize.width * 0.5), y: params.insets.top + 93.0), size: emojiViewSize)
                 
                 if case let .curve(duration, curve) = transition.animation, !emojiViewWasExpanded {
                     let distance = CGPoint(x: emojiViewFrame.midX - emojiView.center.x, y: emojiViewFrame.midY - emojiView.center.y)
@@ -1423,7 +1495,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
         
         let statusFrame = CGRect(
             origin: CGPoint(
-                x: (params.size.width - statusSize.width) * 0.5,
+                x: contentCenterX - statusSize.width * 0.5,
                 y: titleFrame.maxY + 4.0
             ),
             size: statusSize
@@ -1450,7 +1522,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                     emojiViewY = params.insets.top + 14.0
                 }
                 
-                let emojiViewFrame = CGRect(origin: CGPoint(x: floor((params.size.width - emojiViewSize.width) * 0.5), y: emojiViewY), size: emojiViewSize)
+                let emojiViewFrame = CGRect(origin: CGPoint(x: floor(contentCenterX - emojiViewSize.width * 0.5), y: emojiViewY), size: emojiViewSize)
                 
                 if case let .curve(duration, curve) = transition.animation, emojiViewWasExpanded {
                     let distance = CGPoint(x: emojiViewFrame.midX - emojiView.center.x, y: emojiViewFrame.midY - emojiView.center.y)
@@ -1477,7 +1549,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                         self.addSubview(emojiTooltipView)
                     }
                     
-                    let emojiTooltipSize = emojiTooltipView.update(constrainedWidth: params.size.width - 32.0 * 2.0, subjectWidth: emojiViewSize.width * 0.5)
+                    let emojiTooltipSize = emojiTooltipView.update(constrainedWidth: (params.insets.left != params.insets.right ? params.size.width - params.insets.left - params.insets.right : params.size.width) - 32.0 * 2.0, subjectWidth: emojiViewSize.width * 0.5)
                     let emojiTooltipFrame = CGRect(origin: CGPoint(x: emojiViewFrame.minX + floor((emojiViewFrame.width - emojiTooltipSize.width) * 0.5), y: emojiViewFrame.maxY + 8.0), size: emojiTooltipSize)
                     emojiTooltipTransition.setFrame(view: emojiTooltipView, frame: emojiTooltipFrame)
                     
@@ -1509,7 +1581,7 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
             } else {
                 weakSignalY = statusFrame.maxY + (havePrimaryVideo ? 12.0 : 12.0)
             }
-            let weakSignalFrame = CGRect(origin: CGPoint(x: floor((params.size.width - weakSignalSize.width) * 0.5), y: weakSignalY), size: weakSignalSize)
+            let weakSignalFrame = CGRect(origin: CGPoint(x: floor(contentCenterX - weakSignalSize.width * 0.5), y: weakSignalY), size: weakSignalSize)
             if weakSignalView.bounds.isEmpty {
                 weakSignalView.frame = weakSignalFrame
                 if !transition.animation.isImmediate {
@@ -1530,5 +1602,20 @@ public final class PrivateCallScreen: OverlayMaskContainerView, AVPictureInPictu
                 })
             }
         }
+    }
+}
+
+/// Where the 1:1 call screen puts the peer's name over full-screen video, from the top of the screen.
+///
+/// The top row holds the back button (top-left) and, once the call is active, the key emoji and the conference button.
+/// The name goes below that row whenever the row holds the back button or the key emoji, so a long name never runs into
+/// "‹ Back" (wider in some languages) while the call is requesting, ringing or connecting, and does not move when the
+/// call becomes active. iPhone Duo puts the back button in the side strip, which leaves the top row to the name until
+/// the call is active.
+public func privateCallScreenVideoTitleY(insetTop: CGFloat, isActive: Bool, isBackButtonInTopRow: Bool) -> CGFloat {
+    if isActive || isBackButtonInTopRow {
+        return insetTop + 2.0 + 54.0
+    } else {
+        return insetTop + 2.0
     }
 }

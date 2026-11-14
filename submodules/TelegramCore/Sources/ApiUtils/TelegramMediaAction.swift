@@ -1,12 +1,28 @@
 import Foundation
 import Postbox
-import TelegramApi
+internal import TelegramApi
 
+/// What a topic edit changed, from `messageActionTopicEdit` or `updateEditForumTopic` (the same fields under the same
+/// flags): a field that is present changed, and an icon id of 0 removes the icon.
+func forumTopicEditComponents(title: String?, iconEmojiId: Int64?, closed: Api.Bool?, hidden: Api.Bool?) -> [TelegramMediaActionType.ForumTopicEditComponent] {
+    var components: [TelegramMediaActionType.ForumTopicEditComponent] = []
+    if let title = title {
+        components.append(.title(title))
+    }
+    if let iconEmojiId = iconEmojiId {
+        components.append(.iconFileId(iconEmojiId == 0 ? nil : iconEmojiId))
+    }
+    if let closed = closed {
+        components.append(.isClosed(closed == .boolTrue))
+    }
+    if let hidden = hidden {
+        components.append(.isHidden(hidden == .boolTrue))
+    }
+    return components
+}
 
 func telegramMediaActionFromApiAction(_ action: Api.MessageAction) -> TelegramMediaAction? {
     switch action {
-    case let .messageActionWalletTonConnectRequest(data):
-        return TelegramMediaAction(action: .walletTonConnectRequest(flags: data.flags, sessionId: data.sessionId, expires: data.expires, topic: data.topic, traceId: data.traceId, dappName: data.dappName))
     case let .messageActionChannelCreate(messageActionChannelCreateData):
         let title = messageActionChannelCreateData.title
         return TelegramMediaAction(action: .groupCreated(title: title))
@@ -171,21 +187,8 @@ func telegramMediaActionFromApiAction(_ action: Api.MessageAction) -> TelegramMe
         let (title, iconColor, iconEmojiId) = (messageActionTopicCreateData.title, messageActionTopicCreateData.iconColor, messageActionTopicCreateData.iconEmojiId)
         return TelegramMediaAction(action: .topicCreated(title: title, iconColor: iconColor, iconFileId: iconEmojiId))
     case let .messageActionTopicEdit(messageActionTopicEditData):
-        let (flags, title, iconEmojiId, closed, hidden) = (messageActionTopicEditData.flags, messageActionTopicEditData.title, messageActionTopicEditData.iconEmojiId, messageActionTopicEditData.closed, messageActionTopicEditData.hidden)
-        var components: [TelegramMediaActionType.ForumTopicEditComponent] = []
-        if let title = title {
-            components.append(.title(title))
-        }
-        if (flags & (1 << 1)) != 0 {
-            components.append(.iconFileId(iconEmojiId == 0 ? nil : iconEmojiId))
-        }
-        if let closed = closed {
-            components.append(.isClosed(closed == .boolTrue))
-        }
-        if let hidden = hidden {
-            components.append(.isHidden(hidden == .boolTrue))
-        }
-        return TelegramMediaAction(action: .topicEdited(components: components))
+        let (title, iconEmojiId, closed, hidden) = (messageActionTopicEditData.title, messageActionTopicEditData.iconEmojiId, messageActionTopicEditData.closed, messageActionTopicEditData.hidden)
+        return TelegramMediaAction(action: .topicEdited(components: forumTopicEditComponents(title: title, iconEmojiId: iconEmojiId, closed: closed, hidden: hidden)))
     case let .messageActionSuggestProfilePhoto(messageActionSuggestProfilePhotoData):
         let photo = messageActionSuggestProfilePhotoData.photo
         return TelegramMediaAction(action: .suggestedProfilePhoto(image: telegramMediaImageFromApiPhoto(photo)))
@@ -396,6 +399,10 @@ func telegramMediaActionFromApiAction(_ action: Api.MessageAction) -> TelegramMe
         return TelegramMediaAction(action: .communityChanged(communityId: communityId))
     case let .messageActionChatJoinedViaCommunity(messageActionChatJoinedViaCommunityData):
         return TelegramMediaAction(action: .joinedViaCommunity(communityId: PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(messageActionChatJoinedViaCommunityData.communityId))))
+    case let .messageActionWalletTonConnectRequest(data):
+        return TelegramMediaAction(action: .walletTonConnectRequest(flags: data.flags, sessionId: data.sessionId, expires: data.expires, topic: data.topic, traceId: data.traceId, dappName: data.dappName))
+    case .messageActionNoPaidMessagesTokenUsed:
+        return TelegramMediaAction(action: .noPaidMessagesTokenUsed)
     }
 }
 

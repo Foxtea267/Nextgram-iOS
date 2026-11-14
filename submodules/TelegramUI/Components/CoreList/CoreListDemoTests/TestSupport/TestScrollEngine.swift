@@ -41,6 +41,7 @@ final class TestScrollEngine: ScrollEngine {
     }
     var onWillBeginDragging: (() -> Void)?
     var onDidEndDragging: (() -> Void)?
+    var onDidEndDecelerating: (() -> Void)?
     var shouldStopScrollingOnRelease: ((CGFloat) -> Bool)?
     /// Mirrors `PhysicsScrollEngine.offset`: the physics position, advanced once per frame, never a sample of
     /// the flight. See that property and the clock-free-mutation-pass spec.
@@ -77,10 +78,11 @@ final class TestScrollEngine: ScrollEngine {
 
     func haltMotionInPlace() {
         // Mirrors PhysicsScrollEngine.haltMotionInPlace: catch the flight at its live position (production
-        // additionally removes the CA animation), then idle the core.
+        // additionally removes the CA animation, and `catchFlight` publishes the end), then idle the core.
         if let f = flight {
             core.setOffset(f.liveOffset(now: clock.now))
             flight = nil
+            onFlightChanged?(nil)
         }
         core.cancelDeceleration()
     }
@@ -228,6 +230,9 @@ final class TestScrollEngine: ScrollEngine {
             return
         }
         guard core.isDecelerating else { return }
-        _ = core.step(dtMs: CGFloat(dt * 1000))
+        if core.step(dtMs: CGFloat(dt * 1000)) {
+            // Parity with PhysicsScrollEngine.step: a stepped deceleration reports its own end.
+            onDidEndDecelerating?()
+        }
     }
 }

@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -15,6 +14,7 @@ import EmojiStatusComponent
 import TelegramStringFormatting
 import TelegramNotices
 import EntityKeyboard
+import ChatEntityKeyboardInputNode
 import PagerComponent
 import Markdown
 import GradientBackground
@@ -593,25 +593,17 @@ final class AvatarEditorScreenComponent: Component {
                         }
                     })
                 },
-                clearGroup: { [weak self] groupId in
+                clearGroup: { [weak self] groupId, sourceView, sourceRect in
                     guard let strongSelf = self, let controller = strongSelf.controller?() else {
                         return
                     }
                     let context = controller.context
                     let presentationData = controller.context.sharedContext.currentPresentationData.with { $0 }
                     if groupId == AnyHashable("recent") {
-                        let actionSheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationTheme: presentationData.theme, fontSize: presentationData.listsFontSize))
-                        var items: [ActionSheetItem] = []
-                        items.append(ActionSheetButtonItem(title: presentationData.strings.Emoji_ClearRecent, color: .destructive, action: { [weak actionSheet] in
-                            actionSheet?.dismissAnimated()
+                        let contextController = makeEmojiClearGroupContextController(presentationData: presentationData, title: presentationData.strings.Emoji_ClearRecent, sourceView: sourceView, sourceRect: sourceRect, action: {
                             let _ = context.engine.stickers.clearRecentlyUsedEmoji().start()
-                        }))
-                        actionSheet.setItemGroups([ActionSheetItemGroup(items: items), ActionSheetItemGroup(items: [
-                            ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                                actionSheet?.dismissAnimated()
-                            })
-                        ])])
-                        context.sharedContext.mainWindow?.presentInGlobalOverlay(actionSheet)
+                        })
+                        context.sharedContext.mainWindow?.presentInGlobalOverlay(contextController)
                     } else if groupId == AnyHashable("popular") {
                         let actionSheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationTheme: presentationData.theme, fontSize: presentationData.listsFontSize))
                         var items: [ActionSheetItem] = []
@@ -727,25 +719,17 @@ final class AvatarEditorScreenComponent: Component {
                         }
                     })
                 },
-                clearGroup: { [weak self] groupId in
+                clearGroup: { [weak self] groupId, sourceView, sourceRect in
                     guard let strongSelf = self, let controller = strongSelf.controller?() else {
                         return
                     }
                     let context = controller.context
                     if groupId == AnyHashable("recent") {
                         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-                        let actionSheet = ActionSheetController(theme: ActionSheetControllerTheme(presentationTheme: presentationData.theme, fontSize: presentationData.listsFontSize))
-                        var items: [ActionSheetItem] = []
-                        items.append(ActionSheetButtonItem(title: presentationData.strings.Stickers_ClearRecent, color: .destructive, action: { [weak actionSheet] in
-                            actionSheet?.dismissAnimated()
+                        let contextController = makeEmojiClearGroupContextController(presentationData: presentationData, title: presentationData.strings.Stickers_ClearRecent, sourceView: sourceView, sourceRect: sourceRect, action: {
                             let _ = context.engine.stickers.clearRecentlyUsedStickers().start()
-                        }))
-                        actionSheet.setItemGroups([ActionSheetItemGroup(items: items), ActionSheetItemGroup(items: [
-                            ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                                actionSheet?.dismissAnimated()
-                            })
-                        ])])
-                        context.sharedContext.mainWindow?.presentInGlobalOverlay(actionSheet)
+                        })
+                        context.sharedContext.mainWindow?.presentInGlobalOverlay(contextController)
                     } else if groupId == AnyHashable("featuredTop") {
                         let _ = (context.engine.data.subscribe(TelegramEngine.EngineData.Item.OrderedLists.ListItems(collectionId: Namespaces.OrderedItemList.CloudFeaturedStickerPacks))
                         |> take(1)
@@ -828,7 +812,10 @@ final class AvatarEditorScreenComponent: Component {
             }
             self.navigationMetrics = (environment.navigationHeight, environment.statusBarHeight)
             
+            // iPhone Duo: one side's safe inset is the side strip; the right margin is its own and centered
+            // content is centered in the band between the insets. With equal insets these are the old values.
             let sideInset: CGFloat = 16.0 + environment.safeInsets.left
+            let rightSideInset: CGFloat = 16.0 + environment.safeInsets.right
             
             if state.expanded && environment.inputHeight > 0.0 {
                 state.expanded = false
@@ -995,12 +982,15 @@ final class AvatarEditorScreenComponent: Component {
                 let previewScale = effectiveIsExpanded ? 1.0 : collapsedAvatarSize.width / avatarPreviewSize.width
                 let cornerRadius = effectiveIsExpanded ? 0.0 : availableSize.width / ([.forum, .community].contains(component.peerType) ? 4.0 : 2.0)
                 let position = effectiveIsExpanded ? avatarPreviewSize.height / 2.0 : environment.navigationHeight + 10.0
+                // Collapsed, the avatar is centered in the band between the side safe insets (iPhone Duo's side strip);
+                // expanded it fills the width. With equal insets both are the full width's center.
+                let bandCenterX: CGFloat = effectiveIsExpanded ? availableSize.width / 2.0 : environment.safeInsets.left + (availableSize.width - environment.safeInsets.left - environment.safeInsets.right) / 2.0
                                 
                 transition.setBounds(view: previewView, bounds: CGRect(origin: .zero, size: avatarPreviewSize))
                 transition.setPosition(view: previewView, position: CGPoint(x: avatarPreviewSize.width / 2.0, y: avatarPreviewSize.height / 2.0))
                 
                 transition.setBounds(view: self.previewContainerView, bounds: CGRect(origin: .zero, size: avatarPreviewSize))
-                transition.setPosition(view: self.previewContainerView, position: CGPoint(x: availableSize.width / 2.0, y: position))
+                transition.setPosition(view: self.previewContainerView, position: CGPoint(x: bandCenterX, y: position))
                 transition.setTransform(view: self.previewContainerView, transform: CATransform3DMakeScale(previewScale, previewScale, 1.0))
                 transition.setCornerRadius(layer: self.previewContainerView.layer, cornerRadius: cornerRadius)
                 
@@ -1026,7 +1016,7 @@ final class AvatarEditorScreenComponent: Component {
                     maximumNumberOfLines: 0
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - sideInset * 2.0 - 15.0 * 2.0, height: .greatestFiniteMagnitude)
+                containerSize: CGSize(width: availableSize.width - sideInset - rightSideInset - 15.0 * 2.0, height: .greatestFiniteMagnitude)
             )
             let backgroundTitleFrame = CGRect(origin: CGPoint(x: sideInset + 15.0, y: contentHeight), size: backgroundTitleSize)
             if let backgroundTitleView = self.backgroundTitleView.view {
@@ -1063,7 +1053,7 @@ final class AvatarEditorScreenComponent: Component {
                     }
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: .greatestFiniteMagnitude)
+                containerSize: CGSize(width: availableSize.width - sideInset - rightSideInset, height: .greatestFiniteMagnitude)
             )
             let backgroundFrame = CGRect(origin: .zero, size: backgroundSize)
             if let backgroundView = self.backgroundView.view {
@@ -1113,7 +1103,7 @@ final class AvatarEditorScreenComponent: Component {
                     )
                 ),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - sideInset * 2.0, height: availableSize.height)
+                containerSize: CGSize(width: availableSize.width - sideInset - rightSideInset, height: availableSize.height)
             )
             let colorPickerFrame = CGRect(origin: .zero, size: colorPickerSize)
             if let colorPickerView = self.colorPickerView.view {
@@ -1161,7 +1151,7 @@ final class AvatarEditorScreenComponent: Component {
                     maximumNumberOfLines: 1
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - sideInset * 2.0 - 15.0 * 2.0, height: .greatestFiniteMagnitude)
+                containerSize: CGSize(width: availableSize.width - sideInset - rightSideInset - 15.0 * 2.0, height: .greatestFiniteMagnitude)
             )
             let keyboardTitleFrame = CGRect(origin: CGPoint(x: sideInset + 15.0, y: contentHeight), size: keyboardTitleSize)
             if let keyboardTitleView = self.keyboardTitleView.view {
@@ -1209,9 +1199,9 @@ final class AvatarEditorScreenComponent: Component {
                     )
                 ),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - sideInset * 2.0 - 15.0 * 2.0, height: .greatestFiniteMagnitude)
+                containerSize: CGSize(width: availableSize.width - sideInset - rightSideInset - 15.0 * 2.0, height: .greatestFiniteMagnitude)
             )
-            let keyboardSwitchFrame = CGRect(origin: CGPoint(x: availableSize.width - sideInset - 15.0 - keyboardSwitchSize.width, y: contentHeight), size: keyboardSwitchSize)
+            let keyboardSwitchFrame = CGRect(origin: CGPoint(x: availableSize.width - rightSideInset - 15.0 - keyboardSwitchSize.width, y: contentHeight), size: keyboardSwitchSize)
             if let keyboardSwitchView = self.keyboardSwitchView.view {
                 if keyboardSwitchView.superview == nil {
                     self.addSubview(keyboardSwitchView)
@@ -1233,7 +1223,7 @@ final class AvatarEditorScreenComponent: Component {
                 bottomInset += 52.0 + buttonInsets.bottom - 14.0
             }
             
-            let keyboardContainerFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: CGSize(width: availableSize.width - sideInset * 2.0, height: availableSize.height - contentHeight - bottomInset))
+            let keyboardContainerFrame = CGRect(origin: CGPoint(x: sideInset, y: contentHeight), size: CGSize(width: availableSize.width - sideInset - rightSideInset, height: availableSize.height - contentHeight - bottomInset))
             transition.setFrame(view: self.keyboardContainerView, frame: keyboardContainerFrame)
             transition.setAlpha(view: self.keyboardContainerView, alpha: state.editingColor ? 0.0 : 1.0)
             
@@ -1354,11 +1344,12 @@ final class AvatarEditorScreenComponent: Component {
                     color: theme.list.itemCheckColors.foregroundColor,
                     startingPosition: .begin,
                     size: CGSize(width: 30.0, height: 30.0),
-                    loop: true,
-                    lottieSettings: component.context.lottieRenderingSettings
+                    loop: true
                 ))))
             }
             
+            // The bottom button spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom.
+            let buttonSideInsets = environment.bottomEdgeSideInsets()
             let buttonSize = self.buttonView.update(
                 transition: transition,
                 component: AnyComponent(
@@ -1380,13 +1371,13 @@ final class AvatarEditorScreenComponent: Component {
                     )
                 ),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - buttonInsets.left - buttonInsets.right, height: 52.0)
+                containerSize: CGSize(width: availableSize.width - buttonInsets.left - buttonInsets.right - buttonSideInsets.left - buttonSideInsets.right, height: 52.0)
             )
             if let buttonView = self.buttonView.view {
                 if buttonView.superview == nil {
                     self.addSubview(buttonView)
                 }
-                transition.setFrame(view: buttonView, frame: CGRect(origin: CGPoint(x: buttonInsets.left, y: contentHeight), size: buttonSize))
+                transition.setFrame(view: buttonView, frame: CGRect(origin: CGPoint(x: buttonSideInsets.left + buttonInsets.left, y: contentHeight), size: buttonSize))
             }
             
             let bottomPanelFrame = CGRect(origin: CGPoint(x: 0.0, y: contentHeight - 4.0), size: CGSize(width: availableSize.width, height: availableSize.height - contentHeight + 4.0))
@@ -1397,8 +1388,10 @@ final class AvatarEditorScreenComponent: Component {
                     deviceMetrics: environment.deviceMetrics,
                     intrinsicInsets: UIEdgeInsets(top: 0.0, left: 0.0, bottom: bottomPanelFrame.height, right: 0.0),
                     safeInsets: UIEdgeInsets(top: 0.0, left: environment.safeInsets.left, bottom: 0.0, right: environment.safeInsets.right),
+                    reservedCorners: environment.reservedCorners,
+                    division: nil,
                     additionalInsets: .zero,
-                    statusBarHeight: environment.statusBarHeight,
+                    statusBarHeight: environment.fullStatusBarHeight,
                     inputHeight: nil,
                     inputHeightIsInteractivellyChanging: false,
                     inVoiceOver: false,
@@ -1535,6 +1528,7 @@ final class AvatarEditorScreenComponent: Component {
                         cropRotation: 0.0,
                         cropMirroring: false,
                         cropOrientation: nil,
+                        cropPerspective: .zero,
                         gradientColors: nil,
                         videoTrimRange: nil,
                         videoBounce: false,

@@ -49,6 +49,7 @@ final class MediaEditorRenderer {
         case texture(MTLTexture, CMTime, Bool, CGRect?, CGFloat, CGPoint)
         case videoBuffer(VideoPixelBuffer, CGRect?, CGFloat, CGPoint)
         case ciImage(CIImage, CMTime)
+        case entityFrame(MediaEditorComposerEntityFrame, CMTime)
         
         var timestamp: CMTime {
             switch self {
@@ -58,15 +59,23 @@ final class MediaEditorRenderer {
                 return videoBuffer.timestamp
             case let .ciImage(_, timestamp):
                 return timestamp
+            case let .entityFrame(_, timestamp):
+                return timestamp
             }
         }
     }
     
     private var device: MTLDevice?
     private var library: MTLLibrary?
-    private var commandQueue: MTLCommandQueue?
+    private(set) var commandQueue: MTLCommandQueue?
     private var textureCache: CVMetalTextureCache?
     private var semaphore = DispatchSemaphore(value: 3)
+    /// Permits actually taken from `semaphore`.
+    ///
+    /// A timed-out wait does NOT take one, so signalling unconditionally in `didRenderFrame`
+    /// handed back a permit that was never held: the count crept up, the triple buffer stopped
+    /// throttling, and queued GPU work ran further and further ahead of the display.
+    private let acquiredRenderPermits = Atomic<Int>(value: 0)
     
     private var renderPasses: [RenderPass] = []
     
@@ -74,6 +83,8 @@ final class MediaEditorRenderer {
     private let mainVideoInputPass = VideoInputPass()
     private var additionalVideoInputPass: [Int : VideoInputPass] = [:]
     let videoFinishPass = VideoFinishPass()
+    var frameCompositor: MediaEditorFrameCompositor?
+    private let entityFrameColorSpace = CGColorSpaceCreateDeviceRGB()
     
     private let outputRenderPass = OutputRenderPass()
     private weak var renderTarget: RenderTarget? {
@@ -94,6 +105,7 @@ final class MediaEditorRenderer {
     private(set) var resultTexture: MTLTexture?
     
     var displayEnabled = true
+    var waitsForOffscreenFrames = true
     var skipEditingPasses = false
     var needsDisplay = false
     
@@ -105,7 +117,10 @@ final class MediaEditorRenderer {
     }
     
     deinit {
-        for _ in 0 ..< 3 {
+        // A DispatchSemaphore traps if it is deallocated while permits are still held, so hand
+        // back exactly the ones outstanding rather than a fixed three.
+        let outstanding = self.acquiredRenderPermits.swap(0)
+        for _ in 0 ..< outstanding {
             self.semaphore.signal()
         }
     }
@@ -167,14 +182,6 @@ final class MediaEditorRenderer {
         self.outputRenderPass.setup(device: device, library: library)
     }
     
-    func setupForComposer(composer: MediaEditorComposer) {
-        guard let device = composer.device else {
-            return
-        }
-        self.device = device
-        self.commonSetup(device: device)
-    }
-    
     func setupForStandaloneDevice(device: MTLDevice) {
         self.device = device
         self.commonSetup(device: device)
@@ -203,6 +210,22 @@ final class MediaEditorRenderer {
                 }
             case let .ciImage(image, _):
                 if let texture = self.ciInputPass.processCIImage(image, device: device, commandBuffer: commandBuffer) {
+                    return VideoFinishPass.Input(texture: texture, hasTransparency: true, rect: nil, scale: 1.0, offset: .zero)
+                } else {
+                    return nil
+                }
+            case let .entityFrame(frame, _):
+                guard let frameCompositor = self.frameCompositor else {
+                    return nil
+                }
+                let texture: MTLTexture?
+                switch frame.content {
+                case let .pixelBuffer(pixelBuffer):
+                    texture = frameCompositor.texture(for: pixelBuffer, convertingTo: self.entityFrameColorSpace, extendedRange: false)
+                case let .image(image):
+                    texture = frameCompositor.texture(for: image)
+                }
+                if let texture {
                     return VideoFinishPass.Input(texture: texture, hasTransparency: true, rect: nil, scale: 1.0, offset: .zero)
                 } else {
                     return nil
@@ -275,7 +298,7 @@ final class MediaEditorRenderer {
                 self.needsDisplay = true
                 renderTarget.redraw()
             }
-        } else {
+        } else if self.waitsForOffscreenFrames {
             commandBuffer.waitUntilCompleted()
         }
     }
@@ -320,12 +343,28 @@ final class MediaEditorRenderer {
     }
     
     func willRenderFrame() {
-        let timeout = self.renderTarget != nil ? DispatchTime.now() + 0.1 : .distantFuture
-        let _ = self.semaphore.wait(timeout: timeout)
+        // Bounded on both paths. `consume` waits here before the export's own frame timeout can
+        // apply, so an unbounded wait would deadlock ahead of it if a permit were ever lost — for
+        // instance when a command buffer's completion handler does not run after a GPU error.
+        // Proceeding without a permit only costs throttling for that one frame.
+        let timeout = DispatchTime.now() + (self.renderTarget != nil ? 0.1 : 10.0)
+        if self.semaphore.wait(timeout: timeout) == .success {
+            let _ = self.acquiredRenderPermits.modify { $0 + 1 }
+        }
     }
     
     func didRenderFrame() {
-        self.semaphore.signal()
+        var heldPermit = false
+        let _ = self.acquiredRenderPermits.modify { current in
+            guard current > 0 else {
+                return current
+            }
+            heldPermit = true
+            return current - 1
+        }
+        if heldPermit {
+            self.semaphore.signal()
+        }
     }
     
     func consume(
@@ -357,7 +396,7 @@ final class MediaEditorRenderer {
         self.renderTarget?.redraw()
     }
     
-    func finalRenderedCIImage() -> CIImage? {
+    func finalRenderedTexture() -> MTLTexture? {
         guard let texture = self.resultTexture, let device = self.effectiveDevice, let commandBuffer = self.commandQueue?.makeCommandBuffer() else {
             return nil
         }
@@ -374,7 +413,7 @@ final class MediaEditorRenderer {
         guard commandBuffer.status == .completed else {
             return nil
         }
-        return getTextureCIImage(texture: snapshot)
+        return snapshot
     }
 
     func finalRenderedImage(mirror: Bool = false) -> UIImage? {

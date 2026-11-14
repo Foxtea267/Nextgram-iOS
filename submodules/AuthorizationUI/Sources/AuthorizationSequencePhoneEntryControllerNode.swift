@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -21,7 +20,7 @@ private final class PhoneAndCountryNode: ASDisplayNode {
     let strings: PresentationStrings
     let theme: PresentationTheme
     
-    let countryButton: ASButtonNode
+    let countryButton: CountryButtonNode
     let countryButtonArrow: ASImageNode
     let phoneBackground: ASImageNode
     let phoneInputNode: PhoneInputNode
@@ -85,7 +84,7 @@ private final class PhoneAndCountryNode: ASDisplayNode {
             context.strokePath()
         })?.stretchableImage(withLeftCapWidth: 95, topCapHeight: 2)
         
-        self.countryButton = ASButtonNode()
+        self.countryButton = CountryButtonNode()
         self.countryButton.displaysAsynchronously = false
         self.countryButton.setBackgroundImage(countryButtonBackground, for: [])
         self.countryButton.titleNode.maximumNumberOfLines = 1
@@ -116,8 +115,9 @@ private final class PhoneAndCountryNode: ASDisplayNode {
         self.phoneInputNode.numberField.textField.textColor = theme.list.itemPrimaryTextColor
         self.phoneInputNode.countryCodeField.textField.tintColor = theme.list.itemAccentColor
         self.phoneInputNode.numberField.textField.tintColor = theme.list.itemAccentColor
-        self.phoneInputNode.countryCodeField.accessibilityHint = strings.Login_VoiceOver_PhoneCountryCode
-        self.phoneInputNode.numberField.accessibilityHint = strings.Login_VoiceOver_PhoneNumber
+        // The fields show only digits (or a placeholder): VoiceOver names them.
+        self.phoneInputNode.countryCodeField.textField.accessibilityLabel = strings.Login_VoiceOver_PhoneCountryCode
+        self.phoneInputNode.numberField.textField.accessibilityLabel = strings.Login_VoiceOver_PhoneNumber
         self.phoneInputNode.countryCodeField.textField.accessibilityIdentifier = "Auth.PhoneEntry.CountryCodeField"
         self.phoneInputNode.numberField.textField.accessibilityIdentifier = "Auth.PhoneEntry.PhoneNumberField"
 
@@ -153,24 +153,22 @@ private final class PhoneAndCountryNode: ASDisplayNode {
                                 
                 if strongSelf.processNumberChange(number: strongSelf.phoneInputNode.number) {
                 } else if let code = Int(code), let name = name, let countryName = countryCodeAndIdToName[CountryCodeAndId(code: code, id: name)] {
-                    let flagString = emojiFlagForISOCountryCode(name)
                     var localizedName: String = AuthorizationSequenceCountrySelectionController.lookupCountryNameById(name, strings: strongSelf.strings) ?? countryName
                     if name == "FT" {
                         localizedName = strongSelf.strings.Login_AnonymousNumbers
                     }
-                    strongSelf.countryButton.setTitle("\(flagString) \(localizedName)", with: Font.regular(20.0), with: theme.list.itemAccentColor, for: [])
+                    strongSelf.countryButton.setCountryTitle(countryId: name, name: localizedName, font: Font.regular(20.0), color: theme.list.itemAccentColor)
                     strongSelf.hasCountry = true
                     
                     if strongSelf.phoneInputNode.mask == nil {
                         strongSelf.phoneInputNode.numberField.textField.attributedPlaceholder = NSAttributedString(string: strings.Login_PhonePlaceholder, font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
                     }
                 } else if let code = Int(code), let (countryId, countryName) = countryCodeToIdAndName[code] {
-                    let flagString = emojiFlagForISOCountryCode(countryId)
                     var localizedName: String = AuthorizationSequenceCountrySelectionController.lookupCountryNameById(countryId, strings: strongSelf.strings) ?? countryName
                     if countryId == "FT" {
                         localizedName = strongSelf.strings.Login_AnonymousNumbers
                     }
-                    strongSelf.countryButton.setTitle("\(flagString) \(localizedName)", with: Font.regular(20.0), with: theme.list.itemAccentColor, for: [])
+                    strongSelf.countryButton.setCountryTitle(countryId: countryId, name: localizedName, font: Font.regular(20.0), color: theme.list.itemAccentColor)
                     strongSelf.hasCountry = true
                     
                     if strongSelf.phoneInputNode.mask == nil {
@@ -183,7 +181,11 @@ private final class PhoneAndCountryNode: ASDisplayNode {
                     strongSelf.phoneInputNode.numberField.textField.attributedPlaceholder = NSAttributedString(string: strings.Login_PhonePlaceholder, font: Font.regular(20.0), textColor: theme.list.itemPlaceholderTextColor)
                 }
                 
-                strongSelf.countryButton.accessibilityLabel = strongSelf.countryButton.attributedTitle(for: .normal)?.string ?? ""
+                if !strongSelf.hasCountry {
+                    // setCountryTitle labels the button with the country's name (its title starts with the flag's
+                    // placeholder); the plain "Select Country" title is read as shown.
+                    strongSelf.countryButton.accessibilityLabel = strings.Login_SelectCountry
+                }
                 strongSelf.countryButton.accessibilityTraits = [.button]
                 
                 if strongSelf.hasCountry {
@@ -214,12 +216,11 @@ private final class PhoneAndCountryNode: ASDisplayNode {
     
     func processNumberChange(number: String) -> Bool {
         if let (country, _) = AuthorizationSequenceCountrySelectionController.lookupCountryIdByNumber(number, preferredCountries: self.preferredCountryIdForCode) {
-            let flagString = emojiFlagForISOCountryCode(country.id)
             var localizedName: String = AuthorizationSequenceCountrySelectionController.lookupCountryNameById(country.id, strings: self.strings) ?? country.name
             if country.id == "FT" {
                 localizedName = self.strings.Login_AnonymousNumbers
             }
-            self.countryButton.setTitle("\(flagString) \(localizedName)", with: Font.regular(20.0), with: self.theme.list.itemAccentColor, for: [])
+            self.countryButton.setCountryTitle(countryId: country.id, name: localizedName, font: Font.regular(20.0), color: self.theme.list.itemAccentColor)
             self.hasCountry = true
             
             let maskFont = Font.with(size: 20.0, design: .regular, traits: [.monospacedNumbers])
@@ -396,10 +397,10 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.debugAction = debugAction
         self.hasOtherAccounts = hasOtherAccounts
         
-        self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+        self.animationNode = DefaultAnimatedStickerNodeImpl()
         self.animationNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "IntroPhone"), width: 256, height: 256, playbackMode: .once, mode: .direct(cachePathPrefix: nil))
         
-        self.managedAnimationNode = ManagedPhoneAnimationNode(lottieSettings: .noAccountFallback)
+        self.managedAnimationNode = ManagedPhoneAnimationNode()
         self.managedAnimationNode.isHidden = true
         
         self.titleNode = ASTextNode()
@@ -408,7 +409,7 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.titleNode.attributedText = NSAttributedString(string: account == nil ? strings.Login_NewNumber : strings.Login_PhoneTitle, font: Font.light(30.0), textColor: theme.list.itemPrimaryTextColor)
         
         self.titleActivateAreaNode = AccessibilityAreaNode()
-        self.titleActivateAreaNode.accessibilityTraits = .staticText
+        self.titleActivateAreaNode.accessibilityTraits = [.staticText, .header]
         
         self.noticeNode = ImmediateTextNode()
         self.noticeNode.maximumNumberOfLines = 0
@@ -612,8 +613,18 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         self.titleNode.attributedText = NSAttributedString(string: self.account == nil ? self.strings.Login_NewNumber : self.strings.Login_PhoneTitle, font: Font.bold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
         self.titleActivateAreaNode.accessibilityLabel = self.titleNode.attributedText?.string ?? ""
         
+        // iPhone Duo: beside a side strip the content keeps to the band between the side insets; on the unfolded screen it
+        // is centered on the full width, clear of the strip on both sides (authorizationContentBand). With equal insets
+        // (every other phone) it keeps the full width.
+        let (bandMinX, bandWidth) = authorizationContentBand(layout: layout)
+        
         let inset: CGFloat = 24.0
-        let maximumWidth: CGFloat = min(430.0, layout.size.width)
+        let maximumWidth: CGFloat = min(430.0, bandWidth)
+        
+        // iPhone Duo: the bottom button keeps to the content's axis (authorizationBottomBand): unfolded it spans the
+        // side strip, clear only of a corner block at the bottom; folded it keeps to the content band.
+        let (bottomBandMinX, bottomBandWidth) = authorizationBottomBand(layout: layout)
+        let bottomMaximumWidth: CGFloat = min(430.0, bottomBandWidth)
         
         let animationSize = CGSize(width: 100.0, height: 100.0)
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
@@ -621,8 +632,8 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         let noticeInset: CGFloat = self.account == nil ? 32.0 : 0.0
         
         let noticeSize = self.noticeNode.updateLayout(CGSize(width: min(274.0 + noticeInset, maximumWidth - 28.0), height: CGFloat.greatestFiniteMagnitude))
-        let proceedHeight = self.proceedNode.updateLayout(width: maximumWidth - inset * 2.0, transition: transition)
-        let proceedSize = CGSize(width: maximumWidth - inset * 2.0, height: proceedHeight)
+        let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - inset * 2.0, transition: transition)
+        let proceedSize = CGSize(width: bottomMaximumWidth - inset * 2.0, height: proceedHeight)
         
         var items: [AuthorizationLayoutItem] = [
             AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: titleInset, maxValue: titleInset), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
@@ -633,15 +644,11 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         if layout.size.width > 320.0 {
             items.insert(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)), at: 0)
             self.proceedNode.isHidden = false
-            self.animationNode.isHidden = false
-            self.animationNode.visibility = true
         } else {
             insets.top = navigationBarHeight
             self.proceedNode.isHidden = true
-            self.animationNode.isHidden = true
-            self.managedAnimationNode.isHidden = true
         }
-        
+
         let contactSyncSize = self.contactSyncNode.updateLayout(width: maximumWidth)
         if self.hasOtherAccounts {
             self.contactSyncNode.isHidden = false
@@ -649,24 +656,41 @@ final class AuthorizationSequencePhoneEntryControllerNode: ASDisplayNode {
         } else {
             self.contactSyncNode.isHidden = true
         }
+
+        if layout.size.width > 320.0, !authorizationLayoutItemsFit(height: layout.size.height - insets.top - insets.bottom - additionalBottomInset, items: items) {
+            items.removeFirst()
+            insets.top = navigationBarHeight
+        }
+        if items.first?.node === self.animationNode {
+            self.animationNode.isHidden = false
+            self.animationNode.visibility = true
+            // The intro animation hands over to the managed one once it completes (and leaves its supernode).
+            self.managedAnimationNode.isHidden = self.animationNode.supernode != nil
+        } else {
+            self.animationNode.isHidden = true
+            self.managedAnimationNode.isHidden = true
+        }
         
         let buttonFrame: CGRect
         if let forcedButtonFrame = self.forcedButtonFrame, (layout.inputHeight ?? 0.0).isZero {
             buttonFrame = forcedButtonFrame
         } else {
-            buttonFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((layout.size.width - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize)
+            buttonFrame = CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize)
         }
         
         transition.updateFrame(node: self.proceedNode, frame: buttonFrame)
         
         self.animationNode.updateLayout(size: animationSize)
         
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: 0.0, y: insets.top), size: CGSize(width: layout.size.width, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
         
         transition.updateFrame(node: self.managedAnimationNode, frame: self.animationNode.frame)
         
         self.titleActivateAreaNode.frame = self.titleNode.frame
-        self.noticeActivateAreaNode.accessibilityLabel = self.noticeNode.attributedText?.string ?? ""
+        // The notice may carry the "log in using Passkey" link: a link element whose activation is the link's tap.
+        self.noticeActivateAreaNode.applyAccessibilityText(self.noticeNode.attributedText ?? NSAttributedString(), linkAttribute: NSAttributedString.Key(rawValue: "URL"), open: { [weak self] _ in
+            self?.retryPasskey?()
+        })
         self.noticeActivateAreaNode.frame = self.noticeNode.frame
     }
     
@@ -934,7 +958,16 @@ final class PhoneConfirmationController: ViewController {
             self.dimNode.isUserInteractionEnabled = false
             self.cancel()
         }
-        
+
+        // VoiceOver escape: the same as a tap on the dimmed background (Edit). While the sheet is already closing the
+        // escape is still consumed, so it does not reach the navigation controller and pop the phone screen.
+        override func accessibilityPerformEscape() -> Bool {
+            if self.dimNode.isUserInteractionEnabled {
+                self.cancelPressed()
+            }
+            return true
+        }
+
         func animateIn(codeNode: ASDisplayNode, numberNode: ASDisplayNode, buttonNode: ASDisplayNode) {
             guard let layout = self.validLayout else {
                 return
@@ -1054,7 +1087,12 @@ final class PhoneConfirmationController: ViewController {
             let sideInset: CGFloat = 8.0
             let innerInset: CGFloat = 18.0
             
-            let maximumWidth: CGFloat = min(430.0, layout.size.width)
+            // iPhone Duo: beside a side strip the card keeps to the band between the side insets, centered on the full width
+            // on the unfolded screen (authorizationContentBand). With equal insets (every other phone) it is centered on the
+            // full width.
+            let (bandMinX, bandWidth) = authorizationContentBand(layout: layout)
+            
+            let maximumWidth: CGFloat = min(430.0, bandWidth)
             
             transition.updateFrame(node: self.dimNode, frame: CGRect(origin: CGPoint(x: -layout.size.width, y: 0.0), size: CGSize(width: layout.size.width * 3.0, height: layout.size.height)))
             
@@ -1072,10 +1110,10 @@ final class PhoneConfirmationController: ViewController {
                 }
             }
             
-            let backgroundFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((layout.size.width - backgroundSize.width) / 2.0), y: originY), size: backgroundSize)
+            let backgroundFrame = CGRect(origin: CGPoint(x: bandMinX + floorToScreenPixels((bandWidth - backgroundSize.width) / 2.0), y: originY), size: backgroundSize)
             transition.updateFrame(node: self.backgroundNode, frame: backgroundFrame)
               
-            let maxWidth = layout.size.width - 20.0
+            let maxWidth = bandWidth - 20.0
             if !hadLayout {
                 var fontSize = 34.0
                 if layout.size.width < 375.0 {
@@ -1240,7 +1278,7 @@ private final class ManagedPhoneAnimationNode: ManagedAnimationNode {
     private let plateNode: ASDisplayNode
     private var nodes: [PhoneKeyNode]
     
-    init(lottieSettings: LottieRenderingSettings) {
+    init() {
         self.plateNode = ASDisplayNode()
         self.plateNode.backgroundColor = UIColor(rgb: 0xc30023)
         self.plateNode.frame = CGRect(x: 27.0, y: 38.0, width: 46.0, height: 32.0)
@@ -1277,7 +1315,7 @@ private final class ManagedPhoneAnimationNode: ManagedAnimationNode {
         }
         self.nodes = nodes
         
-        super.init(size: CGSize(width: 100.0, height: 100.0), lottieSettings: lottieSettings)
+        super.init(size: CGSize(width: 100.0, height: 100.0))
         
         self.trackTo(item: ManagedAnimationItem(source: .local("IntroPhone"), frames: .range(startFrame: 0, endFrame: 0), duration: 0.001))
         

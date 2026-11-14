@@ -21,7 +21,7 @@ public func instantPage(from content: ChatInputContent) -> InstantPage {
     // `Media` from this dict, so the round-trip preserves the exact `Media` instance (identity), not a copy.
     var media: [MediaId: Media] = [:]
     let blocks = instantPageBlocks(from: content, collectingMediaInto: &media)
-    return InstantPage(blocks: blocks, media: media, isComplete: true, rtl: false, url: "", views: nil)
+    return InstantPage(blocks: blocks, rawMedia: media, isComplete: true, rtl: false, url: "", views: nil)
 }
 
 func instantPageBlocks(from content: ChatInputContent, collectingMediaInto media: inout [MediaId: Media]) -> [InstantPageBlock] {
@@ -67,7 +67,7 @@ func instantPageBlocks(from content: ChatInputContent, collectingMediaInto media
                 }
             }
         case let .code(c):
-            result.append(.preformatted(text: richText(from: c.runs), language: c.language))
+            result.append(.preformatted(text: richText(from: c.runs), language: chatInputCodeLanguageForSending(c.language)))
         case let .pullQuote(pq):
             result.append(.pullQuote(text: richText(from: pq.runs), caption: authorCaptionRichText(pq.author, italic: true)))
         case let .blockQuote(bq):
@@ -208,7 +208,13 @@ func richText(from runs: [ChatInputRun]) -> RichText {
             case let .customEmoji(fileId, _, _):
                 rt = .textCustomEmoji(fileId: fileId, alt: run.text)
             case let .mention(peerId):
-                rt = .textMentionName(text: .plain(run.text), peerId: peerId.toInt64())
+                // `textMentionName` carries the raw user id (`user_id:long`), not a packed `PeerId`: the two
+                // differ for every id of 2^32 and above. Only a user can be mentioned by name.
+                if peerId.namespace == Namespaces.Peer.CloudUser {
+                    rt = .textMentionName(text: .plain(run.text), peerId: peerId.id._internalGetInt64Value())
+                } else {
+                    rt = .plain(run.text)
+                }
             case let .url(url):
                 rt = .url(text: .plain(run.text), url: url, webpageId: nil)
             case let .date(date):
@@ -247,7 +253,7 @@ private func authorRuns(fromCaption rt: RichText, italic: Bool = false) -> [Chat
 // MARK: - Reverse: InstantPage -> ChatInputContent
 
 public func chatInputContent(fromInstantPage page: InstantPage) -> ChatInputContent {
-    return ChatInputContent(blocks: chatInputBlocks(fromInstantPageBlocks: page.blocks, media: page.media))
+    return ChatInputContent(blocks: chatInputBlocks(fromInstantPageBlocks: page.blocks, media: page.rawMedia))
 }
 
 /// Recover a media block's natural size (aspect) from the resolved `Media`. The InstantPage image/video block
@@ -535,8 +541,11 @@ func chatInputRun(fromSinglePart rt: RichText, attributes: ChatInputInlineAttrib
     case let .textSpoiler(inner):
         attributes.spoiler = true
         return chatInputRun(fromSinglePart: inner, attributes: attributes)
-    case let .textMentionName(inner, peerId):
-        attributes.entity = .mention(EnginePeer.Id(peerId))
+    case let .textMentionName(inner, userId):
+        // An id no user can have (only a bogus page carries one) leaves the text plain.
+        if userId > 0 {
+            attributes.entity = .mention(EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(userId)))
+        }
         return chatInputRun(fromSinglePart: inner, attributes: attributes)
     case let .url(inner, url, _):
         attributes.entity = .url(url)
@@ -558,11 +567,20 @@ func chatInputRun(fromSinglePart rt: RichText, attributes: ChatInputInlineAttrib
     }
 }
 
+/// The LaTeX of a paragraph that is ONE formula and nothing else, which is sent as a standalone
+/// `.formula(latex:)` block. A SPOILERED formula is not standalone: the block carries no inline
+/// attribute, so the formula the user hid was sent visible and an edit reopened it unspoilered
+/// (composer harness p20, `HarnessSendPathFormulaSpoilerTests`). It goes as a paragraph holding
+/// `.textSpoiler(.formula)` instead, which round-trips — the same form a spoilered formula beside text
+/// already takes.
 private func standaloneFormulaLatex(from paragraph: ChatInputParagraph) -> String? {
     guard paragraph.style == .body, paragraph.list == nil, paragraph.runs.count == 1 else {
         return nil
     }
     guard let latex = paragraph.runs[0].attributes.formula, !latex.isEmpty else {
+        return nil
+    }
+    guard !paragraph.runs[0].attributes.spoiler else {
         return nil
     }
     return latex

@@ -380,7 +380,18 @@ public func galleryItemForEntry(
                     }
                     
                     if isHLS {
-                        content = HLSVideoContent(id: .message(message.stableId, file.fileId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: file), streamVideo: streamVideos, loopVideo: loopVideos, autoFetchFullSizeThumbnail: true, codecConfiguration: HLSCodecConfiguration(context: context))
+                        // Where the item's player will seek once it owns the content, by the same precedence. A forwarded
+                        // timestamp only for the item the gallery opens on: a neighbour swiped to that already shows its
+                        // video plays from 0, so loading at its timestamp would be wasted, and one that does not seeks.
+                        var startTimestamp = timecode
+                        if startTimestamp == nil && isCentral {
+                            for attribute in message.attributes {
+                                if let attribute = attribute as? ForwardVideoTimestampAttribute {
+                                    startTimestamp = Double(attribute.timestamp)
+                                }
+                            }
+                        }
+                        content = HLSVideoContent(id: .message(message.stableId, file.fileId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: file), streamVideo: streamVideos, loopVideo: loopVideos, autoFetchFullSizeThumbnail: true, captureProtected: captureProtected, codecConfiguration: HLSCodecConfiguration(context: context), startTimestamp: startTimestamp)
                     } else {
                         content = NativeVideoContent(id: .message(message.stableId, file.fileId), userLocation: .peer(message.id.peerId), fileReference: .message(message: MessageReference(message), media: file), imageReference: mediaImage.flatMap({ ImageMediaReference.message(message: MessageReference(message), media: $0) }), streamVideo: .conservative, loopVideo: loopVideos, tempFilePath: tempFilePath, captureProtected: captureProtected, storeAfterDownload: generateStoreAfterDownload?(message, file))
                     }
@@ -706,7 +717,7 @@ private func galleryEntriesForMessageHistoryEntries(_ entries: [MessageHistoryEn
 }
 
 public class GalleryController: ViewController, StandalonePresentableController, KeyShortcutResponder, GalleryControllerProtocol {
-    public static let darkNavigationTheme = NavigationBarTheme(overallDarkAppearance: true, buttonColor: .white, disabledButtonColor: UIColor(rgb: 0x525252), primaryTextColor: .white, backgroundColor: UIColor(white: 0.0, alpha: 0.6), enableBackgroundBlur: false, separatorColor: UIColor(white: 0.0, alpha: 0.8), badgeBackgroundColor: .clear, badgeStrokeColor: .clear, badgeTextColor: .clear, edgeEffectColor: .clear, accentButtonColor: .white, accentDisabledButtonColor: .white, accentForegroundColor: .black, style: .glass)
+    public static let darkNavigationTheme = NavigationBarTheme(overallDarkAppearance: true, buttonColor: .white, disabledButtonColor: UIColor(rgb: 0x525252), primaryTextColor: .white, badgeBackgroundColor: .clear, badgeTextColor: .clear, edgeEffectColor: .clear, accentButtonColor: .white, accentDisabledButtonColor: .white, accentForegroundColor: .black)
     
     private var galleryNode: GalleryControllerNode {
         return self.displayNode as! GalleryControllerNode
@@ -726,6 +737,11 @@ public class GalleryController: ViewController, StandalonePresentableController,
         return self._ready
     }
     private var didSetReady = false
+    
+    /// Has its own header: the bar takes no part in a navigation transition.
+    override public var navigationBarTransitionSource: NavigationBarTransitionSource? {
+        return nil
+    }
     
     private var adjustedForInitialPreviewingLayout = false
     
@@ -1986,7 +2002,7 @@ public class GalleryController: ViewController, StandalonePresentableController,
             if let centralItemNode = self.galleryNode.pager.centralItemNode(), let itemSize = centralItemNode.contentSize() {
                 centralItemNode.adjustForPreviewing()
                 self.preferredContentSize = itemSize.aspectFitted(layout.size)
-                self.containerLayoutUpdated(ContainerViewLayout(size: self.preferredContentSize, metrics: LayoutMetrics(), deviceMetrics: layout.deviceMetrics, intrinsicInsets: UIEdgeInsets(), safeInsets: UIEdgeInsets(), additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: nil, inputHeightIsInteractivellyChanging: false, inVoiceOver: false, presentedInFormSheet: false), transition: .immediate)
+                self.containerLayoutUpdated(ContainerViewLayout(size: self.preferredContentSize, metrics: LayoutMetrics(), deviceMetrics: layout.deviceMetrics, intrinsicInsets: UIEdgeInsets(), safeInsets: UIEdgeInsets(), reservedCorners: .none, division: nil, additionalInsets: UIEdgeInsets(), statusBarHeight: nil, inputHeight: nil, inputHeightIsInteractivellyChanging: false, inVoiceOver: false, presentedInFormSheet: false), transition: .immediate)
             }
         }
     }

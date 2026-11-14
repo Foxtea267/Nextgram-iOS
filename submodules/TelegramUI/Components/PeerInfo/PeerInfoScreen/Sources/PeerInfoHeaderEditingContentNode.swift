@@ -50,7 +50,8 @@ final class PeerInfoHeaderEditingContentNode: ASDisplayNode {
     
     func update(
         width: CGFloat,
-        safeInset: CGFloat,
+        leftInset: CGFloat,
+        rightInset: CGFloat,
         statusBarHeight: CGFloat,
         navigationHeight: CGFloat,
         presentedInFormSheet: Bool,
@@ -64,7 +65,13 @@ final class PeerInfoHeaderEditingContentNode: ASDisplayNode {
         transition: ContainedViewLayoutTransition
     ) -> CGFloat {
         let avatarSize: CGFloat = presentedInFormSheet ? 200.0 : 100.0
-        let avatarFrame = CGRect(origin: CGPoint(x: floor((width - avatarSize) / 2.0), y: statusBarHeight + 22.0), size: CGSize(width: avatarSize, height: avatarSize))
+        self.avatarNode.updateAccessibility(label: presentationData.strings.Privacy_ProfilePhoto)
+        // iPhone Duo: with a strip the insets differ and the avatar and its button are centered in the band
+        // between them, on the regular header's axis (PeerInfoHeaderNode's `bandCenteredOrigin`).
+        func bandCenteredOrigin(_ elementWidth: CGFloat) -> CGFloat {
+            return max(leftInset, leftInset + floorToScreenPixels((width - leftInset - rightInset - elementWidth) / 2.0))
+        }
+        let avatarFrame = CGRect(origin: CGPoint(x: leftInset == rightInset ? floor((width - avatarSize) / 2.0) : bandCenteredOrigin(avatarSize), y: statusBarHeight + 22.0), size: CGSize(width: avatarSize, height: avatarSize))
         transition.updateFrameAdditiveToCenter(node: self.avatarNode, frame: CGRect(origin: avatarFrame.center, size: CGSize()))
         
         var contentHeight: CGFloat = statusBarHeight + 10.0 + avatarSize + 28.0
@@ -76,10 +83,13 @@ final class PeerInfoHeaderEditingContentNode: ASDisplayNode {
             let setPhotoTitle = peer?.smallProfileImage != nil ? presentationData.strings.Settings_ChangePhoto : presentationData.strings.Settings_SetPhoto
             self.avatarTextNode.attributedText = NSAttributedString(string: setPhotoTitle, font: Font.regular(17.0), textColor: presentationData.theme.list.itemAccentColor)
             self.avatarButtonNode.accessibilityLabel = self.avatarTextNode.attributedText?.string
+            self.avatarButtonNode.accessibilityTraits = .button
+            self.avatarButtonNode.isAccessibilityElement = true
+            self.avatarTextNode.isAccessibilityElement = false
             
             let avatarTextSize = self.avatarTextNode.updateLayout(CGSize(width: width, height: 32.0))
             transition.updateFrame(node: self.avatarTextNode, frame: CGRect(origin: CGPoint(), size: avatarTextSize))
-            transition.updateFrame(node: self.avatarButtonNode, frame: CGRect(origin: CGPoint(x: floorToScreenPixels((width - avatarTextSize.width) / 2.0), y: contentHeight - 5.0), size: avatarTextSize))
+            transition.updateFrame(node: self.avatarButtonNode, frame: CGRect(origin: CGPoint(x: leftInset == rightInset ? floorToScreenPixels((width - avatarTextSize.width) / 2.0) : bandCenteredOrigin(avatarTextSize.width), y: contentHeight - 5.0), size: avatarTextSize))
             contentHeight += 32.0
         }
         
@@ -179,7 +189,7 @@ final class PeerInfoHeaderEditingContentNode: ASDisplayNode {
                 placeholder = presentationData.strings.Channel_Edit_AboutItem
                 isEnabled = canEditPeerInfo(context: self.context, peer: peer, chatLocation: chatLocation, threadData: threadData) || isEditableBot
             }
-            let itemHeight = itemNode.update(width: width, safeInset: safeInset, isSettings: isSettings, hasPrevious: hasPrevious, hasNext: key != fieldKeys.last, placeholder: placeholder, isEnabled: isEnabled, presentationData: presentationData, updateText: updateText)
+            let itemHeight = itemNode.update(width: width, leftInset: leftInset, rightInset: rightInset, isSettings: isSettings, hasPrevious: hasPrevious, hasNext: key != fieldKeys.last, placeholder: placeholder, isEnabled: isEnabled, presentationData: presentationData, updateText: updateText)
             transition.updateFrame(node: itemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: contentHeight), size: CGSize(width: width, height: itemHeight)))
             contentHeight += itemHeight
             hasPrevious = true

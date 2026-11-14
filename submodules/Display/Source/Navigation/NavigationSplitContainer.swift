@@ -8,6 +8,17 @@ enum NavigationSplitContainerScrollToTop {
     case detail
 }
 
+/// The width of the master pane. While the fold is active and runs vertically through the whole
+/// container (iPhone Duo half-open in landscape), the split sits on the hinge's midline, so the
+/// chat list and the chat each get one side of the fold. Otherwise a third of the width, at least
+/// 320pt and at most half.
+public func splitMasterWidth(containerSize: CGSize, division: CGRect?) -> CGFloat {
+    if let division, division.width < containerSize.width, division.minY <= 0.5, division.maxY >= containerSize.height - 0.5 {
+        return floorToScreenPixels(division.midX)
+    }
+    return min(max(320.0, floor(containerSize.width / 3.0)), floor(containerSize.width / 2.0))
+}
+
 final class NavigationSplitContainer: ASDisplayNode {
     private var theme: NavigationControllerTheme
     
@@ -17,6 +28,8 @@ final class NavigationSplitContainer: ASDisplayNode {
     
     private(set) var masterControllers: [ViewController] = []
     private(set) var detailControllers: [ViewController] = []
+    // The detail pane's last size and `isBesideBottomTabBar`.
+    private var detailLayoutState: (size: CGSize, isBesideBottomTabBar: Bool)?
     
     var canHaveKeyboardFocus: Bool = false {
         didSet {
@@ -47,7 +60,7 @@ final class NavigationSplitContainer: ASDisplayNode {
         self.detailContainer.clipsToBounds = true
         
         self.separator = ASDisplayNode()
-        self.separator.backgroundColor = theme.navigationBar.separatorColor
+        self.separator.backgroundColor = theme.separatorColor
         
         super.init()
         
@@ -67,11 +80,20 @@ final class NavigationSplitContainer: ASDisplayNode {
     }
     
     func updateTheme(theme: NavigationControllerTheme) {
-        self.separator.backgroundColor = theme.navigationBar.separatorColor
+        self.separator.backgroundColor = theme.separatorColor
     }
     
+    /// The master controllers highlight the chat the detail pane shows (`updateNavigationCustomData`);
+    /// when the split goes away (the layout became compact, e.g. folding iPhone Duo) nothing else clears
+    /// that highlight, so the container clears it before it is removed.
+    func clearDetailSelection() {
+        for controller in self.masterControllers {
+            controller.updateNavigationCustomData(nil, progress: 0.0, transition: .immediate)
+        }
+    }
+
     func scrollToTopProxyFrames(layout: ContainerViewLayout) -> (master: CGRect, detail: CGRect) {
-        let masterWidth: CGFloat = min(max(320.0, floor(layout.size.width / 3.0)), floor(layout.size.width / 2.0))
+        let masterWidth = splitMasterWidth(containerSize: layout.size, division: layout.division)
         let detailWidth = layout.size.width - masterWidth
         let scrollToTopHeight = max(layout.statusBarHeight ?? layout.safeInsets.top, 1.0)
         
@@ -82,7 +104,7 @@ final class NavigationSplitContainer: ASDisplayNode {
     }
 
     func update(layout: ContainerViewLayout, masterControllers: [ViewController], detailControllers: [ViewController], detailsPlaceholderNode: NavigationDetailsPlaceholderNode?, transition: ContainedViewLayoutTransition) {
-        let masterWidth: CGFloat = min(max(320.0, floor(layout.size.width / 3.0)), floor(layout.size.width / 2.0))
+        let masterWidth = splitMasterWidth(containerSize: layout.size, division: layout.division)
         let detailWidth = layout.size.width - masterWidth
         
         transition.updateFrame(node: self.masterContainer, frame: CGRect(origin: CGPoint(), size: CGSize(width: masterWidth, height: layout.size.height)))
@@ -101,9 +123,22 @@ final class NavigationSplitContainer: ASDisplayNode {
         masterSafeInsets.right = 0.0
         var detailSafeInsets = layout.safeInsets
         detailSafeInsets.left = 0.0
+        let masterReserved = reservedAreaForPane(corners: layout.reservedCorners, division: layout.division, paneFrame: CGRect(x: 0.0, y: 0.0, width: masterWidth, height: layout.size.height), containerSize: layout.size)
+        let detailReserved = reservedAreaForPane(corners: layout.reservedCorners, division: layout.division, paneFrame: CGRect(x: masterWidth, y: 0.0, width: detailWidth, height: layout.size.height), containerSize: layout.size)
         
-        self.masterContainer.update(layout: ContainerViewLayout(size: CGSize(width: masterWidth, height: layout.size.height), metrics: layout.metrics, deviceMetrics: layout.deviceMetrics, intrinsicInsets: layout.intrinsicInsets, safeInsets: masterSafeInsets, additionalInsets: UIEdgeInsets(), statusBarHeight: layout.statusBarHeight, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), canBeClosed: false, controllers: masterControllers, transition: transition)
-        self.detailContainer.update(layout: ContainerViewLayout(size: CGSize(width: detailWidth, height: layout.size.height), metrics: layout.metrics, deviceMetrics: layout.deviceMetrics, intrinsicInsets: layout.intrinsicInsets, safeInsets: detailSafeInsets, additionalInsets: layout.additionalInsets, statusBarHeight: layout.statusBarHeight, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), canBeClosed: true, controllers: detailControllers, transition: transition)
+        // The master pane is laid out first, so that its top controller reports its tab bar for the layout it now has.
+        self.masterContainer.update(layout: ContainerViewLayout(size: CGSize(width: masterWidth, height: layout.size.height), metrics: layout.metrics, deviceMetrics: layout.deviceMetrics, intrinsicInsets: layout.intrinsicInsets, safeInsets: masterSafeInsets, reservedCorners: masterReserved.corners, division: masterReserved.division, additionalInsets: UIEdgeInsets(), statusBarHeight: layout.statusBarHeight, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet), canBeClosed: false, controllers: masterControllers, transition: transition)
+        let detailSize = CGSize(width: detailWidth, height: layout.size.height)
+        let isBesideBottomTabBar = masterControllers.last?.showsBottomTabBar ?? false
+        var detailTransition = transition
+        // A master stack change applied without animation (a swipe back in the master pane, as it commits) would move
+        // what in the detail lines up with the master's tab bar in one frame; with nothing else changed (the detail's
+        // size and its stack, which an animated transition would animate a push or pop of), animate it.
+        if case .immediate = transition, let detailLayoutState = self.detailLayoutState, detailLayoutState.size == detailSize, detailLayoutState.isBesideBottomTabBar != isBesideBottomTabBar, self.detailControllers.elementsEqual(detailControllers, by: ===) {
+            detailTransition = .animated(duration: 0.3, curve: .easeInOut)
+        }
+        self.detailLayoutState = (detailSize, isBesideBottomTabBar)
+        self.detailContainer.update(layout: ContainerViewLayout(size: detailSize, metrics: layout.metrics, deviceMetrics: layout.deviceMetrics, intrinsicInsets: layout.intrinsicInsets, safeInsets: detailSafeInsets, reservedCorners: detailReserved.corners, division: detailReserved.division, additionalInsets: layout.additionalInsets, statusBarHeight: layout.statusBarHeight, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet, isBesideBottomTabBar: isBesideBottomTabBar), canBeClosed: true, controllers: detailControllers, transition: detailTransition)
         
         var controllersUpdated = false
         if self.detailControllers.last !== detailControllers.last {

@@ -50,9 +50,13 @@ swift_library(
         ":TelegramCore",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/TelegramApi:TelegramApi",
+        "//submodules/Utils/RangeSet:RangeSet",
         "//submodules/MtProtoKit:MtProtoKit",
         "//submodules/Postbox:Postbox",
         "//submodules/WebProxyTransport:WebProxyTransport",
+        # InstantPageButtonLinkStyleTests round-trips through the flatc-generated TelegramCore_* types.
+        "//submodules/TelegramCore/FlatBuffers",
+        "//submodules/TelegramCore/FlatSerialization",
     ],
 )
 

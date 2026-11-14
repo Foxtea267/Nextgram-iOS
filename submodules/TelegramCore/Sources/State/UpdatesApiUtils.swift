@@ -1,6 +1,6 @@
 import Foundation
 import Postbox
-import TelegramApi
+internal import TelegramApi
 
 
 private func collectPreCachedResources(for photo: Api.Photo) -> [(MediaResource, Data)]? {
@@ -406,6 +406,10 @@ extension Api.Update {
                 if case let .walletTransaction(value)? = data.transaction,
                    case let .walletTransactionPeerUser(peer) = value.peer {
                     return [PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(peer.userId))]
+                }
+                if case let .walletTransaction(value)? = data.transaction,
+                   case let .walletTransactionPeerChannel(peer) = value.peer {
+                    return [PeerId(namespace: Namespaces.Peer.CloudChannel, id: PeerId.Id._internalFromInt64Value(peer.channelId))]
                 }
                 return []
             case let .updateChannel(updateChannelData):

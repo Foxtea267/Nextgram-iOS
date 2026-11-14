@@ -1,12 +1,20 @@
 import Foundation
-import Postbox
 import TelegramCore
 
 /// Whether a notification has to say which account it was delivered to: more than one is signed
 /// in (bugs.telegram.org/c/18387). Every record not marked logged out counts. The app also leaves
 /// out a record whose session turns out to be unauthorized when it opens it, which the extension
 /// cannot know without opening every account; such a record counts here until it is marked.
-func notificationsNameRecipientAccount(records: [AccountRecord<TelegramAccountManagerTypes.Attribute>]) -> Bool {
+///
+/// With "Show Notifications From All Accounts" off
+/// (`InAppNotificationSettings.displayNotificationsFromAllAccounts`) only the current account
+/// notifies, so its notifications are not named. One for another account can still arrive then,
+/// sent before the app unregistered that account (after a switch of the current account), and it
+/// is named: it is not from the account the user is looking at.
+func notificationsNameRecipientAccount(records: [AccountRecord<TelegramAccountManagerTypes.Attribute>], notificationsFromAllAccounts: Bool, isCurrentAccount: Bool) -> Bool {
+    if !notificationsFromAllAccounts && isCurrentAccount {
+        return false
+    }
     let accountCount = records.filter { record in
         return !record.attributes.contains(where: { attribute in
             if case .loggedOut = attribute {
@@ -22,7 +30,7 @@ func notificationsNameRecipientAccount(records: [AccountRecord<TelegramAccountMa
 /// The name a notification uses for the account it was delivered to, as the extension named it
 /// before its 2021 rewrite dropped the feature (`StoredAccountInfo.peerName`): the username
 /// without "@", else the account's name.
-func notificationRecipientAccountName(accountPeer: Peer?) -> String? {
+func notificationRecipientAccountName(accountPeer: EnginePeer?) -> String? {
     guard let accountPeer else {
         return nil
     }

@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -37,10 +36,10 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
         }
     }
     
-    required public init(lottieSettings: LottieRenderingSettings) {
+    required public init() {
         self.interactiveImageNode = ChatMessageInteractiveMediaNode()
         
-        super.init(lottieSettings: lottieSettings)
+        super.init()
         
         self.addSubnode(self.interactiveImageNode)
         
@@ -85,7 +84,7 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
             guard let strongSelf = self, let item = strongSelf.item else {
                 return
             }
-            item.controllerInteraction.updateMessageReaction(message, value, force, sourceView)
+            item.controllerInteraction.updateMessageReaction(message._asMessage(), value, force, sourceView)
         }
 
         self.interactiveImageNode.activatePinch = { [weak self] sourceNode in
@@ -98,7 +97,7 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
             guard let strongSelf = self, let _ = strongSelf.item else {
                 return
             }
-            strongSelf.item?.controllerInteraction.playMessageEffect(message)
+            strongSelf.item?.controllerInteraction.playMessageEffect(message._asMessage())
         }
         self.interactiveImageNode.requestInlineUpdate = { [weak self] in
             guard let self else {
@@ -131,7 +130,7 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                 for media in item.message.media {
                     if let telegramImage = media as? TelegramMediaImage {
                         selectedMedia = telegramImage
-                        if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramImage) {
+                        if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .image(telegramImage)) {
                             automaticDownload = .full
                         }
                         
@@ -143,13 +142,13 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                         selectedMedia = telegramStory
                         if let storyMedia = item.message.associatedStories[telegramStory.storyId], case let .item(storyItem) = storyMedia.get(Stories.StoredItem.self), let media = storyItem.media {
                             if let telegramImage = media as? TelegramMediaImage {
-                                if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramImage) {
+                                if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .image(telegramImage)) {
                                     automaticDownload = .full
                                 }
                             } else if let telegramFile = media as? TelegramMediaFile {
-                                if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramFile) {
+                                if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .file(telegramFile)) {
                                     automaticDownload = .full
-                                } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: telegramFile) {
+                                } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: .file(telegramFile)) {
                                     automaticDownload = .prefetch
                                 }
                                 
@@ -173,9 +172,9 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                         }
                     } else if let telegramFile = media as? TelegramMediaFile {
                         selectedMedia = telegramFile
-                        if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramFile) {
+                        if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .file(telegramFile)) {
                             automaticDownload = .full
-                        } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: telegramFile) {
+                        } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: .file(telegramFile)) {
                             automaticDownload = .prefetch
                         }
                         
@@ -218,7 +217,7 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                     } else if let poll = media as? TelegramMediaPoll {
                         if let telegramImage = poll.attachedMedia as? TelegramMediaImage {
                             selectedMedia = telegramImage
-                            if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramImage) {
+                            if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .image(telegramImage)) {
                                 automaticDownload = .full
                             }
                             
@@ -227,9 +226,9 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                             }
                         } else if let telegramFile = poll.attachedMedia as? TelegramMediaFile {
                             selectedMedia = telegramFile
-                            if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramFile) {
+                            if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .file(telegramFile)) {
                                 automaticDownload = .full
-                            } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: telegramFile) {
+                            } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: .file(telegramFile)) {
                                 automaticDownload = .prefetch
                             }
                             if (telegramFile.isVideo && !telegramFile.isAnimated) && item.context.sharedContext.energyUsageSettings.autoplayVideo {
@@ -250,13 +249,13 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                         
             if let extendedMedia, case let .full(media) = extendedMedia {
                 if let telegramImage = media as? TelegramMediaImage {
-                    if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramImage) {
+                    if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .image(telegramImage)) {
                         automaticDownload = .full
                     }
                 } else if let telegramFile = media as? TelegramMediaFile {
-                    if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: telegramFile) {
+                    if shouldDownloadMediaAutomatically(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, authorPeerId: item.message.author?.id, contactsPeerIds: item.associatedData.contactsPeerIds, media: .file(telegramFile)) {
                         automaticDownload = .full
-                    } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: telegramFile) {
+                    } else if shouldPredownloadMedia(settings: item.controllerInteraction.automaticMediaDownloadSettings, peerType: item.associatedData.automaticDownloadPeerType, networkType: item.associatedData.automaticDownloadNetworkType, media: .file(telegramFile)) {
                         automaticDownload = .prefetch
                     }
                     
@@ -322,7 +321,10 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
             
             switch preparePosition {
                 case .linear:
-                    if case .color = item.presentationData.theme.wallpaper {
+                    if item.bubbleStyle == .bubbleless {
+                        // Without bubbles there is no bubble stroke to keep clear of: the media spans the text column.
+                        bubbleInsets = layoutConstants.image.bubbleInsets
+                    } else if case .color = item.presentationData.theme.wallpaper {
                         let colors: PresentationThemeBubbleColorComponents
                         if item.message.effectivelyIncoming(item.context.account.peerId) {
                             colors = item.presentationData.theme.theme.chat.message.incoming.bubble.withoutWallpaper
@@ -389,7 +391,7 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                 switch preparePosition {
                 case .linear(_, .None), .linear(_, .Neighbour(true, _, _)):
                     if item.message.effectivelyIncoming(item.context.account.peerId) {
-                        statusType = .ImageIncoming
+                        statusType = item.bubbleStyle.hidesIncomingStatus ? nil : .ImageIncoming
                     } else {
                         if item.message.flags.contains(.Failed) {
                             statusType = .ImageOutgoing(.Failed)
@@ -425,7 +427,11 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                 )
             }
             
-            let (unboundSize, initialWidth, refineLayout) = interactiveImageLayout(item.context, item.presentationData, item.presentationData.dateTimeFormat, item.message, item.associatedData, item.attributes, selectedMedia!, selectedMediaIndex, dateAndStatus, automaticDownload, item.associatedData.automaticDownloadPeerType, item.associatedData.automaticDownloadPeerId, sizeCalculation, layoutConstants, contentMode, item.controllerInteraction.presentationContext)
+            if let file = selectedMedia as? TelegramMediaFile, file.isDisplayablePass {
+                automaticDownload = .full
+            }
+            
+            let (unboundSize, initialWidth, refineLayout) = interactiveImageLayout(item.context, item.presentationData, item.presentationData.dateTimeFormat, EngineMessage(item.message), item.associatedData, item.attributes, EngineMedia(selectedMedia!), selectedMediaIndex, dateAndStatus, automaticDownload, item.associatedData.automaticDownloadPeerType, item.associatedData.automaticDownloadPeerId, sizeCalculation, layoutConstants, contentMode, item.controllerInteraction.presentationContext)
             
             let forceFullCorners = false
             let contentProperties = ChatMessageBubbleContentProperties(hidesSimpleAuthorHeader: true, headerSpacing: 7.0, hidesBackground: .emptyWallpaper, forceFullCorners: forceFullCorners, forceAlignment: .none)
@@ -438,7 +444,10 @@ public class ChatMessageMediaBubbleContentNode: ChatMessageBubbleContentNode {
                 }
                 
                 var updatedPosition: ChatMessageBubbleContentPosition = position
-                if forceFullCorners, case .linear = updatedPosition {
+                if item.bubbleStyle == .bubbleless, case .linear = updatedPosition {
+                    // Without bubbles media has no bubble to tuck into, so it keeps all four corners round.
+                    updatedPosition = .linear(top: .None(.None(.None)), bottom: .None(.None(.None)))
+                } else if forceFullCorners, case .linear = updatedPosition {
                     updatedPosition = .linear(top: .None(.None(.None)), bottom: .None(.None(.None)))
                 } else if hasReplyMarkup, case let .linear(top, _) = updatedPosition {
                     updatedPosition = .linear(top: top, bottom: .BubbleNeighbour)

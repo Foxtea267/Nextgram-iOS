@@ -51,8 +51,8 @@ extension PeerInfoScreenNode {
         }, contentContext: nil, progress: nil, completion: nil)
     }
     
-    func openUrl(url: String, concealed: Bool, external: Bool, forceExternal: Bool = false, commit: @escaping () -> Void = {}) {
-        let _ = self.context.sharedContext.openUserGeneratedUrl(context: self.context, peerId: self.peerId, url: url, webpage: nil, concealed: concealed, forceConcealed: false, skipUrlAuth: false, skipConcealedAlert: false, forceDark: false, present: { [weak self] c in
+    func openUrl(url: String, concealed: Bool, forceConcealed: Bool = false, external: Bool, forceExternal: Bool = false, commit: @escaping () -> Void = {}) {
+        let _ = self.context.sharedContext.openUserGeneratedUrl(context: self.context, peerId: self.peerId, url: url, webpage: nil, concealed: concealed, forceConcealed: forceConcealed, skipUrlAuth: false, skipConcealedAlert: false, forceDark: false, present: { [weak self] c in
             self?.controller?.present(c, in: .window(.root))
         }, openResolved: { [weak self] tempResolved in
             guard let strongSelf = self else {
@@ -221,7 +221,7 @@ extension PeerInfoScreenNode {
             guard let self else {
                 return
             }
-            let shareController = self.context.sharedContext.makeShareController(context: self.context, params: ShareControllerParams(subject: .url(url), updatedPresentationData: self.controller?.updatedPresentationData, collectibleItemInfo: collectibleItemInfo, actionCompleted: { [weak self] in
+            let shareController = self.context.sharedContext.makeShareScreen(context: self.context, params: ShareControllerParams(subject: .url(url), updatedPresentationData: self.controller?.updatedPresentationData, collectibleItemInfo: collectibleItemInfo, actionCompleted: { [weak self] in
                 if let strongSelf = self {
                     let presentationData = strongSelf.context.sharedContext.currentPresentationData.with { $0 }
                     strongSelf.controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)

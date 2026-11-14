@@ -4,7 +4,6 @@ import Display
 import ComponentFlow
 import HierarchyTrackingLayer
 import LottieBinding
-import LottieSettings
 import SwiftSignalKit
 import AppBundle
 import GZip
@@ -15,10 +14,14 @@ public final class LottieComponent: Component {
     
     public enum ContentData {
         case placeholder(data: Data)
-        case animation(data: Data, cacheKey: String?)
+        case animation(data: Data)
     }
     
     open class Content: Equatable {
+        /// Color space of the raw pixels supplied by the animation renderer.
+        /// Nil preserves the existing display-space rendering for other content.
+        open var renderingColorSpace: CGColorSpace? { nil }
+
         open var frameRange: Range<Double> {
             preconditionFailure()
         }
@@ -70,9 +73,9 @@ public final class LottieComponent: Component {
         
         override public func load(_ f: @escaping (LottieComponent.ContentData) -> Void) -> Disposable {
             if let url = getAppBundle().url(forResource: self.name, withExtension: "json"), let data = try? Data(contentsOf: url) {
-                f(.animation(data: data, cacheKey: url.path))
+                f(.animation(data: data))
             } else if let url = getAppBundle().url(forResource: self.name, withExtension: "tgs"), let data = try? Data(contentsOf: URL(fileURLWithPath: url.path)), let unpackedData = TGGUnzipData(data, 5 * 1024 * 1024) {
-                f(.animation(data: unpackedData, cacheKey: url.path))
+                f(.animation(data: unpackedData))
             }
             
             return EmptyDisposable
@@ -93,7 +96,6 @@ public final class LottieComponent: Component {
     public let renderingScale: CGFloat?
     public let loop: Bool
     public let playOnce: ActionSlot<Void>?
-    public let lottieSettings: LottieRenderingSettings
     
     public init(
         content: Content,
@@ -103,8 +105,7 @@ public final class LottieComponent: Component {
         size: CGSize? = nil,
         renderingScale: CGFloat? = nil,
         loop: Bool = false,
-        playOnce: ActionSlot<Void>? = nil,
-        lottieSettings: LottieRenderingSettings
+        playOnce: ActionSlot<Void>? = nil
     ) {
         self.content = content
         self.color = color
@@ -114,17 +115,9 @@ public final class LottieComponent: Component {
         self.renderingScale = renderingScale
         self.loop = loop
         self.playOnce = playOnce
-        self.lottieSettings = lottieSettings
     }
     
     public static func ==(lhs: LottieComponent, rhs: LottieComponent) -> Bool {
-        // Load-bearing: the view builds its LottieInstance lazily from stored
-        // state, so without this a settings change (the killswitch arriving, or
-        // the debug switch being toggled) would not re-render an existing
-        // component and the flip would appear not to work.
-        if lhs.lottieSettings != rhs.lottieSettings {
-            return false
-        }
         if lhs.content != rhs.content {
             return false
         }
@@ -355,8 +348,8 @@ public final class LottieComponent: Component {
             }
         }
         
-        private func loadAnimation(data: Data, cacheKey: String?, startingPosition: StartingPosition, frameRange: Range<Double>, lottieSettings: LottieRenderingSettings) {
-            self.animationInstance = makeLottieInstance(data: data, fitzModifier: .none, colorReplacements: nil, cacheKey: cacheKey ?? "", settings: lottieSettings)
+        private func loadAnimation(data: Data, startingPosition: StartingPosition, frameRange: Range<Double>) {
+            self.animationInstance = makeLottieInstance(data: data, fitzModifier: .none, colorReplacements: nil)
             if let animationInstance = self.animationInstance {
                 self.animationFrameRange = Int(floor(frameRange.lowerBound * Double(animationInstance.frameCount))) ..< Int(floor(frameRange.upperBound * Double(animationInstance.frameCount)))
             } else {
@@ -435,7 +428,8 @@ public final class LottieComponent: Component {
             guard let animationInstance = self.animationInstance, let animationFrameRange = self.animationFrameRange, let currentDisplaySize = self.currentDisplaySize else {
                 return
             }
-            guard let context = DrawingContext(size: currentDisplaySize, scale: 1.0, opaque: false, clear: true) else {
+            let colorSpace = self.component?.content.renderingColorSpace
+            guard let context = DrawingContext(size: currentDisplaySize, scale: 1.0, opaque: false, clear: true, colorSpace: colorSpace) else {
                 return
             }
             
@@ -445,7 +439,7 @@ public final class LottieComponent: Component {
             
             animationInstance.renderFrame(with: Int32(effectiveFrameIndex), into: context.bytes.assumingMemoryBound(to: UInt8.self), width: Int32(currentDisplaySize.width), height: Int32(currentDisplaySize.height), bytesPerRow: Int32(context.bytesPerRow))
             
-            var image = context.generateImage()
+            var image = context.generateImage(colorSpace: colorSpace)
             if let _ = self.component?.color {
                 image = image?.withRenderingMode(.alwaysTemplate)
             }
@@ -494,8 +488,8 @@ public final class LottieComponent: Component {
                         switch result {
                         case let .placeholder(data):
                             self.loadPlaceholder(data: data)
-                        case let .animation(data, cacheKey):
-                            self.loadAnimation(data: data, cacheKey: cacheKey, startingPosition: component.startingPosition, frameRange: frameRange, lottieSettings: component.lottieSettings)
+                        case let .animation(data):
+                            self.loadAnimation(data: data, startingPosition: component.startingPosition, frameRange: frameRange)
                         }
                     }
                 }

@@ -6,6 +6,7 @@ import TelegramPresentationData
 import ComponentFlow
 import ComponentDisplayAdapters
 import TabBarComponent
+import TabBarLayout
 import GlassControls
 import NagramSettings
 
@@ -15,15 +16,18 @@ final class TabBarControllerNode: ASDisplayNode {
         let toolbar: Toolbar?
         let isTabBarHidden: Bool
         let currentControllerSearchState: ViewController.TabBarSearchState?
+        /// The side placement depends on it, and with it the bottom inset the tab gets.
+        let itemCount: Int
         let nagramBottomBarSettings: NagramBottomBarSettings
         let nagramGlassTransparencySettings: GlassOverlayTransparencySettings // MARK: NAGRAM
         let nagramReduceTransparencyEnabled: Bool // MARK: NAGRAM
-        
+
         init(
             layout: ContainerViewLayout,
             toolbar: Toolbar?,
             isTabBarHidden: Bool,
             currentControllerSearchState: ViewController.TabBarSearchState?,
+            itemCount: Int,
             nagramBottomBarSettings: NagramBottomBarSettings,
             nagramGlassTransparencySettings: GlassOverlayTransparencySettings, // MARK: NAGRAM
             nagramReduceTransparencyEnabled: Bool // MARK: NAGRAM
@@ -32,6 +36,7 @@ final class TabBarControllerNode: ASDisplayNode {
             self.toolbar = toolbar
             self.isTabBarHidden = isTabBarHidden
             self.currentControllerSearchState = currentControllerSearchState
+            self.itemCount = itemCount
             self.nagramBottomBarSettings = nagramBottomBarSettings
             self.nagramGlassTransparencySettings = nagramGlassTransparencySettings
             self.nagramReduceTransparencyEnabled = nagramReduceTransparencyEnabled
@@ -40,9 +45,9 @@ final class TabBarControllerNode: ASDisplayNode {
     
     private struct LayoutResult {
         let params: Params
-        let bottomInset: CGFloat
+        let bottomInset: CGFloat?
         
-        init(params: Params, bottomInset: CGFloat) {
+        init(params: Params, bottomInset: CGFloat?) {
             self.params = params
             self.bottomInset = bottomInset
         }
@@ -55,6 +60,15 @@ final class TabBarControllerNode: ASDisplayNode {
             super.layoutSubviews()
             
             self.onLayout?()
+        }
+        
+        // MARK: NAGRAM
+        var onDidMoveToWindow: (() -> Void)?
+        
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            
+            self.onDidMoveToWindow?()
         }
     }
     
@@ -69,6 +83,10 @@ final class TabBarControllerNode: ASDisplayNode {
     private var tabBarView = ComponentView<Empty>()
     private var tabBarContentState: (hasItems: Bool, hasContent: Bool)?
     private var needsTabBarRecreation = false
+    // MARK: NAGRAM — native glass that enters the window while the bar is hidden below the screen stays blank when
+    // the bar is shown again (the settings search hides it, and a pushed search result removes the tab controller from
+    // the window until it is popped). Recreate it when it is next shown.
+    private var tabBarEnteredWindowHidden = false
     
     private let disabledOverlayNode: ASDisplayNode
     private var toolbar: ComponentView<Empty>?
@@ -83,6 +101,8 @@ final class TabBarControllerNode: ASDisplayNode {
     private weak var currentController: ViewController?
     
     private var layoutResult: LayoutResult?
+    /// What the last layout pass applied to the bar; its placement is nil while the bar is horizontal.
+    private var appliedPlacement: TabBarAppliedPlacement?
     private var isUpdateRequested: Bool = false
     private var isChangingSelectedIndex: Bool = false
     
@@ -120,7 +140,8 @@ final class TabBarControllerNode: ASDisplayNode {
 
     // MARK: NAGRAM
     var nagramCanActivateSearch: Bool {
-        return !self.tabBarHidden && self.currentController?.toolbar == nil && NagramSettings.shared.bottomBarSettings.isVisible(.search)
+        // The vertical bar lays out no search.
+        return !self.tabBarHidden && self.currentController?.toolbar == nil && self.appliedPlacement?.placement == nil && NagramSettings.shared.bottomBarSettings.isVisible(.search)
     }
     
     init(theme: PresentationTheme, strings: PresentationStrings, itemSelected: @escaping (Int, Bool, [ASDisplayNode]) -> Void, itemHasDoubleTapAction: @escaping (Int) -> Bool, itemDoubleTapped: @escaping (Int) -> Void, contextAction: @escaping (Int, ContextExtractedContentContainingView, ContextGesture) -> Void, swipeAction: @escaping (Int, TabBarItemSwipeDirection) -> Void, toolbarActionSelected: @escaping (ToolbarActionOption) -> Void, disabledPressed: @escaping () -> Void, activateSearch: @escaping () -> Void, deactivateSearch: @escaping () -> Void) {
@@ -154,6 +175,14 @@ final class TabBarControllerNode: ASDisplayNode {
                     let _ = self.updateImpl(params: layoutResult.params, transition: .immediate)
                 }
             }
+        }
+        
+        // MARK: NAGRAM
+        (self.view as? View)?.onDidMoveToWindow = { [weak self] in
+            guard let self, self.view.window != nil, self.tabBarHidden else {
+                return
+            }
+            self.tabBarEnteredWindowHidden = true
         }
         
         self.backgroundColor = theme.list.plainBackgroundColor
@@ -194,9 +223,18 @@ final class TabBarControllerNode: ASDisplayNode {
         }
     }
     
-    func containerLayoutUpdated(_ layout: ContainerViewLayout, toolbar: Toolbar?, transition: ContainedViewLayoutTransition) -> CGFloat {
+    /// Where the bar goes in `layout` when it is vertical, nil for the horizontal bar. Every path that lays
+    /// out a tab asks this, so they agree on whether the bar's inset applies.
+    func sidePlacement(for layout: ContainerViewLayout) -> TabBarSidePlacement? {
+        // MARK: NAGRAM — size the vertical bar by the items the bottom-bar settings actually show.
+        return tabBarSidePlacement(layout: layout, itemCount: self.nagramSideItemCount(settings: NagramSettings.shared.bottomBarSettings))
+    }
+
+    /// The bottom inset the current tab gets, or nil to leave the tab's own.
+    func containerLayoutUpdated(_ layout: ContainerViewLayout, toolbar: Toolbar?, transition: ContainedViewLayoutTransition) -> CGFloat? {
+        let nagramBottomBarSettings = NagramSettings.shared.bottomBarSettings // MARK: NAGRAM
         let nagramGlassTransparencySettings = currentGlassOverlayTransparencySettings() // MARK: NAGRAM
-        let params = Params(layout: layout, toolbar: toolbar, isTabBarHidden: self.tabBarHidden, currentControllerSearchState: self.currentController?.tabBarSearchState, nagramBottomBarSettings: NagramSettings.shared.bottomBarSettings, nagramGlassTransparencySettings: nagramGlassTransparencySettings, nagramReduceTransparencyEnabled: nagramGlassTransparencySettings.followsSystemTransparency && isReduceTransparencyEnabled()) // MARK: NAGRAM
+        let params = Params(layout: layout, toolbar: toolbar, isTabBarHidden: self.tabBarHidden, currentControllerSearchState: self.currentController?.tabBarSearchState, itemCount: self.nagramSideItemCount(settings: nagramBottomBarSettings), nagramBottomBarSettings: nagramBottomBarSettings, nagramGlassTransparencySettings: nagramGlassTransparencySettings, nagramReduceTransparencyEnabled: nagramGlassTransparencySettings.followsSystemTransparency && isReduceTransparencyEnabled()) // MARK: NAGRAM
         if let layoutResult = self.layoutResult, layoutResult.params == params {
             return layoutResult.bottomInset
         } else {
@@ -235,27 +273,51 @@ final class TabBarControllerNode: ASDisplayNode {
             return nil
         }
     }
-    
-    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat {
+
+    // MARK: NAGRAM — the bar's items as configured: the bottom row and the standalone slot, limited to
+    // tabs this controller has. Shared by the layout pass and the side placement so they agree.
+    private func nagramVisibleItemIds(settings: NagramBottomBarSettings) -> (bottom: [NagramBottomBarItemId], external: NagramBottomBarItemId?) {
+        let availableIds = Set(self.tabBarItems.compactMap { self.nagramItemId(for: $0.item) })
+        let bottom = settings.visibleBottomItems.filter { $0 == .search || availableIds.contains($0) }
+        let external: NagramBottomBarItemId?
+        if let externalItemId = settings.externalItem, externalItemId != .search, !settings.hiddenItems.contains(externalItemId), availableIds.contains(externalItemId) {
+            external = externalItemId
+        } else {
+            external = nil
+        }
+        return (bottom, external)
+    }
+
+    // MARK: NAGRAM — the vertical bar has no standalone slot, so it shows the external item in its row.
+    private func nagramSideItemCount(settings: NagramBottomBarSettings) -> Int {
+        let ids = self.nagramVisibleItemIds(settings: settings)
+        let newsCount = settings.isBottomBarVisible && self.tabBarItems.contains(where: { $0.item.animationName == "TabNews" }) ? 1 : 0 // MARK: NEXTGRAM
+        return ids.bottom.count + (ids.external == nil ? 0 : 1) + newsCount
+    }
+
+    private func updateImpl(params: Params, transition: ContainedViewLayoutTransition) -> CGFloat? {
         var panelsBottomInset: CGFloat = params.layout.insets(options: []).bottom
         if params.layout.metrics.widthClass == .regular, let inputHeight = params.layout.inputHeight, inputHeight != 0.0 {
             panelsBottomInset = inputHeight + 8.0
         }
-        if panelsBottomInset == 0.0 {
-            panelsBottomInset = 8.0
-        } else {
-            panelsBottomInset = max(panelsBottomInset, 8.0)
-        }
+        panelsBottomInset = tabBarFloatingBottomInset(bottomInset: panelsBottomInset)
 
-        var tabBarBottomInset: CGFloat = panelsBottomInset
+        let sidePlacement = self.sidePlacement(for: params.layout)
+        let isCompact = tabBarIsCompact(layout: params.layout, sidePlacement: sidePlacement)
+        // Where iOS 27 would switch its tab bar to the wide variant (a vertically compact phone, the bar at least
+        // 568pt wide), the bar keeps its own horizontal layout; elsewhere a horizontal bar takes iOS 27's portrait one.
+        let isWide = params.layout.size.width > params.layout.size.height && params.layout.size.width >= 568.0
+        let isSystemLayout = sidePlacement == nil && !isCompact && !isWide
+
+        var keyboardBottomInset: CGFloat = 0.0
         if let currentController = self.currentController {
             if let tabBarSearchState = currentController.tabBarSearchState, tabBarSearchState.isActive, let inputHeight = params.layout.inputHeight, inputHeight != 0.0 {
-                tabBarBottomInset = max(tabBarBottomInset, inputHeight + 8.0)
+                keyboardBottomInset = inputHeight + 8.0
             }
         }
 
         var sideInset: CGFloat = 12.0
-        if tabBarBottomInset <= 28.0 {
+        if max(panelsBottomInset, keyboardBottomInset) <= 28.0 {
             sideInset = 20.0
         }
         
@@ -266,6 +328,21 @@ final class TabBarControllerNode: ASDisplayNode {
             }
             return (id, (index, item))
         })
+        // MARK: NEXTGRAM — Use the same tab actions for configured items and the upstream News tab.
+        let makeTabBarItem: (Int, TabBarNodeItem) -> TabBarComponent.Item = { index, item in
+            return TabBarComponent.Item(
+                content: .tabBarItem(item.item),
+                action: { [weak self] isLongTap in
+                    self?.itemSelected(index, isLongTap, [])
+                },
+                doubleTapAction: self.itemHasDoubleTapAction(index) ? { [weak self] in
+                    self?.itemDoubleTapped(index)
+                } : nil,
+                contextAction: { [weak self] gesture, sourceView in
+                    self?.contextAction(index, sourceView, gesture)
+                }
+            )
+        }
         let makeComponentItem: (NagramBottomBarItemId) -> TabBarComponent.Item? = { [weak self] id in
             guard let self else {
                 return nil
@@ -283,29 +360,62 @@ final class TabBarControllerNode: ASDisplayNode {
             guard let item = tabBarItemsById[id] else {
                 return nil
             }
-            let index = item.index
-            return TabBarComponent.Item(
-                content: .tabBarItem(item.item.item),
-                action: { [weak self] isLongTap in
-                    self?.itemSelected(index, isLongTap, [])
-                },
-                doubleTapAction: self.itemHasDoubleTapAction(index) ? { [weak self] in
-                    self?.itemDoubleTapped(index)
-                } : nil,
-                contextAction: { [weak self] gesture, sourceView in
-                    self?.contextAction(index, sourceView, gesture)
-                }
-            )
+            return makeTabBarItem(item.index, item.item) // MARK: NEXTGRAM
         }
 
-        let visibleComponentItems: [TabBarComponent.Item] = bottomBarSettings.visibleBottomItems.compactMap { makeComponentItem($0) }
-        let externalComponentItem: TabBarComponent.Item?
-        if let externalItemId = bottomBarSettings.externalItem, externalItemId != .search, !bottomBarSettings.hiddenItems.contains(externalItemId) {
-            externalComponentItem = makeComponentItem(externalItemId)
-        } else {
-            externalComponentItem = nil
+        let nagramItemIds = self.nagramVisibleItemIds(settings: bottomBarSettings)
+        var visibleComponentItems: [TabBarComponent.Item] = nagramItemIds.bottom.compactMap { makeComponentItem($0) }
+        if bottomBarSettings.isBottomBarVisible, let news = self.tabBarItems.enumerated().first(where: { $0.element.item.animationName == "TabNews" }) {
+            visibleComponentItems.append(makeTabBarItem(news.offset, news.element)) // MARK: NEXTGRAM
         }
-        
+        let externalComponentItem: TabBarComponent.Item? = nagramItemIds.external.flatMap { makeComponentItem($0) }
+
+
+        let tabBarBottomInset: CGFloat
+        let tabBarSideInset: CGFloat
+        if isSystemLayout {
+            // iOS 27 floats the bar at least 21pt above the bottom edge and from the sides (`minimumPlatterInsets`),
+            // and higher by as much as the safe area reaches past the home affordance's 21pt allowance in a 34pt
+            // portrait inset.
+            tabBarBottomInset = max(max(21.0, params.layout.insets(options: []).bottom - 13.0), keyboardBottomInset)
+            tabBarSideInset = 21.0
+        } else {
+            tabBarBottomInset = max(panelsBottomInset, keyboardBottomInset)
+            tabBarSideInset = sideInset
+        }
+
+        let previousAppliedPlacement = self.tabBarView.view == nil ? nil : self.appliedPlacement
+        let appliedPlacement = TabBarAppliedPlacement(placement: sidePlacement, containerSize: params.layout.size, isHidden: self.tabBarHidden)
+        self.appliedPlacement = appliedPlacement
+        // Folding or unfolding switches the axis without animation. A rotation that moves the vertical bar
+        // fades it from its old place to its new one instead of moving it across the screen.
+        var transition = transition
+        var tabBarFrameTransition = transition
+        var crossfadeDuration: Double?
+        switch tabBarPlacementChange(from: previousAppliedPlacement, to: appliedPlacement) {
+        case .animate:
+            break
+        case .immediate:
+            transition = .immediate
+            tabBarFrameTransition = .immediate
+        case .crossfade:
+            tabBarFrameTransition = .immediate
+            if case let .animated(duration, _) = transition {
+                crossfadeDuration = duration
+            }
+        }
+
+        // MARK: NAGRAM — the vertical bar has no standalone slot; its external item joins the row.
+        let componentItems: [TabBarComponent.Item]
+        let componentExternalItem: TabBarComponent.Item?
+        if sidePlacement != nil {
+            componentItems = visibleComponentItems + (externalComponentItem.map { [$0] } ?? [])
+            componentExternalItem = nil
+        } else {
+            componentItems = visibleComponentItems
+            componentExternalItem = externalComponentItem
+        }
+
         var selectedId: AnyHashable?
         if self.selectedIndex < self.tabBarItems.count {
             let selectedItem = self.tabBarItems[self.selectedIndex].item
@@ -328,7 +438,8 @@ final class TabBarControllerNode: ASDisplayNode {
         }
         // MARK: NAGRAM — empty glass containers must not be reused when content returns.
         let tabBarSearchState = self.currentController?.tabBarSearchState
-        let searchIsVisible = bottomBarSettings.isVisible(.search)
+        // The vertical bar lays out no search.
+        let searchIsVisible = sidePlacement == nil && bottomBarSettings.isVisible(.search)
         let hasVisibleSearch = searchIsVisible && tabBarSearchState != nil
         let hasTabBarItems = !visibleComponentItems.isEmpty
         let hasVisibleTabBarContent = hasTabBarItems || externalComponentItem != nil || hasVisibleSearch
@@ -338,6 +449,10 @@ final class TabBarControllerNode: ASDisplayNode {
             }
         }
         self.tabBarContentState = (hasTabBarItems, hasVisibleTabBarContent)
+        if self.tabBarEnteredWindowHidden && !params.isTabBarHidden {
+            self.tabBarEnteredWindowHidden = false
+            self.needsTabBarRecreation = true
+        }
         if self.needsTabBarRecreation && tabBarSearchState?.isActive != true {
             self.needsTabBarRecreation = false
             let previousTabBarView = self.tabBarView
@@ -359,8 +474,8 @@ final class TabBarControllerNode: ASDisplayNode {
             component: AnyComponent(TabBarComponent(
                 theme: self.theme,
                 strings: self.strings,
-                items: visibleComponentItems,
-                externalItem: externalComponentItem,
+                items: componentItems,
+                externalItem: componentExternalItem,
                 search: searchIsVisible ? tabBarSearchState.flatMap { tabBarSearchState in
                     return TabBarComponent.Search(
                         isActive: tabBarSearchState.isActive,
@@ -380,7 +495,10 @@ final class TabBarControllerNode: ASDisplayNode {
                     )
                 } : nil,
                 selectedId: selectedId,
-                outerInsets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: tabBarBottomInset, right: sideInset),
+                outerInsets: UIEdgeInsets(top: 0.0, left: tabBarSideInset, bottom: tabBarBottomInset, right: tabBarSideInset),
+                axis: sidePlacement == nil ? .horizontal : .vertical,
+                isCompact: isCompact,
+                usesSystemLayout: !isWide,
                 layoutItemCount: nagramLayoutItemCount,
                 isAdaptiveWidth: false,
                 alignItemsToLeft: bottomBarSettings.alignment == .spaceBetween,
@@ -389,40 +507,83 @@ final class TabBarControllerNode: ASDisplayNode {
                 buttonWidthFillRatio: CGFloat(bottomBarSettings.buttonWidthFillRatio) / 100.0
             )),
             environment: {},
-            containerSize: CGSize(width: params.layout.size.width - sideInset * 2.0, height: 100.0)
+            containerSize: sidePlacement?.frame.size ?? CGSize(width: params.layout.size.width - tabBarSideInset * 2.0, height: 100.0)
         )
-        let tabBarOriginX: CGFloat
-        let onlySearchButton = hasVisibleSearch && bottomBarSettings.searchMode != .bar && visibleComponentItems.isEmpty && externalComponentItem == nil && tabBarSearchState?.isActive != true
-        // MARK: NEXTGRAM — Apply edge alignment when the component is narrower than its container.
-        if onlySearchButton {
-            tabBarOriginX = params.layout.size.width - sideInset - tabBarSize.width
-        } else if bottomBarSettings.alignment == .spaceBetween && tabBarSearchState?.isActive != true {
-            tabBarOriginX = sideInset
+        let tabBarFrame: CGRect
+        if let sidePlacement {
+            tabBarFrame = params.isTabBarHidden ? sidePlacement.hiddenFrame(containerWidth: params.layout.size.width) : sidePlacement.frame
         } else {
-            tabBarOriginX = floor((params.layout.size.width - tabBarSize.width) * 0.5)
+            // MARK: NAGRAM — place the horizontal bar by the bottom-bar alignment and width settings.
+            let centeredX: CGFloat
+            if isSystemLayout {
+                // UIKit rounds the centered bar to pixels half away from zero.
+                centeredX = floor((params.layout.size.width - tabBarSize.width) * 0.5 * UIScreenScale + 0.5) / UIScreenScale
+            } else {
+                centeredX = floor((params.layout.size.width - tabBarSize.width) * 0.5)
+            }
+            let tabBarOriginX: CGFloat
+            let onlySearchButton = hasVisibleSearch && bottomBarSettings.searchMode != .bar && visibleComponentItems.isEmpty && externalComponentItem == nil && tabBarSearchState?.isActive != true
+            let fillsAvailableWidth = !onlySearchButton && (bottomBarSettings.buttonWidthFillRatio >= 100 || externalComponentItem != nil || hasVisibleSearch)
+            if onlySearchButton {
+                tabBarOriginX = params.layout.size.width - tabBarSideInset - tabBarSize.width
+            } else if !fillsAvailableWidth && tabBarSearchState?.isActive != true {
+                if bottomBarSettings.alignment == .spaceBetween { // MARK: NAGRAM
+                    tabBarOriginX = tabBarSideInset
+                } else {
+                    tabBarOriginX = centeredX
+                }
+            } else if bottomBarSettings.buttonWidthFillRatio < 100 && tabBarSearchState == nil {
+                tabBarOriginX = tabBarSideInset
+            } else {
+                tabBarOriginX = centeredX
+            }
+            tabBarFrame = CGRect(origin: CGPoint(x: tabBarOriginX, y: params.layout.size.height - (params.isTabBarHidden ? 0.0 : (tabBarSize.height + tabBarBottomInset))), size: tabBarSize)
         }
-        let tabBarFrame = CGRect(origin: CGPoint(x: tabBarOriginX, y: params.layout.size.height - (params.isTabBarHidden ? 0.0 : (tabBarSize.height + tabBarBottomInset))), size: tabBarSize)
         
         if let tabBarComponentView = self.tabBarView.view {
             // MARK: NAGRAM — attach restored glass at its final size and opacity.
-            let viewTransition: ContainedViewLayoutTransition
-            if tabBarComponentView.superview == nil {
-                viewTransition = .immediate
+            let isNewlyAttached = tabBarComponentView.superview == nil
+            let viewFrameTransition: ContainedViewLayoutTransition
+            let viewAlphaTransition: ContainedViewLayoutTransition
+            if isNewlyAttached {
+                viewFrameTransition = .immediate
+                viewAlphaTransition = .immediate
                 tabBarComponentView.frame = tabBarFrame
                 self.view.addSubview(tabBarComponentView)
             } else {
-                viewTransition = transition
+                viewFrameTransition = tabBarFrameTransition
+                viewAlphaTransition = transition
             }
-            viewTransition.updateFrame(view: tabBarComponentView, frame: tabBarFrame)
-            let tabBarContentAlpha: CGFloat = !params.isTabBarHidden && params.toolbar == nil && hasVisibleTabBarContent ? 1.0 : 0.0
-            viewTransition.updateAlpha(layer: tabBarComponentView.layer, alpha: tabBarContentAlpha)
-            tabBarComponentView.isUserInteractionEnabled = tabBarContentAlpha > 0.0
+            // MARK: NAGRAM — hidden or empty bars are transparent and do not take touches.
+            let tabBarAlpha: CGFloat = !params.isTabBarHidden && params.toolbar == nil && hasVisibleTabBarContent ? 1.0 : 0.0
+            if !isNewlyAttached, let crossfadeDuration, let previousAppliedPlacement, let previousPlacement = previousAppliedPlacement.placement {
+                if !previousAppliedPlacement.isHidden && tabBarComponentView.alpha > 0.0, let snapshotView = tabBarComponentView.snapshotView(afterScreenUpdates: false) {
+                    snapshotView.frame = previousPlacement.movedFrame(from: previousAppliedPlacement.containerSize, to: params.layout.size)
+                    self.view.insertSubview(snapshotView, aboveSubview: tabBarComponentView)
+                    snapshotView.layer.animateAlpha(from: 1.0, to: 0.0, duration: crossfadeDuration * 0.5, removeOnCompletion: false, completion: { [weak snapshotView] _ in
+                        snapshotView?.removeFromSuperview()
+                    })
+                }
+                if !self.tabBarHidden && tabBarAlpha > 0.0 {
+                    tabBarComponentView.layer.animateAlpha(from: 0.0, to: tabBarAlpha, duration: crossfadeDuration * 0.5, delay: crossfadeDuration * 0.5)
+                }
+            }
+            viewFrameTransition.updateFrame(view: tabBarComponentView, frame: tabBarFrame)
+            viewAlphaTransition.updateAlpha(layer: tabBarComponentView.layer, alpha: tabBarAlpha)
+            tabBarComponentView.isUserInteractionEnabled = tabBarAlpha > 0.0
+            // A hidden bar is moved below the screen, not removed: VoiceOver must not reach it there.
+            tabBarComponentView.accessibilityElementsHidden = self.tabBarHidden
         }
         
-        transition.updateFrame(node: self.disabledOverlayNode, frame: tabBarFrame)
+        tabBarFrameTransition.updateFrame(node: self.disabledOverlayNode, frame: tabBarFrame)
         
         let toolbarHeight = 44.0
-        let toolbarFrame = CGRect(origin: CGPoint(x: sideInset, y: params.layout.size.height - panelsBottomInset - toolbarHeight), size: CGSize(width: params.layout.size.width - sideInset * 2.0, height: toolbarHeight))
+        let toolbarFrame: CGRect
+        if sidePlacement != nil {
+            toolbarFrame = tabBarSideToolbarFrame(layout: params.layout, sideMargin: sideInset, bottomInset: panelsBottomInset, height: toolbarHeight)
+        } else {
+            toolbarFrame = CGRect(origin: CGPoint(x: sideInset, y: params.layout.size.height - panelsBottomInset - toolbarHeight), size: CGSize(width: params.layout.size.width - sideInset * 2.0, height: toolbarHeight))
+        }
         
         if let toolbarData = params.toolbar {
             let toolbar: ComponentView<Empty>
@@ -444,6 +605,7 @@ final class TabBarControllerNode: ASDisplayNode {
                             items: [GlassControlGroupComponent.Item(
                                 id: "left_" + value.title,
                                 content: .text(value.title),
+                                foregroundColor: value.customTitleColor,
                                 action: value.isEnabled ? { [weak self] in
                                     guard let self else {
                                         return
@@ -459,6 +621,7 @@ final class TabBarControllerNode: ASDisplayNode {
                             items: [GlassControlGroupComponent.Item(
                                 id: "right_" + value.title,
                                 content: .text(value.title),
+                                foregroundColor: value.customTitleColor,
                                 action: value.isEnabled ? { [weak self] in
                                     guard let self else {
                                         return
@@ -474,6 +637,7 @@ final class TabBarControllerNode: ASDisplayNode {
                             items: [GlassControlGroupComponent.Item(
                                 id: "right_" + value.title,
                                 content: .text(value.title),
+                                foregroundColor: value.customTitleColor,
                                 action: value.isEnabled ? { [weak self] in
                                     guard let self else {
                                         return
@@ -507,6 +671,12 @@ final class TabBarControllerNode: ASDisplayNode {
             }
         }
         
+        if sidePlacement != nil {
+            // The content already keeps clear of the strip through the side safe inset; only the edit
+            // toolbar at the bottom needs an inset.
+            return params.toolbar != nil ? panelsBottomInset + toolbarHeight : nil
+        }
+        // MARK: NAGRAM — a bar with nothing visible takes no inset.
         if params.toolbar == nil && !hasVisibleTabBarContent {
             return 0.0
         }
@@ -530,6 +700,14 @@ final class TabBarControllerNode: ASDisplayNode {
     func isPointInsideContentArea(point: CGPoint) -> Bool {
         guard let tabBarView = self.tabBarView.view else {
             return false
+        }
+        if let sidePlacement = self.appliedPlacement?.placement {
+            switch sidePlacement.edge {
+            case .left:
+                return point.x > tabBarView.frame.maxX
+            case .right:
+                return point.x < tabBarView.frame.minX
+            }
         }
         if point.y < tabBarView.frame.minY {
             return true

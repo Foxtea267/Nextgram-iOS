@@ -1,4 +1,3 @@
-import LottieSettings
 import UIKit
 import ComponentFlow
 import Display
@@ -18,6 +17,9 @@ import ItemListUI
 import ChatListSearchItemHeader
 import LottieComponent
 import MultilineTextComponent
+// MARK: NAGRAM
+import NagramFlippedList
+import NagramSettings
 
 public final class ChatInlineSearchResultsListComponent: Component {
     public struct Presentation: Equatable {
@@ -270,6 +272,8 @@ public final class ChatInlineSearchResultsListComponent: Component {
         private var isUpdating: Bool = false
         
         private let listNode: ListView
+        // MARK: NAGRAM — 「从下往上显示」聊天内搜索结果：列表上下镜像，最新结果贴近底部。
+        private let nagramBottomUp: Bool
         private let emptyResultsTitle = ComponentView<Empty>()
         private let emptyResultsText = ComponentView<Empty>()
         private let emptyResultsAnimation = ComponentView<Empty>()
@@ -294,7 +298,8 @@ public final class ChatInlineSearchResultsListComponent: Component {
         private var hintAnimateListTransition: Bool = false
         
         override public init(frame: CGRect) {
-            self.listNode = ListViewImpl()
+            self.nagramBottomUp = NagramSettings.shared.bottomUpChatSearchResults
+            self.listNode = self.nagramBottomUp ? NagramFlippedListView() : ListViewImpl() // MARK: NAGRAM
             
             super.init(frame: frame)
             
@@ -426,6 +431,11 @@ public final class ChatInlineSearchResultsListComponent: Component {
             
             self.listNode.frame = CGRect(origin: CGPoint(), size: availableSize)
             let (listDuration, listCurve) = listViewAnimationDurationAndCurve(transition: transition.containedViewLayoutTransition)
+            var listInsets = component.insets
+            // MARK: NAGRAM — 镜像列表的 top inset 是屏幕底部的留白；结果贴底，要让开键盘。
+            if self.nagramBottomUp {
+                listInsets = UIEdgeInsets(top: max(listInsets.bottom, component.inputHeight), left: listInsets.left, bottom: listInsets.top, right: listInsets.right)
+            }
             self.listNode.transaction(
                 deleteIndices: [],
                 insertIndicesAndItems: [],
@@ -433,7 +443,7 @@ public final class ChatInlineSearchResultsListComponent: Component {
                 options: [.Synchronous, .LowLatency, .PreferSynchronousDrawing, .PreferSynchronousResourceLoading],
                 updateSizeAndInsets: ListViewUpdateSizeAndInsets(
                     size: availableSize,
-                    insets: component.insets,
+                    insets: listInsets,
                     duration: listDuration,
                     curve: listCurve
                 ),
@@ -1257,8 +1267,7 @@ public final class ChatInlineSearchResultsListComponent: Component {
                 let emptyResultsAnimationSize = self.emptyResultsAnimation.update(
                     transition: .immediate,
                     component: AnyComponent(LottieComponent(
-                        content: LottieComponent.AppBundleContent(name: "ChatListNoResults"),
-                        lottieSettings: component.context.lottieRenderingSettings
+                        content: LottieComponent.AppBundleContent(name: "ChatListNoResults")
                     )),
                     environment: {},
                     containerSize: CGSize(width: emptyAnimationHeight, height: emptyAnimationHeight)

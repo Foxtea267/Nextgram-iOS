@@ -1,7 +1,7 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 import MtProtoKit
 
 public enum CreateChannelError {
@@ -76,7 +76,7 @@ private func createChannel(postbox: Postbox, network: Network, stateManager: Acc
                 |> timeout(5.0, queue: Queue.concurrentDefaultQueue(), alternate: .fail(.generic))
                 |> mapToSignal { peerId -> Signal<PeerId, CreateChannelError> in
                     if title.contains("*forum") {
-                        return _internal_setChannelForumMode(postbox: postbox, network: network, stateManager: stateManager, peerId: peerId, isForum: true, displayForumAsTabs: true)
+                        return _internal_setChannelForumMode(postbox: postbox, network: network, stateManager: stateManager, peerId: peerId, isForum: true, displayForumAsTabs: true, displayForumAsSidebar: false)
                         |> castError(CreateChannelError.self)
                         |> map { _ -> PeerId in
                         }

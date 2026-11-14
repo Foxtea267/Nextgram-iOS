@@ -226,7 +226,7 @@ private final class TitleFieldComponent: Component {
                 self.textField.becomeFirstResponder()
             }
             
-            self.textField.frame = CGRect(x: 15.0 + iconSize.width + 15.0, y: 0.0, width: availableSize.width - 46.0 - iconSize.width, height: 44.0)
+            self.textField.frame = CGRect(x: 15.0 + iconSize.width + 15.0, y: 0.0, width: availableSize.width - 46.0 - iconSize.width, height: availableSize.height)
                         
             return availableSize
         }
@@ -679,8 +679,14 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
             
             let sideInset: CGFloat = 16.0
             let topInset: CGFloat = 16.0 + environment.navigationHeight
+            // Sections are centered in the band between the side insets, where their labels are laid out (the
+            // screen's center unless one inset is iPhone Duo's strip).
+            let bandCenterX = environment.safeInsets.left + (context.availableSize.width - environment.safeInsets.left - environment.safeInsets.right) / 2.0
             let headerSpacing: CGFloat = 6.0
             let sectionSpacing: CGFloat = 30.0
+            // Glass sections, as the app's lists draw them: 26 pt corners, a 52 pt row.
+            let sectionCornerRadius: CGFloat = 26.0
+            let rowHeight: CGFloat = 52.0
             
             var contentHeight = topInset
             
@@ -698,21 +704,24 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
                 availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0  - environment.safeInsets.left - environment.safeInsets.right, height: CGFloat.greatestFiniteMagnitude),
                 transition: .immediate
             )
+            // iPhone Duo: beside a left side strip the header starts with its section, past the strip. With equal side
+            // insets it keeps its old position.
+            let titleHeaderStripInset: CGFloat = environment.safeInsets.left != environment.safeInsets.right ? environment.safeInsets.left : 0.0
             context.add(titleHeader
-                .position(CGPoint(x: sideInset * 2.0 + titleHeader.size.width / 2.0, y: contentHeight + titleHeader.size.height / 2.0))
+                .position(CGPoint(x: titleHeaderStripInset + sideInset * 2.0 + titleHeader.size.width / 2.0, y: contentHeight + titleHeader.size.height / 2.0))
             )
             contentHeight += titleHeader.size.height + headerSpacing
             
             let titleBackground = titleBackground.update(
                 component: RoundedRectangle(
                     color: environment.theme.list.itemBlocksBackgroundColor,
-                    cornerRadius: 10.0
+                    cornerRadius: sectionCornerRadius
                 ),
-                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: 44.0),
+                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: rowHeight),
                 transition: context.transition
             )
             context.add(titleBackground
-                .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + titleBackground.size.height / 2.0))
+                .position(CGPoint(x: bandCenterX, y: contentHeight + titleBackground.size.height / 2.0))
             )
             
             var isEditing = false
@@ -739,11 +748,11 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
                         state?.switchIcon()
                     }
                 ),
-                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: 44.0),
+                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: rowHeight),
                 transition: context.transition
             )
             context.add(titleField
-                .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + titleBackground.size.height / 2.0))
+                .position(CGPoint(x: bandCenterX, y: contentHeight + titleBackground.size.height / 2.0))
             )
             
             contentHeight += titleBackground.size.height + sectionSpacing
@@ -752,13 +761,13 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
                 let hideBackground = hideBackground.update(
                     component: RoundedRectangle(
                         color: environment.theme.list.itemBlocksBackgroundColor,
-                        cornerRadius: 10.0
+                        cornerRadius: sectionCornerRadius
                     ),
-                    availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: 44.0),
+                    availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right, height: rowHeight),
                     transition: context.transition
                 )
                 context.add(hideBackground
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + hideBackground.size.height / 2.0))
+                    .position(CGPoint(x: bandCenterX, y: contentHeight + hideBackground.size.height / 2.0))
                 )
                 
                 let hideTitle = hideTitle.update(
@@ -849,7 +858,7 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
                 let iconBackground = iconBackground.update(
                     component: RoundedRectangle(
                         color: environment.theme.list.itemBlocksBackgroundColor,
-                        cornerRadius: 10.0
+                        cornerRadius: sectionCornerRadius
                     ),
                     availableSize: CGSize(
                         width: context.availableSize.width - sideInset * 2.0 - environment.safeInsets.left - environment.safeInsets.right,
@@ -858,7 +867,7 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
                     transition: context.transition
                 )
                 context.add(iconBackground
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + iconBackground.size.height / 2.0))
+                    .position(CGPoint(x: bandCenterX, y: contentHeight + iconBackground.size.height / 2.0))
                 )
                 
                 if let emojiContent = state.emojiContent {
@@ -878,8 +887,8 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
                         transition: context.transition
                     )
                     context.add(iconSelector
-                        .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + iconSelector.size.height / 2.0))
-                        .cornerRadius(10.0)
+                        .position(CGPoint(x: bandCenterX, y: contentHeight + iconSelector.size.height / 2.0))
+                        .cornerRadius(sectionCornerRadius)
                         .clipsToBounds(true)
                     )
                     
@@ -913,7 +922,7 @@ private final class ForumCreateTopicScreenComponent: CombinedComponent {
                                 }
                             })
                         },
-                        clearGroup: { _ in
+                        clearGroup: { _, _, _ in
                         },
                         editAction: { _ in
                         },

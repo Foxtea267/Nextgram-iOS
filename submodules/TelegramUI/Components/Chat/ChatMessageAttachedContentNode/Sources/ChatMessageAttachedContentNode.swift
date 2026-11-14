@@ -82,6 +82,10 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
     }
     
     private var backgroundView: MessageInlineBlockBackgroundView?
+    /// The tinted block a link preview, game or invoice is drawn in, in this node's coordinates.
+    public var inlineBlockFrame: CGRect? {
+        return self.backgroundView?.frame
+    }
     
     private let transformContainer: ASDisplayNode
     private var title: TextNodeWithEntities?
@@ -221,6 +225,16 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                 } else if case let .link(link) = info, link.isCentered {
                     incoming = true
                 }
+            }
+            
+            // The layout takes no item, so a preview asks the classifier its message's item asked, with the same inputs.
+            var bubbleStyle: ChatMessageBubbleStyle = .bubble
+            if !presentationData.chatBubbleCorners.bubbleMode {
+                var isMessageOptions = false
+                if let subject = associatedData.subject, case .messageOptions = subject {
+                    isMessageOptions = true
+                }
+                bubbleStyle = chatMessageBubbleStyle(bubbleMode: false, isMessageOptions: isMessageOptions, incoming: incoming, message: message)
             }
             
             let isAd = message.adAttribute != nil
@@ -368,9 +382,9 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                             contentFileValue = file
                         }
                         
-                        if shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: file, isAd: isAd) {
+                        if shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: .file(file), isAd: isAd) {
                             contentMediaAutomaticDownload = .full
-                        } else if shouldPredownloadMedia(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, media: file) {
+                        } else if shouldPredownloadMedia(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, media: .file(file)) {
                             contentMediaAutomaticDownload = .prefetch
                         }
                         
@@ -426,15 +440,15 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                 } else {
                     let contentMode: InteractiveMediaNodeContentMode = contentMediaAspectFilled ? .aspectFill : .aspectFit
                     
-                    let automaticDownload = shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: contentMediaValue, isAd: isAd)
+                    let automaticDownload = shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: EngineMedia(contentMediaValue), isAd: isAd)
                     
                     let (_, initialImageWidth, refineLayout) = makeContentMedia(
                         context,
                         presentationData,
                         presentationData.dateTimeFormat,
-                        message, associatedData,
+                        EngineMessage(message), associatedData,
                         attributes,
-                        contentMediaValue,
+                        EngineMedia(contentMediaValue),
                         nil,
                         nil,
                         automaticDownload ? .full : .none,
@@ -457,7 +471,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
             
             let contentFileContinueLayout: ChatMessageInteractiveFileNode.ContinueLayout?
             if let contentFileValue {
-                let automaticDownload = shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: contentFileValue, isAd: isAd)
+                let automaticDownload = shouldDownloadMediaAutomatically(settings: automaticDownloadSettings, peerType: associatedData.automaticDownloadPeerType, networkType: associatedData.automaticDownloadNetworkType, authorPeerId: message.author?.id, contactsPeerIds: associatedData.contactsPeerIds, media: .file(contentFileValue), isAd: isAd)
                 
                 let (_, refineLayout) = makeContentFile(ChatMessageInteractiveFileNode.Arguments(
                     context: context,
@@ -481,7 +495,8 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                     isAttachedContentBlock: true,
                     layoutConstants: layoutConstants,
                     constrainedSize: CGSize(width: constrainedSize.width - insets.left - insets.right, height: constrainedSize.height),
-                    controllerInteraction: controllerInteraction
+                    controllerInteraction: controllerInteraction,
+                    bubbleStyle: bubbleStyle
                 ))
                 contentFileContinueLayout = refineLayout
             } else {
@@ -751,6 +766,8 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                 var statusLayoutAndContinue: (CGFloat, (CGFloat) -> (CGSize, (ListViewItemUpdateAnimation) -> ChatMessageDateAndStatusNode))?
                 if case .customChatContents = associatedData.subject {
                 } else if !presentationData.chatBubbleCorners.hasTails {
+                } else if bubbleStyle.hidesIncomingStatus {
+                    // Without bubbles the time is in the author header.
                 } else if case let .messageOptions(_, _, info) = associatedData.subject, case let .link(link) = info, link.isCentered {
                 } else if case let .linear(_, bottom) = position {
                     switch bottom {
@@ -1406,7 +1423,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                                     guard let controllerInteraction else {
                                         return
                                     }
-                                    controllerInteraction.playMessageEffect(message)
+                                    controllerInteraction.playMessageEffect(message._asMessage())
                                 }
                                 contentMedia.activateLocalContent = { [weak self] mode in
                                     guard let self else {
@@ -1418,7 +1435,7 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                                     guard let controllerInteraction else {
                                         return
                                     }
-                                    controllerInteraction.updateMessageReaction(message, value, force, sourceView)
+                                    controllerInteraction.updateMessageReaction(message._asMessage(), value, force, sourceView)
                                 }
                                 contentMedia.visibility = self.visibility != .none
                                 
@@ -1623,6 +1640,8 @@ public final class ChatMessageAttachedContentNode: ASDisplayNode {
                                 self.transformContainer.view.insertSubview(backgroundView, at: 0)
                                 backgroundView.update(size: backgroundFrame.size, isTransparent: false, primaryColor: mainColor, secondaryColor: secondaryColor, thirdColor: tertiaryColor, backgroundColor: nil, pattern: pattern, patternTopRightPosition: patternTopRightPosition, patternAlpha: patternAlpha, animation: .None)
                             }
+                            // Without bubbles the block sits on the page, where it is rounder.
+                            backgroundView.clipCornerRadius = bubbleStyle.isBubbleless ? chatMessageBubblelessInlineBlockCornerRadius : nil
                         } else {
                             if let backgroundView = self.backgroundView {
                                 self.backgroundView = nil

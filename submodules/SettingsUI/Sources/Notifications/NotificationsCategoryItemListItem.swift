@@ -257,11 +257,12 @@ public class NotificationsCategoryItemListItemNode: ListViewItemNode, ItemListIt
                     
                     strongSelf.activateArea.frame = CGRect(origin: CGPoint(x: params.leftInset, y: 0.0), size: CGSize(width: params.width - params.leftInset - params.rightInset, height: layout.contentSize.height))
                     strongSelf.activateArea.accessibilityLabel = item.title
-                    strongSelf.activateArea.accessibilityValue = item.label
+                    // The value is what the row shows besides its title: the state and the exceptions line.
+                    strongSelf.activateArea.accessibilityValue = [item.label, item.subtitle].filter({ !$0.isEmpty }).joined(separator: ", ")
                     if item.enabled {
-                        strongSelf.activateArea.accessibilityTraits = []
+                        strongSelf.activateArea.accessibilityTraits = .button
                     } else {
-                        strongSelf.activateArea.accessibilityTraits = .notEnabled
+                        strongSelf.activateArea.accessibilityTraits = [.button, .notEnabled]
                     }
                     
                     if let icon = item.icon {
@@ -346,7 +347,7 @@ public class NotificationsCategoryItemListItemNode: ListViewItemNode, ItemListIt
                         strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: item.systemStyle == .glass) : nil
                         
                         strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                        strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                        strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                         strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
                         strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - bottomStripeInset - params.rightInset - separatorRightInset, height: separatorHeight))
                     }

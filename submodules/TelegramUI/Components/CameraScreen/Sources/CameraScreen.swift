@@ -3,11 +3,13 @@ import UIKit
 import Display
 import AsyncDisplayKit
 import ComponentFlow
+import AttachmentUI
 import SwiftSignalKit
 import ViewControllerComponent
 import ComponentDisplayAdapters
 import TelegramPresentationData
 import AccountContext
+import ContextUI
 import TelegramCore
 import PresentationDataUtils
 import Camera
@@ -150,6 +152,91 @@ struct CameraState: Equatable {
     }
 }
 
+extension CameraState.CameraMode {
+    var captureKind: CameraScreenCaptureKind {
+        switch self {
+        case .photo:
+            return .photo
+        case .video:
+            return .video
+        case .live:
+            return .live
+        }
+    }
+    
+    init(_ kind: CameraScreenCaptureKind) {
+        switch kind {
+        case .photo:
+            self = .photo
+        case .video:
+            self = .video
+        case .live:
+            self = .live
+        }
+    }
+}
+
+extension CameraScreenFlashKind {
+    init(_ mode: Camera.FlashMode) {
+        switch mode {
+        case .on:
+            self = .on
+        case .auto:
+            self = .auto
+        default:
+            self = .off
+        }
+    }
+}
+
+extension Camera.FlashMode {
+    init(_ kind: CameraScreenFlashKind) {
+        switch kind {
+        case .off:
+            self = .off
+        case .on:
+            self = .on
+        case .auto:
+            self = .auto
+        }
+    }
+}
+
+extension CameraCaptureMode {
+    init?(_ mode: CameraState.CameraMode) {
+        switch mode {
+        case .photo:
+            self = .photo
+        case .video:
+            self = .video
+        case .live:
+            return nil
+        }
+    }
+    
+    init(_ mode: ChatCameraRecordingCaptureModes.Mode) {
+        switch mode {
+        case .photo:
+            self = .photo
+        case .video:
+            self = .video
+        }
+    }
+}
+
+extension CameraScreenAccessStatus {
+    init(_ access: AccessType) {
+        switch access {
+        case .notDetermined:
+            self = .notDetermined
+        case .allowed:
+            self = .allowed
+        default:
+            self = .denied
+        }
+    }
+}
+
 enum CameraScreenTransition {
     case animateIn
     case animateOut
@@ -179,7 +266,9 @@ private final class CameraScreenComponent: CombinedComponent {
     let hasAppeared: Bool
     let isVisible: Bool
     let panelWidth: CGFloat
+    let chatScreenLayout: CameraScreenChatScreenLayout?
     let resolvedCodePeer: EnginePeer?
+    let batchCount: Int
     let animateFlipAction: ActionSlot<Void>
     let animateShutter: () -> Void
     let toggleCameraPositionAction: ActionSlot<Void>
@@ -199,7 +288,9 @@ private final class CameraScreenComponent: CombinedComponent {
         hasAppeared: Bool,
         isVisible: Bool,
         panelWidth: CGFloat,
+        chatScreenLayout: CameraScreenChatScreenLayout?,
         resolvedCodePeer: EnginePeer?,
+        batchCount: Int,
         animateFlipAction: ActionSlot<Void>,
         animateShutter: @escaping () -> Void,
         toggleCameraPositionAction: ActionSlot<Void>,
@@ -218,7 +309,9 @@ private final class CameraScreenComponent: CombinedComponent {
         self.hasAppeared = hasAppeared
         self.isVisible = isVisible
         self.panelWidth = panelWidth
+        self.chatScreenLayout = chatScreenLayout
         self.resolvedCodePeer = resolvedCodePeer
+        self.batchCount = batchCount
         self.animateFlipAction = animateFlipAction
         self.animateShutter = animateShutter
         self.toggleCameraPositionAction = toggleCameraPositionAction
@@ -252,10 +345,16 @@ private final class CameraScreenComponent: CombinedComponent {
         if lhs.isVisible != rhs.isVisible {
             return false
         }
+        if lhs.chatScreenLayout != rhs.chatScreenLayout {
+            return false
+        }
         if lhs.panelWidth != rhs.panelWidth {
             return false
         }
         if lhs.resolvedCodePeer != rhs.resolvedCodePeer {
+            return false
+        }
+        if lhs.batchCount != rhs.batchCount {
             return false
         }
         return true
@@ -351,6 +450,8 @@ private final class CameraScreenComponent: CombinedComponent {
         
         private let hapticFeedback = HapticFeedback()
         
+        private let mode: CameraScreenImpl.Mode
+        
         init(
             context: AccountContext,
             mode: CameraScreenImpl.Mode,
@@ -368,6 +469,7 @@ private final class CameraScreenComponent: CombinedComponent {
             self.animateShutter = animateShutter
             self.animateFlipAction = animateFlipAction
             self.getController = getController
+            self.mode = mode
             
             super.init()
                                    
@@ -383,8 +485,11 @@ private final class CameraScreenComponent: CombinedComponent {
                 }
             })
             
-            Queue.concurrentDefaultQueue().async {
-                self.setupRecentAssetSubscription()
+            let storyControls = cameraScreenStoryControls(mode: mode.kind)
+            if storyControls.recentGalleryAsset {
+                Queue.concurrentDefaultQueue().async {
+                    self.setupRecentAssetSubscription()
+                }
             }
             
             if case .story = mode {
@@ -413,12 +518,14 @@ private final class CameraScreenComponent: CombinedComponent {
                     })
                 }
                 
-                let _ = (mediaEditorStoredState(engine: self.context.engine)
-                |> deliverOnMainQueue).start(next: { [weak self] state in
-                    if let self, let privacy = state?.privacy {
-                        self.privacy = privacy.privacy
-                    }
-                })
+                if storyControls.storyPrivacy {
+                    let _ = (mediaEditorStoredState(engine: self.context.engine)
+                    |> deliverOnMainQueue).start(next: { [weak self] state in
+                        if let self, let privacy = state?.privacy {
+                            self.privacy = privacy.privacy
+                        }
+                    })
+                }
             }
         }
         
@@ -520,7 +627,7 @@ private final class CameraScreenComponent: CombinedComponent {
             self.isPressingButton = false
             self.buttonPressTimestamp = CACurrentMediaTime()
             
-            self.buttonPressTimer = SwiftSignalKit.Timer(timeout: 0.3, repeat: false, completion: { [weak self] in
+            self.buttonPressTimer = SwiftSignalKit.Timer(timeout: cameraScreenHoldMinimumPressDuration(mode: self.mode.kind), repeat: false, completion: { [weak self] in
                 if let self, let _ = self.buttonPressTimestamp {
                     if case .none = controller.cameraState.recording {
                         self.startVideoRecording(pressing: true)
@@ -581,12 +688,32 @@ private final class CameraScreenComponent: CombinedComponent {
                 self.displayingCollageSelection = false
                 isCollageEnabled = false
             }
+            let previousMode = controller.cameraState.mode
+            let changesChatCaptureMode = self.mode.kind == .chat && previousMode != mode && CameraCaptureMode(mode) != nil
+            if changesChatCaptureMode {
+                controller.node.beginCaptureKindTransition()
+            }
             controller.updateCameraState({ $0.updatedMode(mode).updatedIsCollageEnabled(isCollageEnabled) }, transition: .spring(duration: 0.3))
             
-            var flashOn = controller.cameraState.flashMode == .on
-            if case .video = mode, case .auto = controller.cameraState.flashMode {
-                camera.setFlashMode(.on)
-                flashOn = true
+            var flashMode = controller.cameraState.flashMode
+            if let updatedFlashMode = cameraScreenFlashModeAfterModeSwitch(mode: self.mode.kind, current: CameraScreenFlashKind(flashMode), to: mode.captureKind) {
+                flashMode = Camera.FlashMode(updatedFlashMode)
+                camera.setFlashMode(flashMode)
+            }
+            let flashOn = flashMode == .on
+            
+            if case .chat = self.mode, previousMode != mode, let captureMode = CameraCaptureMode(mode) {
+                controller.node.resetFocusIndicator()
+                controller.updateChatAudioSession(captureKind: mode.captureKind, isRecording: false)
+                let _ = (camera.setCaptureMode(captureMode)
+                |> deliverOnMainQueue).startStandalone(next: { [weak controller] _ in
+                    guard let controller else {
+                        return
+                    }
+                    controller.node.endCaptureKindTransition()
+                    controller.updateChatAudioSession(captureKind: controller.cameraState.mode.captureKind, isRecording: controller.cameraState.recording != .none)
+                })
+                camera.setFlashMode(flashMode)
             }
             
             self.updateScreenBrightness(flashOn: flashOn)
@@ -596,20 +723,9 @@ private final class CameraScreenComponent: CombinedComponent {
             guard let controller = self.getController(), let camera = controller.camera else {
                 return
             }
-            var flashOn = false
-            switch controller.cameraState.flashMode {
-            case .off:
-                flashOn = true
-                camera.setFlashMode(.on)
-            case .on:
-                if controller.cameraState.mode == .video {
-                    camera.setFlashMode(.off)
-                } else {
-                    camera.setFlashMode(.auto)
-                }
-            default:
-                camera.setFlashMode(.off)
-            }
+            let nextFlashMode = cameraScreenNextFlashMode(mode: self.mode.kind, current: CameraScreenFlashKind(controller.cameraState.flashMode), captureKind: controller.cameraState.mode.captureKind)
+            let flashOn = nextFlashMode == .on
+            camera.setFlashMode(Camera.FlashMode(nextFlashMode))
             self.hapticFeedback.impact(.light)
             
             self.updateScreenBrightness(flashOn: flashOn)
@@ -662,6 +778,10 @@ private final class CameraScreenComponent: CombinedComponent {
             self.lastFlipTimestamp = currentTimestamp
             
             camera.togglePosition()
+            if case .chat = self.mode {
+                controller.node.chatZoomScale = 1.0
+                controller.node.resetFocusIndicator()
+            }
             
             action.invoke(Void())
             
@@ -779,6 +899,9 @@ private final class CameraScreenComponent: CombinedComponent {
             guard !(self.isTakingPhoto && !cameraState.isCollageEnabled) else {
                 return
             }
+            if let chatBatch = controller.chatBatch, !chatBatch.acceptsCapture {
+                return
+            }
             
             self.animateShutter()
             
@@ -792,6 +915,10 @@ private final class CameraScreenComponent: CombinedComponent {
             }
             controller.node.presentCollageManagementTooltipIfNeeded()
             
+            var unmirrorsResult = false
+            if let chatParams = controller.mode.chatParams {
+                unmirrorsResult = chatCameraUnmirrorsResult(isFront: controller.cameraState.position == .front, mirrorsFrontResult: chatParams.mirrorsFrontResult)
+            }
             let takePhoto = { [weak self] in
                 guard let self else {
                     return
@@ -802,6 +929,9 @@ private final class CameraScreenComponent: CombinedComponent {
                     case .began:
                         return .single(.pendingImage)
                     case let .finished(image, additionalImage, _):
+                        if unmirrorsResult {
+                            return .single(.image(CameraScreenImpl.Result.Image(image: chatCameraHorizontallyFlippedImage(image), additionalImage: additionalImage, additionalImagePosition: .topRight)))
+                        }
                         return .single(.image(CameraScreenImpl.Result.Image(image: image, additionalImage: additionalImage, additionalImagePosition: .topRight)))
                     case .failed:
                         return .complete()
@@ -814,8 +944,8 @@ private final class CameraScreenComponent: CombinedComponent {
             let isFlashOn = controller.cameraState.flashMode == .on
             
             if isFrontCamera && isFlashOn {
-                let previousBrightness = UIScreen.main.brightness
-                UIScreen.main.brightness = 1.0
+                let previousBrightness = mainWindowScreen.brightness
+                mainWindowScreen.brightness = 1.0
                 
                 let flashController = CameraFrontFlashOverlayController(color: controller.cameraState.flashTint.color)
                 controller.presentInGlobalOverlay(flashController)
@@ -826,7 +956,7 @@ private final class CameraScreenComponent: CombinedComponent {
                     Queue.mainQueue().after(0.5, {
                         self.isTakingPhoto = false
                         
-                        self.brightnessArguments = (CACurrentMediaTime(), 0.25, UIScreen.main.brightness, previousBrightness)
+                        self.brightnessArguments = (CACurrentMediaTime(), 0.25, mainWindowScreen.brightness, previousBrightness)
                         self.animateBrightnessChange()
                         flashController.dismissAnimated()
                     })
@@ -853,14 +983,14 @@ private final class CameraScreenComponent: CombinedComponent {
             
             if isFrontCamera && isVideo && isFlashOn {
                 if self.initialBrightness == nil {
-                    self.initialBrightness = UIScreen.main.brightness
-                    self.brightnessArguments = (CACurrentMediaTime(), 0.2, UIScreen.main.brightness, 1.0)
+                    self.initialBrightness = mainWindowScreen.brightness
+                    self.brightnessArguments = (CACurrentMediaTime(), 0.2, mainWindowScreen.brightness, 1.0)
                     self.animateBrightnessChange()
                 }
             } else {
                 if let initialBrightness = self.initialBrightness {
                     self.initialBrightness = nil
-                    self.brightnessArguments = (CACurrentMediaTime(), 0.2, UIScreen.main.brightness, initialBrightness)
+                    self.brightnessArguments = (CACurrentMediaTime(), 0.2, mainWindowScreen.brightness, initialBrightness)
                     self.animateBrightnessChange()
                 }
             }
@@ -880,7 +1010,7 @@ private final class CameraScreenComponent: CombinedComponent {
                 let t = CGFloat(max(0.0, min(1.0, (CACurrentMediaTime() - startTime) / duration)))
                 let value = initial + (target - initial) * t
                 
-                UIScreen.main.brightness = value
+                mainWindowScreen.brightness = value
                 
                 if t >= 1.0 {
                     self.brightnessArguments = nil
@@ -902,6 +1032,12 @@ private final class CameraScreenComponent: CombinedComponent {
             guard case .none = controller.cameraState.recording else {
                 return
             }
+            if let chatParams = self.mode.chatParams, !cameraScreenAllowsHoldToRecord(mode: .chat, allowVideo: chatParams.allowVideo) {
+                return
+            }
+            if let chatBatch = controller.chatBatch, !chatBatch.acceptsCapture {
+                return
+            }
                         
             controller.node.dismissAllTooltips()
             
@@ -910,16 +1046,37 @@ private final class CameraScreenComponent: CombinedComponent {
                 self.updated(transition: .spring(duration: 0.3))
             }
             
+            let modeKind = self.mode.kind
+            let chatCaptureModes: ChatCameraRecordingCaptureModes?
+            if case .chat = self.mode {
+                chatCaptureModes = chatCameraRecordingCaptureModes(captureKind: controller.cameraState.mode.captureKind)
+            } else {
+                chatCaptureModes = nil
+            }
+            let recordingSignal: Signal<CameraRecordingData, CameraRecordingError>
+            if let beforeRecording = chatCaptureModes?.beforeRecording {
+                recordingSignal = camera.startRecording(captureMode: CameraCaptureMode(beforeRecording))
+            } else {
+                recordingSignal = camera.startRecording()
+            }
+            if let captureModes = chatCaptureModes {
+                self.captureModeAfterRecording = captureModes.afterRecording.map { CameraCaptureMode($0) }
+                self.hasChatRecordingData = false
+                controller.updateChatAudioSession(captureKind: controller.cameraState.mode.captureKind, isRecording: true)
+                controller.node.beginChatHoldZoom()
+                controller.node.resetFocusIndicator()
+            }
             let startRecording = { [weak self] in
                 guard let self else {
                     return
                 }
 
-                self.resultDisposable.set((camera.startRecording()
+                self.resultDisposable.set((recordingSignal
                 |> deliverOnMainQueue).start(next: { [weak self] recordingData in
                     if let self, let controller = self.getController() {
+                        self.hasChatRecordingData = true
                         controller.updateCameraState({ $0.updatedDuration(recordingData.duration) }, transition: .easeInOut(duration: 0.1))
-                        if recordingData.duration > 59.0 {
+                        if cameraScreenShouldStopRecording(mode: modeKind, duration: recordingData.duration) {
                             self.stopVideoRecording()
                         }
                     }
@@ -933,13 +1090,39 @@ private final class CameraScreenComponent: CombinedComponent {
             startRecording()
         }
         
+        private var captureModeAfterRecording: CameraCaptureMode?
+        fileprivate var hasChatRecordingData = false
+        
+        private func restoreCaptureModeAfterRecording(camera: CameraProtocol) {
+            guard case .chat = self.mode else {
+                return
+            }
+            let captureMode = self.captureModeAfterRecording
+            self.captureModeAfterRecording = nil
+            let getController = self.getController
+            let _ = ((captureMode.flatMap { camera.setCaptureMode($0) } ?? .single(Void()))
+            |> deliverOnMainQueue).startStandalone(next: { _ in
+                guard let controller = getController() else {
+                    return
+                }
+                controller.updateChatAudioSession(captureKind: controller.cameraState.mode.captureKind, isRecording: controller.cameraState.recording != .none)
+            })
+        }
+        
         func stopVideoRecording() {
             guard let controller = self.getController(), let camera = controller.camera, let cameraState = self.cameraState else {
                 return
             }
             
+            if case .chat = self.mode {
+                self.resultDisposable.set(nil)
+            }
+            let restore = Atomic<Bool>(value: false)
             self.resultDisposable.set((camera.stopRecording()
             |> deliverOnMainQueue).start(next: { [weak self] result in
+                if !restore.swap(true) {
+                    self?.restoreCaptureModeAfterRecording(camera: camera)
+                }
                 if let self, case let .finished(mainResult, additionalResult, duration, positionChangeTimestamps, _) = result {
                     self.completion.invoke(.single(
                         .video(CameraScreenImpl.Result.Video(
@@ -955,8 +1138,14 @@ private final class CameraScreenComponent: CombinedComponent {
                         ))
                     ))
                 }
+                self?.getController()?.node.openDeferredChatReviewIfNeeded()
+            }, completed: { [weak self] in
+                if !restore.swap(true) {
+                    self?.restoreCaptureModeAfterRecording(camera: camera)
+                }
+                self?.getController()?.node.openDeferredChatReviewIfNeeded()
             }))
-            if !cameraState.isCollageEnabled {
+            if cameraScreenTransitionsAfterVideoRecording(mode: self.mode.kind, isCollageEnabled: cameraState.isCollageEnabled) {
                 self.isTransitioning = true
                 Queue.mainQueue().after(1.25, {
                     self.isTransitioning = false
@@ -968,7 +1157,7 @@ private final class CameraScreenComponent: CombinedComponent {
             
             if case .front = controller.cameraState.position, let initialBrightness = self.initialBrightness {
                 self.initialBrightness = nil
-                self.brightnessArguments = (CACurrentMediaTime(), 0.2, UIScreen.main.brightness, initialBrightness)
+                self.brightnessArguments = (CACurrentMediaTime(), 0.2, mainWindowScreen.brightness, initialBrightness)
                 self.animateBrightnessChange()
             }
         }
@@ -1311,11 +1500,15 @@ private final class CameraScreenComponent: CombinedComponent {
             }
         }
         
-        func updateZoom(fraction: CGFloat) {
-            guard let camera = self.getController()?.camera else {
+        func updateZoom(fraction: CGFloat, isTablet: Bool) {
+            guard let controller = self.getController(), let camera = controller.camera else {
                 return
             }
-            camera.setZoomLevel(fraction)
+            if case .chat = self.mode {
+                controller.node.updateChatHoldZoom(travel: Float(isTablet ? fraction - 1.0 : fraction))
+            } else {
+                camera.setZoomLevel(fraction)
+            }
         }
     }
     
@@ -1343,6 +1536,7 @@ private final class CameraScreenComponent: CombinedComponent {
         let zoomControl = Child(ZoomComponent.self)
         let streamAsButton = Child(PlainButtonComponent.self)
         let flashButton = Child(CameraButton.self)
+        let topFlipButton = Child(CameraButton.self)
         let flipButton = Child(CameraButton.self)
         let dualButton = Child(CameraButton.self)
         let collageButton = Child(CameraButton.self)
@@ -1376,6 +1570,9 @@ private final class CameraScreenComponent: CombinedComponent {
                     isAvatar = true
                 }
             }
+            let modeKind = component.mode.kind
+            let chatParams = component.mode.chatParams
+            let storyControls = cameraScreenStoryControls(mode: modeKind)
             
             let isTablet: Bool
             if case .regular = environment.metrics.widthClass {
@@ -1386,31 +1583,24 @@ private final class CameraScreenComponent: CombinedComponent {
             
             let smallPanelWidth = min(component.panelWidth, 88.0)
             let panelWidth = min(component.panelWidth, 185.0)
+            // The right panel of the tablet layout ends at the side strip where there is one (iPhone Duo's unfolded screen
+            // in landscape: its top-right corner block and the strip below it).
+            let rightPanelMaxX = availableSize.width - environment.safeInsets.right
             
             var controlsBottomInset: CGFloat = 0.0
-            let previewHeight = floorToScreenPixels(availableSize.width * 1.77778)
+            var previewOriginX: CGFloat = 0.0
+            var previewWidth = availableSize.width
+            var previewHeight = floorToScreenPixels(availableSize.width * 1.77778)
+            if !isTablet, let placement = storyPreviewBandPlacement(containerSize: availableSize, safeInsets: environment.safeInsets) {
+                previewOriginX = placement.x
+                previewWidth = placement.size.width
+                previewHeight = placement.size.height
+            }
             if !isTablet {
-                if availableSize.height < previewHeight + 30.0 {
-                    controlsBottomInset = -70.0
-                }
+                controlsBottomInset = storyCameraControlsBottomInset(containerHeight: availableSize.height, viewfinderHeight: previewHeight)
             }
             
-            let hasAllRequiredAccess: Bool
-            switch component.cameraAuthorizationStatus {
-            case .notDetermined:
-                hasAllRequiredAccess = true
-            case .allowed:
-                switch component.microphoneAuthorizationStatus {
-                case .notDetermined:
-                    hasAllRequiredAccess = true
-                case .allowed:
-                    hasAllRequiredAccess = true
-                default:
-                    hasAllRequiredAccess = false
-                }
-            default:
-                hasAllRequiredAccess = false
-            }
+            let hasAllRequiredAccess = cameraScreenHasAllRequiredAccess(mode: modeKind, camera: CameraScreenAccessStatus(component.cameraAuthorizationStatus), microphone: CameraScreenAccessStatus(component.microphoneAuthorizationStatus))
                         
             if !hasAllRequiredAccess {
                 let accountContext = component.context
@@ -1422,13 +1612,13 @@ private final class CameraScreenComponent: CombinedComponent {
                             accountContext.sharedContext.applicationBindings.openSettings()
                         }
                     ),
-                    availableSize: CGSize(width: availableSize.width, height: previewHeight),
+                    availableSize: CGSize(width: previewWidth, height: previewHeight),
                     transition: context.transition
                 )
                 context.add(placeholder
-                    .position(CGPoint(x: availableSize.width / 2.0, y: environment.safeInsets.top + previewHeight / 2.0))
+                    .position(CGPoint(x: previewOriginX + previewWidth / 2.0, y: environment.safeInsets.top + previewHeight / 2.0))
                     .clipsToBounds(true)
-                    .cornerRadius(11.0)
+                    .cornerRadius(cameraScreenPlaceholderCornerRadius(mode: modeKind))
                     .appear(.default(alpha: true))
                     .disappear(.default(alpha: true))
                 )
@@ -1436,6 +1626,25 @@ private final class CameraScreenComponent: CombinedComponent {
                         
             if case .holding = component.cameraState.recording {
                 
+            } else if case .chat = modeKind, hasAllRequiredAccess, case .back = component.cameraState.position, !state.isTransitioning, let controller = controller() as? CameraScreenImpl, let camera = controller.camera, camera.metrics.zoomLevels.count > 1 {
+                let zoomScale = controller.node.chatZoomScale
+                let zoomControl = zoomControl.update(
+                    component: ZoomComponent(
+                        availableValues: camera.metrics.zoomLevels,
+                        value: zoomScale,
+                        tag: zoomControlTag,
+                        selected: { [weak controller] value in
+                            controller?.node.updateChatZoomScale(value, animated: true)
+                        }
+                    ),
+                    availableSize: context.availableSize,
+                    transition: context.transition
+                )
+                context.add(zoomControl
+                    .position(CGPoint(x: context.availableSize.width / 2.0, y: component.chatScreenLayout?.zoomCenterY ?? (availableSize.height - zoomControl.size.height / 2.0 - 114.0 - environment.safeInsets.bottom)))
+                    .appear(.default(alpha: true))
+                    .disappear(.default(alpha: true))
+                )
             } else {
                 let _ = zoomControl
 //                let zoomControl = zoomControl.update(
@@ -1487,7 +1696,7 @@ private final class CameraScreenComponent: CombinedComponent {
                 case .handsFree:
                     shutterState = .stopRecording
                 case .holding:
-                    shutterState = .holdRecording(progress: min(1.0, Float(component.cameraState.duration / 60.0)))
+                    shutterState = .holdRecording(progress: cameraScreenHoldRecordingProgress(mode: modeKind, duration: component.cameraState.duration))
                 case .none:
                     switch component.cameraState.mode {
                     case .photo:
@@ -1513,17 +1722,21 @@ private final class CameraScreenComponent: CombinedComponent {
                     context: component.context,
                     strings: environment.strings,
                     isTablet: isTablet,
-                    isSticker: isSticker,
-                    hasGallery: !isSticker && !isAvatar,
+                    isSticker: !cameraScreenAllowsHoldToRecord(mode: modeKind, allowVideo: chatParams?.allowVideo ?? true),
+                    hasGallery: !isSticker && !isAvatar && chatParams == nil,
+                    isChat: chatParams != nil,
+                    holdMinimumPressDuration: cameraScreenHoldMinimumPressDuration(mode: modeKind),
                     hasAppeared: component.hasAppeared && hasAllRequiredAccess,
                     hasAccess: hasAllRequiredAccess,
                     hideControls: component.cameraState.collageProgress > 1.0 - .ulpOfOne,
                     controlsBottomInset: controlsBottomInset,
+                    bottomRowPlacement: component.chatScreenLayout?.bottomRowPlacement,
                     collageProgress: component.cameraState.collageProgress,
                     collageCount: component.cameraState.isCollageEnabled ? component.cameraState.collageGrid.count : nil,
                     tintColor: controlsTintColor,
                     shutterState: shutterState,
                     lastGalleryAsset: state.lastGalleryAsset,
+                    chatTrailingButton: cameraScreenChatTrailingButton(mode: modeKind, isTablet: isTablet, batchCount: component.batchCount),
                     resolvedCodePeer: state.isTakingPhoto || state.isRecording ? nil : component.resolvedCodePeer,
                     tag: captureControlsTag,
                     galleryButtonTag: galleryButtonTag,
@@ -1568,6 +1781,19 @@ private final class CameraScreenComponent: CombinedComponent {
                         }
                         state.togglePosition(animateFlipAction)
                     },
+                    showsCloseButton: cameraScreenShowsBottomCloseButton(mode: modeKind, isTablet: isTablet),
+                    closeTapped: {
+                        guard let controller = environment.controller() as? CameraScreenImpl else {
+                            return
+                        }
+                        controller.requestCancel()
+                    },
+                    chatDoneTapped: {
+                        guard let controller = environment.controller() as? CameraScreenImpl else {
+                            return
+                        }
+                        controller.node.openChatReviewFromDone()
+                    },
                     galleryTapped: { [weak state] in
                         guard let controller = environment.controller() as? CameraScreenImpl else {
                             return
@@ -1588,7 +1814,7 @@ private final class CameraScreenComponent: CombinedComponent {
                     },
                     zoomUpdated: { [weak state] fraction in
                         if let state {
-                            state.updateZoom(fraction: fraction)
+                            state.updateZoom(fraction: fraction, isTablet: isTablet)
                         }
                     },
                     flipAnimationAction: animateFlipAction,
@@ -1600,9 +1826,9 @@ private final class CameraScreenComponent: CombinedComponent {
             
             let captureControlsPosition: CGPoint
             if isTablet {
-                captureControlsPosition = CGPoint(x: availableSize.width - panelWidth / 2.0, y: availableSize.height / 2.0)
+                captureControlsPosition = CGPoint(x: rightPanelMaxX - panelWidth / 2.0, y: availableSize.height / 2.0)
             } else {
-                captureControlsPosition = CGPoint(x: availableSize.width / 2.0, y: availableSize.height - captureControls.size.height / 2.0 - environment.safeInsets.bottom - 5.0 + floorToScreenPixels(controlsBottomInset * 0.66))
+                captureControlsPosition = CGPoint(x: availableSize.width / 2.0, y: component.chatScreenLayout?.shutterCenterY ?? storyCameraShutterCenterY(containerHeight: availableSize.height, bottomInset: environment.safeInsets.bottom, controlsBottomInset: controlsBottomInset))
             }
             context.add(captureControls
                 .position(captureControlsPosition)
@@ -1629,7 +1855,7 @@ private final class CameraScreenComponent: CombinedComponent {
                         strings: environment.strings,
                         peerId: state.sendAsPeerId ?? component.context.account.peerId,
                         story: state.liveStreamStory,
-                        statusBarHeight: environment.statusBarHeight,
+                        statusBarHeight: environment.fullStatusBarHeight,
                         inputHeight: environment.inputHeight,
                         safeInsets: environment.safeInsets,
                         metrics: environment.metrics,
@@ -1665,7 +1891,13 @@ private final class CameraScreenComponent: CombinedComponent {
             
             var flashButtonPosition: CGPoint?
             let topControlSideInset: CGFloat = 9.0
+            // iPhone Duo: the right-anchored top controls keep the right safe inset (the side strip, whose top
+            // corner holds the status corner); it is 0 on every other phone, whose camera is portrait-only.
+            let topControlRightInset: CGFloat = topControlSideInset + environment.safeInsets.right + environment.navigationBarTrailingButtonsInset
             let topControlVerticalInset: CGFloat = 12.0
+            // The top row's top edge. Beside iPhone Duo's status island (unfolded portrait) its 44pt controls are centred
+            // on the island's clock line (compact status height + 31), as the editors' are; elsewhere below the status bar.
+            let topRowTop: CGFloat = environment.navigationBarTrailingButtonsInset > 0.0 ? environment.statusBarHeight + 31.0 - 22.0 : max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset)
             let topButtonSpacing: CGFloat = 15.0
             
             if component.cameraState.mode == .live && component.cameraState.isStreaming == .none {
@@ -1691,7 +1923,7 @@ private final class CameraScreenComponent: CombinedComponent {
                     transition: .immediate
                 )
                 context.add(streamAsButton
-                    .position(CGPoint(x: topControlSideInset + streamAsButton.size.width / 2.0 + 7.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + streamAsButton.size.height / 2.0 + 4.0))
+                    .position(CGPoint(x: topControlSideInset + streamAsButton.size.width / 2.0 + 7.0, y: topRowTop + streamAsButton.size.height / 2.0 + 4.0))
                     .appear(ComponentTransition.Appear({ _, view, transition in
                         if let buttonView = view as? PlainButtonComponent.View, let view = buttonView.contentView as? StreamAsComponent.View, !transition.animation.isImmediate {
                             view.animateIn(transition: transition)
@@ -1708,7 +1940,7 @@ private final class CameraScreenComponent: CombinedComponent {
             }
                         
             if case .none = component.cameraState.recording, !state.isTransitioning {
-                if !state.displayingCollageSelection && component.cameraState.isStreaming == .none {
+                if !state.displayingCollageSelection && component.cameraState.isStreaming == .none && cameraScreenShowsTopCancelButton(mode: modeKind, isTablet: isTablet) {
                     let cancelButton = cancelButton.update(
                         component: CameraButton(
                             content: AnyComponentWithIdentity(
@@ -1725,14 +1957,15 @@ private final class CameraScreenComponent: CombinedComponent {
                                 guard let controller = controller() as? CameraScreenImpl else {
                                     return
                                 }
-                                controller.requestDismiss(animated: true)
-                            }
+                                controller.requestCancel()
+                            },
+                            accessibility: ComponentAccessibility(label: environment.strings.Common_Close)
                         ).tagged(cancelButtonTag),
                         availableSize: CGSize(width: 40.0, height: 40.0),
                         transition: .immediate
                     )
                     context.add(cancelButton
-                        .position(CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - cancelButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + cancelButton.size.height / 2.0))
+                        .position(CGPoint(x: isTablet ? smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - cancelButton.size.width / 2.0, y: topRowTop + cancelButton.size.height / 2.0))
                         .appear(.default(scale: true))
                         .disappear(.default(scale: true))
                         .shadow(Shadow(color: UIColor(white: 0.0, alpha: 0.25), radius: 3.0, offset: .zero))
@@ -1809,7 +2042,7 @@ private final class CameraScreenComponent: CombinedComponent {
                             transition: .immediate
                         )
                         context.add(endStreamButton
-                            .position(CGPoint(x: availableSize.width - topControlSideInset - 3.0 - endStreamButton.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + endStreamButton.size.height / 2.0))
+                            .position(CGPoint(x: availableSize.width - topControlRightInset - 3.0 - endStreamButton.size.width / 2.0, y: topRowTop + endStreamButton.size.height / 2.0))
                             .appear(.default(scale: true))
                             .disappear(.default(scale: true))
                         )
@@ -1841,13 +2074,14 @@ private final class CameraScreenComponent: CombinedComponent {
                                     if let state {
                                         state.disableCollageCamera()
                                     }
-                                }
+                                },
+                                accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Camera_Collage, traits: .selected)
                             ).tagged(disableCollageButtonTag),
                             availableSize: CGSize(width: 40.0, height: 40.0),
                             transition: .immediate
                         )
                         context.add(disableCollageButton
-                            .position(CGPoint(x: availableSize.width - topControlSideInset - disableCollageButton.size.width / 2.0 - 5.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + disableCollageButton.size.height / 2.0 + 2.0))
+                            .position(CGPoint(x: availableSize.width - topControlRightInset - disableCollageButton.size.width / 2.0 - 5.0, y: topRowTop + disableCollageButton.size.height / 2.0 + 2.0))
                             .appear(.default(scale: true))
                             .disappear(.default(scale: true))
                             .shadow(Shadow(color: UIColor(white: 0.0, alpha: 0.25), radius: 3.0, offset: .zero))
@@ -1868,13 +2102,26 @@ private final class CameraScreenComponent: CombinedComponent {
                                     if let state {
                                         state.presentFlashTint()
                                     }
-                                }
+                                },
+                                accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Camera_Flash, value: {
+                                    switch component.cameraState.flashMode {
+                                    case .on:
+                                        return environment.strings.Camera_FlashOn
+                                    case .auto:
+                                        return environment.strings.Camera_FlashAuto
+                                    default:
+                                        return environment.strings.Camera_FlashOff
+                                    }
+                                }())
                             ).tagged(flashButtonTag),
                             availableSize: CGSize(width: 40.0, height: 40.0),
                             transition: .immediate
                         )
                         
-                        let position = CGPoint(x: isTablet ? availableSize.width - smallPanelWidth / 2.0 : availableSize.width - topControlSideInset - flashButton.size.width / 2.0 - 50.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flashButton.size.height / 2.0)
+                        var position = CGPoint(x: isTablet ? rightPanelMaxX - smallPanelWidth / 2.0 : availableSize.width - topControlRightInset - flashButton.size.width / 2.0 - cameraScreenTopFlashTrailingOffset(mode: modeKind, isTablet: isTablet), y: topRowTop + flashButton.size.height / 2.0)
+                        if let chatScreenLayout = component.chatScreenLayout {
+                            position = CGPoint(x: availableSize.width / 2.0, y: chatScreenLayout.topRowCenterY)
+                        }
                         flashButtonPosition = position
                         context.add(flashButton
                             .position(position)
@@ -1883,10 +2130,39 @@ private final class CameraScreenComponent: CombinedComponent {
                             .shadow(Shadow(color: UIColor(white: 0.0, alpha: 0.25), radius: 3.0, offset: .zero))
                         )
                         rightMostButtonWidth = flashButton.size.width
+                        
+                        if cameraScreenShowsTopFlipButton(mode: modeKind, isTablet: isTablet, batchCount: component.batchCount) && component.cameraState.recording == .none {
+                            let topFlipButton = topFlipButton.update(
+                                component: CameraButton(
+                                    content: AnyComponentWithIdentity(
+                                        id: "flip",
+                                        component: AnyComponent(
+                                            Image(
+                                                image: state.image(.flip),
+                                                tintColor: controlsTintColor,
+                                                size: CGSize(width: 40.0, height: 40.0)
+                                            )
+                                        )
+                                    ),
+                                    action: { [weak state] in
+                                        state?.togglePosition(animateFlipAction)
+                                    },
+                                    accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Camera_SwitchCamera)
+                                ),
+                                availableSize: CGSize(width: 40.0, height: 40.0),
+                                transition: .immediate
+                            )
+                            context.add(topFlipButton
+                                .position(CGPoint(x: position.x - 50.0, y: position.y))
+                                .appear(.default(scale: true))
+                                .disappear(.default(scale: true))
+                                .shadow(Shadow(color: UIColor(white: 0.0, alpha: 0.25), radius: 3.0, offset: .zero))
+                            )
+                        }
                     }
                     
-                    if !isSticker && !isAvatar && !isTablet {
-                        var nextButtonX = availableSize.width - topControlSideInset - rightMostButtonWidth / 2.0 - 100.0
+                    if storyControls.dualCamera && !isTablet {
+                        var nextButtonX = availableSize.width - topControlRightInset - rightMostButtonWidth / 2.0 - 100.0
                         if LegacyCameraImpl.shared.isDualCameraSupported(forRoundVideo: false) && !component.cameraState.isCollageEnabled && component.cameraState.isStreaming == .none {
                             let dualButton = dualButton.update(
                                 component: CameraButton(
@@ -1903,13 +2179,14 @@ private final class CameraScreenComponent: CombinedComponent {
                                         if let state {
                                             state.toggleDualCamera()
                                         }
-                                    }
+                                    },
+                                    accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Camera_DualCamera, traits: component.cameraState.isDualCameraEnabled ? .selected : [])
                                 ).tagged(dualButtonTag),
                                 availableSize: CGSize(width: 40.0, height: 40.0),
                                 transition: .immediate
                             )
                             context.add(dualButton
-                                .position(CGPoint(x: nextButtonX, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + dualButton.size.height / 2.0 + 2.0))
+                                .position(CGPoint(x: nextButtonX, y: topRowTop + dualButton.size.height / 2.0 + 2.0))
                                 .appear(.default(scale: true))
                                 .disappear(.default(scale: true))
                                 .shadow(Shadow(color: UIColor(white: 0.0, alpha: 0.25), radius: 3.0, offset: .zero))
@@ -1937,13 +2214,14 @@ private final class CameraScreenComponent: CombinedComponent {
                                             if let state {
                                                 state.togglePosition(animateFlipAction)
                                             }
-                                        }
+                                        },
+                                        accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Camera_SwitchCamera)
                                     ),
                                     availableSize: availableSize,
                                     transition: context.transition
                                 )
                                 context.add(flipButton
-                                    .position(CGPoint(x: nextButtonX, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + flipButton.size.height / 2.0 - 4.0))
+                                    .position(CGPoint(x: nextButtonX, y: topRowTop + flipButton.size.height / 2.0 - 4.0))
                                     .appear(.default(scale: true))
                                     .disappear(.default(scale: true))
                                 )
@@ -1966,7 +2244,8 @@ private final class CameraScreenComponent: CombinedComponent {
                                         if let state {
                                             state.toggleCollageCamera()
                                         }
-                                    }
+                                    },
+                                    accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Camera_Collage, traits: component.cameraState.isCollageEnabled ? .selected : [])
                                 ).tagged(collageButtonTag),
                                 availableSize: CGSize(width: 40.0, height: 40.0),
                                 transition: .immediate
@@ -1976,10 +2255,10 @@ private final class CameraScreenComponent: CombinedComponent {
                             }
                             var collageButtonX = nextButtonX
                             if rightMostButtonWidth.isZero {
-                                collageButtonX = availableSize.width - topControlSideInset - collageButton.size.width / 2.0 - 54.0
+                                collageButtonX = availableSize.width - topControlRightInset - collageButton.size.width / 2.0 - 54.0
                             }
                             context.add(collageButton
-                                .position(CGPoint(x: collageButtonX, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + collageButton.size.height / 2.0 + 2.0))
+                                .position(CGPoint(x: collageButtonX, y: topRowTop + collageButton.size.height / 2.0 + 2.0))
                                 .appear(.default(scale: true))
                                 .disappear(.default(scale: true))
                                 .shadow(Shadow(color: UIColor(white: 0.0, alpha: 0.25), radius: 3.0, offset: .zero))
@@ -1998,7 +2277,7 @@ private final class CameraScreenComponent: CombinedComponent {
                                     transition: .immediate
                                 )
                                 context.add(collageCarousel
-                                    .position(CGPoint(x: collageCarousel.size.width / 2.0, y: max(environment.statusBarHeight + 5.0, environment.safeInsets.top + topControlVerticalInset) + collageCarousel.size.height / 2.0 + 2.0))
+                                    .position(CGPoint(x: collageCarousel.size.width / 2.0, y: topRowTop + collageCarousel.size.height / 2.0 + 2.0))
                                     .appear(ComponentTransition.Appear({ _, view, transition in
                                         if let view = view as? CollageIconCarouselComponent.View, !transition.animation.isImmediate {
                                             view.animateIn()
@@ -2036,7 +2315,8 @@ private final class CameraScreenComponent: CombinedComponent {
                             if let state {
                                 state.togglePosition(animateFlipAction)
                             }
-                        }
+                        },
+                        accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Camera_SwitchCamera)
                     ),
                     availableSize: availableSize,
                     transition: context.transition
@@ -2048,10 +2328,9 @@ private final class CameraScreenComponent: CombinedComponent {
                 )
             }
             
-            let isVideoRecording = component.cameraState.recording != .none
+            let isVideoRecording = component.cameraState.recording != .none && (chatParams == nil || state.hasChatRecordingData)
             if isVideoRecording && !state.isTransitioning && !state.displayingCollageSelection {
-                let duration = Int(component.cameraState.duration)
-                let durationString =  String(format: "%02d:%02d", (duration / 60) % 60, duration % 60)
+                let durationString = cameraScreenTimecode(mode: modeKind, duration: component.cameraState.duration)
                 let timeLabel = timeLabel.update(
                     component: MultilineTextComponent(
                         text: .plain(NSAttributedString(string: durationString, font: Font.with(size: 21.0, design: .camera), textColor: controlsTintColor)),
@@ -2064,9 +2343,9 @@ private final class CameraScreenComponent: CombinedComponent {
                 
                 let timePosition: CGPoint
                 if isTablet {
-                    timePosition = CGPoint(x: availableSize.width - panelWidth / 2.0, y: availableSize.height / 2.0 - 97.0)
+                    timePosition = CGPoint(x: rightPanelMaxX - panelWidth / 2.0, y: availableSize.height / 2.0 - 97.0)
                 } else {
-                    timePosition = CGPoint(x: availableSize.width / 2.0, y: max(environment.statusBarHeight + 5.0 + 20.0, environment.safeInsets.top + topControlVerticalInset + 20.0))
+                    timePosition = CGPoint(x: availableSize.width / 2.0, y: topRowTop + 20.0)
                 }
                                 
                 if component.cameraState.recording != .none {
@@ -2112,7 +2391,7 @@ private final class CameraScreenComponent: CombinedComponent {
                             transition: .immediate
                         )
                         context.add(hintLabel
-                            .position(CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom - 136.0))
+                            .position(CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom - 136.0 + floorToScreenPixels(controlsBottomInset * 0.66)))
                             .appear(.default(alpha: true))
                             .disappear(.default(alpha: true))
                         )
@@ -2130,24 +2409,22 @@ private final class CameraScreenComponent: CombinedComponent {
                     availableSize: CGSize(width: availableSize.width - 32.0, height: availableSize.height),
                     transition: context.transition
                 )
+                // Below the viewfinder, not above the bottom inset, which can be the home indicator's (iPhone Duo): a viewfinder
+                // taller than the screen leaves no room for the hint, and it stays off screen as on home-button phones.
                 context.add(collageReorderHint
-                    .position(CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + 16.0 + collageReorderHint.size.height / 2.0))
+                    .position(CGPoint(x: previewOriginX + previewWidth / 2.0, y: environment.safeInsets.top + previewHeight + 16.0 + collageReorderHint.size.height / 2.0))
                     .appear(.default(alpha: true))
                     .disappear(.default(alpha: true))
                 )
             }
 
-            if !isSticker, case .none = component.cameraState.recording, component.cameraState.isStreaming == .none && !state.isTransitioning && hasAllRequiredAccess && component.cameraState.collageProgress < 1.0 - .ulpOfOne {
+            let availableModes = cameraScreenAvailableModes(mode: modeKind, allowPhoto: chatParams?.allowPhoto ?? true, allowVideo: chatParams?.allowVideo ?? true, canLivestream: state.canLivestream, isTablet: isTablet).map { CameraState.CameraMode($0) }
+            if cameraScreenShowsModeControl(mode: modeKind, availableModes: availableModes.map { $0.captureKind }), case .none = component.cameraState.recording, component.cameraState.isStreaming == .none && !state.isTransitioning && hasAllRequiredAccess && component.cameraState.collageProgress < 1.0 - .ulpOfOne {
                 let availableModeControlSize: CGSize
                 if isTablet {
                     availableModeControlSize = CGSize(width: floor(panelWidth), height: 120.0)
                 } else {
                     availableModeControlSize = CGSize(width: availableSize.width - 140.0, height: availableSize.height)
-                }
-                
-                var availableModes: [CameraState.CameraMode] = [.photo, .video]
-                if !isTablet && state.canLivestream {
-                    availableModes.append(.live)
                 }
                 
                 let modeControl = modeControl.update(
@@ -2169,9 +2446,9 @@ private final class CameraScreenComponent: CombinedComponent {
                 )
                 let modeControlPosition: CGPoint
                 if isTablet {
-                    modeControlPosition = CGPoint(x: availableSize.width - panelWidth / 2.0, y: availableSize.height / 2.0 + modeControl.size.height + 26.0)
+                    modeControlPosition = CGPoint(x: rightPanelMaxX - panelWidth / 2.0, y: availableSize.height / 2.0 + modeControl.size.height + 26.0)
                 } else {
-                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0)
+                    modeControlPosition = CGPoint(x: availableSize.width / 2.0, y: component.chatScreenLayout?.modeRowCenterY ?? (availableSize.height - environment.safeInsets.bottom + modeControl.size.height / 2.0 + controlsBottomInset + 16.0))
                 }
                 context.add(modeControl
                     .position(modeControlPosition)
@@ -2208,6 +2485,81 @@ private final class CameraScreenComponent: CombinedComponent {
                         
             return availableSize
         }
+    }
+}
+
+public struct CameraScreenEditorHandoffSlot {
+    public let frame: CGRect
+    public let hasGlass: Bool
+    public let contentViews: [UIView]
+
+    public init(frame: CGRect, hasGlass: Bool, contentViews: [UIView]) {
+        self.frame = frame
+        self.hasGlass = hasGlass
+        self.contentViews = contentViews
+    }
+}
+
+public struct CameraScreenEditorBottomHandoff {
+    public let left: CameraScreenEditorHandoffSlot?
+    public let middle: CameraScreenEditorHandoffSlot?
+    public let right: CameraScreenEditorHandoffSlot?
+    public let previewFrame: CGRect?
+    public let didAdopt: () -> Void
+}
+
+public struct CameraScreenEditorReturnTargets {
+    public let left: CGRect?
+    public let middle: CGRect?
+    public let right: CGRect?
+    public let previewFrame: CGRect?
+}
+
+func cameraScreenUpdateSublayerTransform(layer: CALayer, transform: CATransform3D, transition: ContainedViewLayoutTransition) {
+    switch transition {
+    case .immediate:
+        layer.removeAnimation(forKey: "sublayerTransform")
+        layer.sublayerTransform = transform
+    case let .animated(duration, curve):
+        let initial = layer.presentation()?.sublayerTransform ?? layer.sublayerTransform
+        layer.sublayerTransform = transform
+        layer.animate(from: NSValue(caTransform3D: initial), to: NSValue(caTransform3D: transform), keyPath: "sublayerTransform", timingFunction: curve.timingFunction, duration: duration, delay: 0.0, mediaTimingFunction: curve.mediaTimingFunction, removeOnCompletion: true, additive: false)
+    }
+}
+
+func cameraScreenAnimateBlur(layer: CALayer, fromRadius: CGFloat, toRadius: CGFloat, delay: Double = 0.0) {
+    ComponentTransition.animateTransientBlur(layer: layer, fromRadius: fromRadius, toRadius: toRadius, duration: 0.2, delay: delay)
+}
+
+func cameraScreenHandoffIconView(name: String, size: CGSize) -> UIView {
+    let view = UIImageView(image: generateTintedImage(image: UIImage(bundleImageName: name), color: .white))
+    view.contentMode = .center
+    view.frame = CGRect(origin: .zero, size: size)
+    return view
+}
+
+private final class CameraChatDiscardReferenceContentSource: ContextReferenceContentSource {
+    private weak var sourceView: UIView?
+
+    init(sourceView: UIView) {
+        self.sourceView = sourceView
+    }
+
+    func transitionInfo() -> ContextControllerReferenceViewInfo? {
+        guard let sourceView = self.sourceView else {
+            return nil
+        }
+        return ContextControllerReferenceViewInfo(referenceView: sourceView, contentAreaInScreenSpace: mainWindowScreenBounds, actionsPosition: .top)
+    }
+}
+
+private final class CameraScreenPassthroughView: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let result = super.hitTest(point, with: event)
+        if result === self {
+            return nil
+        }
+        return result
     }
 }
 
@@ -2255,10 +2607,43 @@ private class BlurView: UIVisualEffectView {
 }
 
 public class CameraScreenImpl: ViewController, CameraScreen {
-    public enum Mode {
+    public enum Mode: Equatable {
         case story
         case sticker
         case avatar
+        case chat(ChatCameraParams)
+
+        var kind: CameraScreenModeKind {
+            switch self {
+            case .story:
+                return .story
+            case .sticker:
+                return .sticker
+            case .avatar:
+                return .avatar
+            case .chat:
+                return .chat
+            }
+        }
+
+        var chatParams: ChatCameraParams? {
+            if case let .chat(params) = self {
+                return params
+            }
+            return nil
+        }
+
+        public static func ==(lhs: Mode, rhs: Mode) -> Bool {
+            switch lhs {
+            case .story, .sticker, .avatar:
+                return lhs.kind == rhs.kind
+            case let .chat(lhsParams):
+                if case let .chat(rhsParams) = rhs {
+                    return lhsParams.allowPhoto == rhsParams.allowPhoto && lhsParams.allowVideo == rhsParams.allowVideo && lhsParams.isSingleShot == rhsParams.isSingleShot && lhsParams.maxCount == rhsParams.maxCount && lhsParams.hasAudio == rhsParams.hasAudio && lhsParams.saveCapturedMedia == rhsParams.saveCapturedMedia && lhsParams.prefersFrontCamera == rhsParams.prefersFrontCamera && lhsParams.mirrorsFrontResult == rhsParams.mirrorsFrontResult && lhsParams.documentFrame == rhsParams.documentFrame && lhsParams.locksPortrait == rhsParams.locksPortrait && lhsParams.fixesCameraPosition == rhsParams.fixesCameraPosition
+                }
+                return false
+            }
+        }
     }
     
     public enum CameraMode {
@@ -2388,7 +2773,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         fileprivate let containerView: UIView
         fileprivate let componentHost: ComponentView<ViewControllerComponentContainer.Environment>
         fileprivate let codeFrameView: CameraCodeFrameView
+        private let focusCrosshairsView: FocusCrosshairsView
         private let previewContainerView: UIView
+        private var chatPreviewTransformView: UIView?
+        private var chatInterfaceView: UIView?
+        private var chatInterfaceBlurRadius: CGFloat = 0.0
+        private var chatInterfaceDismissedInteractively = false
         
         private let collageContainerView: UIView
         private var collageView: CameraCollageView?
@@ -2405,9 +2795,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         private var additionalPreviewSnapshotView: UIView?
         fileprivate let previewFrameLeftDimView: UIView
         fileprivate let previewFrameRightDimView: UIView
+        fileprivate var documentFrameTopDimView: UIView?
+        fileprivate var documentFrameBottomDimView: UIView?
         fileprivate let transitionDimView: UIView
         fileprivate let transitionCornersView: UIImageView
-        
+        private var transitionCornersRadii: CornerRadii?
+
         private var cameraStateDisposable: Disposable?
         private var changingPositionDisposable: Disposable?
         private var appliedDualCamera = false
@@ -2422,6 +2815,134 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         
         private let idleTimerExtensionDisposable = MetaDisposable()
         
+        private var pendingEditorHandoff = false
+        private var isEditorHandedOff = false
+
+        private func editorHandoffAvailableNow() -> Bool {
+            guard let controller = self.controller, let layout = self.validLayout, let captureControlsView = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View else {
+                return false
+            }
+            return cameraScreenEditorHandoffAvailable(
+                mode: controller.mode.kind,
+                isTablet: layout.metrics.isTablet,
+                isRecording: controller.cameraState.recording != .none,
+                isCollageComplete: controller.cameraState.isCollageEnabled && (self.collage?.isComplete ?? false),
+                isTransitioning: !captureControlsView.isBottomRowVisible
+            )
+        }
+
+        fileprivate func makeEditorBottomHandoff() -> CameraScreenEditorBottomHandoff? {
+            guard self.pendingEditorHandoff else {
+                return nil
+            }
+            return self.makeBottomHandoff(fadesTopButtons: false)
+        }
+
+        fileprivate func makeChatReviewBottomHandoff() -> CameraScreenEditorBottomHandoff? {
+            guard case .chat = self.controller?.mode, !self.isEditorHandedOff, self.editorHandoffAvailableNow() else {
+                return nil
+            }
+            return self.makeBottomHandoff(fadesTopButtons: true)
+        }
+
+        private var topButtonAlphasBeforeHandoff: [(UIView, CGFloat)] = []
+
+        private func makeBottomHandoff(fadesTopButtons: Bool) -> CameraScreenEditorBottomHandoff? {
+            guard let captureControlsView = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View else {
+                return nil
+            }
+            let modeView = self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View
+            let sides = captureControlsView.editorHandoffSlots()
+            return CameraScreenEditorBottomHandoff(left: sides.left, middle: modeView?.editorHandoffSlot(), right: sides.right, previewFrame: self.viewfinderWindowFrame, didAdopt: { [weak self, weak captureControlsView, weak modeView] in
+                guard let self else {
+                    return
+                }
+                self.pendingEditorHandoff = false
+                self.isEditorHandedOff = true
+                captureControlsView?.setHandedOffToEditor()
+                modeView?.setHandedOffToEditor()
+                if fadesTopButtons {
+                    captureControlsView?.animateShutterOutToEditor(transition: ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut)))
+                    self.topButtonAlphasBeforeHandoff = self.topButtonViews.map { ($0, $0.alpha) }
+                    for view in self.topButtonViews {
+                        let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
+                        transition.setAlpha(view: view, alpha: 0.0)
+                        cameraScreenAnimateBlur(layer: view.layer, fromRadius: 0.0, toRadius: cameraScreenEditorHandoffBlurRadius)
+                    }
+                }
+            })
+        }
+
+        private var viewfinderWindowFrame: CGRect? {
+            guard self.previewContainerView.window != nil, let layout = self.validLayout, !layout.metrics.isTablet else {
+                return nil
+            }
+            return self.previewContainerView.convert(self.previewContainerView.bounds, to: nil)
+        }
+
+        private var isViewfinderMovedToEditor = false
+
+        fileprivate func moveViewfinder(editorFrame: CGRect, toEditor: Bool) {
+            let view = self.previewContainerView
+            guard let superview = view.superview, view.window != nil, view.bounds.width > 0.0 else {
+                return
+            }
+            let restFrame = view.convert(view.bounds, to: nil)
+            let scale = editorFrame.width / restFrame.width
+            let restPosition = view.layer.position
+            let target = superview.convert(CGPoint(x: editorFrame.midX, y: editorFrame.midY), from: nil)
+            let morphPosition = CGPoint(x: target.x - (restFrame.midX - superview.convert(restPosition, to: nil).x) * scale, y: target.y - (restFrame.midY - superview.convert(restPosition, to: nil).y) * scale)
+            if toEditor {
+                self.isViewfinderMovedToEditor = true
+                view.layer.animatePosition(from: restPosition, to: morphPosition, duration: 0.4, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
+                view.layer.animateScale(from: 1.0, to: scale, duration: 0.4, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
+            } else {
+                self.isViewfinderMovedToEditor = false
+                view.layer.animatePosition(from: morphPosition, to: restPosition, duration: 0.4, timingFunction: kCAMediaTimingFunctionSpring)
+                view.layer.animateScale(from: scale, to: 1.0, duration: 0.4, timingFunction: kCAMediaTimingFunctionSpring)
+            }
+        }
+
+        private func resetViewfinderAfterEditor() {
+            guard self.isViewfinderMovedToEditor else {
+                return
+            }
+            self.isViewfinderMovedToEditor = false
+            self.previewContainerView.layer.removeAnimation(forKey: "position")
+            self.previewContainerView.layer.removeAnimation(forKey: "transform.scale")
+        }
+
+        private var topButtonViews: [UIView] {
+            return [cancelButtonTag, dualButtonTag, flashButtonTag, collageButtonTag, zoomControlTag].compactMap { self.componentHost.findTaggedView(tag: $0) }
+        }
+
+        private func restoreBottomRowAfterChatReview() {
+            guard self.isEditorHandedOff else {
+                return
+            }
+            self.isEditorHandedOff = false
+            let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
+            (self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View)?.restoreFromEditorHandoff(transition: transition, delay: cameraScreenEditorReturnContentDelay)
+            (self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View)?.restoreFromEditorHandoff(delay: cameraScreenEditorReturnContentDelay)
+            let alphas = self.topButtonAlphasBeforeHandoff
+            self.topButtonAlphasBeforeHandoff = []
+            for (view, alpha) in alphas {
+                transition.setAlpha(view: view, alpha: alpha)
+                if alpha > 0.0 {
+                    cameraScreenAnimateBlur(layer: view.layer, fromRadius: cameraScreenEditorHandoffBlurRadius, toRadius: 0.0)
+                }
+            }
+        }
+
+        fileprivate func editorReturnTargets() -> CameraScreenEditorReturnTargets? {
+            guard self.isEditorHandedOff, let captureControlsView = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View else {
+                return nil
+            }
+            let modeView = self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View
+            let sides = captureControlsView.editorReturnTargets()
+            return CameraScreenEditorReturnTargets(left: sides.left, middle: modeView?.editorReturnTarget(), right: sides.right, previewFrame: self.viewfinderWindowFrame)
+        }
+
         fileprivate var cameraIsActive = true {
             didSet {
                 if self.cameraIsActive {
@@ -2533,7 +3054,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             
             self.previewContainerView = UIView()
             self.previewContainerView.clipsToBounds = true
-            self.previewContainerView.layer.cornerRadius = 30.0
+            self.previewContainerView.layer.cornerRadius = cameraScreenPreviewCornerRadius(mode: controller.mode.kind)
             if #available(iOS 13.0, *) {
                 self.previewContainerView.layer.cornerCurve = .continuous
             }
@@ -2550,7 +3071,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                     isDualCameraEnabled = isDualCameraEnabledValue.boolValue
                 }
             }
-            if [.sticker, .avatar].contains(controller.mode) {
+            if !cameraScreenStoryControls(mode: controller.mode.kind).dualCamera {
                 isDualCameraEnabled = false
             }
             
@@ -2564,8 +3085,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             if let cameraFrontPositionValue = UserDefaults.standard.object(forKey: "TelegramStoryCameraUseFrontPosition") as? NSNumber, cameraFrontPositionValue.boolValue {
                 cameraFrontPosition = true
             }
+            if let chatParams = controller.mode.chatParams {
+                cameraFrontPosition = chatCameraInitialFrontPosition(storedFront: cameraFrontPosition, prefersFront: chatParams.prefersFrontCamera, fixesPosition: chatParams.fixesCameraPosition)
+            }
             
             self.codeFrameView = CameraCodeFrameView(frame: .zero)
+            self.focusCrosshairsView = FocusCrosshairsView(frame: .zero)
             
             self.collageContainerView = UIView()
             self.collageContainerView.clipsToBounds = true
@@ -2637,21 +3162,57 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             self.view.addSubview(self.backgroundView)
             self.view.addSubview(self.containerView)
             
-            self.containerView.addSubview(self.previewContainerView)
+            if cameraScreenDismissMovesOnlyViewfinder(mode: controller.mode.kind) {
+                let chatPreviewTransformView = CameraScreenPassthroughView()
+                self.chatPreviewTransformView = chatPreviewTransformView
+                self.containerView.addSubview(chatPreviewTransformView)
+                chatPreviewTransformView.addSubview(self.previewContainerView)
+                
+                let chatInterfaceView = CameraScreenPassthroughView()
+                self.chatInterfaceView = chatInterfaceView
+                self.containerView.addSubview(chatInterfaceView)
+            } else {
+                self.containerView.addSubview(self.previewContainerView)
+            }
             self.previewContainerView.addSubview(self.mainPreviewContainerView)
             self.previewContainerView.addSubview(self.collageContainerView)
             self.previewContainerView.addSubview(self.additionalPreviewContainerView)
             self.previewContainerView.addSubview(self.previewBlurView)
             self.previewContainerView.addSubview(self.previewFrameLeftDimView)
             self.previewContainerView.addSubview(self.previewFrameRightDimView)
+            if controller.mode.chatParams?.documentFrame != nil {
+                let documentFrameTopDimView = UIView()
+                documentFrameTopDimView.backgroundColor = UIColor(white: 0.0, alpha: cameraScreenDocumentFrameDimAlpha)
+                documentFrameTopDimView.isUserInteractionEnabled = false
+                self.previewContainerView.addSubview(documentFrameTopDimView)
+                self.documentFrameTopDimView = documentFrameTopDimView
+                
+                let documentFrameBottomDimView = UIView()
+                documentFrameBottomDimView.backgroundColor = UIColor(white: 0.0, alpha: cameraScreenDocumentFrameDimAlpha)
+                documentFrameBottomDimView.isUserInteractionEnabled = false
+                self.previewContainerView.addSubview(documentFrameBottomDimView)
+                self.documentFrameBottomDimView = documentFrameBottomDimView
+            }
             self.previewContainerView.addSubview(self.codeFrameView)
+            self.previewContainerView.addSubview(self.focusCrosshairsView)
             self.containerView.addSubview(self.transitionDimView)
             self.view.addSubview(self.transitionCornersView)
+            // VoiceOver: the camera picture and the transition decorations are not read (as in the QR scanner); the
+            // controls over them are, and so are the detected-code frame and the collage tiles beside the picture.
+            self.mainPreviewContainerView.accessibilityElementsHidden = true
+            self.additionalPreviewContainerView.accessibilityElementsHidden = true
+            self.previewBlurView.accessibilityElementsHidden = true
+            self.transitionCornersView.accessibilityElementsHidden = true
+            self.backgroundView.accessibilityElementsHidden = true
             
             self.mainPreviewContainerView.addSubview(self.mainPreviewView)
             self.mainPreviewContainerView.addSubview(self.mainPreviewAnimationWrapperView)
             self.additionalPreviewContainerView.addSubview(self.additionalPreviewView)
                         
+            self.focusCrosshairsView.exposureChangeEnded = { [weak self] in
+                self?.camera?.endExposureTargetBiasChange()
+            }
+            
             self.completion.connect { [weak self] result in
                 if let self {
                     let pipPosition = self.pipPosition
@@ -2679,6 +3240,8 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                                 collage.addResult(result, snapshotView: self.mainPreviewContainerView.snapshotView(afterScreenUpdates: false))
                             }
                         }
+                    } else if case .chat = self.controller?.mode {
+                        self.completeWithChatResult(result)
                     } else {
                         self.animateOutToEditor()
                         self.controller?.completion(
@@ -2770,12 +3333,363 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             }))
         }
         
+        private let batchCounterView = CameraBatchCounterView(frame: CGRect(origin: .zero, size: CameraBatchCounterView.size))
+        private let batchStripView = CameraBatchStripView(frame: .zero)
+        private let batchDoneButton = HighlightableButton()
+        private var batchListenerDisposable: Disposable?
+        private let batchResultDisposables = DisposableSet()
+        private var batchCountForLayout = 0
+        private var batchDoneButtonIsShown = false
+
+        private func setupChatBatchIfNeeded() {
+            guard let batch = self.controller?.chatBatch, self.batchListenerDisposable == nil else {
+                return
+            }
+            self.batchCounterView.tapped = { [weak self] in
+                self?.toggleChatBatchStrip()
+            }
+            self.batchStripView.itemSelected = { [weak self] id in
+                guard let self else {
+                    return
+                }
+                self.setChatBatchStripShown(false)
+                self.openChatReview(focusItemId: id)
+            }
+            self.batchStripView.itemRemoved = { [weak self] id in
+                self?.controller?.chatBatch?.remove(id: id)
+            }
+            self.batchDoneButton.titleLabel?.font = Font.medium(18.0)
+            self.batchDoneButton.setTitleColor(.white, for: .normal)
+            self.batchDoneButton.setTitle(self.presentationData.strings.Common_Done, for: .normal)
+            self.batchDoneButton.contentHorizontalAlignment = .left
+            self.batchDoneButton.isExclusiveTouch = true
+            self.batchDoneButton.alpha = 0.0
+            self.batchDoneButton.isHidden = true
+            self.batchDoneButton.addTarget(self, action: #selector(self.chatBatchDonePressed), for: .touchUpInside)
+            self.batchListenerDisposable = batch.addListener { [weak self] in
+                self?.chatBatchUpdated()
+            }
+        }
+
+        private func chatBatchUpdated() {
+            guard let batch = self.controller?.chatBatch else {
+                return
+            }
+            if batch.count == 0 {
+                self.setChatBatchStripShown(false)
+            }
+            self.requestUpdateLayout(transition: .easeInOut(duration: 0.2))
+        }
+
+        private func setChatBatchDoneButtonShown(_ shown: Bool, animated: Bool) {
+            guard self.batchDoneButtonIsShown != shown else {
+                return
+            }
+            self.batchDoneButtonIsShown = shown
+            if animated {
+                self.batchDoneButton.isHidden = false
+                UIView.animate(withDuration: 0.3, animations: {
+                    self.batchDoneButton.alpha = shown ? 1.0 : 0.0
+                }, completion: { _ in
+                    if !self.batchDoneButtonIsShown {
+                        self.batchDoneButton.isHidden = true
+                    }
+                })
+            } else {
+                self.batchDoneButton.alpha = shown ? 1.0 : 0.0
+                self.batchDoneButton.isHidden = !shown
+            }
+        }
+
+        private func updateChatBatchViews(layout: ContainerViewLayout) {
+            guard let batch = self.controller?.chatBatch, let componentView = self.componentHost.view else {
+                return
+            }
+            if self.batchStripView.superview == nil, let interfaceParentView = componentView.superview {
+                interfaceParentView.insertSubview(self.batchStripView, aboveSubview: componentView)
+                interfaceParentView.insertSubview(self.batchCounterView, aboveSubview: self.batchStripView)
+                interfaceParentView.insertSubview(self.batchDoneButton, aboveSubview: self.batchCounterView)
+            }
+            let count = self.chatChromeBatchCount
+            let isRecording = self.cameraState.recording != .none
+            let showsControls = count > 0 && !isRecording && self.cameraIsActive
+            let animated = self.batchCountForLayout != count || self.batchCounterView.isShown != showsControls
+            self.batchCounterView.setCount(count, animated: self.batchCountForLayout != count && self.batchCountForLayout != 0)
+            self.batchCountForLayout = count
+            self.batchCounterView.setShown(showsControls, animated: animated)
+            let hasTrailingButton = cameraScreenChatTrailingButton(mode: .chat, isTablet: layout.metrics.isTablet, batchCount: count) != nil
+            self.setChatBatchDoneButtonShown(showsControls && !hasTrailingButton, animated: true)
+            if !showsControls {
+                self.setChatBatchStripShown(false)
+            }
+
+            let doneTextWidth = ceil(self.batchDoneButton.titleLabel?.sizeThatFits(CGSize(width: 200.0, height: 44.0)).width ?? 40.0)
+            let doneSize = CGSize(width: max(60.0, doneTextWidth + 20.0), height: 44.0)
+            var doneCenterY = layout.size.height - layout.intrinsicInsets.bottom - 40.0
+            var shutterCenterY = doneCenterY - 90.0
+            var trailingButtonCenterX: CGFloat?
+            if let controlsView = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View {
+                let controlsFrame = controlsView.convert(controlsView.bounds, to: self.containerView)
+                shutterCenterY = controlsFrame.midY
+                if let slotView = controlsView.bottomFlipButtonSlotView, slotView.superview != nil {
+                    let slotFrame = slotView.convert(slotView.bounds, to: self.containerView)
+                    doneCenterY = slotFrame.midY
+                    if hasTrailingButton {
+                        trailingButtonCenterX = slotFrame.midX
+                    }
+                }
+            }
+            self.batchDoneButton.frame = CGRect(x: layout.size.width - layout.safeInsets.right - 20.0 - doneTextWidth, y: doneCenterY - doneSize.height / 2.0, width: doneSize.width, height: doneSize.height)
+
+            let counterSize = CameraBatchCounterView.size
+            var counterFrame = CGRect(x: layout.size.width - layout.safeInsets.right - 56.0 - 10.0 + floor((64.0 - counterSize.width) / 2.0), y: shutterCenterY - counterSize.height / 2.0, width: counterSize.width, height: counterSize.height)
+            if let trailingButtonCenterX {
+                counterFrame.origin.x = floorToScreenPixels(trailingButtonCenterX - counterSize.width / 2.0)
+            }
+            self.batchCounterView.bounds = CGRect(origin: .zero, size: counterSize)
+            self.batchCounterView.center = counterFrame.center
+
+            let itemSide = cameraBatchThumbnailSide(screenSize: layout.size)
+            let stripHeight = CameraBatchStripView.height(itemSide: itemSide)
+            self.batchStripView.frame = CGRect(x: 4.0, y: counterFrame.minY - stripHeight - 20.0, width: layout.size.width - 4.0 * 2.0, height: stripHeight)
+            self.batchStripView.update(items: batch.items, itemSide: itemSide, animated: self.batchStripView.isShown)
+        }
+
+        private func setChatBatchStripShown(_ shown: Bool) {
+            self.batchCounterView.setToggled(shown, animated: true)
+            self.batchStripView.setShown(shown, animated: true)
+        }
+
+        private func toggleChatBatchStrip() {
+            self.setChatBatchStripShown(!self.batchStripView.isShown)
+        }
+
+        @objc private func chatBatchDonePressed() {
+            self.openChatReviewFromDone()
+        }
+
+        fileprivate func chatDiscardSourceView() -> UIView? {
+            if let controlsView = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View, let closeButtonView = controlsView.bottomCloseButtonView, closeButtonView.superview != nil {
+                return closeButtonView
+            }
+            return self.componentHost.findTaggedView(tag: cancelButtonTag)
+        }
+
+        fileprivate func openChatReviewFromDone() {
+            self.setChatBatchStripShown(false)
+            self.openChatReview(focusItemId: nil)
+        }
+
+        private var hasDeferredChatReview = false
+        private var deferredChatReviewFocusItemId: String?
+        private var chatChromeHeldCount: Int?
+
+        fileprivate var chatChromeBatchCount: Int {
+            return cameraBatchChromeCount(count: self.controller?.chatBatch?.count ?? 0, heldCount: self.chatChromeHeldCount)
+        }
+
+        private func releaseChatChromeHold() {
+            guard self.chatChromeHeldCount != nil else {
+                return
+            }
+            self.chatChromeHeldCount = nil
+            self.requestUpdateLayout(transition: .easeInOut(duration: 0.2))
+        }
+
+        @discardableResult
+        private func openChatReview(focusItemId: String?) -> CameraBatchReviewPresentation {
+            guard let controller = self.controller, let batch = controller.chatBatch, !batch.isClosed, batch.count > 0, controller.chatDiscardSheet == nil, let openChatReview = controller.openChatReview else {
+                return .unavailable
+            }
+            if case .deferUntilRecordingStops = cameraBatchReviewRequest(isRecording: self.cameraState.recording != .none) {
+                self.hasDeferredChatReview = true
+                self.deferredChatReviewFocusItemId = focusItemId
+                return .deferred
+            }
+            self.hasDeferredChatReview = false
+            self.deferredChatReviewFocusItemId = nil
+            self.pauseCameraCapture()
+            openChatReview(batch, focusItemId)
+            return .opened
+        }
+
+        fileprivate func openDeferredChatReviewIfNeeded() {
+            guard let batch = self.controller?.chatBatch else {
+                return
+            }
+            guard cameraBatchOpensDeferredReview(hasDeferredReview: self.hasDeferredChatReview, isRecording: self.cameraState.recording != .none, pendingCount: batch.pendingCount) else {
+                return
+            }
+            let focusItemId = self.deferredChatReviewFocusItemId
+            self.hasDeferredChatReview = false
+            self.deferredChatReviewFocusItemId = nil
+            if case .unavailable = self.openChatReview(focusItemId: focusItemId) {
+                self.releaseChatChromeHold()
+            }
+        }
+
+        fileprivate func resumeAfterChatReview() {
+            self.resetViewfinderAfterEditor()
+            self.restoreBottomRowAfterChatReview()
+            self.releaseChatChromeHold()
+            self.resumeCameraCapture(fromGallery: false)
+        }
+
+        fileprivate func completeWithChatResult(_ result: Signal<CameraScreenImpl.Result, NoError>) {
+            guard let batch = self.controller?.chatBatch else {
+                return
+            }
+            self.setupChatBatchIfNeeded()
+            let thumbnailPixelSide = ceil(cameraBatchThumbnailSide(screenSize: self.validLayout?.size ?? CGSize(width: 390.0, height: 844.0)) * UIScreenScale)
+            let itemSignal: Signal<CameraBatch.Item?, NoError> = result
+            |> mapToSignal { value -> Signal<CameraBatch.Item?, NoError> in
+                switch value {
+                case let .image(image):
+                    return CameraBatch.photoItem(image: image.image, thumbnailPixelSide: thumbnailPixelSide)
+                case let .video(video):
+                    return CameraBatch.videoItem(path: video.videoPath, dimensions: video.dimensions, duration: video.duration, mirror: video.mirror, cover: video.coverImage, thumbnailPixelSide: thumbnailPixelSide)
+                default:
+                    return .complete()
+                }
+            }
+            batch.beginPending()
+            let pendingEnded = Atomic<Bool>(value: false)
+            let disposable = MetaDisposable()
+            self.batchResultDisposables.add(disposable)
+            disposable.set((itemSignal
+            |> take(1)).start(next: { [weak self] item in
+                if !pendingEnded.swap(true) {
+                    batch.endPending()
+                }
+                guard let item else {
+                    self?.openDeferredChatReviewIfNeeded()
+                    return
+                }
+                guard let self else {
+                    let _ = batch.append(item)
+                    return
+                }
+                let hadChromeHold = self.chatChromeHeldCount != nil
+                if !hadChromeHold {
+                    self.chatChromeHeldCount = batch.count
+                }
+                let appendResult = batch.append(item)
+                var opensReview = false
+                var presentation: CameraBatchReviewPresentation = .unavailable
+                if case let .appended(value) = appendResult {
+                    opensReview = value
+                    if value {
+                        presentation = self.openChatReview(focusItemId: item.uniqueId)
+                    }
+                }
+                if !hadChromeHold && !cameraBatchKeepsChromeHold(opensReview: opensReview, presentation: presentation) {
+                    self.releaseChatChromeHold()
+                }
+                self.openDeferredChatReviewIfNeeded()
+            }, completed: { [weak self] in
+                Queue.mainQueue().async {
+                    if !pendingEnded.swap(true) {
+                        batch.endPending()
+                    }
+                    self?.batchResultDisposables.remove(disposable)
+                    self?.openDeferredChatReviewIfNeeded()
+                }
+            }))
+        }
+
+        fileprivate var chatZoomScale: Float = 1.0
+        private var chatHoldZoomStartScale: Float = 1.0
+        private var chatZoomLabelKey: String?
+        
+        private var chatZoomLevels: [Float] {
+            guard let camera = self.camera else {
+                return [1.0]
+            }
+            return chatCameraZoomLevels(backLevels: camera.metrics.zoomLevels, isFront: self.cameraState.position == .front)
+        }
+        
+        fileprivate func updateChatZoomScale(_ scale: Float, animated: Bool) {
+            guard let camera = self.camera else {
+                return
+            }
+            let levels = self.chatZoomLevels
+            let scale = chatCameraClampedZoomScale(levels: levels, scale: scale)
+            self.chatZoomScale = scale
+            camera.setZoomScale(CGFloat(scale))
+            let selectedLevel = chatCameraSelectedZoomLevel(levels: levels, scale: scale)
+            let labelKey = "\(selectedLevel) \(chatCameraZoomLabel(level: selectedLevel, selected: true, scale: scale))"
+            if labelKey != self.chatZoomLabelKey {
+                self.chatZoomLabelKey = labelKey
+                self.requestUpdateLayout(transition: animated ? .easeInOut(duration: 0.2) : .immediate)
+            }
+        }
+        
+        fileprivate func beginChatHoldZoom() {
+            self.chatHoldZoomStartScale = self.chatZoomScale
+        }
+        
+        fileprivate func updateChatHoldZoom(travel: Float) {
+            let scale = chatCameraHoldZoomScale(startScale: self.chatHoldZoomStartScale, travel: travel, levels: self.chatZoomLevels)
+            if scale != self.chatZoomScale {
+                self.updateChatZoomScale(scale, animated: false)
+            }
+        }
+        
+        fileprivate func resetFocusIndicator() {
+            self.isAdjustingExposure = false
+            self.focusCrosshairsView.reset()
+        }
+
+        private var captureKindSnapshotView: UIView?
+
+        fileprivate func beginCaptureKindTransition() {
+            self.captureKindSnapshotView?.removeFromSuperview()
+            self.captureKindSnapshotView = nil
+            guard let snapshotView = self.mainPreviewView.snapshotView(afterScreenUpdates: false) else {
+                return
+            }
+            snapshotView.frame = self.mainPreviewView.frame
+            snapshotView.isUserInteractionEnabled = false
+            self.mainPreviewContainerView.addSubview(snapshotView)
+            self.captureKindSnapshotView = snapshotView
+        }
+
+        fileprivate func endCaptureKindTransition() {
+            guard let snapshotView = self.captureKindSnapshotView else {
+                return
+            }
+            self.captureKindSnapshotView = nil
+            UIView.animate(withDuration: 0.25, animations: {
+                snapshotView.alpha = 0.0
+            }, completion: { _ in
+                snapshotView.removeFromSuperview()
+            })
+        }
+
+        private func updateCaptureKindSnapshot(containerSize: CGSize, transition: ComponentTransition) {
+            guard let snapshotView = self.captureKindSnapshotView else {
+                return
+            }
+            let sourceSize = snapshotView.bounds.size
+            guard sourceSize.width > 0.0, sourceSize.height > 0.0 else {
+                return
+            }
+            let scale = max(containerSize.width / sourceSize.width, containerSize.height / sourceSize.height)
+            transition.setPosition(view: snapshotView, position: CGPoint(x: containerSize.width / 2.0, y: containerSize.height / 2.0))
+            transition.setScale(view: snapshotView, scale: scale)
+        }
+        
+        private var isAdjustingExposure = false
+        private var exposureTranslation: CGFloat = 0.0
+        
         deinit {
             self.cameraStateDisposable?.dispose()
             self.changingPositionDisposable?.dispose()
             self.collageStateDisposable?.dispose()
             self.idleTimerExtensionDisposable.dispose()
             self.authorizationStatusDisposables.dispose()
+            self.batchListenerDisposable?.dispose()
+            self.batchResultDisposables.dispose()
         }
         
         private var panGestureRecognizer: UIPanGestureRecognizer?
@@ -2809,10 +3723,10 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         }
         
         private func maybeSetupCamera() {
-            guard self.controller?.isCameraActivated == true else {
+            guard let controller = self.controller, controller.isCameraActivated else {
                 return
             }
-            if case .allowed = self.cameraAuthorizationStatus, case .allowed = self.microphoneAuthorizationStatus {
+            if cameraScreenCanSetupCamera(mode: controller.mode.kind, camera: CameraScreenAccessStatus(self.cameraAuthorizationStatus), microphone: CameraScreenAccessStatus(self.microphoneAuthorizationStatus)) {
                 self.setupCamera()
             }
         }
@@ -2822,9 +3736,18 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             self.maybeSetupCamera()
         }
         
+        private var requestsMicrophoneAccess: Bool {
+            guard let controller = self.controller else {
+                return true
+            }
+            let chatParams = controller.mode.chatParams
+            return cameraScreenRequestsMicrophone(mode: controller.mode.kind, allowVideo: chatParams?.allowVideo ?? true, hasAudio: chatParams?.hasAudio ?? true)
+        }
+        
         private func requestDeviceAccess() {
+            let requestsMicrophoneAccess = self.requestsMicrophoneAccess
             DeviceAccess.authorizeAccess(to: .camera(.video), { granted in
-                if granted {
+                if granted && requestsMicrophoneAccess {
                     DeviceAccess.authorizeAccess(to: .microphone(.video))
                 }
             })
@@ -2842,6 +3765,24 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 camera = cameraHolder.camera
                 self.mainPreviewView = cameraHolder.previewView
                 self.mainPreviewAnimationWrapperView.addSubview(self.mainPreviewView)
+                if case .chat = controller.mode, let captureMode = CameraCaptureMode(self.cameraState.mode) {
+                    let _ = camera.setCaptureMode(captureMode).startStandalone()
+                }
+            } else if let chatParams = controller.mode.chatParams {
+                camera = self.cameraImpl.makeCamera(
+                    configuration: Camera.Configuration(
+                        preset: .hd1920x1080,
+                        position: self.cameraState.position,
+                        isDualEnabled: false,
+                        audio: chatParams.hasAudio,
+                        photo: true,
+                        metadata: true,
+                        captureMode: CameraCaptureMode(self.cameraState.mode) ?? .photo
+                    ),
+                    previewView: self.mainPreviewView,
+                    secondaryPreviewView: self.additionalPreviewView
+                )
+                isNew = true
             } else {
                 camera = self.cameraImpl.makeCamera(
                     configuration: Camera.Configuration(
@@ -2858,6 +3799,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 isNew = true
             }
                         
+            let persistsPosition = chatCameraPersistsPosition(fixesPosition: controller.mode.chatParams?.fixesCameraPosition ?? false)
             self.cameraStateDisposable = combineLatest(
                 queue: Queue.mainQueue(),
                 camera.flashMode,
@@ -2876,7 +3818,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                     self.requestUpdateLayout(transition: transition)
                 }
                 
-                if previousState.position != self.cameraState.position {
+                if previousState.position != self.cameraState.position, persistsPosition {
                     UserDefaults.standard.set((self.cameraState.position == .front) as NSNumber, forKey: "TelegramStoryCameraUseFrontPosition")
                 }
             })
@@ -2890,7 +3832,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 if let self {
                     if modeChange != .none {
                         if case .dualCamera = modeChange, case .front = self.cameraState.position {
-                        } else {
+                        } else if self.captureKindSnapshotView == nil {
                             if let snapshot = self.mainPreviewView.snapshotView(afterScreenUpdates: false) {
                                 self.mainPreviewView.addSubview(snapshot)
                                 self.mainPreviewSnapshotView = snapshot
@@ -2966,7 +3908,28 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             })
             
             camera.focus(at: CGPoint(x: 0.5, y: 0.5), autoFocus: true)
-            if isNew {
+            if let chatParams = controller.mode.chatParams {
+                let recognizedQRCode = chatParams.recognizedQRCode
+                var seenCodes = Set<String>()
+                let throttledSignal = camera.detectedCodes
+                |> mapToThrottled { next -> Signal<[CameraCode], NoError> in
+                    return .single(next) |> then(.complete() |> delay(0.1, queue: Queue.concurrentDefaultQueue()))
+                }
+                self.controller?.codeDisposable = (throttledSignal
+                |> deliverOnMainQueue).start(next: { [weak self] codes in
+                    guard let self, self.cameraState.recording == CameraState.Recording.none else {
+                        return
+                    }
+                    for code in chatCameraUnseenQRCodes(codes.map { $0.message }, seen: seenCodes) {
+                        if recognizedQRCode(code) {
+                            seenCodes.insert(code)
+                        }
+                    }
+                })
+                if isNew {
+                    camera.startCapture()
+                }
+            } else if isNew {
                 let throttledSignal = camera.detectedCodes
                 |> mapToThrottled { next -> Signal<[CameraCode], NoError> in
                     return .single(next) |> then(.complete() |> delay(0.1, queue: Queue.concurrentDefaultQueue()))
@@ -3031,19 +3994,88 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             switch gestureRecognizer.state {
             case .changed:
                 let scale = gestureRecognizer.scale
-                camera.setZoomDelta(scale)
+                if case .chat = self.controller?.mode {
+                    self.updateChatZoomScale(self.chatZoomScale * Float(scale), animated: false)
+                } else {
+                    camera.setZoomDelta(scale)
+                }
                 gestureRecognizer.scale = 1.0
             default:
                 break
             }
         }
 
+        private func setChatInterfaceAppearance(_ appearance: CameraScreenDismissInterfaceAppearance, duration: Double) {
+            guard let chatInterfaceView = self.chatInterfaceView else {
+                return
+            }
+            var previousBlurRadius = self.chatInterfaceBlurRadius
+            if duration > 0.0, let presentationRadius = chatInterfaceView.layer.presentation()?.value(forKeyPath: "filters.gaussianBlur.inputRadius") as? NSNumber {
+                previousBlurRadius = CGFloat(presentationRadius.doubleValue)
+            }
+            self.chatInterfaceBlurRadius = appearance.blurRadius
+            
+            if appearance.blurRadius > 0.0 || (duration > 0.0 && previousBlurRadius > 0.0) {
+                if let blurFilter = CALayer.blur() {
+                    blurFilter.setValue(appearance.blurRadius as NSNumber, forKey: "inputRadius")
+                    chatInterfaceView.layer.filters = [blurFilter]
+                }
+            } else {
+                chatInterfaceView.layer.filters = nil
+            }
+            
+            if duration > 0.0 {
+                if previousBlurRadius != appearance.blurRadius {
+                    chatInterfaceView.layer.animate(from: previousBlurRadius as NSNumber, to: appearance.blurRadius as NSNumber, keyPath: "filters.gaussianBlur.inputRadius", timingFunction: CAMediaTimingFunctionName.easeInEaseOut.rawValue, duration: duration, completion: { [weak self, weak chatInterfaceView] completed in
+                        guard completed, let self, let chatInterfaceView, self.chatInterfaceBlurRadius == 0.0 else {
+                            return
+                        }
+                        chatInterfaceView.layer.filters = nil
+                    })
+                }
+                ContainedViewLayoutTransition.animated(duration: duration, curve: .easeInOut).updateAlpha(layer: chatInterfaceView.layer, alpha: appearance.alpha)
+            } else {
+                chatInterfaceView.layer.removeAnimation(forKey: "opacity")
+                chatInterfaceView.alpha = appearance.alpha
+            }
+        }
+        
         private var isDismissing = false
         @objc private func handlePan(_ gestureRecognizer: UIPanGestureRecognizer) {
             guard let controller = self.controller, let layout = self.validLayout else {
                 return
             }
             let translation = gestureRecognizer.translation(in: gestureRecognizer.view)
+            if case .chat = controller.mode {
+                switch gestureRecognizer.state {
+                case .began:
+                    let location = gestureRecognizer.location(in: self.previewContainerView)
+                    let startLocation = CGPoint(x: location.x - translation.x, y: location.y - translation.y)
+                    if self.focusCrosshairsView.canAdjustExposure(at: startLocation) {
+                        self.isAdjustingExposure = true
+                        self.exposureTranslation = 0.0
+                        self.camera?.beginExposureTargetBiasChange()
+                        self.focusCrosshairsView.beginExposureChange()
+                    }
+                case .changed:
+                    if self.isAdjustingExposure {
+                        let delta = translation.y - self.exposureTranslation
+                        self.exposureTranslation = translation.y
+                        let value = chatCameraExposureValue(current: self.focusCrosshairsView.exposureValue, translation: delta)
+                        self.focusCrosshairsView.updateExposure(value: value)
+                        self.camera?.setExposureTargetBias(chatCameraExposureBias(value: value))
+                        return
+                    }
+                case .ended, .cancelled:
+                    if self.isAdjustingExposure {
+                        self.isAdjustingExposure = false
+                        self.focusCrosshairsView.endExposureChange()
+                        return
+                    }
+                default:
+                    break
+                }
+            }
             switch gestureRecognizer.state {
             case .began:
                 break
@@ -3061,9 +4093,16 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                                 gestureRecognizer.isEnabled = false
                                 gestureRecognizer.isEnabled = true
                             }
-                        case .sticker, .avatar:
-                            if (abs(translation.y) > 10.0 || self.isDismissing) && self.hasAppeared {
-                                self.containerView.layer.sublayerTransform = CATransform3DMakeTranslation(0.0, translation.y, 0.0)
+                        case .sticker, .avatar, .chat:
+                            if (abs(translation.y) > 10.0 || self.isDismissing) && self.hasAppeared && (self.chatPreviewTransformView != nil || cameraBatchAllowsInteractiveDismiss(count: controller.chatBatch?.count ?? 0, pendingCount: controller.chatBatch?.pendingCount ?? 0)) {
+                                if let chatPreviewTransformView = self.chatPreviewTransformView {
+                                    chatPreviewTransformView.layer.sublayerTransform = CATransform3DMakeTranslation(0.0, translation.y, 0.0)
+                                    if !self.isDismissing {
+                                        self.setChatInterfaceAppearance(cameraScreenDismissInterfaceAppearance(isDismissing: true), duration: cameraScreenDismissInterfaceAnimationDuration)
+                                    }
+                                } else {
+                                    self.containerView.layer.sublayerTransform = CATransform3DMakeTranslation(0.0, translation.y, 0.0)
+                                }
                                 if !self.isDismissing {
                                     controller.statusBar.updateStatusBarStyle(.Ignore, animated: true)
                                     self.isDismissing = true
@@ -3082,10 +4121,23 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                         controller.completeWithTransitionProgress(transitionFraction, velocity: abs(velocity.x), dismissing: true)
                         
                         self.isDismissing = false
-                    case .sticker, .avatar:
+                    case .sticker, .avatar, .chat:
                         let velocity = gestureRecognizer.velocity(in: self.view)
-                        let transitionFraction = translation.y / self.frame.height
-                        if abs(transitionFraction) > 0.3 || abs(velocity.y) > 1000.0 {
+                        let completes = cameraScreenModalDismissCompletes(translation: translation.y, velocity: velocity.y, height: self.frame.height)
+                        let chatOutcome = cameraBatchPanDismissOutcome(count: controller.chatBatch?.count ?? 0, pendingCount: controller.chatBatch?.pendingCount ?? 0, completes: completes)
+                        if self.chatPreviewTransformView != nil, case .dismiss = chatOutcome {
+                            self.chatInterfaceDismissedInteractively = true
+                            controller.requestDismiss(animated: true, interactive: true)
+                        } else if let chatPreviewTransformView = self.chatPreviewTransformView {
+                            ContainedViewLayoutTransition.animated(duration: 0.25, curve: .easeInOut).updateAlpha(layer: self.backgroundView.layer, alpha: 1.0)
+                            controller.statusBar.updateStatusBarStyle(.White, animated: true)
+                            
+                            ContainedViewLayoutTransition.animated(duration: 0.3, curve: .spring).updateSublayerTransformOffset(layer: chatPreviewTransformView.layer, offset: .zero)
+                            self.setChatInterfaceAppearance(cameraScreenDismissInterfaceAppearance(isDismissing: false), duration: cameraScreenDismissInterfaceAnimationDuration)
+                            if case .confirmDiscard = chatOutcome {
+                                controller.requestCancel()
+                            }
+                        } else if completes {
                             self.containerView.layer.sublayerTransform = CATransform3DIdentity
                             self.mainPreviewAnimationWrapperView.center = self.previewContainerView.center.offsetBy(dx: 0.0, dy: translation.y)
                             
@@ -3123,6 +4175,10 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 let location = gestureRecognizer.location(in: self.mainPreviewView)
                 let point = self.mainPreviewView.cameraPoint(for: location)
                 camera.focus(at: point, autoFocus: false)
+                if case .chat = self.controller?.mode {
+                    self.isAdjustingExposure = false
+                    self.focusCrosshairsView.showFocus(at: gestureRecognizer.location(in: self.previewContainerView))
+                }
             }
         }
 
@@ -3148,7 +4204,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 self.containerLayoutUpdated(layout: layout, transition: .immediate)
             case .ended, .cancelled:
                 self.pipTranslation = nil
-                self.pipPosition = pipPositionForLocation(layout: layout, position: location, velocity: velocity)
+                self.pipPosition = pipPositionForLocation(layout: layout, centerX: self.previewContainerView.convert(CGPoint(x: self.previewContainerView.bounds.midX, y: self.previewContainerView.bounds.midY), to: self.view).x, position: location, velocity: velocity)
                 self.containerLayoutUpdated(layout: layout, transition: .spring(duration: 0.4))
                 
                 self._livestreamMediaSource?.setDualCameraPosition(self.pipPosition)
@@ -3302,6 +4358,9 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                             duration: 0.3
                         )
                     } else {
+                        if let layout = self.validLayout, layout.safeInsets.left != layout.safeInsets.right {
+                            self.mainPreviewView.bounds = CGRect(origin: .zero, size: self.previewContainerView.bounds.size)
+                        }
                         self.mainPreviewAnimationWrapperView.bounds = self.mainPreviewView.bounds
                         self.mainPreviewAnimationWrapperView.center = CGPoint(x: self.previewContainerView.frame.width / 2.0, y: self.previewContainerView.frame.height / 2.0)
                         
@@ -3335,6 +4394,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                         view.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.2)
                     }
                 }
+            } else if case .chat = controller.mode {
+                self.animatedIn = true
+                self.containerView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.25)
+                self.containerView.layer.animatePosition(from: CGPoint(x: 0.0, y: 40.0), to: CGPoint(), duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, additive: true, completion: { _ in
+                    self.requestUpdateLayout(hasAppeared: true, transition: .immediate)
+                })
             }
         }
 
@@ -3373,7 +4438,14 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 } else {
                     self.mainPreviewAnimationWrapperView.addSubview(self.mainPreviewView)
                     self.animatedIn = false
-                    
+
+                    if let chatPreviewTransformView = self.chatPreviewTransformView {
+                        let previewOffsetY = chatPreviewTransformView.layer.sublayerTransform.m42
+                        chatPreviewTransformView.layer.removeAnimation(forKey: "sublayerTransform")
+                        chatPreviewTransformView.layer.sublayerTransform = CATransform3DIdentity
+                        self.mainPreviewAnimationWrapperView.center = self.mainPreviewAnimationWrapperView.center.offsetBy(dx: 0.0, dy: previewOffsetY)
+                    }
+
                     let destinationInnerFrame = destinationView.convert(transitionOut.destinationRect, to: self.previewContainerView)
                     let initialCenter = self.mainPreviewAnimationWrapperView.layer.position
                    
@@ -3398,50 +4470,70 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                     self.mainPreviewAnimationWrapperView.layer.animateScale(from: 1.0, to: targetScale, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
                 }
                 
-                if let view = self.componentHost.view {
+                if !self.chatInterfaceDismissedInteractively, let view = self.componentHost.view {
                     view.layer.animatePosition(from: view.center, to: destinationLocalFrame.center, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring)
                     view.layer.animateScale(from: 1.0, to: targetScale, duration: 0.3, timingFunction: kCAMediaTimingFunctionSpring, removeOnCompletion: false)
                     view.layer.animateScale(from: 1.0, to: 0.0, duration: 0.2, removeOnCompletion: false)
                 }
+            } else if case .chat = controller.mode {
+                self.containerView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.25, removeOnCompletion: false)
+                self.containerView.layer.animatePosition(from: CGPoint(), to: CGPoint(x: 0.0, y: 40.0), duration: 0.25, removeOnCompletion: false, additive: true, completion: { _ in
+                    completion()
+                })
             } else {
                 completion()
             }
 
-            self.componentHost.view?.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
+            if !self.chatInterfaceDismissedInteractively {
+                self.componentHost.view?.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
+            }
             if case .story = controller.mode {
                 self.previewContainerView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.35, removeOnCompletion: false)
             }
         }
         
-        func animateOutToEditor() {
+        func animateOutToEditor(allowsBottomHandoff: Bool = true) {
+            let handsOffBottomRow = allowsBottomHandoff && self.editorHandoffAvailableNow()
             self.cameraIsActive = false
             self.requestUpdateLayout(transition: .immediate)
             
             let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
             if let view = self.componentHost.findTaggedView(tag: cancelButtonTag) {
-                view.layer.animateScale(from: 1.0, to: 0.1, duration: 0.2)
                 transition.setAlpha(view: view, alpha: 0.0)
+                cameraScreenAnimateBlur(layer: view.layer, fromRadius: 0.0, toRadius: cameraScreenEditorHandoffBlurRadius)
             }
             if let view = self.componentHost.findTaggedView(tag: dualButtonTag) {
-                view.layer.animateScale(from: 1.0, to: 0.1, duration: 0.2)
                 transition.setAlpha(view: view, alpha: 0.0)
+                cameraScreenAnimateBlur(layer: view.layer, fromRadius: 0.0, toRadius: cameraScreenEditorHandoffBlurRadius)
             }
             if let view = self.componentHost.findTaggedView(tag: flashButtonTag) {
-                view.layer.animateScale(from: 1.0, to: 0.1, duration: 0.2)
                 transition.setAlpha(view: view, alpha: 0.0)
+                cameraScreenAnimateBlur(layer: view.layer, fromRadius: 0.0, toRadius: cameraScreenEditorHandoffBlurRadius)
             }
             if let view = self.componentHost.findTaggedView(tag: collageButtonTag) {
-                view.layer.animateScale(from: 1.0, to: 0.1, duration: 0.2)
                 transition.setAlpha(view: view, alpha: 0.0)
+                cameraScreenAnimateBlur(layer: view.layer, fromRadius: 0.0, toRadius: cameraScreenEditorHandoffBlurRadius)
             }
             if let view = self.componentHost.findTaggedView(tag: zoomControlTag) {
                 transition.setAlpha(view: view, alpha: 0.0)
+                cameraScreenAnimateBlur(layer: view.layer, fromRadius: 0.0, toRadius: cameraScreenEditorHandoffBlurRadius)
             }
-            if let view = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View {
-                view.animateOutToEditor(transition: transition)
-            }
-            if let view = self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View {
-                view.animateOutToEditor(transition: transition)
+            let captureControlsView = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View
+            let modeView = self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View
+            if handsOffBottomRow {
+                captureControlsView?.animateShutterOutToEditor(transition: transition)
+                self.pendingEditorHandoff = true
+                Queue.mainQueue().after(cameraScreenEditorHandoffAdoptTimeout, { [weak self, weak captureControlsView, weak modeView] in
+                    guard let self, self.pendingEditorHandoff else {
+                        return
+                    }
+                    self.pendingEditorHandoff = false
+                    captureControlsView?.animateOutToEditor(transition: transition)
+                    modeView?.animateOutToEditor(transition: transition)
+                })
+            } else {
+                captureControlsView?.animateOutToEditor(transition: transition)
+                modeView?.animateOutToEditor(transition: transition)
             }
             
             Queue.mainQueue().after(1.5, {
@@ -3507,6 +4599,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         }
         
         func animateInFromEditor(toGallery: Bool) {
+            self.pendingEditorHandoff = false
+            let wasHandedOff = self.isEditorHandedOff
+            self.isEditorHandedOff = false
+            if wasHandedOff && toGallery {
+                (self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View)?.clearEditorHandoffStayingHidden()
+            }
             if !toGallery {
                 self.resumeCameraCapture(fromGallery: false)
                 
@@ -3519,30 +4617,35 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 
                 let transition = ComponentTransition(animation: .curve(duration: 0.2, curve: .easeInOut))
                 if let view = self.componentHost.findTaggedView(tag: cancelButtonTag) {
-                    view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2)
                     transition.setAlpha(view: view, alpha: 1.0)
+                    cameraScreenAnimateBlur(layer: view.layer, fromRadius: cameraScreenEditorHandoffBlurRadius, toRadius: 0.0)
                 }
                 if let view = self.componentHost.findTaggedView(tag: dualButtonTag) {
-                    view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2)
                     transition.setAlpha(view: view, alpha: 1.0)
+                    cameraScreenAnimateBlur(layer: view.layer, fromRadius: cameraScreenEditorHandoffBlurRadius, toRadius: 0.0)
                 }
                 if let view = self.componentHost.findTaggedView(tag: flashButtonTag) {
-                    view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2)
                     transition.setAlpha(view: view, alpha: 1.0)
+                    cameraScreenAnimateBlur(layer: view.layer, fromRadius: cameraScreenEditorHandoffBlurRadius, toRadius: 0.0)
                 }
                 if let view = self.componentHost.findTaggedView(tag: collageButtonTag) {
-                    view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2)
                     transition.setAlpha(view: view, alpha: 1.0)
+                    cameraScreenAnimateBlur(layer: view.layer, fromRadius: cameraScreenEditorHandoffBlurRadius, toRadius: 0.0)
                 }
                 if let view = self.componentHost.findTaggedView(tag: zoomControlTag) {
-                    view.layer.animateScale(from: 0.1, to: 1.0, duration: 0.2)
                     transition.setAlpha(view: view, alpha: 1.0)
+                    cameraScreenAnimateBlur(layer: view.layer, fromRadius: cameraScreenEditorHandoffBlurRadius, toRadius: 0.0)
                 }
-                if let view = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View {
-                    view.animateInFromEditor(transition: transition)
-                }
-                if let view = self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View {
-                    view.animateInFromEditor(transition: transition)
+                if wasHandedOff {
+                    (self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View)?.restoreFromEditorHandoff(transition: transition, delay: cameraScreenEditorReturnContentDelay)
+                    (self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View)?.restoreFromEditorHandoff(delay: cameraScreenEditorReturnContentDelay)
+                } else {
+                    if let view = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View {
+                        view.animateInFromEditor(transition: transition)
+                    }
+                    if let view = self.componentHost.findTaggedView(tag: modeControlTag) as? ModeComponent.View {
+                        view.animateInFromEditor(transition: transition)
+                    }
                 }
             }
         }
@@ -3562,6 +4665,31 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             let scale = 1.0 * progress + (1.0 - progress) * maxScale
             let offset = (1.0 - progress) * deltaOffset
             transition.updateSublayerTransformScaleAndOffset(layer: self.containerView.layer, scale: scale, offset: CGPoint(x: 0.0, y: offset), beginWithCurrentState: true)
+            self.updateBottomRowCounterScale(CameraScreenContainerScale(scale: scale, offset: CGPoint(x: 0.0, y: offset), center: CGPoint(x: self.containerView.bounds.midX, y: self.containerView.bounds.midY)), transition: transition)
+        }
+
+        private func originInContainer(of view: UIView) -> CGPoint {
+            var point = view.frame.origin
+            var current = view.superview
+            while let superview = current, superview !== self.containerView {
+                point.x += superview.frame.minX - superview.bounds.minX
+                point.y += superview.frame.minY - superview.bounds.minY
+                current = superview.superview
+            }
+            return point
+        }
+
+        private func updateBottomRowCounterScale(_ containerScale: CameraScreenContainerScale, transition: ContainedViewLayoutTransition) {
+            let isIdentity = abs(containerScale.scale - 1.0) < .ulpOfOne && abs(containerScale.offset.y) < .ulpOfOne
+            if let captureControlsView = self.componentHost.findTaggedView(tag: captureControlsTag) as? CaptureControlsComponent.View {
+                captureControlsView.updateContainerScale(isIdentity ? nil : containerScale, originInContainer: self.originInContainer(of: captureControlsView), transition: transition)
+            }
+            if let modeView = self.componentHost.findTaggedView(tag: modeControlTag) {
+                let origin = self.originInContainer(of: modeView)
+                let center = CGPoint(x: origin.x + modeView.bounds.width * 0.5, y: origin.y + modeView.bounds.height * 0.5)
+                let counter = isIdentity ? .identity : containerScale.counterTransform(at: center)
+                cameraScreenUpdateSublayerTransform(layer: modeView.layer, transform: CATransform3DConcat(CATransform3DMakeScale(counter.scale, counter.scale, 1.0), CATransform3DMakeTranslation(counter.translation.x, counter.translation.y, 0.0)), transition: transition)
+            }
         }
         
         func presentDraftTooltip() {
@@ -3648,6 +4776,9 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             guard let layout = self.validLayout, case .compact = layout.metrics.widthClass else {
                 return
             }
+            if let controller = self.controller, !cameraScreenStoryControls(mode: controller.mode.kind).tooltips {
+                return
+            }
             let _ = (ApplicationSpecificNotice.incrementStoriesCameraTip(accountManager: self.context.sharedContext.accountManager)
             |> deliverOnMainQueue).start(next: { [weak self] count in
                 guard let self else {
@@ -3727,39 +4858,80 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             let isTablet = layout.metrics.isTablet
             
             var topInset: CGFloat = (layout.statusBarHeight ?? 0.0) + 5.0
-            let previewSize: CGSize
+            var previewSize: CGSize
+            var previewOriginX: CGFloat = 0.0
             if isTablet {
                 previewSize = CGSize(width: floorToScreenPixels(layout.size.height / 1.77778), height: layout.size.height)
             } else {
                 previewSize = CGSize(width: layout.size.width, height: floorToScreenPixels(layout.size.width * 1.77778))
+                if let placement = storyPreviewBandPlacement(containerSize: layout.size, safeInsets: layout.safeInsets) {
+                    previewOriginX = placement.x
+                    previewSize = placement.size
+                }
                 if layout.size.height < previewSize.height + 30.0 {
                     topInset = 0.0
                 }
             }
-            let bottomInset = layout.size.height - previewSize.height - topInset
+            // Clamped like the story editor's: a 9:16 viewfinder much taller than the screen (iPhone Duo's unfolded
+            // screen in portrait, 238pt over) would otherwise put the bottom controls below the screen.
+            var bottomInset = max(0.0, layout.size.height - previewSize.height - topInset)
+            if !isTablet {
+                // The bottom controls stay above the home indicator. Below a 9:16 viewfinder that fits there is always more
+                // room than the indicator takes; one taller than the screen leaves none, which until iPhone Duo only
+                // happened on home-button phones (its folded screen, 150pt over, put the mode selector on the indicator).
+                bottomInset = max(bottomInset, layout.intrinsicInsets.bottom)
+            }
             
             let panelWidth: CGFloat
-            let previewFrame: CGRect
+            var previewFrame: CGRect
             let viewfinderFrame: CGRect
+            var chatScreenLayout: CameraScreenChatScreenLayout?
             if isTablet {
                 previewFrame = CGRect(origin: .zero, size: layout.size)
                 viewfinderFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((layout.size.width - previewSize.width) / 2.0), y: 0.0), size: previewSize)
                 panelWidth = viewfinderFrame.minX
             } else {
-                previewFrame = CGRect(origin: CGPoint(x: 0.0, y: topInset), size: previewSize)
+                previewFrame = CGRect(origin: CGPoint(x: previewOriginX, y: topInset), size: previewSize)
                 viewfinderFrame = previewFrame
                 panelWidth = 0.0
+                
+                var captureKind = self.cameraState.mode.captureKind
+                if case .chat = controller.mode {
+                    captureKind = chatCameraEffectiveCaptureKind(captureKind: captureKind, isRecording: self.cameraState.recording != .none)
+                }
+                let aspectRatio = cameraScreenPreviewAspectRatio(mode: controller.mode.kind, captureKind: captureKind, isTablet: isTablet)
+                if case .chat = controller.mode, aspectRatio < 1.77 {
+                    let aspectHeight = floorToScreenPixels(previewSize.width * aspectRatio)
+                    previewFrame = CGRect(origin: CGPoint(x: previewOriginX, y: topInset + floorToScreenPixels((previewSize.height - aspectHeight) / 2.0)), size: CGSize(width: previewSize.width, height: aspectHeight))
+                }
+                if case .chat = controller.mode, layout.safeInsets.left != layout.safeInsets.right {
+                    let screenLayout = CameraScreenChatScreenLayout(screenSize: layout.size, captureKind: captureKind)
+                    previewFrame = screenLayout.previewFrame
+                    chatScreenLayout = screenLayout
+                }
+            }
+            
+            var componentLayout = layout
+            var componentOriginX: CGFloat = 0.0
+            if controller.mode.kind != .chat, let band = storyControlsBandLayout(layout) {
+                componentLayout = band.layout
+                componentOriginX = band.originX
             }
             
             let environment = ViewControllerComponentContainer.Environment(
-                statusBarHeight: layout.statusBarHeight ?? 0.0,
+                // Beside iPhone Duo's status island (unfolded portrait) the top row sits at the compact status height,
+                // its right controls clear of the island (`navigationBarTrailingButtonsInset`).
+                statusBarHeight: layout.navigationBarStatusBarHeight ?? 0.0,
+                fullStatusBarHeight: layout.statusBarHeight ?? 0.0,
                 navigationHeight: 0.0,
                 safeInsets: UIEdgeInsets(
                     top: topInset,
-                    left: layout.safeInsets.left,
+                    left: componentLayout.safeInsets.left,
                     bottom: bottomInset,
-                    right: layout.safeInsets.right
+                    right: componentLayout.safeInsets.right
                 ),
+                reservedCorners: componentLayout.reservedCorners,
+                navigationBarTrailingButtonsInset: layout.navigationBarTrailingButtonsInset,
                 additionalInsets: layout.additionalInsets,
                 inputHeight: layout.inputHeight ?? 0.0,
                 metrics: layout.metrics,
@@ -3785,7 +4957,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                     self.maybePresentTooltips()
                 } else if case .notDetermined = self.cameraAuthorizationStatus {
                     self.requestDeviceAccess()
-                } else if case .notDetermined = self.microphoneAuthorizationStatus {
+                } else if case .notDetermined = self.microphoneAuthorizationStatus, self.requestsMicrophoneAccess {
                     self.requestDeviceAccess()
                 }
                 self.didAppear()
@@ -3804,7 +4976,9 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                         hasAppeared: self.hasAppeared,
                         isVisible: self.cameraIsActive && !self.hasGallery && self.postingAvailable,
                         panelWidth: panelWidth,
+                        chatScreenLayout: chatScreenLayout,
                         resolvedCodePeer: controller.resolvedCodePeer,
+                        batchCount: self.chatChromeBatchCount,
                         animateFlipAction: self.animateFlipAction,
                         animateShutter: { [weak self] in
                             guard let self else {
@@ -3851,16 +5025,24 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                     environment
                 },
                 forceUpdate: forceUpdate,
-                containerSize: layout.size
+                containerSize: componentLayout.size
             )
             if let componentView = self.componentHost.view {
                 if componentView.superview == nil {
-                    self.containerView.insertSubview(componentView, belowSubview: transitionDimView)
+                    if let chatInterfaceView = self.chatInterfaceView {
+                        chatInterfaceView.addSubview(componentView)
+                    } else {
+                        self.containerView.insertSubview(componentView, belowSubview: transitionDimView)
+                    }
                     componentView.clipsToBounds = true
                 }
             
-                let componentFrame = CGRect(origin: .zero, size: componentSize)
+                let componentFrame = CGRect(origin: CGPoint(x: componentOriginX, y: 0.0), size: componentSize)
                 transition.setFrame(view: componentView, frame: componentFrame)
+            }
+            if controller.chatBatch != nil {
+                self.setupChatBatchIfNeeded()
+                self.updateChatBatchViews(layout: layout)
             }
 
             transition.setPosition(view: self.backgroundView, position: CGPoint(x: layout.size.width / 2.0, y: layout.size.height / 2.0))
@@ -3870,6 +5052,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 transition.setPosition(view: self.containerView, position: CGPoint(x: layout.size.width / 2.0, y: layout.size.height / 2.0))
             }
             transition.setBounds(view: self.containerView, bounds: CGRect(origin: .zero, size: layout.size))
+            if let chatPreviewTransformView = self.chatPreviewTransformView {
+                transition.setFrame(view: chatPreviewTransformView, frame: CGRect(origin: .zero, size: layout.size))
+            }
+            if let chatInterfaceView = self.chatInterfaceView {
+                transition.setFrame(view: chatInterfaceView, frame: CGRect(origin: .zero, size: layout.size))
+            }
             
             transition.setFrame(view: self.transitionDimView, frame: CGRect(origin: .zero, size: layout.size))
             
@@ -3884,6 +5072,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             transition.setFrame(view: self.collageContainerView, frame: CGRect(origin: .zero, size: previewContainerFrame.size))
             
             transition.setFrame(view: self.codeFrameView, frame: CGRect(origin: .zero, size: previewContainerFrame.size))
+            transition.setFrame(view: self.focusCrosshairsView, frame: CGRect(origin: .zero, size: previewContainerFrame.size))
+            if let documentFrameTopDimView = self.documentFrameTopDimView, let documentFrameBottomDimView = self.documentFrameBottomDimView {
+                let documentFrameRects = cameraScreenDocumentFrameDimRects(containerSize: previewContainerFrame.size)
+                transition.setFrame(view: documentFrameTopDimView, frame: documentFrameRects.top)
+                transition.setFrame(view: documentFrameBottomDimView, frame: documentFrameRects.bottom)
+            }
             self.codeFrameView.update(size: previewContainerFrame.size, code: controller.focusedCode)
             
             if self.cameraState.isCollageEnabled {
@@ -3979,30 +5173,31 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             
             let dualCameraSize: CGFloat = 160.0
             let circleSide = floorToScreenPixels(previewSize.width * dualCameraSize / 393.0)
-            let circleOffset = CGPoint(x: previewSize.width * (dualCameraSize + 107.0) / 1080.0, y: previewSize.width * (dualCameraSize + 278.0) / 1080.0)
-            
-            var origin: CGPoint
-            switch self.pipPosition {
-            case .topLeft:
-                origin = CGPoint(x: circleOffset.x, y: circleOffset.y)
-                if !isDualCameraEnabled {
-                    origin = origin.offsetBy(dx: -180.0, dy: 0.0)
-                }
-            case .topRight:
-                origin = CGPoint(x: previewFrame.width - circleOffset.x, y: circleOffset.y)
-                if !isDualCameraEnabled {
-                    origin = origin.offsetBy(dx: 180.0, dy: 0.0)
-                }
-            case .bottomLeft:
-                origin = CGPoint(x: circleOffset.x, y: previewFrame.height - circleOffset.y)
-                if !isDualCameraEnabled {
-                    origin = origin.offsetBy(dx: -180.0, dy: 0.0)
-                }
-            case .bottomRight:
-                origin = CGPoint(x: previewFrame.width - circleOffset.x, y: previewFrame.height - circleOffset.y)
-                if !isDualCameraEnabled {
-                    origin = origin.offsetBy(dx: 180.0, dy: 0.0)
-                }
+
+            let pipLeftInset = max(0.0, layout.safeInsets.left - previewContainerFrame.minX)
+            let pipRightInset = max(0.0, previewContainerFrame.maxX - (layout.size.width - layout.safeInsets.right))
+            let pipIsLeft = self.pipPosition == .topLeft || self.pipPosition == .bottomLeft
+            let pipIsBottom = self.pipPosition == .bottomLeft || self.pipPosition == .bottomRight
+            // On iPhone Duo unfolded the viewfinder's bottom edge is below the screen: a bottom corner keeps to the shutter
+            // instead.
+            var pipShutterCenterY: CGFloat?
+            if !isTablet && layout.reservedCorners != .none {
+                let shutterCenterY = storyCameraShutterCenterY(containerHeight: layout.size.height, bottomInset: bottomInset, controlsBottomInset: storyCameraControlsBottomInset(containerHeight: layout.size.height, viewfinderHeight: previewSize.height))
+                pipShutterCenterY = shutterCenterY - previewContainerFrame.minY
+            }
+            var origin = cameraDualPreviewCenter(
+                isLeft: pipIsLeft,
+                isBottom: pipIsBottom,
+                viewfinderWidth: previewSize.width,
+                containerSize: previewFrame.size,
+                visibleHeight: layout.size.height - previewContainerFrame.minY,
+                leftInset: pipLeftInset,
+                rightInset: pipRightInset,
+                shutterCenterY: pipShutterCenterY,
+                shutterCenterAboveViewfinderBottom: storyCameraShutterCenterAboveViewfinderBottom
+            )
+            if !isDualCameraEnabled {
+                origin = origin.offsetBy(dx: pipIsLeft ? -180.0 : 180.0, dy: 0.0)
             }
             
             if let pipTranslation = self.pipTranslation {
@@ -4047,8 +5242,9 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             let mainPreviewInnerFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((previewFrame.width - mainPreviewInnerSize.width) / 2.0), y: floorToScreenPixels((previewFrame.height - mainPreviewInnerSize.height) / 2.0)), size: mainPreviewInnerSize)
             let additionalPreviewInnerFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((circleSide - additionalPreviewInnerSize.width) / 2.0), y: floorToScreenPixels((circleSide - additionalPreviewInnerSize.height) / 2.0)), size: additionalPreviewInnerSize)
             
+            let waitsForPreviewTransition = [.sticker, .avatar].contains(controller.mode) || (controller.mode.kind == .chat && controller.transitionIn != nil)
             if mainPreviewView.superview != self.mainPreviewContainerView {
-                if [.sticker, .avatar].contains(controller.mode), !self.animatedIn {
+                if waitsForPreviewTransition, !self.animatedIn {
                     
                 } else {
                     self.mainPreviewContainerView.insertSubview(mainPreviewView, at: 0)
@@ -4058,14 +5254,15 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 self.additionalPreviewContainerView.insertSubview(additionalPreviewView, at: 0)
             }
             
-            if [.sticker, .avatar].contains(controller.mode) {
-                if self.animatedIn {
-                    mainPreviewView.frame = mainPreviewInnerFrame
-                }
+            let animatesMainPreviewFrame = self.animatedIn && (chatScreenLayout != nil || controller.mode.kind == .chat)
+            if waitsForPreviewTransition && !self.animatedIn {
+            } else if animatesMainPreviewFrame {
+                transition.setFrame(view: mainPreviewView, frame: mainPreviewInnerFrame)
             } else {
                 mainPreviewView.frame = mainPreviewInnerFrame
             }
-            
+            self.updateCaptureKindSnapshot(containerSize: previewFrame.size, transition: transition)
+
             additionalPreviewView.frame = additionalPreviewInnerFrame
                               
             self.previewFrameLeftDimView.isHidden = !isTablet
@@ -4074,24 +5271,52 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             self.previewFrameRightDimView.isHidden = !isTablet
             transition.setFrame(view: self.previewFrameRightDimView, frame: CGRect(origin: CGPoint(x: viewfinderFrame.maxX, y: 0.0), size: CGSize(width: viewfinderFrame.minX + 1.0, height: viewfinderFrame.height)))
             
-            let screenCornerRadius = layout.deviceMetrics.screenCornerRadius
-            if screenCornerRadius > 0.0, self.transitionCornersView.image == nil {
-                self.transitionCornersView.image = generateImage(CGSize(width: screenCornerRadius, height: screenCornerRadius * 3.0), rotatedContext: { size, context in
-                    context.setFillColor(UIColor.black.cgColor)
-                    context.fill(CGRect(origin: .zero, size: size))
-                    context.setBlendMode(.clear)
-                    
-                    let path = UIBezierPath(roundedRect: CGRect(origin: .zero, size: CGSize(width: size.width * 2.0, height: size.height)), cornerRadius: size.width)
-                    context.addPath(path.cgPath)
-                    context.fillPath()
-                })?.stretchableImage(withLeftCapWidth: 0, topCapHeight: Int(screenCornerRadius))
+            // The strip rounds the left corners of the screen the camera pushes aside (the chat list) as the screen's own
+            // left corners are rounded: on iPhone Duo's folded screen they differ from the right ones (8pt on the hinge
+            // side, 59pt outside).
+            let screenCornerRadii = layout.screenCornerRadii
+            let transitionCornersWidth = max(screenCornerRadii.topLeft, screenCornerRadii.bottomLeft)
+            if transitionCornersWidth > 0.0, self.transitionCornersRadii != screenCornerRadii {
+                self.transitionCornersRadii = screenCornerRadii
+                if screenCornerRadii.isUniform {
+                    let screenCornerRadius = transitionCornersWidth
+                    self.transitionCornersView.image = generateImage(CGSize(width: screenCornerRadius, height: screenCornerRadius * 3.0), rotatedContext: { size, context in
+                        context.setFillColor(UIColor.black.cgColor)
+                        context.fill(CGRect(origin: .zero, size: size))
+                        context.setBlendMode(.clear)
+
+                        let path = UIBezierPath(roundedRect: CGRect(origin: .zero, size: CGSize(width: size.width * 2.0, height: size.height)), cornerRadius: size.width)
+                        context.addPath(path.cgPath)
+                        context.fillPath()
+                    })?.stretchableImage(withLeftCapWidth: 0, topCapHeight: Int(screenCornerRadius))
+                } else {
+                    let topRadius = screenCornerRadii.topLeft
+                    let bottomRadius = screenCornerRadii.bottomLeft
+                    self.transitionCornersView.image = generateImage(CGSize(width: transitionCornersWidth, height: topRadius + bottomRadius + 1.0), rotatedContext: { size, context in
+                        context.setFillColor(UIColor.black.cgColor)
+                        context.fill(CGRect(origin: .zero, size: size))
+                        context.setBlendMode(.clear)
+
+                        let path = CGMutablePath()
+                        path.move(to: CGPoint(x: topRadius, y: 0.0))
+                        path.addLine(to: CGPoint(x: size.width, y: 0.0))
+                        path.addLine(to: CGPoint(x: size.width, y: size.height))
+                        path.addLine(to: CGPoint(x: bottomRadius, y: size.height))
+                        path.addArc(tangent1End: CGPoint(x: 0.0, y: size.height), tangent2End: CGPoint(x: 0.0, y: size.height - bottomRadius), radius: bottomRadius)
+                        path.addLine(to: CGPoint(x: 0.0, y: topRadius))
+                        path.addArc(tangent1End: CGPoint(x: 0.0, y: 0.0), tangent2End: CGPoint(x: topRadius, y: 0.0), radius: topRadius)
+                        path.closeSubpath()
+                        context.addPath(path)
+                        context.fillPath()
+                    })?.resizableImage(withCapInsets: UIEdgeInsets(top: topRadius, left: 0.0, bottom: bottomRadius, right: 0.0), resizingMode: .stretch)
+                }
             }
             self.transitionCornersView.isHidden = isTablet
-        
-            transition.setPosition(view: self.transitionCornersView, position: CGPoint(x: layout.size.width + screenCornerRadius / 2.0, y: layout.size.height / 2.0))
-            transition.setBounds(view: self.transitionCornersView, bounds: CGRect(origin: .zero, size: CGSize(width: screenCornerRadius, height: layout.size.height)))
+
+            transition.setPosition(view: self.transitionCornersView, position: CGPoint(x: layout.size.width + transitionCornersWidth / 2.0, y: layout.size.height / 2.0))
+            transition.setBounds(view: self.transitionCornersView, bounds: CGRect(origin: .zero, size: CGSize(width: transitionCornersWidth, height: layout.size.height)))
             
-            if ([.sticker, .avatar].contains(controller.mode) || isTablet) && isFirstTime {
+            if (cameraScreenUsesModalPresentation(mode: controller.mode.kind) || isTablet) && isFirstTime {
                 self.animateIn()
             }
             
@@ -4115,6 +5340,8 @@ public class CameraScreenImpl: ViewController, CameraScreen {
     fileprivate let holder: CameraHolder?
     fileprivate let transitionIn: TransitionIn?
     fileprivate let transitionOut: (Bool) -> TransitionOut?
+    public let chatBatch: CameraBatch?
+    public var openChatReview: ((CameraBatch, String?) -> Void)?
 
     public final class ResultTransition {
         public weak var sourceView: UIView?
@@ -4196,11 +5423,16 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         self.transitionIn = transitionIn
         self.transitionOut = transitionOut
         self.completion = completion
+        self.chatBatch = mode.chatParams.flatMap { CameraBatch(maxCount: $0.maxCount, isSingleShot: $0.isSingleShot) }
 
         super.init(navigationBarPresentationData: nil)
 
         self.statusBar.statusBarStyle = .Ignore
-        self.supportedOrientations = ViewControllerSupportedOrientations(regularSize: .all, compactSize: .portrait)
+        if mode.chatParams?.locksPortrait == true {
+            self.supportedOrientations = ViewControllerSupportedOrientations(regularSize: .portrait, compactSize: .portrait)
+        } else {
+            self.supportedOrientations = ViewControllerSupportedOrientations(regularSize: .all, compactSize: .portrait)
+        }
         self.automaticallyControlPresentationContextLayout = false
         
         self.navigationPresentation = .flatModal
@@ -4240,7 +5472,20 @@ public class CameraScreenImpl: ViewController, CameraScreen {
             return
         }
         self.isCameraActivated = true
-        self.requestAudioSession()
+        if cameraScreenPushesAudioSessionOnActivation(mode: self.mode.kind) {
+            self.requestAudioSession()
+        } else {
+            let captureKind: CameraScreenCaptureKind
+            switch self.cameraMode {
+            case .photo:
+                captureKind = .photo
+            case .video:
+                captureKind = .video
+            case .live:
+                captureKind = .live
+            }
+            self.updateChatAudioSession(captureKind: captureKind, isRecording: false)
+        }
         if case .story = self.mode {
             self.postingAvailabilityPromise.set(self.context.engine.messages.checkStoriesUploadAvailability(target: .myStories))
         }
@@ -4357,6 +5602,9 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                          if case let .peer(peer, _) = resolvedUrl, let peer {
                              self.resolvedCodePeer = EnginePeer(peer)
                              self.requestLayout(transition: .animated(duration: 0.4, curve: .spring))
+                         } else if case let .noPaidMessagesToken(peer, _) = resolvedUrl {
+                             self.resolvedCodePeer = EnginePeer(peer)
+                             self.requestLayout(transition: .animated(duration: 0.4, curve: .spring))
                          }
                      })
                 )
@@ -4380,6 +5628,20 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         }
     }
     
+    fileprivate func updateChatAudioSession(captureKind: CameraScreenCaptureKind, isRecording: Bool) {
+        guard let chatParams = self.mode.chatParams, self.isCameraActivated else {
+            return
+        }
+        if chatCameraNeedsAudioSession(captureKind: captureKind, isRecording: isRecording, allowVideo: chatParams.allowVideo, hasAudio: chatParams.hasAudio) {
+            if self.audioSessionDisposable == nil {
+                self.requestAudioSession()
+            }
+        } else if let audioSessionDisposable = self.audioSessionDisposable {
+            self.audioSessionDisposable = nil
+            audioSessionDisposable.dispose()
+        }
+    }
+    
     private func requestAudioSession() {
         self.audioSessionDisposable = self.context.sharedContext.mediaManager.audioSession.push(audioSessionType: .record(speaker: false, video: true, withOthers: true), activate: { _ in
             if #available(iOS 13.0, *) {
@@ -4391,6 +5653,22 @@ public class CameraScreenImpl: ViewController, CameraScreen {
     }
     
     private var galleryController: ViewController?
+    public func makeEditorBottomHandoff() -> CameraScreenEditorBottomHandoff? {
+        return self.node.makeEditorBottomHandoff()
+    }
+
+    public func moveViewfinder(editorFrame: CGRect, toEditor: Bool) {
+        self.node.moveViewfinder(editorFrame: editorFrame, toEditor: toEditor)
+    }
+
+    public func makeChatReviewBottomHandoff() -> CameraScreenEditorBottomHandoff? {
+        return self.node.makeChatReviewBottomHandoff()
+    }
+
+    public func editorReturnTargets() -> CameraScreenEditorReturnTargets? {
+        return self.node.editorReturnTargets()
+    }
+
     public func returnFromEditor() {
         self.node.animateInFromEditor(toGallery: self.galleryController?.displayNode.supernode != nil)
     }
@@ -4585,7 +5863,7 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                             self.node.collage?.addResults(signals: results)
                         }
                     } else {
-                        self.node.animateOutToEditor()
+                        self.node.animateOutToEditor(allowsBottomHandoff: false)
                         if let assets = results as? [PHAsset] {
                             self.completion(.single(.assets(assets)), nil, self.remainingStoryCount, {
                             })
@@ -4616,6 +5894,12 @@ public class CameraScreenImpl: ViewController, CameraScreen {
                 controller?.dismiss(animated: true)
             }
         }
+        if let attachmentController = controller as? AttachmentController, let galleryButtonView = self.node.componentHost.findTaggedView(tag: galleryButtonTag) {
+            attachmentController.attachmentButton = galleryButtonView
+            attachmentController.attachmentButtonContentSnapshot = { [weak galleryButtonView] in
+                return galleryButtonView?.snapshotView(afterScreenUpdates: false)
+            }
+        }
         controller.customModalStyleOverlayTransitionFactorUpdated = { [weak self, weak controller] transition in
             if let self, let controller {
                 let transitionFactor = controller.modalStyleOverlayTransitionFactor
@@ -4634,6 +5918,47 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         self.node.presentDraftTooltip()
     }
 
+    public func returnFromChatReview() {
+        self.node.resumeAfterChatReview()
+    }
+
+    fileprivate weak var chatDiscardSheet: ViewController?
+
+    public var isPresentingChatDiscardSheet: Bool {
+        return self.chatDiscardSheet != nil
+    }
+
+    public func requestChatDismiss(animated: Bool) {
+        self.requestDismiss(animated: animated)
+    }
+
+    fileprivate func requestCancel() {
+        guard let chatBatch = self.chatBatch, case .confirmDiscard = cameraBatchCancelAction(count: chatBatch.count, pendingCount: chatBatch.pendingCount) else {
+            self.requestDismiss(animated: true)
+            return
+        }
+        guard self.chatDiscardSheet == nil, let sourceView = self.node.chatDiscardSourceView() else {
+            return
+        }
+        self.node.dismissAllTooltips()
+        let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }.withUpdated(theme: defaultDarkColorPresentationTheme)
+        let items: [ContextMenuItem] = [
+            .action(ContextMenuActionItem(text: presentationData.strings.Camera_Discard, textColor: .destructive, icon: { _ in
+                return nil
+            }, action: { [weak self] _, f in
+                f(.default)
+                self?.requestDismiss(animated: true)
+            }))
+        ]
+        let contextController = makeContextController(
+            presentationData: presentationData,
+            source: .reference(CameraChatDiscardReferenceContentSource(sourceView: sourceView)),
+            items: .single(ContextController.Items(content: .list(items)))
+        )
+        self.chatDiscardSheet = contextController
+        self.presentInGlobalOverlay(contextController)
+    }
+
     private var isDismissed = false
     fileprivate func requestDismiss(animated: Bool, interactive: Bool = false) {
         guard !self.isDismissed else {
@@ -4642,20 +5967,22 @@ public class CameraScreenImpl: ViewController, CameraScreen {
         self.cameraActivationLink?.invalidate()
         self.cameraActivationLink = nil
         
+        self.chatBatch?.close()
+        
         self.node.dismissAllTooltips()
         
         if !interactive {
             self.hapticFeedback.impact(.light)
         }
         
-        if case .story = self.mode {
+        if cameraScreenInvalidatesCameraOnDismiss(mode: self.mode.kind, hasHolder: self.holder != nil) {
             self.node.camera?.stopCapture(invalidate: true)
         }
         
         self.isDismissed = true
         if animated {
             self.ignoreStatusBar = true
-            if let layout = self.validLayout, layout.metrics.isTablet || [.sticker, .avatar].contains(self.mode) {
+            if let layout = self.validLayout, layout.metrics.isTablet || cameraScreenUsesModalPresentation(mode: self.mode.kind) {
                 self.node.animateOut(completion: {
                     self.dismiss(animated: false)
                     self.transitionedOut()
@@ -4820,11 +6147,24 @@ public class CameraScreenImpl: ViewController, CameraScreen {
     }
 }
 
-private func pipPositionForLocation(layout: ContainerViewLayout, position: CGPoint, velocity: CGPoint) -> CameraScreenImpl.PIPPosition {
+// A 9:16 viewfinder that leaves no room below it for the controls (home-button phones, iPhone Duo) lifts them.
+private func storyCameraControlsBottomInset(containerHeight: CGFloat, viewfinderHeight: CGFloat) -> CGFloat {
+    return containerHeight < viewfinderHeight + 30.0 ? -70.0 : 0.0
+}
+
+// Where the viewfinder fits above the controls, the shutter's centre is this far above its bottom edge.
+private let storyCameraShutterCenterAboveViewfinderBottom: CGFloat = maximumShutterSize.height / 2.0 + 5.0
+
+// The shutter's centre on a phone, outside the chat camera's own layout (`CameraScreenChatScreenLayout`).
+private func storyCameraShutterCenterY(containerHeight: CGFloat, bottomInset: CGFloat, controlsBottomInset: CGFloat) -> CGFloat {
+    return containerHeight - bottomInset - storyCameraShutterCenterAboveViewfinderBottom + floorToScreenPixels(controlsBottomInset * 0.66)
+}
+
+private func pipPositionForLocation(layout: ContainerViewLayout, centerX: CGFloat, position: CGPoint, velocity: CGPoint) -> CameraScreenImpl.PIPPosition {
     var layoutInsets = layout.insets(options: [.input])
     layoutInsets.bottom += 48.0
     var result = CGPoint()
-    if position.x < layout.size.width / 2.0 {
+    if position.x < centerX {
         result.x = 0.0
     } else {
         result.x = 1.0
@@ -4992,4 +6332,49 @@ private func sampleBufferFromPixelBuffer(pixelBuffer: CVPixelBuffer) -> CMSample
     dict[kCMSampleAttachmentKey_DisplayImmediately as NSString] = true as NSNumber
 
     return sampleBuffer
+}
+
+private func chatCameraHorizontallyFlippedImage(_ image: UIImage) -> UIImage {
+    let format = UIGraphicsImageRendererFormat()
+    format.scale = image.scale
+    format.opaque = true
+    return UIGraphicsImageRenderer(size: image.size, format: format).image { rendererContext in
+        rendererContext.cgContext.translateBy(x: image.size.width, y: 0.0)
+        rendererContext.cgContext.scaleBy(x: -1.0, y: 1.0)
+        image.draw(in: CGRect(origin: .zero, size: image.size))
+    }
+}
+
+struct CameraScreenChatScreenLayout: Equatable {
+    var previewFrame: CGRect
+    var topRowCenterY: CGFloat
+    var shutterCenterY: CGFloat
+    var zoomCenterY: CGFloat
+    var modeRowCenterY: CGFloat
+    var bottomRowPlacement: CaptureControlsBottomRowPlacement
+
+    init(screenSize: CGSize, captureKind: CameraScreenCaptureKind) {
+        let modeRowBottomInset: CGFloat = 58.0
+        self.topRowCenterY = 50.0
+        let shutterToModeRowSpacing: CGFloat = 96.0
+        let zoomToShutterSpacing: CGFloat = 92.0
+        let photoSideButtonCenterInset: CGFloat = 58.0
+        let videoSideButtonCenterInset: CGFloat = 40.0
+
+        self.modeRowCenterY = screenSize.height - modeRowBottomInset
+        self.shutterCenterY = self.modeRowCenterY - shutterToModeRowSpacing
+        self.zoomCenterY = self.shutterCenterY - zoomToShutterSpacing
+
+        let sideButtonCenterInset: CGFloat
+        switch captureKind {
+        case .photo:
+            self.previewFrame = CGRect(origin: .zero, size: screenSize)
+            sideButtonCenterInset = photoSideButtonCenterInset
+        default:
+            let width = floorToScreenPixels(screenSize.height / 1.77778)
+            self.previewFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((screenSize.width - width) / 2.0), y: 0.0), size: CGSize(width: width, height: screenSize.height))
+            sideButtonCenterInset = self.previewFrame.minX + videoSideButtonCenterInset
+        }
+        self.bottomRowPlacement = CaptureControlsBottomRowPlacement(rowCenterOffsetFromShutter: self.modeRowCenterY - self.shutterCenterY, buttonSideCenterInset: sideButtonCenterInset)
+    }
 }

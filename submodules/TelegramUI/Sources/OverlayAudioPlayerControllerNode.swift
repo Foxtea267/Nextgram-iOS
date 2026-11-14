@@ -80,6 +80,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
     private var saveMediaDisposable: MetaDisposable?
     
     private var validLayout: ContainerViewLayout?
+    private var containerUsesCornerRadii = false
     
     private var presentationDataDisposable: Disposable?
     private var nextgramPlayerStyleDisposable: Disposable? // MARK: NEXTGRAM
@@ -327,7 +328,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         
         self.contentNode = ASDisplayNode()
         
-        self.controlsNode = OverlayAudioPlayerControlsNode(account: context.account, engine: context.engine, accountManager: context.sharedContext.accountManager, presentationData: self.presentationData, status: context.sharedContext.mediaManager.musicMediaPlayerState, chatLocation: self.chatLocation, source: self.source, lottieSettings: context.lottieRenderingSettings)
+        self.controlsNode = OverlayAudioPlayerControlsNode(account: context.account, engine: context.engine, accountManager: context.sharedContext.accountManager, presentationData: self.presentationData, status: context.sharedContext.mediaManager.musicMediaPlayerState, chatLocation: self.chatLocation, source: self.source)
         self.controlsNode.getParentController = getParentController
         
         self.historyBackgroundNode = ASDisplayNode()
@@ -1011,7 +1012,19 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         transition.updateTransform(layer: self.containerContainingNode.layer, transform: containerTransform)
         
         let containerCornerRadius = max(22.0, layout.deviceMetrics.screenCornerRadius)
-        transition.updateCornerRadius(node: self.containerContainingNode, cornerRadius: containerCornerRadius)
+        let screenCornerRadii = layout.screenCornerRadii
+        if !screenCornerRadii.isUniform, CALayer.cornerRadiiSupported {
+            // iPhone Duo's cover screen: the container fills the screen, so each corner follows its own screen corner
+            // (8pt on the hinge side, 59pt outside) rather than one radius.
+            self.containerUsesCornerRadii = true
+            self.containerContainingNode.layer.setCornerRadii(screenCornerRadii)
+        } else {
+            if self.containerUsesCornerRadii {
+                self.containerUsesCornerRadii = false
+                self.containerContainingNode.layer.setCornerRadii(CornerRadii(uniform: containerCornerRadius))
+            }
+            transition.updateCornerRadius(node: self.containerContainingNode, cornerRadius: containerCornerRadius)
+        }
     }
     
     // MARK: NEXTGRAM
@@ -1132,17 +1145,26 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         let usesModernLayout = self.controlsNode.usesModernMusicLayout
         let minimumQueueHeight: CGFloat = self.usesCompactMusicHeader ? 68.0 : 120.0
         let controlsMaxHeight = usesModernLayout ? max(0.0, layout.size.height - listTopInset - minimumQueueHeight) : layout.size.height
+        // The bottom controls panel spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom.
+        // Equal insets keep the controls across the full width, as before.
+        let controlsBottomInsets = layout.bottomEdgeSideInsets()
+        let controlsLeftInset: CGFloat = layout.safeInsets.left != layout.safeInsets.right ? controlsBottomInsets.left : 0.0
+        let controlsRightInset: CGFloat = layout.safeInsets.left != layout.safeInsets.right ? controlsBottomInsets.right : 0.0
+        // MARK: NEXTGRAM — Apply the playlist's height limit with the updated side insets.
         let controlsHeight = self.controlsNode.updateLayout(width: layout.size.width,
-            leftInset: usesModernLayout ? layout.safeInsets.left : 0.0, rightInset: usesModernLayout ? layout.safeInsets.right : 0.0,
+            leftInset: usesModernLayout ? layout.safeInsets.left : controlsLeftInset, rightInset: usesModernLayout ? layout.safeInsets.right : controlsRightInset,
             bottomInset: layout.intrinsicInsets.bottom, maxHeight: controlsMaxHeight, savedMusic: self.isSaved, transition: transition)
         
         let controlsFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - controlsHeight), size: CGSize(width: layout.size.width, height: controlsHeight))
         let controlsTransition = self.controlsNode.frame.width > 0.0 ? transition : .immediate
         controlsTransition.updateFrame(node: self.controlsNode, frame: controlsFrame)
-        
+
+        // The playlist keeps 16pt clear of a side strip (iPhone Duo), so its rows and header stay out of the strip and of
+        // the status corner above it when the sheet rises to the top; 16pt on each side otherwise.
+        let listSideMargins = layout.listSideMargins(base: 16.0)
         var insets = UIEdgeInsets()
-        insets.left = 16.0
-        insets.right = 16.0
+        insets.left = listSideMargins.left
+        insets.right = listSideMargins.right
         insets.bottom = 0.0
                         
         let listNodeSize = CGSize(width: layout.size.width, height: max(0.0, layout.size.height - listTopInset - controlsHeight)) // MARK: NEXTGRAM
@@ -1224,13 +1246,13 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                     )
                 ),
                 environment: {},
-                containerSize: CGSize(width: layout.size.width - headerInset * 2.0, height: 44.0)
+                containerSize: CGSize(width: layout.size.width - listSideMargins.left - listSideMargins.right, height: 44.0)
             )
             if let headerButtonsView = self.headerButtons.view {
                 if headerButtonsView.superview == nil {
                     self.historyFrameNode.view.addSubview(headerButtonsView)
                 }
-                headerButtonsView.frame = CGRect(origin: CGPoint(x: headerInset, y: headerInset), size: headerButtonsSize)
+                headerButtonsView.frame = CGRect(origin: CGPoint(x: listSideMargins.left, y: headerInset), size: headerButtonsSize)
             }
             
             let titleString: String
@@ -1246,19 +1268,21 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 titleString = ""
             }
             
+            // Centred between the header's buttons, in the band the header keeps to.
+            let titleAvailableWidth = layout.size.width - listSideMargins.left - listSideMargins.right - 54.0 * 2.0
             let titleSize = self.title.update(
                 transition: ComponentTransition(transition),
                 component: AnyComponent(
                     MultilineTextComponent(text: .plain(NSAttributedString(string: titleString, font: Font.semibold(17.0), textColor: self.presentationData.theme.list.itemPrimaryTextColor)))
                 ),
                 environment: {},
-                containerSize: CGSize(width: layout.size.width - 70.0 * 2.0, height: headerHeight)
+                containerSize: CGSize(width: titleAvailableWidth, height: headerHeight)
             )
             if let titleView = self.title.view {
                 if titleView.superview == nil {
                     self.historyFrameNode.view.addSubview(titleView)
                 }
-                titleView.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - titleSize.width) / 2.0), y: 29.0), size: titleSize)
+                titleView.frame = CGRect(origin: CGPoint(x: listSideMargins.left + 54.0 + floor((titleAvailableWidth - titleSize.width) / 2.0), y: 29.0), size: titleSize)
                 titleView.isHidden = compactHeader // MARK: NEXTGRAM
             }
             self.headerButtons.view?.isHidden = false // MARK: NEXTGRAM
@@ -1294,9 +1318,14 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 self.view.addSubview(self.albumArtBackground)
                 animateIn = true
             }
-            let albumArtSide = min(360.0, layout.size.width - 32.0)
+            // iPhone Duo: beside a side strip the cover keeps to the band between the side insets (in folded portrait it
+            // reached 31pt into the strip and the status corner). Elsewhere the insets are equal and the band is the
+            // whole width, as before.
+            let albumArtBandInsets: (left: CGFloat, right: CGFloat) = layout.safeInsets.left != layout.safeInsets.right ? (layout.safeInsets.left, layout.safeInsets.right) : (0.0, 0.0)
+            let albumArtBandWidth = layout.size.width - albumArtBandInsets.left - albumArtBandInsets.right
+            let albumArtSide = min(360.0, albumArtBandWidth - 32.0)
             let albumArtSize = CGSize(width: albumArtSide, height: albumArtSide)
-            self.albumArtNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((layout.size.width - albumArtSize.width) / 2.0), y: floorToScreenPixels((layout.size.height - albumArtSize.height) / 2.0)), size: albumArtSize)
+            self.albumArtNode.frame = CGRect(origin: CGPoint(x: albumArtBandInsets.left + floorToScreenPixels((albumArtBandWidth - albumArtSize.width) / 2.0), y: floorToScreenPixels((layout.size.height - albumArtSize.height) / 2.0)), size: albumArtSize)
             
             let makeLargeAlbumArtLayout = self.albumArtNode.asyncLayout()
             let applyLargeAlbumArt = makeLargeAlbumArtLayout(TransformImageArguments(corners: ImageCorners(radius: 4.0), imageSize: albumArtSize, boundingSize: albumArtSize, intrinsicInsets: UIEdgeInsets()))
@@ -1475,9 +1504,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.hasAnyHistoryMessages = self.historyNode.hasAnyMessages
         self.controlsNode.hasPlainBackground = !self.historyNode.hasAnyMessages
         
-        let sideInset: CGFloat = 16.0
+        // The playlist's side margins (wider beside iPhone Duo's side strip), which the list insets match.
+        let listSideMargins = layout.listSideMargins(base: 16.0)
         let headerHeight: CGFloat = self.effectiveHeaderHeight
-        
+
         let layoutTopInset: CGFloat = max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top)
 
         let rawControlsOffset = offset + layoutTopInset
@@ -1490,8 +1520,8 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         
         let frameFrame = CGRect(origin: CGPoint(x: 0.0, y: backgroundOffset), size: CGSize(width: layout.size.width, height: layout.size.height))
         let topOverlayFrame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: layout.size.width, height: headerHeight))
-        let leftOverlayFrame = CGRect(origin: CGPoint(x: 0.0, y: topOverlayFrame.maxY - 1.0), size: CGSize(width: sideInset, height: layout.size.height))
-        let rightOverlayFrame = CGRect(origin: CGPoint(x: layout.size.width - sideInset, y: topOverlayFrame.maxY - 1.0), size: CGSize(width: sideInset, height: layout.size.height))
+        let leftOverlayFrame = CGRect(origin: CGPoint(x: 0.0, y: topOverlayFrame.maxY - 1.0), size: CGSize(width: listSideMargins.left, height: layout.size.height))
+        let rightOverlayFrame = CGRect(origin: CGPoint(x: layout.size.width - listSideMargins.right, y: topOverlayFrame.maxY - 1.0), size: CGSize(width: listSideMargins.right, height: layout.size.height))
         
         transition.updateFrame(node: self.historyFrameNode, frame: frameFrame)
         self.historyFrameTopOverlayClipNode.frame = topOverlayFrame
@@ -1499,7 +1529,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.historyFrameLeftOverlayNode.frame = leftOverlayFrame
         self.historyFrameRightOverlayNode.frame = rightOverlayFrame
         if let image = self.historyFrameTopMaskNode.image {
-            self.historyFrameTopMaskNode.frame = CGRect(origin: CGPoint(x: sideInset, y: topOverlayFrame.maxY - 1.0), size: CGSize(width: layout.size.width - sideInset * 2.0, height: image.size.height))
+            self.historyFrameTopMaskNode.frame = CGRect(origin: CGPoint(x: listSideMargins.left, y: topOverlayFrame.maxY - 1.0), size: CGSize(width: layout.size.width - listSideMargins.left - listSideMargins.right, height: image.size.height))
         }
         self.historyFrameTopMaskNode.isHidden = self.controlsNode.hasPlainBackground
         
@@ -1560,10 +1590,12 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         if let layout = self.validLayout {
             let layoutTopInset: CGFloat = max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top)
             let controlsHeight = self.controlsNode.frame.height
-            
+
+            // The same side margins as the current list (wider beside iPhone Duo's side strip).
+            let listSideMargins = layout.listSideMargins(base: 16.0)
             var insets = UIEdgeInsets()
-            insets.left = 16.0
-            insets.right = 16.0
+            insets.left = listSideMargins.left
+            insets.right = listSideMargins.right
             insets.bottom = 0.0
 
             let headerHeight = self.effectiveHeaderHeight
@@ -1658,12 +1690,14 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             if let layout = self.validLayout {
                 let layoutTopInset: CGFloat = max(layout.statusBarHeight ?? 0.0, layout.safeInsets.top)
                 let controlsHeight = self.controlsNode.frame.height
-                
+
+                // The same side margins as the replaced list (wider beside iPhone Duo's side strip).
+                let listSideMargins = layout.listSideMargins(base: 16.0)
                 var insets = UIEdgeInsets()
-                insets.left = 16.0
-                insets.right = 16.0
+                insets.left = listSideMargins.left
+                insets.right = listSideMargins.right
                 insets.bottom = 0.0
-                
+
                 let headerHeight = self.effectiveHeaderHeight
                 let listTopInset = layoutTopInset + headerHeight
                 let listNodeSize = CGSize(width: layout.size.width, height: max(0.0, layout.size.height - listTopInset - controlsHeight)) // MARK: NEXTGRAM
@@ -1940,11 +1974,11 @@ private final class OverlayAudioPlayerContextExtractedContentSource: ContextExtr
     }
     
     func takeView() -> ContextControllerTakeViewInfo? {
-        return ContextControllerTakeViewInfo(containingItem: .node(self.contentNode), contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerTakeViewInfo(containingItem: .node(self.contentNode), contentAreaInScreenSpace: mainWindowScreenBounds)
     }
     
     func putBack() -> ContextControllerPutBackViewInfo? {
-        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }
 

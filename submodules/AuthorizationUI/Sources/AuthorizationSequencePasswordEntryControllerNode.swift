@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -63,7 +62,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.strings = strings
         self.theme = theme
         
-        self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+        self.animationNode = DefaultAnimatedStickerNodeImpl()
         self.animationNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "IntroPassword"), width: 256, height: 256, playbackMode: .still(.start), mode: .direct(cachePathPrefix: nil))
         
         self.titleNode = ASTextNode()
@@ -72,7 +71,7 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.titleNode.attributedText = NSAttributedString(string: strings.LoginPassword_Title, font: Font.semibold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
         
         self.titleActivateAreaNode = AccessibilityAreaNode()
-        self.titleActivateAreaNode.accessibilityTraits = .staticText
+        self.titleActivateAreaNode.accessibilityTraits = [.staticText, .header]
         
         self.noticeNode = ASTextNode()
         self.noticeNode.isUserInteractionEnabled = false
@@ -92,6 +91,8 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.resetNode = HighlightableButtonNode()
         self.resetNode.displaysAsynchronously = false
         self.resetNode.setAttributedTitle(NSAttributedString(string: self.strings.LoginPassword_ResetAccount, font: Font.regular(16.0), textColor: self.theme.list.itemDestructiveColor, paragraphAlignment: .center), for: [])
+        self.resetNode.accessibilityLabel = self.strings.LoginPassword_ResetAccount
+        self.resetNode.accessibilityTraits = [.button]
         
         self.codeSeparatorNode = ASDisplayNode()
         self.codeSeparatorNode.isLayerBacked = true
@@ -106,7 +107,8 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         self.codeField.textField.keyboardAppearance = self.theme.rootController.keyboardColor.keyboardAppearance
         self.codeField.textField.disableAutomaticKeyboardHandling = [.forward, .backward]
         self.codeField.textField.tintColor = self.theme.list.itemAccentColor
-        self.codeField.textField.accessibilityHint = self.strings.Login_VoiceOver_Password
+        // The field shows only the password hint as its placeholder: VoiceOver names it.
+        self.codeField.textField.accessibilityLabel = self.strings.Login_VoiceOver_Password
         
         self.proceedNode = SolidRoundedButtonNode(title: self.strings.Login_Continue, theme: SolidRoundedButtonTheme(theme: self.theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5)
         self.proceedNode.progressType = .embedded
@@ -173,8 +175,18 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
             layout = layout.withUpdatedInputHeight(previousInputHeight)
         }
         
+        // iPhone Duo: beside a side strip the content keeps to the band between the side insets; on the unfolded screen it
+        // is centered on the full width, clear of the strip on both sides (authorizationContentBand). With equal insets
+        // (every other phone) it keeps the full width.
+        let (bandMinX, bandWidth) = authorizationContentBand(layout: layout)
+        
         let inset: CGFloat = 24.0
-        let maximumWidth: CGFloat = min(430.0, layout.size.width)
+        let maximumWidth: CGFloat = min(430.0, bandWidth)
+        
+        // iPhone Duo: the bottom button keeps to the content's axis (authorizationBottomBand): unfolded it spans the
+        // side strip, clear only of a corner block at the bottom; folded it keeps to the content band.
+        let (bottomBandMinX, bottomBandWidth) = authorizationBottomBand(layout: layout)
+        let bottomMaximumWidth: CGFloat = min(430.0, bottomBandWidth)
         
         var insets = layout.insets(options: [])
         insets.top = layout.statusBarHeight ?? 20.0
@@ -193,8 +205,8 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         let noticeSize = self.noticeNode.measure(CGSize(width: maximumWidth - 28.0, height: CGFloat.greatestFiniteMagnitude))
         let forgotSize = self.forgotNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
         let resetSize = self.resetNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
-        let proceedHeight = self.proceedNode.updateLayout(width: maximumWidth - inset * 2.0, transition: transition)
-        let proceedSize = CGSize(width: maximumWidth - inset * 2.0, height: proceedHeight)
+        let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - inset * 2.0, transition: transition)
+        let proceedSize = CGSize(width: bottomMaximumWidth - inset * 2.0, height: proceedHeight)
         
         var items: [AuthorizationLayoutItem] = []
         items.append(AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: titleInset, maxValue: titleInset), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)))
@@ -215,19 +227,26 @@ final class AuthorizationSequencePasswordEntryControllerNode: ASDisplayNode, UIT
         if layout.size.width > 320.0 {
             items.insert(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)), at: 0)
             self.proceedNode.isHidden = false
-            self.animationNode.isHidden = false
-            self.animationNode.visibility = true
+            if !authorizationLayoutItemsFit(height: layout.size.height - insets.top - insets.bottom - additionalBottomInset, items: items) {
+                items.removeFirst()
+                insets.top = navigationBarHeight
+            }
         } else {
             insets.top = navigationBarHeight
             self.proceedNode.isHidden = true
+        }
+        if items.first?.node === self.animationNode {
+            self.animationNode.isHidden = false
+            self.animationNode.visibility = true
+        } else {
             self.animationNode.isHidden = true
         }
         
-        transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: floorToScreenPixels((layout.size.width - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize))
+        transition.updateFrame(node: self.proceedNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize))
         
         self.animationNode.updateLayout(size: animationSize)
         
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: 0.0, y: insets.top), size: CGSize(width: layout.size.width, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - additionalBottomInset)), items: items, transition: transition, failIfDoesNotFit: false)
         
         self.titleActivateAreaNode.accessibilityLabel = self.titleNode.attributedText?.string ?? ""
         self.noticeActivateAreaNode.accessibilityLabel = self.noticeNode.attributedText?.string ?? ""

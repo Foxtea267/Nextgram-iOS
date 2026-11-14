@@ -8,6 +8,13 @@ import ContextUI
 import PeerInfoVisualMediaPaneNode
 
 extension PeerInfoScreenNode {
+    /// What a menu of the bar's "…" opens from: the bar's capsule holding the button, which the menu morphs out of and
+    /// hides while it is open, else the button itself. Every pane's menu goes through it; opening one from the button
+    /// left its capsule on screen beside the menu.
+    func navigationMenuSourceView(_ source: ContextReferenceContentNode) -> UIView {
+        return self.controller?.navigationBar?.navigationButtonContextContainer(sourceView: source.view) ?? source.view
+    }
+
     func displayMediaGalleryContextMenu(source: ContextReferenceContentNode, gesture: ContextGesture?) {
         var isBotPreviewOrStories = false
         if let currentPaneKey = self.paneContainerNode.currentPaneKey {
@@ -48,7 +55,7 @@ extension PeerInfoScreenNode {
                         a(.default)
                         
                         if let self {
-                            self.headerNode.navigationButtonContainer.performAction?(.postStory, nil, nil)
+                            self.performNavigationButtonAction?(.postStory, nil, nil)
                         }
                     })))
                 }
@@ -99,7 +106,7 @@ extension PeerInfoScreenNode {
                     })))
                 }
                 
-                let contextController = makeContextController(presentationData: self.presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceNode: source)), items: .single(ContextController.Items(content: .list(items))), gesture: gesture)
+                let contextController = makeContextController(presentationData: self.presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceView: self.navigationMenuSourceView(source))), items: .single(ContextController.Items(content: .list(items))), gesture: gesture)
                 contextController.passthroughTouchEvent = { [weak self] sourceView, point in
                     guard let strongSelf = self else {
                         return .ignore
@@ -111,26 +118,15 @@ extension PeerInfoScreenNode {
                     }
                     
                     var testView: UIView? = localResult
-                    while true {
-                        if let testViewValue = testView {
-                            if let node = testViewValue.asyncdisplaykit_node as? PeerInfoHeaderNavigationButton {
-                                node.isUserInteractionEnabled = false
-                                DispatchQueue.main.async {
-                                    node.isUserInteractionEnabled = true
-                                }
-                                return .dismiss(consume: false, result: nil)
-                            } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoVisualMediaPaneNode {
-                                node.brieflyDisableTouchActions()
-                                return .dismiss(consume: false, result: nil)
-                            } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoStoryPaneNode {
-                                node.brieflyDisableTouchActions()
-                                return .dismiss(consume: false, result: nil)
-                            } else {
-                                testView = testViewValue.superview
-                            }
-                        } else {
-                            break
+                    while let testViewValue = testView {
+                        if let node = testViewValue.asyncdisplaykit_node as? PeerInfoVisualMediaPane {
+                            node.brieflyDisableTouchActions()
+                            return .dismiss(consume: false, result: nil)
+                        } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoStoryPaneNode {
+                            node.brieflyDisableTouchActions()
+                            return .dismiss(consume: false, result: nil)
                         }
+                        testView = testViewValue.superview
                     }
                     
                     return .dismiss(consume: true, result: nil)
@@ -159,7 +155,7 @@ extension PeerInfoScreenNode {
                     a(.default)
                     
                     if let self {
-                        self.headerNode.navigationButtonContainer.performAction?(.postStory, nil, nil)
+                        self.performNavigationButtonAction?(.postStory, nil, nil)
                     }
                 })))
                 
@@ -229,7 +225,7 @@ extension PeerInfoScreenNode {
                     })))
                 }
                 
-                let contextController = makeContextController(presentationData: self.presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceNode: source)), items: .single(ContextController.Items(content: .list(items))), gesture: gesture)
+                let contextController = makeContextController(presentationData: self.presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceView: self.navigationMenuSourceView(source))), items: .single(ContextController.Items(content: .list(items))), gesture: gesture)
                 contextController.passthroughTouchEvent = { [weak self] sourceView, point in
                     guard let strongSelf = self else {
                         return .ignore
@@ -241,26 +237,15 @@ extension PeerInfoScreenNode {
                     }
                     
                     var testView: UIView? = localResult
-                    while true {
-                        if let testViewValue = testView {
-                            if let node = testViewValue.asyncdisplaykit_node as? PeerInfoHeaderNavigationButton {
-                                node.isUserInteractionEnabled = false
-                                DispatchQueue.main.async {
-                                    node.isUserInteractionEnabled = true
-                                }
-                                return .dismiss(consume: false, result: nil)
-                            } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoVisualMediaPaneNode {
-                                node.brieflyDisableTouchActions()
-                                return .dismiss(consume: false, result: nil)
-                            } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoStoryPaneNode {
-                                node.brieflyDisableTouchActions()
-                                return .dismiss(consume: false, result: nil)
-                            } else {
-                                testView = testViewValue.superview
-                            }
-                        } else {
-                            break
+                    while let testViewValue = testView {
+                        if let node = testViewValue.asyncdisplaykit_node as? PeerInfoVisualMediaPane {
+                            node.brieflyDisableTouchActions()
+                            return .dismiss(consume: false, result: nil)
+                        } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoStoryPaneNode {
+                            node.brieflyDisableTouchActions()
+                            return .dismiss(consume: false, result: nil)
                         }
+                        testView = testViewValue.superview
                     }
                     
                     return .dismiss(consume: true, result: nil)
@@ -292,7 +277,7 @@ extension PeerInfoScreenNode {
                 guard let controller = strongSelf.controller else {
                     return
                 }
-                guard let pane = strongSelf.paneContainerNode.currentPane?.node as? PeerInfoVisualMediaPaneNode else {
+                guard let pane = strongSelf.paneContainerNode.currentPane?.node as? PeerInfoVisualMediaPane else {
                     return
                 }
                 
@@ -302,16 +287,15 @@ extension PeerInfoScreenNode {
                 
                 var recurseGenerateAction: ((Bool) -> ContextMenuActionItem)?
                 let generateAction: (Bool) -> ContextMenuActionItem = { [weak pane] isZoomIn in
-                    let nextZoomLevel = isZoomIn ? pane?.availableZoomLevels().increment : pane?.availableZoomLevels().decrement
-                    let canZoom: Bool = nextZoomLevel != nil
+                    let canZoom: Bool = pane?.canZoom(isZoomIn: isZoomIn) ?? false
                     
                     return ContextMenuActionItem(id: isZoomIn ? 0 : 1, text: isZoomIn ? strings.SharedMedia_ZoomIn : strings.SharedMedia_ZoomOut, textColor: canZoom ? .primary : .disabled, icon: { theme in
                         return generateTintedImage(image: UIImage(bundleImageName: isZoomIn ? "Chat/Context Menu/ZoomIn" : "Chat/Context Menu/ZoomOut"), color: canZoom ? theme.contextMenu.primaryColor : theme.contextMenu.primaryColor.withMultipliedAlpha(0.4))
                     }, action: canZoom ? { action in
-                        guard let pane = pane, let zoomLevel = isZoomIn ? pane.availableZoomLevels().increment : pane.availableZoomLevels().decrement else {
+                        guard let pane = pane, pane.canZoom(isZoomIn: isZoomIn) else {
                             return
                         }
-                        pane.updateZoomLevel(level: zoomLevel)
+                        pane.zoom(isZoomIn: isZoomIn)
                         if let recurseGenerateAction = recurseGenerateAction {
                             action.updateAction(0, recurseGenerateAction(true))
                             action.updateAction(1, recurseGenerateAction(false))
@@ -411,14 +395,7 @@ extension PeerInfoScreenNode {
                     })))
                 }
                 
-                var sourceView: UIView = source.view
-                if sourceView.isDescendant(of: strongSelf.headerNode.navigationButtonContainer.rightButtonsBackground) {
-                    sourceView = strongSelf.headerNode.navigationButtonContainer.rightButtonsBackground
-                } else if sourceView.isDescendant(of: strongSelf.headerNode.navigationButtonContainer.leftButtonsBackground) {
-                    sourceView = strongSelf.headerNode.navigationButtonContainer.leftButtonsBackground
-                }
-                
-                let contextController = makeContextController(presentationData: strongSelf.presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceView: sourceView)), items: .single(ContextController.Items(content: .list(items))), gesture: gesture)
+                let contextController = makeContextController(presentationData: strongSelf.presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceView: strongSelf.navigationMenuSourceView(source))), items: .single(ContextController.Items(content: .list(items))), gesture: gesture)
                 contextController.passthroughTouchEvent = { sourceView, point in
                     guard let strongSelf = self else {
                         return .ignore
@@ -430,26 +407,15 @@ extension PeerInfoScreenNode {
                     }
                     
                     var testView: UIView? = localResult
-                    while true {
-                        if let testViewValue = testView {
-                            if let node = testViewValue.asyncdisplaykit_node as? PeerInfoHeaderNavigationButton {
-                                node.isUserInteractionEnabled = false
-                                DispatchQueue.main.async {
-                                    node.isUserInteractionEnabled = true
-                                }
-                                return .dismiss(consume: false, result: nil)
-                            } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoVisualMediaPaneNode {
-                                node.brieflyDisableTouchActions()
-                                return .dismiss(consume: false, result: nil)
-                            } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoStoryPaneNode {
-                                node.brieflyDisableTouchActions()
-                                return .dismiss(consume: false, result: nil)
-                            } else {
-                                testView = testViewValue.superview
-                            }
-                        } else {
-                            break
+                    while let testViewValue = testView {
+                        if let node = testViewValue.asyncdisplaykit_node as? PeerInfoVisualMediaPane {
+                            node.brieflyDisableTouchActions()
+                            return .dismiss(consume: false, result: nil)
+                        } else if let node = testViewValue.asyncdisplaykit_node as? PeerInfoStoryPaneNode {
+                            node.brieflyDisableTouchActions()
+                            return .dismiss(consume: false, result: nil)
                         }
+                        testView = testViewValue.superview
                     }
                     
                     return .dismiss(consume: true, result: nil)

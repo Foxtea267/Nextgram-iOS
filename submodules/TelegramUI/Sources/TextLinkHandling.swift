@@ -16,6 +16,7 @@ import PresentationDataUtils
 import UrlWhitelist
 import UndoUI
 import BrowserUI
+import NagramSettings // MARK: NAGRAM
 
 func handleTextLinkActionImpl(context: AccountContext, peerId: EnginePeer.Id?, navigateDisposable: MetaDisposable, controller: ViewController, action: TextLinkItemActionType, itemLink: TextLinkItem) {
     let presentationData = context.sharedContext.currentPresentationData.with({ $0 })
@@ -95,9 +96,11 @@ func handleTextLinkActionImpl(context: AccountContext, peerId: EnginePeer.Id?, n
                                 context.sharedContext.navigateToChatController(NavigateToChatControllerParams(navigationController: navigationController, context: context, chatLocation: .replyThread(replyThreadMessage), subject: .message(id: .id(messageId), highlight: ChatControllerSubject.MessageHighlight(quote: nil), timecode: nil, setupReply: false), keepStack: .always))
                             }
                         } else if let navigationController = controller.navigationController as? NavigationController, let effectiveMessageId = replyThreadMessage.effectiveMessageId {
+                            // The resolver already fetched a comment thread, so it is only preloaded; a forum topic's resolved thread
+                            // carries no read state and is opened as before.
                             let _ = ChatControllerImpl.openMessageReplies(context: context, navigationController: navigationController, present: { [weak controller] c, a in
                                 controller?.present(c, in: .window(.root), with: a)
-                            }, messageId: effectiveMessageId, isChannelPost: replyThreadMessage.isChannelPost, atMessage: messageId, displayModalProgress: true).start()
+                            }, messageId: effectiveMessageId, isChannelPost: replyThreadMessage.isChannelPost, atMessage: messageId, displayModalProgress: true, resolvedThread: replyThreadMessage.isForumPost ? nil : replyThreadMessage).start()
                         }
                     case let .replyThread(messageId):
                         if let navigationController = controller.navigationController as? NavigationController {
@@ -110,7 +113,7 @@ func handleTextLinkActionImpl(context: AccountContext, peerId: EnginePeer.Id?, n
                         let sourceLocation = InstantPageSourceLocation(userLocation: peerId.flatMap(MediaResourceUserLocation.peer) ?? .other, peerType: .group)
                         let browserController = context.sharedContext.makeInstantPageController(context: context, webPage: webPage, anchor: anchor, sourceLocation: sourceLocation)
                         (controller.navigationController as? NavigationController)?.pushViewController(browserController, animated: true)
-                    case .boost, .chatFolder, .join, .invoice, .proxy, .sendGrams:
+                    case .boost, .chatFolder, .join, .invoice, .proxy, .sendGrams, .noPaidMessagesToken:
                         if let navigationController = controller.navigationController as? NavigationController {
                             openResolvedUrlImpl(result, context: context, urlContext: peerId.flatMap { .chat(peerId: $0, message: nil, updatedPresentationData: nil) } ?? .generic, navigationController: navigationController, forceExternal: false, forceUpdate: false, openPeer: { peer, navigateToPeer in
                                 openResolvedPeerImpl(peer, navigateToPeer)
@@ -149,7 +152,8 @@ func handleTextLinkActionImpl(context: AccountContext, peerId: EnginePeer.Id?, n
                         concealed = true
                     }
                     
-                    if concealed {
+                    // MARK: NAGRAM — "Skip Open Link Confirmation"; a login-part link still asks.
+                    if concealed && (loginPartUrl != nil || !NagramSettings.shared.skipOpenLinkConfirmation) {
                         // For a login part the prompt shows the host the link really opens. The external-URL opener
                         // asks about such a link as well, so accepting it here tells the opener it has been confirmed.
                         var rawDisplayUrl: String = loginPartUrl.map { urlRemovingLoginPart($0).absoluteString } ?? parsedString

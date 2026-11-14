@@ -17,6 +17,9 @@ import SearchUI
 import WallpaperResources
 import WallpaperGalleryScreen
 import BoostLevelIconComponent
+import ComponentFlow
+import EdgeEffect
+import ComponentDisplayAdapters
 
 struct ThemeGridControllerNodeState: Equatable {
     var editing: Bool
@@ -187,8 +190,7 @@ final class ThemeGridControllerNode: ASDisplayNode {
     private var resetDescriptionItem: ItemListTextItem
     
     private var selectionPanel: ThemeGridSelectionPanelNode?
-    private var selectionPanelSeparatorNode: ASDisplayNode?
-    private var selectionPanelBackgroundNode: NavigationBackgroundNode?
+    private var selectionPanelEdgeEffectView: EdgeEffectView?
     
     let gridNode: GridNode
     private let leftOverlayNode: ASDisplayNode
@@ -575,11 +577,11 @@ final class ThemeGridControllerNode: ASDisplayNode {
                 transition.updateFrame(node: strongSelf.bottomBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: gridLayout.contentSize.height), size: CGSize(width: layout.size.width, height: 500.0)))
                 transition.updateFrame(node: strongSelf.bottomSeparatorNode, frame: CGRect(origin: CGPoint(x: 0.0, y: gridLayout.contentSize.height), size: CGSize(width: layout.size.width, height: UIScreenPixel)))
                 
-                let sideInset = max(16.0, floor((layout.size.width - 674.0) / 2.0))
+                let sideMargins = layout.listSideMargins(base: max(16.0, floor((layout.size.width - 674.0) / 2.0)))
                 var listInsets = layout.safeInsets
                 if layout.size.width >= 320.0 {
-                    listInsets.left = sideInset
-                    listInsets.right = sideInset
+                    listInsets.left = sideMargins.left
+                    listInsets.right = sideMargins.right
                 }
                 
                 let params = ListViewItemLayoutParams(width: layout.size.width, leftInset: listInsets.left, rightInset: listInsets.right, availableHeight: layout.size.height)
@@ -596,7 +598,7 @@ final class ThemeGridControllerNode: ASDisplayNode {
                 transition.updateFrame(node: strongSelf.resetDescriptionItemNode, frame: CGRect(origin: CGPoint(x: 0.0, y: gridLayout.contentSize.height + 35.0 + resetLayout.contentSize.height), size: resetDescriptionLayout.contentSize))
                 
                 let maskSideInset = strongSelf.leftOverlayNode.frame.maxX
-                strongSelf.maskNode.frame = CGRect(origin: CGPoint(x: maskSideInset, y: strongSelf.separatorNode.frame.minY + UIScreenPixel), size: CGSize(width: layout.size.width - sideInset * 2.0, height: gridLayout.contentSize.height + 10.0))
+                strongSelf.maskNode.frame = CGRect(origin: CGPoint(x: maskSideInset, y: strongSelf.separatorNode.frame.minY + UIScreenPixel), size: CGSize(width: layout.size.width - sideMargins.left - sideMargins.right, height: gridLayout.contentSize.height + 10.0))
             }
         }
     }
@@ -776,10 +778,12 @@ final class ThemeGridControllerNode: ASDisplayNode {
         } else {
             referenceImageSize = CGSize(width: 90.0, height: 150.0)
         }
-        let sideInset = max(16.0, floor((layout.size.width - 674.0) / 2.0))
-        
-        let gridWidth = layout.size.width - sideInset * 2.0
-        
+        // iPhone Duo: a side with a side strip keeps the grid and the buttons above it 16pt clear of it;
+        // without a strip both margins are today's.
+        let sideMargins = layout.listSideMargins(base: max(16.0, floor((layout.size.width - 674.0) / 2.0)))
+
+        let gridWidth = layout.size.width - sideMargins.left - sideMargins.right
+
         let imageCount = Int((gridWidth - padding * 2.0) / (referenceImageSize.width))
         let imageSize = referenceImageSize.aspectFilled(CGSize(width: floorToScreenPixels((gridWidth - padding * 2.0 - CGFloat(imageCount - 1) * minSpacing) / CGFloat(imageCount)), height: referenceImageSize.height))
         let spacing = floorToScreenPixels((gridWidth - padding * 2.0 - CGFloat(imageCount) * imageSize.width) / CGFloat(imageCount - 1))
@@ -792,8 +796,8 @@ final class ThemeGridControllerNode: ASDisplayNode {
         
         var listInsets = insets
         if layout.size.width >= 320.0 {
-            listInsets.left = sideInset
-            listInsets.right = sideInset
+            listInsets.left = sideMargins.left
+            listInsets.right = sideMargins.right
             if self.leftOverlayNode.supernode == nil {
                 self.gridNode.addSubnode(self.leftOverlayNode)
             }
@@ -883,60 +887,69 @@ final class ThemeGridControllerNode: ASDisplayNode {
         
         if self.currentState.editing {
             let panelHeight: CGFloat
-            if let selectionPanel = self.selectionPanel {
-                selectionPanel.selectedIds = self.currentState.selectedIds
-                panelHeight = selectionPanel.updateLayout(width: layout.size.width, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, maxHeight: 0.0, transition: transition, metrics: layout.metrics)
-                transition.updateFrame(node: selectionPanel, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - insets.bottom - panelHeight), size: CGSize(width: layout.size.width, height: panelHeight)))
-                if let selectionPanelSeparatorNode = self.selectionPanelSeparatorNode {
-                    transition.updateFrame(node: selectionPanelSeparatorNode, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - insets.bottom - panelHeight), size: CGSize(width: layout.size.width, height: UIScreenPixel)))
-                }
-                if let selectionPanelBackgroundNode = self.selectionPanelBackgroundNode {
-                    transition.updateFrame(node: selectionPanelBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - insets.bottom - panelHeight), size: CGSize(width: layout.size.width, height: insets.bottom + panelHeight)))
-                    selectionPanelBackgroundNode.update(size: selectionPanelBackgroundNode.bounds.size, transition: transition)
-                }
+            // The bottom selection panel spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom.
+            let selectionPanelInsets = layout.bottomEdgeSideInsets()
+            let buttonInsets = ContainerViewLayout.concentricInsets(bottomInset: insets.bottom, innerDiameter: 40.0, sideInset: 16.0)
+            let selectionPanel: ThemeGridSelectionPanelNode
+            let edgeEffectView: EdgeEffectView
+            var isNewPanel = false
+            if let current = self.selectionPanel, let currentEdgeEffectView = self.selectionPanelEdgeEffectView {
+                selectionPanel = current
+                edgeEffectView = currentEdgeEffectView
             } else {
-                let selectionPanelBackgroundNode = NavigationBackgroundNode(color: self.presentationData.theme.rootController.navigationBar.blurredBackgroundColor)
-                self.addSubnode(selectionPanelBackgroundNode)
-                self.selectionPanelBackgroundNode = selectionPanelBackgroundNode
+                isNewPanel = true
                 
-                let selectionPanel = ThemeGridSelectionPanelNode(theme: self.presentationData.theme)
+                self.selectionPanel?.removeFromSupernode()
+                self.selectionPanelEdgeEffectView?.removeFromSuperview()
+                
+                edgeEffectView = EdgeEffectView()
+                self.view.addSubview(edgeEffectView)
+                self.selectionPanelEdgeEffectView = edgeEffectView
+                
+                selectionPanel = ThemeGridSelectionPanelNode(theme: self.presentationData.theme)
                 selectionPanel.controllerInteraction = self.controllerInteraction
-                selectionPanel.selectedIds = self.currentState.selectedIds
-                panelHeight = selectionPanel.updateLayout(width: layout.size.width, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, maxHeight: 0.0, transition: .immediate, metrics: layout.metrics)
                 self.selectionPanel = selectionPanel
                 self.addSubnode(selectionPanel)
-                
-                let selectionPanelSeparatorNode = ASDisplayNode()
-                selectionPanelSeparatorNode.backgroundColor = self.presentationData.theme.chat.inputPanel.panelSeparatorColor
-                self.addSubnode(selectionPanelSeparatorNode)
-                self.selectionPanelSeparatorNode = selectionPanelSeparatorNode
-                
-                selectionPanel.frame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height), size: CGSize(width: layout.size.width, height: panelHeight))
-                selectionPanelBackgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height), size: CGSize(width: layout.size.width, height: 0.0))
-                selectionPanelSeparatorNode.frame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height), size: CGSize(width: layout.size.width, height: UIScreenPixel))
-                transition.updateFrame(node: selectionPanel, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - insets.bottom - panelHeight), size: CGSize(width: layout.size.width, height: panelHeight)))
-                transition.updateFrame(node: selectionPanelBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - insets.bottom - panelHeight), size: CGSize(width: layout.size.width, height: insets.bottom + panelHeight)))
-                selectionPanelBackgroundNode.update(size: selectionPanelBackgroundNode.bounds.size, transition: .immediate)
-                transition.updateFrame(node: selectionPanelSeparatorNode, frame: CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - insets.bottom - panelHeight), size: CGSize(width: layout.size.width, height: UIScreenPixel)))
             }
+            selectionPanel.updateTheme(theme: self.presentationData.theme)
+            selectionPanel.selectedIds = self.currentState.selectedIds
+            panelHeight = selectionPanel.updateLayout(width: layout.size.width, leftInset: selectionPanelInsets.left + buttonInsets.left, rightInset: selectionPanelInsets.right + buttonInsets.right, maxHeight: 0.0, transition: isNewPanel ? .immediate : transition, metrics: layout.metrics)
             
-            insets.bottom += panelHeight
-            scrollIndicatorInsets.bottom += panelHeight
+            let panelFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - buttonInsets.bottom - panelHeight), size: CGSize(width: layout.size.width, height: panelHeight))
+            let edgeEffectSpacing: CGFloat = 16.0
+            let edgeEffectFrame = CGRect(origin: CGPoint(x: 0.0, y: panelFrame.minY - edgeEffectSpacing), size: CGSize(width: layout.size.width, height: layout.size.height - panelFrame.minY + edgeEffectSpacing))
+            
+            if isNewPanel {
+                selectionPanel.frame = panelFrame.offsetBy(dx: 0.0, dy: layout.size.height - panelFrame.minY)
+                edgeEffectView.frame = edgeEffectFrame
+                edgeEffectView.alpha = 0.0
+            }
+            transition.updateFrame(node: selectionPanel, frame: panelFrame)
+            transition.updateFrame(view: edgeEffectView, frame: edgeEffectFrame)
+            transition.updateAlpha(layer: edgeEffectView.layer, alpha: 1.0)
+            edgeEffectView.update(
+                content: self.presentationData.theme.list.blocksBackgroundColor,
+                blur: true,
+                rect: edgeEffectFrame,
+                edge: .bottom,
+                edgeSize: edgeEffectFrame.height,
+                transition: isNewPanel ? .immediate : ComponentTransition(transition)
+            )
+            
+            let occupiedHeight = layout.size.height - panelFrame.minY + 8.0
+            insets.bottom = max(insets.bottom, occupiedHeight)
+            scrollIndicatorInsets.bottom = max(scrollIndicatorInsets.bottom, occupiedHeight)
+            listInsets.bottom = max(listInsets.bottom, occupiedHeight)
         } else if let selectionPanel = self.selectionPanel {
             self.selectionPanel = nil
-            transition.updateFrame(node: selectionPanel, frame: selectionPanel.frame.offsetBy(dx: 0.0, dy: selectionPanel.bounds.size.height + insets.bottom), completion: { [weak selectionPanel] _ in
+            transition.updateFrame(node: selectionPanel, frame: selectionPanel.frame.offsetBy(dx: 0.0, dy: layout.size.height - selectionPanel.frame.minY), completion: { [weak selectionPanel] _ in
                 selectionPanel?.removeFromSupernode()
             })
-            if let selectionPanelSeparatorNode = self.selectionPanelSeparatorNode {
-                transition.updateFrame(node: selectionPanelSeparatorNode, frame: selectionPanelSeparatorNode.frame.offsetBy(dx: 0.0, dy: selectionPanel.bounds.size.height + insets.bottom), completion: { [weak selectionPanelSeparatorNode] _ in
-                    selectionPanelSeparatorNode?.removeFromSupernode()
+            if let selectionPanelEdgeEffectView = self.selectionPanelEdgeEffectView {
+                self.selectionPanelEdgeEffectView = nil
+                transition.updateAlpha(layer: selectionPanelEdgeEffectView.layer, alpha: 0.0, completion: { [weak selectionPanelEdgeEffectView] _ in
+                    selectionPanelEdgeEffectView?.removeFromSuperview()
                 })
-            }
-            if let selectionPanelBackgroundNode = self.selectionPanelBackgroundNode {
-                transition.updateFrame(node: selectionPanelBackgroundNode, frame: selectionPanelBackgroundNode.frame.offsetBy(dx: 0.0, dy: selectionPanel.bounds.size.height + insets.bottom), completion: { [weak selectionPanelSeparatorNode] _ in
-                    selectionPanelSeparatorNode?.removeFromSupernode()
-                })
-                selectionPanelBackgroundNode.update(size: selectionPanelBackgroundNode.bounds.size, transition: transition)
             }
         }
         

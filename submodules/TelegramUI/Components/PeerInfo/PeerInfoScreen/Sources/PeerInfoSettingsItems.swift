@@ -35,7 +35,7 @@ enum SettingsSection: Int, CaseIterable {
     case support
 }
 
-func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
+func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isExpanded: Bool, nagramShowCallsTab: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {
     guard let data = data else {
         return []
     }
@@ -238,9 +238,21 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 51, text: ngI18n("Nagram.Bookmarks", presentationData.strings.baseLanguageCode), icon: PresentationResourcesSettings.savedMessages, action: {
         interaction.openSettings(.nextgramBookmarks)
     }))
-    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
-        interaction.openSettings(.recentCalls)
-    }))
+    // MARK: NAGRAM — 联系人 / 通话记录入口只在对应 tab 不在底栏时显示
+    let nagramBottomBarSettings = NagramSettings.shared.bottomBarSettings
+    let nagramVisibleTabs = nagramBottomBarSettings.isBottomBarVisible ? nagramBottomBarSettings.visibleNavigationItems : []
+    if !(nagramShowCallsTab && nagramVisibleTabs.contains(.calls)) {
+        items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 2, text: presentationData.strings.CallSettings_RecentCalls, icon: PresentationResourcesSettings.recentCalls, action: {
+            interaction.openSettings(.recentCalls)
+        }))
+    }
+    if !nagramVisibleTabs.contains(.contacts) {
+        // Contacts live here rather than in the tab bar, which News took; so does its tab's "!" for contacts access.
+        let contactsWarning = data.globalSettings?.contactsWarning ?? false
+        items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 21, label: contactsWarning ? .badge("!", presentationData.theme.list.itemDestructiveColor) : .none, text: presentationData.strings.Contacts_Title, icon: PresentationResourcesSettings.contacts, action: {
+            interaction.openSettings(.contacts)
+        }))
+    }
     
     let devicesLabel: String
     if let settings = data.globalSettings, let otherSessionsCount = settings.otherSessionsCount {
@@ -274,7 +286,7 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     } else {
         notificationsWarning = false
     }
-    items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 0, label: notificationsWarning ? .badge("!", presentationData.theme.list.itemDestructiveColor) : .none, text: presentationData.strings.Settings_NotificationsAndSounds, icon: PresentationResourcesSettings.notifications, action: {
+    items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 0, label: notificationsWarning ? .badge("!", presentationData.theme.list.itemDestructiveColor) : .none, text: presentationData.strings.Settings_NotificationsAndSounds, icon: PresentationResourcesSettings.notifications, labelAccessibilityText: notificationsWarning ? presentationData.strings.VoiceOver_TabBar_AttentionRequired : nil, action: {
         interaction.openSettings(.notificationsAndSounds)
     }))
     items[.advanced]!.append(PeerInfoScreenDisclosureItem(id: 1, text: presentationData.strings.Settings_PrivacySettings, icon: PresentationResourcesSettings.security, action: {
@@ -373,6 +385,19 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         interaction.openSettings(.tips)
     }))
     
+    // MARK: NAGRAM — 去掉用户在「自定义设置页项目」里关闭的条目。
+    let nagramHiddenItems = NagramSettings.shared.hiddenSettingsPageItems
+    if !nagramHiddenItems.isEmpty {
+        for section in SettingsSection.allCases {
+            items[section] = items[section]?.filter { item in
+                guard let pageItem = nagramSettingsPageItem(section: section, id: item.id) else {
+                    return true
+                }
+                return !nagramHiddenItems.contains(pageItem)
+            }
+        }
+    }
+    
     var result: [(AnyHashable, [PeerInfoScreenItem])] = []
     for section in SettingsSection.allCases {
         if let sectionItems = items[section], !sectionItems.isEmpty {
@@ -380,6 +405,85 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
         }
     }
     return result
+}
+
+// MARK: NAGRAM — 设置页条目到可隐藏项的对应关系，id 与上面 settingsItems 中各条目一致。
+private func nagramSettingsPageItem(section: SettingsSection, id: AnyHashable) -> NagramSettingsPageItem? {
+    switch section {
+    case .phone:
+        return .suggestions
+    case .accounts:
+        return (id.base as? Int) == 100 ? .addAccount : .accounts
+    case .apps:
+        return .miniApps
+    case .wallet:
+        return .wallet
+    case .proxy:
+        return .proxy
+    case .myProfile:
+        return .myProfile
+    case .nagram:
+        return nil
+    default:
+        break
+    }
+    guard let id = id.base as? Int else {
+        return nil
+    }
+    switch (section, id) {
+    case (.edit, 0):
+        return .emojiStatus
+    case (.edit, 1):
+        return .profileColor
+    case (.edit, 2):
+        return .setAvatar
+    case (.edit, 3):
+        return .setUsername
+    case (.shortcuts, 1):
+        return .savedMessages
+    case (.shortcuts, 2):
+        return .recentCalls
+    case (.shortcuts, 21):
+        return .contacts
+    case (.shortcuts, 3):
+        return .devices
+    case (.shortcuts, 4):
+        return .chatFolders
+    case (.advanced, 0):
+        return .notifications
+    case (.advanced, 1):
+        return .privacy
+    case (.advanced, 2):
+        return .dataAndStorage
+    case (.advanced, 3):
+        return .appearance
+    case (.advanced, 6):
+        return .powerSaving
+    case (.advanced, 4):
+        return .language
+    case (.payment, 100):
+        return .premium
+    case (.payment, 102):
+        return .stars
+    case (.payment, 103):
+        return .ton
+    case (.payment, 104):
+        return .business
+    case (.payment, 105):
+        return .sendGift
+    case (.extra, 0):
+        return .passport
+    case (.extra, 1):
+        return .appleWatch
+    case (.support, 0):
+        return .support
+    case (.support, 1):
+        return .faq
+    case (.support, 2):
+        return .tips
+    default:
+        return nil
+    }
 }
 
 func settingsEditingItems(data: PeerInfoScreenData?, state: PeerInfoState, context: AccountContext, presentationData: PresentationData, interaction: PeerInfoInteraction, isMyProfile: Bool) -> [(AnyHashable, [PeerInfoScreenItem])] {

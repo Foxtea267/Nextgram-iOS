@@ -4,6 +4,7 @@ import Camera
 import Foundation
 import Accelerate
 import CoreImage
+import TelegramCore
 
 extension AVFrameRateRange {
     func clamp(rate: Float64) -> Float64 {
@@ -190,23 +191,15 @@ extension LegacyCameraPreviewView.Rotation {
 }
 
 func exifOrientation(for orientation: AVCaptureVideoOrientation, mirror: Bool) -> Int32 {
-    switch (orientation, mirror) {
-    case (.portrait, false):
-        return 6
-    case (.portrait, true):
-        return 5
-    case (.portraitUpsideDown, false):
-        return 8
-    case (.portraitUpsideDown, true):
-        return 7
-    case (.landscapeLeft, false):
-        return 3
-    case (.landscapeLeft, true):
-        return 2
-    case (.landscapeRight, false):
-        return 1
-    case (.landscapeRight, true):
-        return 4
+    switch orientation {
+    case .portrait:
+        return cameraPhotoExifOrientation(orientation: .portrait, mirror: mirror)
+    case .portraitUpsideDown:
+        return cameraPhotoExifOrientation(orientation: .portraitUpsideDown, mirror: mirror)
+    case .landscapeLeft:
+        return cameraPhotoExifOrientation(orientation: .landscapeLeft, mirror: mirror)
+    case .landscapeRight:
+        return cameraPhotoExifOrientation(orientation: .landscapeRight, mirror: mirror)
     @unknown default:
         return 6
     }
@@ -228,20 +221,20 @@ func resizePixelBuffer(from srcPixelBuffer: CVPixelBuffer,
     let dstFlags = CVPixelBufferLockFlags(rawValue: 0)
     
     guard kCVReturnSuccess == CVPixelBufferLockBaseAddress(srcPixelBuffer, srcFlags) else {
-        print("Error: could not lock source pixel buffer")
+        Logger.shared.log("Camera", "Could not lock the source pixel buffer")
         return
     }
     defer { CVPixelBufferUnlockBaseAddress(srcPixelBuffer, srcFlags) }
     
     guard kCVReturnSuccess == CVPixelBufferLockBaseAddress(dstPixelBuffer, dstFlags) else {
-        print("Error: could not lock destination pixel buffer")
+        Logger.shared.log("Camera", "Could not lock the destination pixel buffer")
         return
     }
     defer { CVPixelBufferUnlockBaseAddress(dstPixelBuffer, dstFlags) }
     
     guard let srcData = CVPixelBufferGetBaseAddress(srcPixelBuffer),
           let dstData = CVPixelBufferGetBaseAddress(dstPixelBuffer) else {
-        print("Error: could not get pixel buffer base address")
+        Logger.shared.log("Camera", "Could not get the pixel buffer base address")
         return
     }
     
@@ -260,7 +253,7 @@ func resizePixelBuffer(from srcPixelBuffer: CVPixelBuffer,
     
     let error = vImageScale_ARGB8888(&srcBuffer, &dstBuffer, nil, vImage_Flags(0))
     if error != kvImageNoError {
-        print("Error:", error)
+        Logger.shared.log("Camera", "vImageScale_ARGB8888 failed with \(error)")
     }
 }
 

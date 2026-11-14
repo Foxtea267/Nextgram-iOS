@@ -13,6 +13,7 @@ import ItemListPeerActionItem
 import StorageUsageScreen
 import PresentationDataUtils
 import FaceScanScreen
+import NagramStrings // MARK: NAGRAM
 
 public enum AutomaticSaveIncomingPeerType {
     case privateChats
@@ -31,6 +32,8 @@ private final class DataAndStorageControllerArguments {
     let toggleSaveEditedPhotos: (Bool) -> Void
     let togglePauseMusicOnRecording: (Bool) -> Void
     let toggleRaiseToListen: (Bool) -> Void
+    let nagramToggleRaiseToRecord: (Bool) -> Void // MARK: NAGRAM
+    let nagramToggleSaveCapturedMedia: (Bool) -> Void // MARK: NAGRAM
     let toggleDownloadInBackground: (Bool) -> Void
     let openIntents: () -> Void
     let toggleSensitiveContent: (Bool) -> Void
@@ -46,6 +49,8 @@ private final class DataAndStorageControllerArguments {
         toggleSaveEditedPhotos: @escaping (Bool) -> Void,
         togglePauseMusicOnRecording: @escaping (Bool) -> Void,
         toggleRaiseToListen: @escaping (Bool) -> Void,
+        nagramToggleRaiseToRecord: @escaping (Bool) -> Void, // MARK: NAGRAM
+        nagramToggleSaveCapturedMedia: @escaping (Bool) -> Void, // MARK: NAGRAM
         toggleDownloadInBackground: @escaping (Bool) -> Void,
         openIntents: @escaping () -> Void,
         toggleSensitiveContent: @escaping (Bool) -> Void
@@ -60,6 +65,8 @@ private final class DataAndStorageControllerArguments {
         self.toggleSaveEditedPhotos = toggleSaveEditedPhotos
         self.togglePauseMusicOnRecording = togglePauseMusicOnRecording
         self.toggleRaiseToListen = toggleRaiseToListen
+        self.nagramToggleRaiseToRecord = nagramToggleRaiseToRecord // MARK: NAGRAM
+        self.nagramToggleSaveCapturedMedia = nagramToggleSaveCapturedMedia // MARK: NAGRAM
         self.toggleDownloadInBackground = toggleDownloadInBackground
         self.openIntents = openIntents
         self.toggleSensitiveContent = toggleSensitiveContent
@@ -83,6 +90,8 @@ public enum DataAndStorageEntryTag: ItemListItemTag, Equatable {
     case downloadInBackground
     case pauseMusicOnRecording
     case raiseToListen
+    case nagramRaiseToRecord // MARK: NAGRAM
+    case nagramSaveCapturedMedia // MARK: NAGRAM
     case autoSave(AutomaticSaveIncomingPeerType)
     case sensitiveContent
     case useLessVoiceData
@@ -118,6 +127,8 @@ private enum DataAndStorageEntry: ItemListNodeEntry {
     case saveEditedPhotos(PresentationTheme, String, Bool)
     case pauseMusicOnRecording(PresentationTheme, String, Bool)
     case raiseToListen(PresentationTheme, String, Bool)
+    case nagramRaiseToRecord(String, Bool) // MARK: NAGRAM
+    case nagramSaveCapturedMedia(String, Bool) // MARK: NAGRAM
     case raiseToListenInfo(PresentationTheme, String)
     
     case sensitiveContent(String, Bool)
@@ -138,7 +149,7 @@ private enum DataAndStorageEntry: ItemListNodeEntry {
                 return DataAndStorageSection.backgroundDownload.rawValue
             case .useLessVoiceData, .useLessVoiceDataInfo:
                 return DataAndStorageSection.voiceCalls.rawValue
-            case .otherHeader, .shareSheet, .saveEditedPhotos, .pauseMusicOnRecording, .raiseToListen, .raiseToListenInfo:
+            case .otherHeader, .shareSheet, .saveEditedPhotos, .nagramSaveCapturedMedia, .pauseMusicOnRecording, .raiseToListen, .nagramRaiseToRecord, .raiseToListenInfo: // MARK: NAGRAM
                 return DataAndStorageSection.other.rawValue
             case .sensitiveContent, .sensitiveContentInfo:
                 return DataAndStorageSection.sensitiveContent.rawValue
@@ -187,6 +198,11 @@ private enum DataAndStorageEntry: ItemListNodeEntry {
                 return 34
             case .raiseToListenInfo:
                 return 35
+            // MARK: NAGRAM — 排序见 <，紧跟在 raiseToListen 之后。
+            case .nagramRaiseToRecord:
+                return 1000
+            case .nagramSaveCapturedMedia:
+                return 1001
             case .sensitiveContent:
                 return 36
             case .sensitiveContentInfo:
@@ -296,6 +312,19 @@ private enum DataAndStorageEntry: ItemListNodeEntry {
                 } else {
                     return false
                 }
+            // MARK: NAGRAM
+            case let .nagramRaiseToRecord(lhsText, lhsValue):
+                if case .nagramRaiseToRecord(lhsText, lhsValue) = rhs {
+                    return true
+                } else {
+                    return false
+                }
+            case let .nagramSaveCapturedMedia(lhsText, lhsValue):
+                if case .nagramSaveCapturedMedia(lhsText, lhsValue) = rhs {
+                    return true
+                } else {
+                    return false
+                }
             case let .raiseToListenInfo(lhsTheme, lhsText):
                 if case let .raiseToListenInfo(rhsTheme, rhsText) = rhs, lhsTheme === rhsTheme, lhsText == rhsText {
                     return true
@@ -342,18 +371,29 @@ private enum DataAndStorageEntry: ItemListNodeEntry {
     }
     
     static func <(lhs: DataAndStorageEntry, rhs: DataAndStorageEntry) -> Bool {
-        return lhs.stableId < rhs.stableId
+        // MARK: NAGRAM — nagramRaiseToRecord 排在 raiseToListen（34）与 raiseToListenInfo（35）之间。
+        func sortKey(_ entry: DataAndStorageEntry) -> Double {
+            if case .nagramRaiseToRecord = entry {
+                return 34.5
+            }
+            // nagramSaveCapturedMedia 紧跟在 saveEditedPhotos（32）之后。
+            if case .nagramSaveCapturedMedia = entry {
+                return 32.5
+            }
+            return Double(entry.stableId)
+        }
+        return sortKey(lhs) < sortKey(rhs)
     }
     
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let arguments = arguments as! DataAndStorageControllerArguments
         switch self {
             case let .storageUsage(_, text, value):
-                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.storageUsage, title: text, label: value, sectionId: self.section, style: .blocks, action: {
+                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.storageUsage, title: text, label: value, sectionId: self.section, style: .blocks, minimumLabelSpacing: 6.0, action: {
                     arguments.openStorageUsage()
                 })
             case let .networkUsage(_, text, value):
-                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.dataUsage, title: text, label: value, sectionId: self.section, style: .blocks, action: {
+                return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesSettings.dataUsage, title: text, label: value, sectionId: self.section, style: .blocks, minimumLabelSpacing: 6.0, action: {
                     arguments.openNetworkUsage()
                 })
             case let .automaticDownloadHeader(_, text):
@@ -417,6 +457,15 @@ private enum DataAndStorageEntry: ItemListNodeEntry {
                 return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, sectionId: self.section, style: .blocks, updated: { value in
                     arguments.toggleRaiseToListen(value)
                 }, tag: DataAndStorageEntryTag.raiseToListen)
+            // MARK: NAGRAM
+            case let .nagramRaiseToRecord(text, value):
+                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                    arguments.nagramToggleRaiseToRecord(value)
+                }, tag: DataAndStorageEntryTag.nagramRaiseToRecord)
+            case let .nagramSaveCapturedMedia(text, value):
+                return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: text, value: value, sectionId: self.section, style: .blocks, updated: { value in
+                    arguments.nagramToggleSaveCapturedMedia(value)
+                }, tag: DataAndStorageEntryTag.nagramSaveCapturedMedia)
             case let .raiseToListenInfo(_, text):
                 return ItemListTextItem(presentationData: presentationData, text: .markdown(text), sectionId: self.section)
             case let .sensitiveContent(text, value):
@@ -606,8 +655,8 @@ private func autosaveLabelAndValue(presentationData: PresentationData, settings:
 private func dataAndStorageControllerEntries(context: AccountContext, state: DataAndStorageControllerState, data: DataAndStorageData, presentationData: PresentationData, contentSettingsConfiguration: ContentSettingsConfiguration?, networkUsage: Int64, storageUsage: Int64, mediaAutoSaveSettings: MediaAutoSaveSettings, autosaveExceptionPeers: [EnginePeer.Id: EnginePeer?], mediaSettings: MediaDisplaySettings, showSensitiveContentSetting: Bool) -> [DataAndStorageEntry] {
     var entries: [DataAndStorageEntry] = []
     
-    entries.append(.storageUsage(presentationData.theme, presentationData.strings.ChatSettings_Cache, dataSizeString(storageUsage, formatting: DataSizeStringFormatting(presentationData: presentationData))))
-    entries.append(.networkUsage(presentationData.theme, presentationData.strings.NetworkUsageSettings_Title, dataSizeString(networkUsage, formatting: DataSizeStringFormatting(presentationData: presentationData))))
+    entries.append(.storageUsage(presentationData.theme, presentationData.strings.ChatSettings_Cache, dataSizeString(storageUsage, compact: true, formatting: DataSizeStringFormatting(presentationData: presentationData))))
+    entries.append(.networkUsage(presentationData.theme, presentationData.strings.NetworkUsageSettings_Title, dataSizeString(networkUsage, compact: true, formatting: DataSizeStringFormatting(presentationData: presentationData))))
     
     entries.append(.automaticDownloadHeader(presentationData.theme, presentationData.strings.ChatSettings_AutoDownloadTitle.uppercased()))
     entries.append(.automaticDownloadCellular(presentationData.theme, presentationData.strings.ChatSettings_AutoDownloadUsingCellular, stringForAutoDownloadSetting(strings: presentationData.strings, decimalSeparator: presentationData.dateTimeFormat.decimalSeparator, settings: data.automaticMediaDownloadSettings, connectionType: .cellular)))
@@ -637,8 +686,10 @@ private func dataAndStorageControllerEntries(context: AccountContext, state: Dat
         entries.append(.shareSheet(presentationData.theme, presentationData.strings.ChatSettings_IntentsSettings))
     }
     entries.append(.saveEditedPhotos(presentationData.theme, presentationData.strings.Settings_SaveEditedPhotos, data.generatedMediaStoreSettings.storeEditedPhotos))
+    entries.append(.nagramSaveCapturedMedia(ngI18n("Nagram.SaveCapturedMedia", presentationData.strings.baseLanguageCode), data.generatedMediaStoreSettings.storeCapturedMedia)) // MARK: NAGRAM
     entries.append(.pauseMusicOnRecording(presentationData.theme, presentationData.strings.Settings_PauseMusicOnRecording, data.mediaInputSettings.pauseMusicOnRecording))
     entries.append(.raiseToListen(presentationData.theme, presentationData.strings.Settings_RaiseToListen, data.mediaInputSettings.enableRaiseToSpeak))
+    entries.append(.nagramRaiseToRecord(ngI18n("Nagram.RaiseToRecord", presentationData.strings.baseLanguageCode), data.mediaInputSettings.nagramEnableRaiseToRecord)) // MARK: NAGRAM
     entries.append(.raiseToListenInfo(presentationData.theme, presentationData.strings.Settings_RaiseToListenInfo))
 
     if let contentSettingsConfiguration = contentSettingsConfiguration, contentSettingsConfiguration.canAdjustSensitiveContent && (showSensitiveContentSetting || requireAgeVerification(context: context)) {
@@ -692,8 +743,8 @@ public func dataAndStorageController(context: AccountContext, focusOnItemTag: Da
         var storage: Int64
     }
     let usageSignal: Signal<UsageData, NoError> = combineLatest(
-        context.account.postbox.mediaBox.storageBox.totalSize(),
-        context.account.postbox.mediaBox.cacheStorageBox.totalSize(),
+        context.engine.resources.storageTotalSize(),
+        context.engine.resources.cacheStorageTotalSize(),
         accountNetworkUsageStats(account: context.account, reset: [])
     )
     |> map { disk1, disk2, networkStats -> UsageData in
@@ -836,26 +887,25 @@ public func dataAndStorageController(context: AccountContext, focusOnItemTag: Da
         pushControllerImpl?(autodownloadMediaConnectionTypeController(context: context, connectionType: connectionType))
     }, resetAutomaticDownload: {
         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
-        let actionSheet = ActionSheetController(presentationData: presentationData)
-        actionSheet.setItemGroups([ActionSheetItemGroup(items: [
-            ActionSheetTextItem(title: presentationData.strings.AutoDownloadSettings_ResetHelp),
-            ActionSheetButtonItem(title: presentationData.strings.AutoDownloadSettings_Reset, color: .destructive, action: { [weak actionSheet] in
-                actionSheet?.dismissAnimated()
-                
-                let _ = updateMediaDownloadSettingsInteractively(accountManager: context.sharedContext.accountManager, { settings in
-                    var settings = settings
-                    let defaultSettings = MediaAutoDownloadSettings.defaultSettings
-                    settings.cellular = defaultSettings.cellular
-                    settings.wifi = defaultSettings.wifi
-                    return settings
-                }).start()
-            })
-            ]), ActionSheetItemGroup(items: [
-                ActionSheetButtonItem(title: presentationData.strings.Common_Cancel, color: .accent, font: .bold, action: { [weak actionSheet] in
-                    actionSheet?.dismissAnimated()
-                })
-                ])])
-        presentControllerImpl?(actionSheet, nil)
+        let alertController = textAlertController(
+            context: context,
+            title: nil,
+            text: presentationData.strings.AutoDownloadSettings_ResetHelp,
+            actions: [
+                TextAlertAction(type: .defaultDestructiveAction, title: presentationData.strings.AutoDownloadSettings_Reset, action: {
+                    let _ = updateMediaDownloadSettingsInteractively(accountManager: context.sharedContext.accountManager, { settings in
+                        var settings = settings
+                        let defaultSettings = MediaAutoDownloadSettings.defaultSettings
+                        settings.cellular = defaultSettings.cellular
+                        settings.wifi = defaultSettings.wifi
+                        return settings
+                    }).start()
+                }),
+                TextAlertAction(type: .genericAction, title: presentationData.strings.Common_Cancel, action: {})
+            ],
+            actionLayout: .vertical
+        )
+        presentControllerImpl?(alertController, nil)
     }, toggleVoiceUseLessData: { value in
         let _ = updateVoiceCallSettingsSettingsInteractively(accountManager: context.sharedContext.accountManager, { current in
             var current = current
@@ -875,6 +925,14 @@ public func dataAndStorageController(context: AccountContext, focusOnItemTag: Da
     }, toggleRaiseToListen: { value in
         let _ = updateMediaInputSettingsInteractively(accountManager: context.sharedContext.accountManager, {
             $0.withUpdatedEnableRaiseToSpeak(value)
+        }).start()
+    }, nagramToggleRaiseToRecord: { value in // MARK: NAGRAM
+        let _ = updateMediaInputSettingsInteractively(accountManager: context.sharedContext.accountManager, {
+            $0.withUpdatedNagramEnableRaiseToRecord(value)
+        }).start()
+    }, nagramToggleSaveCapturedMedia: { value in // MARK: NAGRAM
+        let _ = updateGeneratedMediaStoreSettingsInteractively(accountManager: context.sharedContext.accountManager, {
+            $0.withUpdatedStoreCapturedMedia(value)
         }).start()
     }, toggleDownloadInBackground: { value in
         let _ = updateMediaDownloadSettingsInteractively(accountManager: context.sharedContext.accountManager, { settings in

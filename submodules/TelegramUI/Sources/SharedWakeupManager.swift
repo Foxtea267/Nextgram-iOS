@@ -78,6 +78,8 @@ public final class SharedWakeupManager {
     private var allowBackgroundTimeExtensionDeadline: Double?
     private var allowBackgroundTimeExtensionDeadlineTimer: SwiftSignalKit.Timer?
     private var isInBackgroundExtension: Bool = false
+    // MARK: NAGRAM — Whether account transactions may currently begin; see updateAccounts.
+    private var canBeginTransactions: Bool = true
     
     private var accountSettingsDisposable: Disposable?
     private var inForegroundDisposable: Disposable?
@@ -1168,7 +1170,8 @@ public final class SharedWakeupManager {
         
         if self.inForeground || self.hasActiveAudioSession || self.isInBackgroundExtension || self.backgroundProcessingTaskId != nil || self.backgroundStoryProcessingTaskId != nil || hasBackgroundLocationTask || (hasTasks && self.currentExternalCompletion != nil) || self.activeExplicitExtensionTimer != nil || self.silenceAudioRenderer != nil {
             Logger.shared.log("Wakeup", "enableBeginTransactions: true (active)")
-            
+            self.canBeginTransactions = true
+
             for (account, primary, tasks) in self.accountsAndTasks {
                 account.postbox.setCanBeginTransactions(true)
                 
@@ -1192,7 +1195,31 @@ public final class SharedWakeupManager {
             // MARK: NAGRAM — A deadline timer grants no background execution time.
             // Without an active assertion, stop new transactions before releasing the last task.
             Logger.shared.log("Wakeup", "enableBeginTransactions: false")
-            
+
+            // Whatever kept the process running until now (the foreground, audio, a call, a
+            // location or processing task) may already be gone, and transactions that began
+            // under it are still running or queued. Being suspended inside one leaves a database
+            // lock held (0xdead10cc), so hold an assertion of our own until they have drained.
+            var completionsAfterTransactionsComplete = completionsAfterTransactionsComplete
+            if self.canBeginTransactions {
+                self.canBeginTransactions = false
+
+                final class DrainTaskHolder {
+                    var taskId: UIBackgroundTaskIdentifier?
+                }
+                let drainTaskHolder = DrainTaskHolder()
+                let endDrainTask: () -> Void = { [weak self] in
+                    if let taskId = drainTaskHolder.taskId {
+                        drainTaskHolder.taskId = nil
+                        self?.endBackgroundTask(taskId)
+                    }
+                }
+                if let taskId = self.beginBackgroundTask("drain-transactions", endDrainTask), taskId != .invalid {
+                    drainTaskHolder.taskId = taskId
+                    completionsAfterTransactionsComplete.append(endDrainTask)
+                }
+            }
+
             final class CompletionObservationState {
                 var isCompleted: Bool = false
                 var remainingAccounts: [AccountRecordId]

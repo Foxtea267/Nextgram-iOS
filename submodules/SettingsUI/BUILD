@@ -13,10 +13,8 @@ swift_library(
     ],
     deps = [
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
-        "//submodules/LottieSettings:LottieSettings",
         "//submodules/AsyncDisplayKit:AsyncDisplayKit",
         "//submodules/Display:Display",
-        "//submodules/Postbox:Postbox",
         "//submodules/TelegramCore:TelegramCore",
         "//submodules/MtProtoKit:MtProtoKit",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
@@ -86,6 +84,10 @@ swift_library(
         "//submodules/ContextUI:ContextUI",
         "//submodules/Markdown:Markdown",
         "//submodules/UndoUI:UndoUI",
+        # MARK: NAGRAM — Nagram 设置项加入设置搜索
+        "//Nagram/SettingsUI:NagramSettingsUI",
+        "//Nagram/Strings:NagramStrings",
+        "//Nagram/InAppSafari:NagramInAppSafari", # MARK: NAGRAM
         "//submodules/DeleteChatPeerActionSheetItem:DeleteChatPeerActionSheetItem",
         "//submodules/PhoneNumberFormat:PhoneNumberFormat",
         "//submodules/OpenInExternalAppUI:OpenInExternalAppUI",
@@ -140,6 +142,7 @@ swift_library(
         "//submodules/TelegramUI/Components/SliderComponent",
         "//submodules/TelegramUI/Components/AlertComponent",
         "//submodules/TelegramUI/Components/AlertComponent/AlertInputFieldComponent",
+        "//submodules/TelegramUI/Components/AlertComponent/AlertCheckComponent",
         "//submodules/TelegramUI/Components/EdgeEffect",
         "//submodules/TelegramUI/Components/AvatarEditorScreen",
         "//submodules/TelegramUI/Components/Settings/PeerSelectionScreen",

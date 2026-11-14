@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -76,7 +75,7 @@ public final class PermissionContentNode: ASDisplayNode {
         self.iconNode.displaysAsynchronously = false
         
         if case let .animation(animation) = icon {
-            self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: context.lottieRenderingSettings)
+            self.animationNode = DefaultAnimatedStickerNodeImpl()
             
             self.animationNode?.setup(source: AnimatedStickerNodeLocalFileSource(name: animation), width: 320, height: 320, playbackMode: .once, mode: .direct(cachePathPrefix: nil))
             self.animationNode?.visibility = true
@@ -90,25 +89,28 @@ public final class PermissionContentNode: ASDisplayNode {
         self.titleNode.isUserInteractionEnabled = false
         self.titleNode.displaysAsynchronously = false
         self.titleNode.isAccessibilityElement = true
+        self.titleNode.accessibilityTraits = .header
         
         self.subtitleNode = ImmediateTextNode()
         self.subtitleNode.maximumNumberOfLines = 1
         self.subtitleNode.textAlignment = .center
         self.subtitleNode.isUserInteractionEnabled = false
         self.subtitleNode.displaysAsynchronously = false
-        self.subtitleNode.isAccessibilityElement = true
+        // Read only when there is a subtitle (set below); an empty one was an empty element.
+        self.subtitleNode.isAccessibilityElement = false
         
         self.textNode = ImmediateTextNode()
         self.textNode.maximumNumberOfLines = 0
         self.textNode.displaysAsynchronously = false
         self.textNode.isAccessibilityElement = true
+        self.textNode.accessibilityTraits = .staticText
         self.textNode.lineSpacing = 0.1
         
         self.footerNode = ImmediateTextNode()
         self.footerNode.textAlignment = .center
         self.footerNode.maximumNumberOfLines = 0
         self.footerNode.displaysAsynchronously = false
-        self.footerNode.isAccessibilityElement = true
+        self.footerNode.isAccessibilityElement = false
         
         self.privacyPolicyButton = HighlightableButtonNode()
         self.privacyPolicyButton.setTitle(secondaryButtonTitle ?? strings.Permissions_PrivacyPolicy, with: Font.regular(17.0), with: theme.list.itemAccentColor, for: .normal)
@@ -129,17 +131,22 @@ public final class PermissionContentNode: ASDisplayNode {
         let body = MarkdownAttributeSet(font: Font.regular(16.0), textColor: secondaryButtonTitle != nil ? theme.list.itemSecondaryTextColor : theme.list.itemPrimaryTextColor)
         let link = MarkdownAttributeSet(font: Font.regular(16.0), textColor: theme.list.itemAccentColor, additionalAttributes: [TelegramTextAttributes.URL: ""])
         self.textNode.attributedText = parseMarkdownIntoAttributedString(text.replacingOccurrences(of: "]", with: "]()"), attributes: MarkdownAttributes(body: body, bold: body, link: link, linkAttribute: { _ in nil }), textAlignment: secondaryText ? .natural : .center)
+        self.textNode.accessibilityLabel = self.textNode.attributedText?.string
         
         self.privacyPolicyButton.isHidden = openPrivacyPolicy == nil
         
         if let subtitle = subtitle {
             self.subtitleNode.attributedText = NSAttributedString(string: subtitle, font: Font.regular(13.0), textColor: theme.list.freeTextColor, paragraphAlignment: .center)
             self.subtitleNode.accessibilityLabel = subtitle
+            self.subtitleNode.isAccessibilityElement = true
+            self.subtitleNode.accessibilityTraits = .staticText
         }
         
         if let footerText = footerText {
             self.footerNode.attributedText = NSAttributedString(string: footerText, font: Font.regular(13.0), textColor: theme.list.freeTextColor, paragraphAlignment: .center)
             self.footerNode.accessibilityLabel = footerText
+            self.footerNode.isAccessibilityElement = true
+            self.footerNode.accessibilityTraits = .staticText
         }
         
         self.addSubnode(self.iconNode)
@@ -201,7 +208,7 @@ public final class PermissionContentNode: ASDisplayNode {
     public func updateLayout(size: CGSize, insets: UIEdgeInsets, transition: ContainedViewLayoutTransition) {
         self.validLayout = (size, insets)
         
-        var sidePadding: CGFloat
+        let sidePadding: CGFloat
         let fontSize: CGFloat
         if min(size.width, size.height) > 330.0 {
             fontSize = 24.0
@@ -210,16 +217,20 @@ public final class PermissionContentNode: ASDisplayNode {
             fontSize = 20.0
             sidePadding = 20.0
         }
-        sidePadding += insets.left
-        
-        let smallerSidePadding: CGFloat = 20.0 + insets.left
+        // Per side: beside a side strip (iPhone Duo) the insets differ, and everything centres in the band between
+        // them. Equal insets give the old symmetric padding and screen-centred frames.
+        let textWidth = size.width - sidePadding * 2.0 - insets.left - insets.right
+        let smallerTextWidth = size.width - 20.0 * 2.0 - insets.left - insets.right
+        func centeredX(_ width: CGFloat) -> CGFloat {
+            return floor((size.width - width + insets.left - insets.right) / 2.0)
+        }
         
         self.titleNode.attributedText = NSAttributedString(string: self.title, font: Font.bold(fontSize), textColor: self.theme.list.itemPrimaryTextColor)
         self.titleNode.accessibilityLabel = self.title
         
-        let titleSize = self.titleNode.updateLayout(CGSize(width: size.width - sidePadding * 2.0, height: .greatestFiniteMagnitude))
-        let subtitleSize = self.subtitleNode.updateLayout(CGSize(width: size.width - smallerSidePadding * 2.0, height: .greatestFiniteMagnitude))
-        let textSize = self.textNode.updateLayout(CGSize(width: size.width - sidePadding * 2.0, height: .greatestFiniteMagnitude))
+        let titleSize = self.titleNode.updateLayout(CGSize(width: textWidth, height: .greatestFiniteMagnitude))
+        let subtitleSize = self.subtitleNode.updateLayout(CGSize(width: smallerTextWidth, height: .greatestFiniteMagnitude))
+        let textSize = self.textNode.updateLayout(CGSize(width: textWidth, height: .greatestFiniteMagnitude))
         let buttonInset: CGFloat = 16.0
         let buttonWidth = min(size.width, size.height) - buttonInset * 2.0 - insets.left - insets.right
         let buttonSize = self.actionButton.update(
@@ -249,8 +260,8 @@ public final class PermissionContentNode: ASDisplayNode {
             containerSize: CGSize(width: buttonWidth, height: 52.0)
         )
         let buttonHeight = buttonSize.height
-        let footerSize = self.footerNode.updateLayout(CGSize(width: size.width - smallerSidePadding * 2.0, height: .greatestFiniteMagnitude))
-        let privacyButtonSize = self.privacyPolicyButton.measure(CGSize(width: size.width - sidePadding * 2.0, height: .greatestFiniteMagnitude))
+        let footerSize = self.footerNode.updateLayout(CGSize(width: smallerTextWidth, height: .greatestFiniteMagnitude))
+        let privacyButtonSize = self.privacyPolicyButton.measure(CGSize(width: textWidth, height: .greatestFiniteMagnitude))
         
         let availableHeight = floor(size.height - insets.top - insets.bottom - titleSize.height - subtitleSize.height - textSize.height - buttonHeight)
         
@@ -283,28 +294,28 @@ public final class PermissionContentNode: ASDisplayNode {
         }
         
         let contentOrigin = insets.top + floor((size.height - insets.top - insets.bottom - contentHeight) / 2.0) - verticalOffset
-        let iconFrame = CGRect(origin: CGPoint(x: floor((size.width - imageSize.width) / 2.0), y: contentOrigin), size: imageSize)
-        let animationFrame = CGRect(origin: CGPoint(x: floor((size.width - imageSize.width) / 2.0), y: contentOrigin), size: imageSize)
-        let titleFrame = CGRect(origin: CGPoint(x: floor((size.width - titleSize.width) / 2.0), y: iconFrame.maxY + imageSpacing), size: titleSize)
+        let iconFrame = CGRect(origin: CGPoint(x: centeredX(imageSize.width), y: contentOrigin), size: imageSize)
+        let animationFrame = CGRect(origin: CGPoint(x: centeredX(imageSize.width), y: contentOrigin), size: imageSize)
+        let titleFrame = CGRect(origin: CGPoint(x: centeredX(titleSize.width), y: iconFrame.maxY + imageSpacing), size: titleSize)
         
         let subtitleFrame: CGRect
         if subtitleSize.height > 0.0 {
-            subtitleFrame = CGRect(origin: CGPoint(x: floor((size.width - subtitleSize.width) / 2.0), y: titleFrame.maxY + titleSubtitleSpacing), size: subtitleSize)
+            subtitleFrame = CGRect(origin: CGPoint(x: centeredX(subtitleSize.width), y: titleFrame.maxY + titleSubtitleSpacing), size: subtitleSize)
         } else {
             subtitleFrame = titleFrame
         }
         
-        let textFrame = CGRect(origin: CGPoint(x: floor((size.width - textSize.width) / 2.0), y: subtitleFrame.maxY + titleTextSpacing), size: textSize)
-        let footerFrame = CGRect(origin: CGPoint(x: floor((size.width - footerSize.width) / 2.0), y: size.height - footerSize.height - insets.bottom - 8.0), size: footerSize)
+        let textFrame = CGRect(origin: CGPoint(x: centeredX(textSize.width), y: subtitleFrame.maxY + titleTextSpacing), size: textSize)
+        let footerFrame = CGRect(origin: CGPoint(x: centeredX(footerSize.width), y: size.height - footerSize.height - insets.bottom - 8.0), size: footerSize)
         
         let buttonFrame: CGRect
         let privacyButtonFrame: CGRect
         if self.textNode.textAlignment == .natural {
-            buttonFrame = CGRect(origin: CGPoint(x: floor((size.width - buttonWidth) / 2.0), y: max(textFrame.maxY + buttonSpacing ,size.height - buttonHeight - insets.bottom - 70.0)), size: CGSize(width: buttonWidth, height: buttonHeight))
-            privacyButtonFrame = CGRect(origin: CGPoint(x: floor((size.width - privacyButtonSize.width) / 2.0), y: buttonFrame.maxY + 29.0), size: privacyButtonSize)
+            buttonFrame = CGRect(origin: CGPoint(x: centeredX(buttonWidth), y: max(textFrame.maxY + buttonSpacing ,size.height - buttonHeight - insets.bottom - 70.0)), size: CGSize(width: buttonWidth, height: buttonHeight))
+            privacyButtonFrame = CGRect(origin: CGPoint(x: centeredX(privacyButtonSize.width), y: buttonFrame.maxY + 29.0), size: privacyButtonSize)
         } else {
-            buttonFrame = CGRect(origin: CGPoint(x: floor((size.width - buttonWidth) / 2.0), y: textFrame.maxY + buttonSpacing), size: CGSize(width: buttonWidth, height: buttonHeight))
-            privacyButtonFrame = CGRect(origin: CGPoint(x: floor((size.width - privacyButtonSize.width) / 2.0), y: buttonFrame.maxY + floor((privacySpacing - privacyButtonSize.height) / 2.0)), size: privacyButtonSize)
+            buttonFrame = CGRect(origin: CGPoint(x: centeredX(buttonWidth), y: textFrame.maxY + buttonSpacing), size: CGSize(width: buttonWidth, height: buttonHeight))
+            privacyButtonFrame = CGRect(origin: CGPoint(x: centeredX(privacyButtonSize.width), y: buttonFrame.maxY + floor((privacySpacing - privacyButtonSize.height) / 2.0)), size: privacyButtonSize)
         }
         
         transition.updateFrame(node: self.iconNode, frame: iconFrame)

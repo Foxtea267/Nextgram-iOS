@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -457,8 +456,7 @@ public final class ChatTextInputMediaRecordingButton: TGModernConversationInputM
             transition: .immediate,
             component: AnyComponent(LottieComponent(
                 content: LottieComponent.AppBundleContent(name: animationName),
-                color: animationTintColor,
-                lottieSettings: self.context.lottieRenderingSettings
+                color: animationTintColor
             )),
             environment: {},
             containerSize: animationFrame.size
@@ -681,10 +679,10 @@ public final class ChatTextInputMediaRecordingButton: TGModernConversationInputM
         
         // The same path and timing as the play button's flight in the chat: each axis on its own curve.
         decoration.layer.position = toPosition
-        decoration.layer.animatePosition(from: CGPoint(x: fromPosition.x - toPosition.x, y: 0.0), to: CGPoint(), duration: duration, mediaTimingFunction: horizontalCurve.mediaTimingFunction, additive: true)
-        decoration.layer.animatePosition(from: CGPoint(x: 0.0, y: fromPosition.y - toPosition.y), to: CGPoint(), duration: duration, mediaTimingFunction: verticalCurve.mediaTimingFunction, additive: true)
+        decoration.layer.animatePosition(from: CGPoint(x: fromPosition.x - toPosition.x, y: 0.0), to: CGPoint(), duration: duration, timingFunction: horizontalCurve.timingFunction, mediaTimingFunction: horizontalCurve.mediaTimingFunction, additive: true)
+        decoration.layer.animatePosition(from: CGPoint(x: 0.0, y: fromPosition.y - toPosition.y), to: CGPoint(), duration: duration, timingFunction: verticalCurve.timingFunction, mediaTimingFunction: verticalCurve.mediaTimingFunction, additive: true)
         decoration.transform = CGAffineTransform(scaleX: toScale, y: toScale)
-        decoration.layer.animateScale(from: fromScale, to: toScale, duration: duration, mediaTimingFunction: verticalCurve.mediaTimingFunction)
+        decoration.layer.animateScale(from: fromScale, to: toScale, duration: duration, timingFunction: verticalCurve.timingFunction, mediaTimingFunction: verticalCurve.mediaTimingFunction)
         
         let fadeDuration = min(0.06, duration)
         // The blob's look is a backdrop refracted by a displacement map under multiply and additive layers. Opacity

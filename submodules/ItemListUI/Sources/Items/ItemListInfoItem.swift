@@ -336,9 +336,10 @@ public class InfoItemNode: ListViewItemNode {
                 if let strongSelf = self {
                     strongSelf.item = item
                     
-                    strongSelf.accessibilityLabel = "\(item.title)\n\(attributedText.string)"
                     strongSelf.activateArea.frame = CGRect(origin: CGPoint(x: params.leftInset, y: 0.0), size: CGSize(width: params.width - params.leftInset - params.rightInset, height: layout.contentSize.height))
-                    strongSelf.activateArea.accessibilityLabel = strongSelf.accessibilityLabel
+                    // The text element reads the item; the node is only its container (a container label was read as
+                    // a second copy of the same text). An empty title adds no blank line.
+                    strongSelf.activateArea.accessibilityLabel = [item.title, attributedText.string].filter { !$0.isEmpty }.joined(separator: "\n")
                 
                     if let _ = updatedTheme {
                         strongSelf.topStripeNode.backgroundColor = itemSeparatorColor
@@ -374,9 +375,12 @@ public class InfoItemNode: ListViewItemNode {
                                 hasTopCorners = true
                                 strongSelf.topStripeNode.isHidden = hasCorners || !item.hasDecorations
                         }
-                    } else if case .blocks = item.style, case .glass = item.systemStyle {
+                    } else {
+                        // A standalone info item (the contact list's access notice) draws no separator above itself.
                         strongSelf.topStripeNode.isHidden = true
-                        hasTopCorners = true
+                        if case .blocks = item.style, case .glass = item.systemStyle {
+                            hasTopCorners = true
+                        }
                     }
                     let bottomStripeInset: CGFloat
                     if let neighbors = neighbors {
@@ -405,7 +409,7 @@ public class InfoItemNode: ListViewItemNode {
                     strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: item.systemStyle == .glass) : nil
                     
                     strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                     strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
                     strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - bottomStripeInset - params.rightInset - separatorRightInset, height: separatorHeight))
                     

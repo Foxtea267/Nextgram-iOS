@@ -75,7 +75,8 @@ public struct NagramBottomBarSettings: Codable, Equatable {
         isBottomBarVisible: Bool = true,
         bottomItems: [NagramBottomBarItemId] = NagramBottomBarSettings.defaultBottomItems,
         externalItem: NagramBottomBarItemId? = .search,
-        hiddenItems: Set<NagramBottomBarItemId> = [],
+        // Telegram 13.2 moved Contacts out of the tab bar into Settings: the tab can still be added, but starts hidden.
+        hiddenItems: Set<NagramBottomBarItemId> = [.contacts],
         topSearchVisible: Bool = true,
         showLabels: Bool = true,
         settingsUseAvatar: Bool? = nil,
@@ -113,6 +114,11 @@ public struct NagramBottomBarSettings: Codable, Equatable {
             result.append(externalItem)
         }
         return result
+    }
+
+    /// The bar is reduced to the standalone search button: no bottom items and no search bar.
+    public var showsOnlySearchButton: Bool {
+        return self.isBottomBarVisible && self.activeBottomItems.isEmpty && self.externalItem == .search && self.searchMode == .button
     }
 
     public func isVisible(_ item: NagramBottomBarItemId) -> Bool {
@@ -365,12 +371,32 @@ public extension NagramBottomBarSettings {
         static let searchMode = "nagram.bottomBarLayout.searchMode"
     }
 
+    /// Version 2 made the compact bar the default. Version 1 stored the old full-width default on every launch, so a
+    /// version 1 layout still exactly at that default moves to the new one; any other width setting is kept.
+    private static let currentVersion = 2
+
     static func load(from defaults: UserDefaults = NagramDemoMode.userDefaults) -> NagramBottomBarSettings {
-        if defaults.object(forKey: Keys.marker) == nil {
+        guard let version = (defaults.object(forKey: Keys.marker) as? NSNumber)?.intValue else {
             let migratedSettings = self.legacySettings(from: defaults)
             migratedSettings.save(to: defaults)
             return migratedSettings
         }
+        if version < Self.currentVersion {
+            var settings = self.storedSettings(from: defaults)
+            if settings.widthMode == .full && settings.slotMode == .visibleOnly && settings.buttonWidthFillRatio >= 100 && settings.alignment == .leftCenter {
+                let compact = NagramBottomBarSettings()
+                settings.widthMode = compact.widthMode
+                settings.slotMode = compact.slotMode
+                settings.buttonWidthFillRatio = compact.buttonWidthFillRatio
+                settings.alignment = compact.alignment
+            }
+            settings.save(to: defaults)
+            return settings
+        }
+        return self.storedSettings(from: defaults)
+    }
+
+    private static func storedSettings(from defaults: UserDefaults) -> NagramBottomBarSettings {
 
         let bottomItems = Self.itemIds(forKey: Keys.bottomItems, defaults: defaults)
         let hiddenItems = Set(Self.itemIds(forKey: Keys.hiddenItems, defaults: defaults))
@@ -399,7 +425,7 @@ public extension NagramBottomBarSettings {
         var settings = self
         settings.normalize()
 
-        NagramSettingsCloudSync.shared.set(1, forKey: Keys.marker, defaults: defaults)
+        NagramSettingsCloudSync.shared.set(Self.currentVersion, forKey: Keys.marker, defaults: defaults)
         NagramSettingsCloudSync.shared.set(settings.isBottomBarVisible, forKey: Keys.isBottomBarVisible, defaults: defaults)
         NagramSettingsCloudSync.shared.set(settings.bottomItems.map(\.rawValue), forKey: Keys.bottomItems, defaults: defaults)
         if let externalItem = settings.externalItem {
@@ -446,11 +472,11 @@ public extension NagramBottomBarSettings {
 
     private static func legacySettings(from defaults: UserDefaults) -> NagramBottomBarSettings {
         let hideAll = defaults.object(forKey: "nagram.hideTabBar") as? Bool ?? false
-        let hideContacts = defaults.object(forKey: "nagram.hideTabBarContacts") as? Bool ?? false
+        let hideContacts = defaults.object(forKey: "nagram.hideTabBarContacts") as? Bool ?? true
         let hideChats = defaults.object(forKey: "nagram.hideTabBarChats") as? Bool ?? false
         let hideSettings = defaults.object(forKey: "nagram.hideTabBarSettings") as? Bool ?? false
         let hideTopSearch = defaults.object(forKey: "nagram.showTabBarSearch") as? Bool ?? false
-        let wideTabBar = defaults.object(forKey: "nagram.wideTabBar") as? Bool ?? true
+        let wideTabBar = defaults.object(forKey: "nagram.wideTabBar") as? Bool ?? false
 
         var hiddenItems = Set<NagramBottomBarItemId>()
         if hideContacts {

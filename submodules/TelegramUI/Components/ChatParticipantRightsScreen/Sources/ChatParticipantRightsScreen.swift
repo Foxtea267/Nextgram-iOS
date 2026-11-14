@@ -247,6 +247,7 @@ private final class ChatParticipantRightsContent: CombinedComponent {
                     initialText: state.initialRank ?? "",
                     resetText: nil,
                     placeholder: strings.EditRank_Placeholder,
+                    clearButtonAccessibilityLabel: strings.WebSearch_RecentSectionClear,
                     characterLimit: Int(rankMaxLength),
                     autocapitalizationType: .sentences,
                     autocorrectionType: .default,
@@ -414,7 +415,7 @@ private final class ChatParticipantRightsComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         hasInputHeight: !environment.inputHeight.isZero,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in

@@ -116,6 +116,16 @@ func datePickerMonthIndex(of date: Date, in months: [Date], calendar: Calendar =
     return months.firstIndex(where: { $0 >= month }) ?? months.count - 1
 }
 
+// The month page `indexOffset` pages from the one shown, in the grid's container: `pageSize` wide and centred in a
+// picker `pickerWidth` wide, which clips. Pages step a whole picker width, not a page width: the grid is at most 390pt
+// wide, so in a wider picker (the chat-search calendar in landscape, iPhone Duo folded) a page-width step left the
+// neighbouring months resting in the margins beside it. `transitionFraction` is a swipe's translation over the
+// picker's width.
+func datePickerMonthPageFrame(indexOffset: Int, transitionFraction: CGFloat, pageSize: CGSize, pickerWidth: CGFloat) -> CGRect {
+    let pageStep = max(pageSize.width, pickerWidth)
+    return CGRect(origin: CGPoint(x: CGFloat(indexOffset) * pageStep + transitionFraction * pageStep, y: 0.0), size: pageSize)
+}
+
 private func generateSmallArrowImage(color: UIColor) -> UIImage? {
     return generateImage(CGSize(width: 7.0, height: 12.0), rotatedContext: { size, context in
         context.clear(CGRect(origin: CGPoint(), size: size))
@@ -703,7 +713,7 @@ public final class DatePickerNode: ASDisplayNode {
             if let size = self.validLayout {
                 let topInset: CGFloat = self.hasValueRow ? 78.0 + 44.0 : 65.0
                 let constrainedSize = CGSize(width: min(390.0, size.width), height: size.height - topInset)
-                self.updateItems(size: constrainedSize, transition: .animated(duration: 0.3, curve: .spring))
+                self.updateItems(size: constrainedSize, pickerWidth: size.width, transition: .animated(duration: 0.3, curve: .spring))
             }
         case .cancelled, .ended:
             let velocity = recognizer.velocity(in: self.view)
@@ -732,7 +742,16 @@ public final class DatePickerNode: ASDisplayNode {
     }
     
     public var heightUpdated: ((CGFloat) -> Void)?
-    private func updateItems(size: CGSize, update: Bool = false, transition: ContainedViewLayoutTransition) {
+    /// How much further from the right edge the header row's controls (month arrows, time and date buttons) stay, to
+    /// clear a corner block the header rises beside (iPhone Duo's status corner). The grid keeps the full width.
+    public var headerTrailingInset: CGFloat = 0.0 {
+        didSet {
+            if self.headerTrailingInset != oldValue, let size = self.validLayout {
+                self.updateLayout(size: size, transition: .immediate)
+            }
+        }
+    }
+    private func updateItems(size: CGSize, pickerWidth: CGFloat, update: Bool = false, transition: ContainedViewLayoutTransition) {
         var validIds: [Date] = []
         
         if self.currentIndex >= 0 && self.currentIndex < self.months.count {
@@ -754,8 +773,7 @@ public final class DatePickerNode: ASDisplayNode {
                     self.contentNode.addSubnode(addedItemNode)
                 }
                 if let itemNode {
-                    let indexOffset = CGFloat(i - self.currentIndex)
-                    let itemFrame = CGRect(origin: CGPoint(x: indexOffset * size.width + self.transitionFraction * size.width, y: 0.0), size: size)
+                    let itemFrame = datePickerMonthPageFrame(indexOffset: i - self.currentIndex, transitionFraction: self.transitionFraction, pageSize: size, pickerWidth: pickerWidth)
                     
                     var itemHeight = size.height
                     if wasAdded {
@@ -819,9 +837,9 @@ public final class DatePickerNode: ASDisplayNode {
         self.monthButtonNode.frame = monthTextFrame.inset(by: UIEdgeInsets(top: -6.0, left: -6.0, bottom: -6.0, right: -30.0))
         
         self.previousButtonNode.isEnabled = self.currentIndex > 0
-        self.previousButtonNode.frame = CGRect(x: size.width - sideInset - 54.0, y: monthTextFrame.minY + 1.0, width: 10.0, height: 17.0)
+        self.previousButtonNode.frame = CGRect(x: size.width - sideInset - self.headerTrailingInset - 54.0, y: monthTextFrame.minY + 1.0, width: 10.0, height: 17.0)
         self.nextButtonNode.isEnabled = self.currentIndex < self.months.count - 1
-        self.nextButtonNode.frame = CGRect(x: size.width - sideInset - 13.0, y: monthTextFrame.minY + 1.0, width: 10.0, height: 17.0)
+        self.nextButtonNode.frame = CGRect(x: size.width - sideInset - self.headerTrailingInset - 13.0, y: monthTextFrame.minY + 1.0, width: 10.0, height: 17.0)
         
         let date = self.date ?? Date()
         var t: time_t = Int(date.timeIntervalSince1970)
@@ -834,7 +852,7 @@ public final class DatePickerNode: ASDisplayNode {
         var timeSize = self.timeButtonNode.measure(size)
         timeSize.width += 24.0
         timeSize.height = 36.0
-        self.timeButtonNode.frame = CGRect(x: size.width - timeSize.width - 10.0, y: 4.0, width: timeSize.width, height: timeSize.height)
+        self.timeButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 10.0, y: 4.0, width: timeSize.width, height: timeSize.height)
         
         let dateString = stringForMediumDate(timestamp: Int32(date.timeIntervalSince1970), strings: self.strings, dateTimeFormat: self.dateTimeFormat, withTime: false)
         self.dateButtonNode.setTitle(dateString, with: Font.with(size: 17.0, traits: .monospacedNumbers), with: self.state.displayingDateSelection ? self.theme.accentColor : self.theme.textColor, for: .normal)
@@ -842,7 +860,7 @@ public final class DatePickerNode: ASDisplayNode {
         var dateSize = self.dateButtonNode.measure(size)
         dateSize.width += 24.0
         dateSize.height = 36.0
-        self.dateButtonNode.frame = CGRect(x: size.width - timeSize.width - 10.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)
+        self.dateButtonNode.frame = CGRect(x: size.width - self.headerTrailingInset - timeSize.width - 10.0 - 4.0 - dateSize.width, y: 4.0, width: dateSize.width, height: dateSize.height)
         
         let daysSideInset: CGFloat = 12.0
         let cellSize: CGFloat = floor((constrainedSize.width - daysSideInset * 2.0) / 7.0)
@@ -863,7 +881,7 @@ public final class DatePickerNode: ASDisplayNode {
         let containerSize = CGSize(width: constrainedSize.width, height: size.height - topInset)
         self.contentNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((size.width - constrainedSize.width) / 2.0), y: topInset), size: containerSize)
         
-        self.updateItems(size: containerSize, transition: transition)
+        self.updateItems(size: containerSize, pickerWidth: size.width, transition: transition)
         
         let monthInset: CGFloat = self.hasValueRow ? timeHeight + 30.0 : 30.0
         self.monthPickerBackgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: monthInset), size: size)

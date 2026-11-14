@@ -4,7 +4,6 @@ import LocalAuthentication
 import Foundation
 import SwiftSignalKit
 import UIKit
-import Postbox
 import TelegramCore
 import Display
 import DeviceAccess
@@ -29,12 +28,12 @@ import MultiAnimationRenderer
 import DCTAnimationCacheImpl
 import DCTMultiAnimationRendererImpl
 import AppBundle
-import LottieSettings
 import DirectMediaImageCache
 import WalletContext
 import WalletConnectScreen
 import AlertUI
 import MetalEngine
+import MessageWidget
 
 private final class DeviceSpecificContactImportContext {
     let disposable = MetaDisposable()
@@ -51,7 +50,7 @@ private final class DeviceSpecificContactImportContext {
 private final class DeviceSpecificContactImportContexts {
     private let queue: Queue
     
-    private var contexts: [PeerId: DeviceSpecificContactImportContext] = [:]
+    private var contexts: [EnginePeer.Id: DeviceSpecificContactImportContext] = [:]
     
     init(queue: Queue) {
         self.queue = queue
@@ -61,8 +60,8 @@ private final class DeviceSpecificContactImportContexts {
         assert(self.queue.isCurrent())
     }
     
-    func update(account: Account, deviceContactDataManager: DeviceContactDataManager, references: [PeerId: DeviceContactBasicDataWithReference]) {
-        var validIds = Set<PeerId>()
+    func update(account: Account, deviceContactDataManager: DeviceContactDataManager, references: [EnginePeer.Id: DeviceContactBasicDataWithReference]) {
+        var validIds = Set<EnginePeer.Id>()
         for (peerId, reference) in references {
             validIds.insert(peerId)
             
@@ -108,7 +107,7 @@ private final class DeviceSpecificContactImportContexts {
             }
         }
         
-        var removeIds: [PeerId] = []
+        var removeIds: [EnginePeer.Id] = []
         for peerId in self.contexts.keys {
             if !validIds.contains(peerId) {
                 removeIds.append(peerId)
@@ -143,6 +142,7 @@ public final class AccountContextImpl: AccountContext {
     public let tonContext: StarsContext?
     public let walletContext: WalletContext?
     private let walletTonConnectDisposable = MetaDisposable()
+    private let widgetWalletDisposable = MetaDisposable()
     private let walletTonConnectDecisionDisposable = MetaDisposable()
     private var walletTonConnectState: WalletContext.TonConnectState?
     private var walletTonConnectController: ViewController?
@@ -172,14 +172,6 @@ public final class AccountContextImpl: AccountContext {
     
     public var currentAppConfiguration: Atomic<AppConfiguration>
     private let _appConfiguration = Promise<AppConfiguration>()
-
-    /// Resolved once and refreshed from the two subscriptions that feed it,
-    /// rather than recomputed per read: this is consulted on every animated
-    /// sticker and on every LottieComponent construction, and resolving it
-    /// copies the whole ExperimentalUISettings struct (retaining its string and
-    /// array fields) and hashes a dictionary key — far too much work to repeat
-    /// per playback.
-    private let cachedLottieRenderingSettings: Atomic<LottieRenderingSettings>
     public var appConfiguration: Signal<AppConfiguration, NoError> {
         return self._appConfiguration.get()
     }
@@ -389,8 +381,8 @@ public final class AccountContextImpl: AccountContext {
         self.cachedGroupCallContexts = AccountGroupCallContextCacheImpl()
         
         let cacheStorageBox = self.account.postbox.mediaBox.cacheStorageBox
-        self.animationCache = DCTAnimationCacheImpl(basePath: self.account.postbox.mediaBox.basePath + "/animation-cache", allocateTempFile: {
-            return TempBox.shared.tempFile(fileName: "file").path
+        self.animationCache = DCTAnimationCacheImpl(basePath: self.engine.resources.mediaBasePath + "/animation-cache", allocateTempFile: {
+            return EngineTempBox.shared.tempFile(fileName: "file").path
         }, updateStorageStats: { path, size in
             if let pathData = path.data(using: .utf8) {
                 cacheStorageBox.update(id: pathData, size: size)
@@ -443,26 +435,20 @@ public final class AccountContextImpl: AccountContext {
         
         let updatedAppConfiguration = getAppConfiguration(engine: self.engine)
         self.currentAppConfiguration = Atomic(value: appConfiguration)
-        self.cachedLottieRenderingSettings = Atomic(value: AccountContextImpl.resolveLottieRenderingSettings(
-            appConfiguration: appConfiguration,
-            experimentalSettings: sharedContext.immediateExperimentalUISettings
-        ))
         self._appConfiguration.set(.single(appConfiguration) |> then(updatedAppConfiguration))
+        MessageWidgetKillSwitch.isEngaged = appConfiguration.data?[MessageWidgetKillSwitch.appConfigurationKey] != nil
                 
         let currentAppConfiguration = self.currentAppConfiguration
-        let cachedLottieRenderingSettings = self.cachedLottieRenderingSettings
-        let lottieSharedContext = sharedContext
         self.appConfigurationDisposable = (self._appConfiguration.get()
         |> deliverOnMainQueue).start(next: { value in
             let _ = currentAppConfiguration.swap(value)
-            let _ = cachedLottieRenderingSettings.swap(AccountContextImpl.resolveLottieRenderingSettings(
-                appConfiguration: value,
-                experimentalSettings: lottieSharedContext.immediateExperimentalUISettings
-            ))
             
             // Switches off the on-disk archive of compiled Metal pipelines (now, and on later launches until the key
             // is removed); pipelines are then compiled on first use as before.
             MetalEngine.shared.pipelineCache.setArchiveDisabled(value.data?["ios_killswitch_disable_metal_pipeline_cache"] != nil)
+            
+            // Read here once per configuration: bubble layout reads the flag on every pass, on any thread.
+            MessageWidgetKillSwitch.isEngaged = value.data?[MessageWidgetKillSwitch.appConfigurationKey] != nil
             
             guard let data = appConfiguration.data else {
                 return
@@ -475,7 +461,7 @@ public final class AccountContextImpl: AccountContext {
             if let url = data["ios_update_url"] as? String, !url.isEmpty {
                 let _ = (sharedContext.accountManager.transaction { transaction -> Void in
                     transaction.updateSharedData(ApplicationSpecificSharedDataKeys.updateSettings, { _ in
-                        return PreferencesEntry(UpdateSettings(url: url))
+                        return EnginePreferencesEntry(UpdateSettings(url: url))
                     })
                 }).start()
             }
@@ -663,11 +649,6 @@ public final class AccountContextImpl: AccountContext {
                 return
             }
             (self.animationRenderer as? DCTMultiAnimationRendererImpl)?.useYuvA = settings.compressedEmojiCache
-
-            let _ = self.cachedLottieRenderingSettings.swap(AccountContextImpl.resolveLottieRenderingSettings(
-                appConfiguration: self.currentAppConfiguration.with { $0 },
-                experimentalSettings: settings
-            ))
         })
 
         self.twoStepAuthData.set(
@@ -682,6 +663,18 @@ public final class AccountContextImpl: AccountContext {
         )
 
         if let walletContext = self.walletContext {
+            self.account.walletTransferTasksRunning.set(walletContext.hasTransferBackgroundTasks)
+            // widget-sandbox v0.5.0 (sdk-v1 §5.13): message widgets get the wallet where it is available to this user
+            // (wallet_available) and this device can sign for it (the user's call of 2026-10-30).
+            let widgetWalletAccountId = self.account.peerId.id._internalGetInt64Value()
+            let widgetWalletOwner = ObjectIdentifier(self)
+            self.widgetWalletDisposable.set((combineLatest(
+                self._appConfiguration.get() |> map { WalletConfiguration.with(appConfiguration: $0).isAvailable } |> distinctUntilChanged,
+                walletContext.widgetWalletReady
+            )
+            |> deliverOnMainQueue).start(next: { isAvailable, isReady in
+                MessageWidgetWalletAvailability.set(isAvailable && isReady, accountId: widgetWalletAccountId, owner: widgetWalletOwner)
+            }))
             self.walletTonConnectDisposable.set((walletContext.tonConnectState
             |> deliverOnMainQueue).start(next: { [weak self] state in
                 self?.updateWalletTonConnectPresentation(state)
@@ -715,7 +708,14 @@ public final class AccountContextImpl: AccountContext {
     }
 
     deinit {
+        if self.walletContext != nil {
+            self.account.walletTransferTasksRunning.set(.single(false))
+        }
         self.walletTonConnectDisposable.dispose()
+        self.widgetWalletDisposable.dispose()
+        if self.walletContext != nil {
+            MessageWidgetWalletAvailability.release(accountId: self.account.peerId.id._internalGetInt64Value(), owner: ObjectIdentifier(self))
+        }
         self.walletTonConnectDecisionDisposable.dispose()
         self.limitsConfigurationDisposable?.dispose()
         self.managedAppSpecificContactsDisposable?.dispose()
@@ -752,7 +752,7 @@ public final class AccountContextImpl: AccountContext {
         }
     }
     
-    public func chatLocationInput(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>) -> ChatLocationInput {
+    public func chatLocationInput(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>) -> EngineChatLocationInput {
         switch location {
         case let .peer(peerId):
             return .peer(peerId: peerId, threadId: nil)
@@ -768,16 +768,16 @@ public final class AccountContextImpl: AccountContext {
         }
     }
     
-    public func chatLocationOutgoingReadState(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>) -> Signal<MessageId?, NoError> {
+    public func chatLocationOutgoingReadState(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>) -> Signal<EngineMessage.Id?, NoError> {
         switch location {
         case .peer:
             return .single(nil)
         case let .replyThread(data):
             if data.isForumPost, let peerId = location.peerId {
                 return self.engine.data.subscribe(TelegramEngine.EngineData.Item.Messages.ThreadInfo(peerId: data.peerId, threadId: data.threadId))
-                |> map { threadData -> MessageId? in
+                |> map { threadData -> EngineMessage.Id? in
                     if let threadData {
-                        return MessageId(peerId: peerId, namespace: Namespaces.Message.Cloud, id: threadData.maxOutgoingReadId)
+                        return EngineMessage.Id(peerId: peerId, namespace: Namespaces.Message.Cloud, id: threadData.maxOutgoingReadId)
                     } else {
                         return nil
                     }
@@ -818,7 +818,7 @@ public final class AccountContextImpl: AccountContext {
         }
     }
     
-    public func applyMaxReadIndex(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>, messageIndex: MessageIndex) {
+    public func applyMaxReadIndex(for location: ChatLocation, contextHolder: Atomic<ChatLocationContextHolder?>, messageIndex: EngineMessage.Index) {
         switch location {
         case .peer:
             let _ = self.engine.messages.applyMaxReadIndexInteractively(index: messageIndex).start()
@@ -830,11 +830,11 @@ public final class AccountContextImpl: AccountContext {
         }
     }
     
-    public func scheduleGroupCall(peerId: PeerId, parentController: ViewController) {
+    public func scheduleGroupCall(peerId: EnginePeer.Id, parentController: ViewController) {
         let _ = self.sharedContext.callManager?.scheduleGroupCall(context: self, peerId: peerId, endCurrentIfAny: true, parentController: parentController)
     }
     
-    public func joinGroupCall(peerId: PeerId, invite: String?, requestJoinAsPeerId: ((@escaping (PeerId?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {
+    public func joinGroupCall(peerId: EnginePeer.Id, invite: String?, requestJoinAsPeerId: ((@escaping (EnginePeer.Id?) -> Void) -> Void)?, activeCall: EngineGroupCallDescription) {
         let callResult = self.sharedContext.callManager?.joinGroupCall(context: self, peerId: peerId, invite: invite, requestJoinAsPeerId: requestJoinAsPeerId, initialCall: activeCall, endCurrentIfAny: false)
         if let callResult = callResult, case let .alreadyInProgress(currentCallType) = callResult {
             if case let .peer(currentPeerId) = currentCallType, currentPeerId == peerId {
@@ -1033,7 +1033,7 @@ public final class AccountContextImpl: AccountContext {
         }
     }
     
-    public func requestCall(peerId: PeerId, isVideo: Bool, completion: @escaping () -> Void) {
+    public func requestCall(peerId: EnginePeer.Id, isVideo: Bool, completion: @escaping () -> Void) {
         // MARK: NAGRAM — 通话前确认:原逻辑封装为 makeCall,confirmCalls 开启时先弹确认
         let makeCall: () -> Void = {
         guard let callResult = self.sharedContext.callManager?.requestCall(context: self, peerId: peerId, isVideo: isVideo, endCurrentIfAny: false) else {
@@ -1120,24 +1120,6 @@ public final class AccountContextImpl: AccountContext {
             return value
         }
         return nil
-    }
-
-    public var lottieRenderingSettings: LottieRenderingSettings {
-        return self.cachedLottieRenderingSettings.with { $0 }
-    }
-
-    fileprivate static func resolveLottieRenderingSettings(appConfiguration: AppConfiguration, experimentalSettings: ExperimentalUISettings) -> LottieRenderingSettings {
-        // Default on; the server can roll it back and outranks the debug switch,
-        // because the point of a killswitch is that setting it guarantees no
-        // tlottie in the field. The device-local opt-out is the switch itself.
-        var backend: LottieBackend = .tlottie
-        if experimentalSettings.forceRLottieBackend {
-            backend = .rlottie
-        }
-        if let data = appConfiguration.data, data["ios_killswitch_disable_tlottie"] != nil {
-            backend = .rlottie
-        }
-        return LottieRenderingSettings(backend: backend)
     }
 }
 

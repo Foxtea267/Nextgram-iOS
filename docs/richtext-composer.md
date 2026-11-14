@@ -100,6 +100,15 @@ not (→ structured `.instantPage` path). The `EntityExpressibleOptions` bag nar
 so quote-bearing content routes onto the rich path even though entities could represent it (opted into by the
 send-options preview and the attachment-menu rich-editor send — see §5).
 
+**Nagram divergence — collapsed quotes stay on the entity path.** Upstream (`a34a9623cb`, 2026-07-03) made every
+collapsed `.blockQuote` non-entity-expressible, so a non-Premium user who collapsed a quote hit the "Remove
+Formatting?" Premium gate on send (reports I0050/I0058), the legacy composer latched to the native editor, and
+drafts and edits went rich. A flat collapsed quote is `messageEntityBlockquote` with `collapsed`, which the
+server accepts from any account (Bot API 7.4 `expandable_blockquote`; Android and macOS send it without Premium),
+so Nagram keeps it entity-expressible under the same flat-only rule as an expanded quote. Restoring such an entity
+(`chatInputStateStringWithAppliedEntities`) strips the quote attribute from the collapsed placeholder's content,
+as the composer's own collapse does; otherwise it parsed as a collapsed quote nested in a collapsed quote.
+
 ---
 
 ## 3. Composer ↔ editor wiring
@@ -172,7 +181,8 @@ The editor auto-detects each paragraph's direction (RTL for Arabic/Hebrew/…) a
 typing "just works" in the composer; an empty message's caret follows the keyboard's input language and re-flips
 live on a globe-key switch. The whole-document override (`RichTextEditorView.layoutDirectionOverride`) exists on the
 façade (and has a UI control in `RichTextAttachmentScreen`) but is **not surfaced in the chat composer** this round —
-auto-detect covers it. Editor-side architecture lives in the editor's own `CLAUDE.md` ("RTL / writing direction").
+auto-detect covers it. Editor-side architecture lives in the canvas editor's guide,
+`submodules/TelegramUI/Components/RichTextEditor/Sources/RichTextEditorUIKit/CLAUDE.md` ("RTL / writing direction").
 
 **Empty-input right inset.** `ChatTextInputPanelNode.calculateTextFieldRealInsets` reserves the action-control slot
 on the field's right (`actionControlsWidth - 10`). The effective per-layout call (applied to the rich node) passes
@@ -218,6 +228,12 @@ All inline / structural features round-trip losslessly through the native compos
   Enter inserts an interior newline (exits on an empty trailing line), backspace in an empty block un-codes it.
   Multi-line quotes also emit **one contiguous blockquote** on send. **Deferred:** language picker (creation
   sets `language = nil`; incoming language round-trips), code in table cells, inline formatting inside code.
+  Since the composer harness's p24 fix wave the model holds a language **as typed** (edge spaces included; an
+  emptied line is nil) and the wire trims it (`chatInputCodeLanguageForSending`, at the `Pre` entity and the
+  rich `preformatted` block); a code body holds plain text only (atoms become their text). A content set the
+  engine composer normalises is reported back to the chat **whenever its read-back differs from what was
+  set** (`RichTextEditorChatInputNode.setInputContent`), and the panel's length counter counts what the text
+  route sends (code bodies included).
 - **Inline media:** an attached image/video renders inline in the native composer and survives expand↔collapse
   + drafts, carried by `ChatInputContent.media`. The concrete view is the shared
   `RichTextEditorMediaView.MediaItemNodeView` (also used by the article editor), resolved via the injected
@@ -331,7 +347,13 @@ as a **`RichTextMessageAttribute`** carrying an `InstantPage`, rendered by the V
   `editMessage == nil && !content.isEntityExpressible() && !content.isEmpty`, enqueues **one**
   `.message(text: "", attributes: [RichTextMessageAttribute(instantPage: instantPage(from: content), …)], …)`.
   Entity-expressible content keeps the existing `breakChatInputText` text+entities loop **byte-identical**. The
-  custom-emoji premium-lock harvest + early-return stays **before** the branch.
+  custom-emoji premium-lock harvest + early-return stays **before** the branch. The route decision and the text
+  loop (markdown conversion, trim, 4096 split, per-piece entities) live in TextFormat
+  (`chatComposerSendRoute` / `chatComposerTextMessages`, `ChatComposerSendPlan.swift`, p20 fix wave) so the
+  composer harness's send-path oracle calls the code the chat calls. A code block is plain text on both
+  routes as far as the native editor is concerned (a `Pre` entity holds no other entity; the engine refuses
+  inline formats in code — `RichTextEditor/CLAUDE.md`, p20 rules), and a spoilered formula is sent as a
+  paragraph holding it, never as a standalone `.formula` block.
 - **Edit** (`ChatControllerLoadDisplayNode`): LOAD seeds `ChatTextInputState(content: chatInputContent(fromInstantPage:
   richTextAttribute.instantPage))` (structural, media preserved — *not* a markdown flatten); DONE routes by
   `isEntityExpressible()` — non-entity → rebuild `RichTextMessageAttribute` + pass `richText:` (so the backend
@@ -453,7 +475,7 @@ Two layers (see `SyncCore_SynchronizeableChatInputState.swift`, `ChatInterfaceSt
 
 > **Invariant — `saveDraft` sends `message: ""` / no entities (clears the `1<<3` flag) when `richMessage` is
 > set.** The InstantPage already carries the text; the receiver builds the draft **purely** from `richMessage`
-> when present (`AccountStateManagementUtils` ignores `message`/`entities`), so sending the flat text duplicates
+> when present (`UpdateInterpreter` ignores `message`/`entities`), so sending the flat text duplicates
 > it on the wire.
 
 ### Cross-device media sync
@@ -547,13 +569,30 @@ Pasting **plain text that parses as CommonMark markdown** inserts it as rich con
 string — `**bold**` becomes bold, `# Heading` / `- list` / a `|`-table become real blocks. Clipboard paste
 only (no drag-&-drop, programmatic insert, or share-extension prefill). Always-on; undo is the escape hatch.
 
-**Pipeline (reuses the send-path parser).** `chatInputContentFromPastedMarkdown(context:plainText:)`
-(`TelegramUI/Sources/PastedMarkdownConversion.swift`) runs the same CommonMark parser the rich-message *send*
-path uses — `inputRichTextAttributeFromText` (`BrowserUI/BrowserMarkdown.swift`, Apple `NSAttributedString(markdown:)`
-with default options) → `InstantPage` → `chatInputContent(fromInstantPage:)` → `ChatInputContent`. A pure gate
+**Pipeline (reuses the send-path parser).** `chatInputContentFromPastedMarkdown(context:plainText:keepsBlankLines:)`
+(`BrowserUI/Sources/PastedMarkdownConversion.swift`) runs the same CommonMark parser the rich-message *send*
+path uses — `inputRichTextAttributeFromText` (`BrowserUI/BrowserMarkdown.swift`, Apple `NSAttributedString(markdown:)`,
+read with `lineBreaks: .keep`, below) → `InstantPage` → `chatInputContent(fromInstantPage:)` → `ChatInputContent`. A pure gate
 `pastedMarkdownContentIsRicherThanPlain(_:)` (`TextFormat/PastedMarkdownGate.swift`) returns nil when the parse
 is nothing but unformatted `.body` paragraphs, so ordinary text (incl. multi-line) falls through to the default
 plain paste; CommonMark's paired-delimiter rules mean a stray `*`/`-` never triggers.
+
+**Line breaks are read as written, not as CommonMark (#70).** The paste parses with
+`lineBreaks: .keep` (`MarkdownSourceLineBreaks`): a single newline stays a line break (CommonMark's soft break
+joined a ChatGPT reply's "**Key:** value" lines into one), and a blank line between two top-level blocks comes back
+as an empty paragraph (source positions, iOS 16+; a `---` between sections becomes that paragraph, since the composer
+has no divider). `pastedMarkdownContentResolvingBlankLines` keeps those only in the chat composer, inline and
+expanded (`keepsBlankLines: true`), and only when the pasted content is sent as text + entities; content that needs a rich
+message (heading, list, table, …) drops them and the renderer spaces its blocks, as do the article editor's pastes
+(decided for #70; keeping them in rich messages too was the alternative). The decision looks at the pasted fragment,
+not the message it lands in: pasted into a native field that already holds rich content, the blank lines stay and add
+to the renderer's spacing. The send path and `.md` documents keep CommonMark (`.commonMark`). Tests:
+`TextFormat/Tests/PastedMarkdownSourceLinesTests.swift`, `Tests/ComposerHarness/Tests/HarnessChatGPTPasteTests.swift`.
+
+**RTF paste: paragraph spacing is not a blank line.** A copied web page (a ChatGPT reply in Safari) separates its
+paragraphs with margins only (`\saN`/`\sbN` in the RTF). Every editor pastes them one line apart: the legacy field as
+the native editors do, so the same paste reads the same whichever editor takes it. (#70 had the legacy field alone turn
+gaps of 8pt or more into blank lines; removed 2026-10-30.)
 
 **Self-referential links are stripped BEFORE that gate (load-bearing — a pasted URL must stay plain).** Apple's
 `NSAttributedString(markdown:)` applies the **GFM autolink extension**, so a bare `https://…` — and also a bare
@@ -576,10 +615,10 @@ label, so those entities are unaffected. **The same rule is applied on the other
 (`storeAttributedTextInPasteboard`) is deliberately NOT touched: it keeps whatever entities the source message
 carried.
 
-**Why the monolith owns the parse.** `BrowserUI` already depends on `ChatRichTextEditorComposer`, so neither the
+**Why the parse is injected.** `BrowserUI` already depends on `ChatRichTextEditorComposer`, so neither the
 panel, the attachment screen, nor the `RichTextEditor` package may import it (cycle). The parse therefore lives in
-the `TelegramUI` monolith (the one layer that can import `BrowserUI` + `AccountContext`) and is **injected downward
-as a closure**. The `RichTextEditor` package stays markdown-free: it exposes a neutral
+`BrowserUI` and the `TelegramUI` monolith **injects it downward as a closure**; the composer harness
+(`Tests/ComposerHarness`) injects the same function. The `RichTextEditor` package stays markdown-free: it exposes a neutral
 `plainTextFragmentTransformer: ((String) -> Document?)?` it calls without knowing what markdown is.
 
 **Wiring.**
@@ -653,7 +692,7 @@ when the message is sent — a separate send-path change.
 | markers (mention/date, code) | `TextFormat/.../MentionDateMarkers.swift`, `CodeBlockMarkers.swift` |
 | native node | `Chat/ChatRichTextEditorComposer/Sources/RichTextEditorChatInputNode.swift` |
 | panel (GET/SET, node select) | `Chat/ChatTextInputPanelNode/Sources/ChatTextInputPanelNode.swift` |
-| markdown-on-paste parse (monolith) | `TelegramUI/Sources/PastedMarkdownConversion.swift` |
+| markdown-on-paste parse | `BrowserUI/Sources/PastedMarkdownConversion.swift` |
 | markdown-on-paste gate | `TextFormat/Sources/PastedMarkdownGate.swift` (`+ Tests/PastedMarkdownGateTests.swift`) |
 | self-referential-link strip (paste) | `TextFormat/Sources/SelfReferentialLinks.swift` (`+ Tests/SelfReferentialLinkTests.swift`); editor-side duplicate `RichTextEditorCore/Model/SelfReferentialLinks.swift` |
 | CommonMark → InstantPage (send + paste) | `BrowserUI/Sources/BrowserMarkdown.swift` (`inputRichTextAttributeFromText`) |

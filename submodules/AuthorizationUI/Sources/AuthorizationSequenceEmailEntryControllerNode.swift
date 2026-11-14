@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -96,7 +95,7 @@ final class AuthorizationSequenceEmailEntryControllerNode: ASDisplayNode, UIText
         self.theme = theme
         self.mode = mode
         
-        self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+        self.animationNode = DefaultAnimatedStickerNodeImpl()
         self.animationNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "IntroMail"), width: 256, height: 256, playbackMode: .once, mode: .direct(cachePathPrefix: nil))
         
         self.titleNode = ASTextNode()
@@ -222,15 +221,26 @@ final class AuthorizationSequenceEmailEntryControllerNode: ASDisplayNode, UIText
         self.titleNode.attributedText = NSAttributedString(string: self.mode == .setup ? self.strings.LoginEmail_Title : self.strings.Login_EnterNewEmailTitle, font: Font.bold(28.0), textColor: self.theme.list.itemPrimaryTextColor)
 
         
+        // iPhone Duo: beside a side strip the content keeps to the band between the side insets; on the unfolded screen it
+        // is centered on the full width, clear of the strip on both sides (authorizationContentBand). With equal insets
+        // (every other phone) it keeps the full width.
+        let (bandMinX, bandWidth) = authorizationContentBand(layout: layout)
+        
         let inset: CGFloat = 24.0
-        let maximumWidth: CGFloat = min(430.0, layout.size.width)
+        let maximumWidth: CGFloat = min(430.0, bandWidth)
+        
+        // iPhone Duo: the bottom button and the divider above it keep to the content's axis (authorizationBottomBand):
+        // unfolded they span the side strip, clear only of a corner block at the bottom; folded they keep to the
+        // content band.
+        let (bottomBandMinX, bottomBandWidth) = authorizationBottomBand(layout: layout)
+        let bottomMaximumWidth: CGFloat = min(430.0, bottomBandWidth)
         
         let animationSize = CGSize(width: 100.0, height: 100.0)
         let titleSize = self.titleNode.measure(CGSize(width: maximumWidth, height: CGFloat.greatestFiniteMagnitude))
         
         let noticeSize = self.noticeNode.measure(CGSize(width: maximumWidth - 80.0, height: CGFloat.greatestFiniteMagnitude))
-        let proceedHeight = self.proceedNode.updateLayout(width: maximumWidth - 48.0, transition: transition)
-        let proceedSize = CGSize(width: maximumWidth - 48.0, height: proceedHeight)
+        let proceedHeight = self.proceedNode.updateLayout(width: bottomMaximumWidth - 48.0, transition: transition)
+        let proceedSize = CGSize(width: bottomMaximumWidth - 48.0, height: proceedHeight)
         
         var items: [AuthorizationLayoutItem] = []
         
@@ -244,19 +254,26 @@ final class AuthorizationSequenceEmailEntryControllerNode: ASDisplayNode, UIText
             items.insert(AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 10.0, maxValue: 10.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)), at: 0)
             self.animationNode.updateLayout(size: animationSize)
             self.proceedNode.isHidden = false
-            self.animationNode.isHidden = false
-            self.animationNode.visibility = true
+            if !authorizationLayoutItemsFit(height: layout.size.height - insets.top - insets.bottom - 120.0, items: items) {
+                items.removeFirst()
+                insets.top = navigationBarHeight
+            }
         } else {
             insets.top = navigationBarHeight
             self.proceedNode.isHidden = true
+        }
+        if items.first?.node === self.animationNode {
+            self.animationNode.isHidden = false
+            self.animationNode.visibility = true
+        } else {
             self.animationNode.isHidden = true
         }
         
-        let buttonFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((layout.size.width - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize)
+        let buttonFrame = CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - proceedSize.width) / 2.0), y: layout.size.height - insets.bottom - proceedSize.height - inset), size: proceedSize)
         transition.updateFrame(node: self.proceedNode, frame: buttonFrame)
         
-        let dividerSize = self.dividerNode.updateLayout(width: maximumWidth)
-        transition.updateFrame(node: self.dividerNode, frame: CGRect(origin: CGPoint(x: floorToScreenPixels((layout.size.width - dividerSize.width) / 2.0), y: buttonFrame.minY - dividerSize.height), size: dividerSize))
+        let dividerSize = self.dividerNode.updateLayout(width: bottomMaximumWidth)
+        transition.updateFrame(node: self.dividerNode, frame: CGRect(origin: CGPoint(x: bottomBandMinX + floorToScreenPixels((bottomBandWidth - dividerSize.width) / 2.0), y: buttonFrame.minY - dividerSize.height), size: dividerSize))
         
         if let _ = self.signInWithAppleButton, self.appleSignInAllowed {
             self.dividerNode.isHidden = false
@@ -264,7 +281,7 @@ final class AuthorizationSequenceEmailEntryControllerNode: ASDisplayNode, UIText
             self.dividerNode.isHidden = true
         }
         
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: 0.0, y: insets.top), size: CGSize(width: layout.size.width, height: layout.size.height - insets.top - insets.bottom - 120.0)), items: items, transition: transition, failIfDoesNotFit: false)
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: bandMinX, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - 120.0)), items: items, transition: transition, failIfDoesNotFit: false)
         
         if let signInWithAppleButton = self.signInWithAppleButton, self.appleSignInAllowed {
             signInWithAppleButton.isHidden = false

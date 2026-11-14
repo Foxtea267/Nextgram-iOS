@@ -90,6 +90,52 @@ public final class ListViewBackingView: UIView {
     override public func accessibilityScroll(_ direction: UIAccessibilityScrollDirection) -> Bool {
         return self.target?.accessibilityScroll(direction) ?? false
     }
+
+    // Not an `_ASDisplayView`, so it forwards to ASDK's collector itself: the rows inside the list's bounds, cached for
+    // the run loop turn. An explicitly set array and the `accessibilityUsesViewElements` opt-out keep UIKit's behaviour.
+    override public var accessibilityElements: [Any]? {
+        get {
+            if let elements = super.accessibilityElements {
+                return elements
+            }
+            return ASDisplayNodeCachedAccessibilityElements(self.target).flatMap { listViewAccessibilityReadingOrder($0) }
+        } set(value) {
+            super.accessibilityElements = value
+        }
+    }
+}
+
+/// ListView's elements in reading order: by origin, top to bottom then leading to trailing, as the collector sorts them,
+/// except that a row reads from its content, below its top inset. A section header is drawn in the top inset of its
+/// first row ("CHATS AND CONTACTS" over the first search result), so by frame the row would be read before its header.
+func listViewAccessibilityReadingOrder(_ elements: [Any]) -> [Any] {
+    if elements.count < 2 {
+        return elements
+    }
+    let keyed: [(origin: CGPoint, index: Int)] = elements.enumerated().map { index, element in
+        var origin: CGPoint
+        if let view = element as? UIView {
+            origin = view.convert(view.bounds, to: nil).origin
+            if let itemNode = view.asyncdisplaykit_node as? ListViewItemNode {
+                origin.y += itemNode.insets.top
+            }
+        } else if let object = element as? NSObject {
+            origin = object.accessibilityFrame.origin
+        } else {
+            origin = CGPoint()
+        }
+        return (origin, index)
+    }
+    let sorted = keyed.sorted { lhs, rhs in
+        if lhs.origin.y != rhs.origin.y {
+            return lhs.origin.y < rhs.origin.y
+        }
+        if lhs.origin.x != rhs.origin.x {
+            return lhs.origin.x < rhs.origin.x
+        }
+        return lhs.index < rhs.index
+    }
+    return sorted.map { elements[$0.index] }
 }
 
 private final class ListViewTimerProxy: NSObject {
@@ -153,6 +199,10 @@ private func cancelContextGestures(view: UIView) {
         cancelContextGestures(view: subview)
     }
 }
+
+// MARK: NAGRAM — "High Refresh Rate Scrolling": also run lists at the display's highest rate while a finger drags
+// them, not only while they decelerate. Off by default because it costs battery; the app sets it from Nagram settings.
+public var nagramListViewHighFrameRateDragging: Bool = false
 
 open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestureRecognizerDelegate {
     public struct ScrollingIndicatorState {
@@ -883,6 +933,10 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
 
         self.scroller.forceDecelerating = false
         self.isDragging = true
+        // MARK: NAGRAM — turned off again when the drag ends without deceleration, or when deceleration ends.
+        if nagramListViewHighFrameRateDragging {
+            self.isAuxiliaryDisplayLinkEnabled = true
+        }
         
         self.beganInteractiveDragging(self.touchesPosition)
         
@@ -1295,6 +1349,8 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                         transition = .animated(duration: max(updateSizeAndInsets.duration, duration ?? 0.3), curve: .easeInOut)
                     case let .Custom(duration, cp1x, cp1y, cp2x, cp2y):
                         transition = .animated(duration: duration, curve: .custom(cp1x, cp1y, cp2x, cp2y))
+                    case let .CustomSpring(duration, mass, stiffness, damping, initialVelocity):
+                        transition = .animated(duration: duration, curve: .customSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity))
                 }
             }
         } else if let scrollToItem = scrollToItem {
@@ -1310,6 +1366,8 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                         }
                     case let .Custom(duration, cp1x, cp1y, cp2x, cp2y):
                         transition = .animated(duration: duration, curve: .custom(cp1x, cp1y, cp2x, cp2y))
+                    case let .CustomSpring(duration, mass, stiffness, damping, initialVelocity):
+                        transition = .animated(duration: duration, curve: .customSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity))
                 }
             }
         }
@@ -3350,6 +3408,12 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                             
                             springAnimation.isAdditive = true
                             animation = springAnimation
+                        case let .CustomSpring(duration, mass, stiffness, damping, initialVelocity):
+                            let curve: ContainedViewLayoutTransitionCurve = .customSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity)
+                            headerNodesTransition = (.animated(duration: duration, curve: curve), false, -completeOffset)
+                            animationCurve = curve
+                            animationDuration = duration
+                            animation = makeCustomSpringSublayerTransformAnimation(layer: self.layer, curve: curve, duration: duration, offset: -completeOffset)
                         case let .Custom(duration, cp1x, cp1y, cp2x, cp2y):
                             headerNodesTransition = (.animated(duration: duration, curve: .custom(cp1x, cp1y, cp2x, cp2y)), false, -completeOffset)
                             animationCurve = .custom(cp1x, cp1y, cp2x, cp2y)
@@ -3613,6 +3677,8 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                         headerNodesTransition = (.animated(duration: duration ?? 0.3, curve: .easeInOut), true, headerNodesTransition.2 - offsetOrZero)
                     case let .Custom(duration, cp1x, cp1y, cp2x, cp2y):
                         headerNodesTransition = (.animated(duration: duration, curve: .custom(cp1x, cp1y, cp2x, cp2y)), headerNodesTransition.1, headerNodesTransition.2 - offsetOrZero)
+                    case let .CustomSpring(duration, mass, stiffness, damping, initialVelocity):
+                        headerNodesTransition = (.animated(duration: duration, curve: .customSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity)), headerNodesTransition.1, headerNodesTransition.2 - offsetOrZero)
                 }
                 for (_, headerNode) in self.itemHeaderNodes {
                     previousItemHeaderNodes.append(headerNode)
@@ -3689,6 +3755,12 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                             
                             animation = springAnimation
                             reverseAnimation = reverseSpringAnimation
+                        case let .CustomSpring(duration, mass, stiffness, damping, initialVelocity):
+                            let curve: ContainedViewLayoutTransitionCurve = .customSpring(mass: mass, stiffness: stiffness, damping: damping, initialVelocity: initialVelocity)
+                            animationCurve = curve
+                            animationDuration = duration
+                            animation = makeCustomSpringSublayerTransformAnimation(layer: self.layer, curve: curve, duration: duration, offset: -offset)
+                            reverseAnimation = makeCustomSpringSublayerTransformAnimation(layer: self.layer, curve: curve, duration: duration, offset: offset)
                         case let .Custom(duration, cp1x, cp1y, cp2x, cp2y):
                             animationCurve = .custom(cp1x, cp1y, cp2x, cp2y)
                             animationDuration = duration
@@ -4267,7 +4339,7 @@ open class ListViewImpl: ASDisplayNode, ListView, ASScrollViewDelegate, ASGestur
                         if itemHeader.stickOverInsets {
                             itemMaxY = itemFrame.maxY
                         } else {
-                            itemMaxY = itemFrame.maxY - (self.rotated ? itemNode.insets.top : itemNode.insets.bottom)
+                            itemMaxY = itemFrame.maxY - (self.rotated ? (itemNode.insets.top + itemNode.stickyHeaderBandTrim) : itemNode.insets.bottom)
                         }
                         
                         if let (previousHeaderId, previousUpperBound, previousUpperIndex, previousUpperBoundEdge, previousLowerBound, previousLowerIndex, previousHeaderItem, hasValidNodes) = previousHeaderBySpace[itemHeader.id.space] {
@@ -5493,4 +5565,23 @@ private func findAccessibilityFocus(_ node: ASDisplayNode) -> Bool {
         return true
     }
     return false
+}
+
+/// Builds the additive `sublayerTransform` translation that scrolls the list with a `.customSpring` curve.
+/// Goes through `CALayer.makeAnimation` so the spring is configured (settling duration, speed scaling,
+/// duration factor, frame rate) exactly like every `ContainedViewLayoutTransition` spring, which keeps the
+/// list scroll in lockstep with content animated by the same curve.
+private func makeCustomSpringSublayerTransformAnimation(layer: CALayer, curve: ContainedViewLayoutTransitionCurve, duration: Double, offset: CGFloat) -> CABasicAnimation {
+    let fromValue = NSValue(caTransform3D: CATransform3DMakeTranslation(0.0, offset, 0.0))
+    let toValue = NSValue(caTransform3D: CATransform3DIdentity)
+    if let animation = layer.makeAnimation(from: fromValue, to: toValue, keyPath: "sublayerTransform", timingFunction: curve.timingFunction, duration: duration, additive: true) as? CABasicAnimation {
+        return animation
+    }
+    let animation = CABasicAnimation(keyPath: "sublayerTransform")
+    animation.fromValue = fromValue
+    animation.toValue = toValue
+    animation.duration = duration * UIView.animationDurationFactor()
+    animation.isRemovedOnCompletion = true
+    animation.isAdditive = true
+    return animation
 }

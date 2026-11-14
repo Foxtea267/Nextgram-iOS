@@ -11,7 +11,6 @@ swift_library(
     ],
     deps = [
         "//submodules/SSignalKit/SwiftSignalKit",
-        "//submodules/LottieSettings:LottieSettings",
         "//submodules/AsyncDisplayKit",
         "//submodules/Display",
         "//submodules/ComponentFlow",
@@ -21,6 +20,7 @@ swift_library(
         "//submodules/TelegramUIPreferences",
         "//submodules/AccountContext",
         "//submodules/ItemListUI",
+        "//Nagram/Strings:NagramStrings", # MARK: NAGRAM
         "//submodules/AvatarNode",
         "//submodules/TelegramStringFormatting",
         "//submodules/AlertUI",

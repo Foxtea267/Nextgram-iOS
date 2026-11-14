@@ -3,7 +3,6 @@ import UIKit
 import TelegramCore
 import AsyncDisplayKit
 import Display
-import UIKit
 import SwiftSignalKit
 import MobileCoreServices
 import TelegramVoip
@@ -27,8 +26,10 @@ import TelegramUIPreferences
 // MARK: NAGRAM — force-copy 增强开关模块
 import NagramSettings
 import NagramMessageHistory // MARK: NAGRAM
+import NagramMediaActions // MARK: NAGRAM
 import NagramStrings
 import NagramTranscription // MARK: NAGRAM
+import NagramSettingsUI // MARK: NAGRAM — 快捷添加消息过滤规则
 import TranslateUI
 import DebugSettingsUI
 import ChatPresentationInterfaceState
@@ -39,11 +40,13 @@ import SettingsUI
 import TextNodeWithEntities
 import ChatControllerInteraction
 import ChatMessageItemCommon
+import ChatMessageDateAndStatusNode
 import ChatMessageItemView
 import ChatMessageBubbleItemNode
 import AdsInfoScreen
 import AdsReportScreen
 import WalletContext
+import WalletSendScreen
  
 private struct MessageContextMenuData {
     let starStatus: Bool?
@@ -106,6 +109,32 @@ private func nagramManagedMessageMenuItems(_ items: [NagramManagedMessageMenuIte
         }
     }
     return nagramCleanMessageMenuSeparators(result)
+}
+
+// MARK: NAGRAM — 私下回复只给群里别人发的普通消息；与「在其他聊天中回复」的限制一致（内容保护、服务消息、阅后即焚等不行）
+private func nagramCanReplyPrivately(message: EngineRawMessage, accountPeerId: EnginePeer.Id, copyProtectionEnabled: Bool) -> Bool {
+    switch message.id.peerId.namespace {
+    case Namespaces.Peer.CloudGroup:
+        break
+    case Namespaces.Peer.CloudChannel:
+        guard let channel = message.peers[message.id.peerId] as? TelegramChannel, case .group = channel.info, !channel.isMonoForum else {
+            return false
+        }
+    default:
+        return false
+    }
+    guard message.id.namespace == Namespaces.Message.Cloud, let author = message.author as? TelegramUser, author.id != accountPeerId, !author.isDeleted else {
+        return false
+    }
+    if copyProtectionEnabled || message.isCopyProtected() || message.minAutoremoveOrClearTimeout == viewOnceTimeout {
+        return false
+    }
+    for media in message.media {
+        if media is TelegramMediaAction || media is TelegramMediaExpiredContent {
+            return false
+        }
+    }
+    return true
 }
 
 private func nagramCleanMessageMenuSeparators(_ items: [ContextMenuItem]) -> [ContextMenuItem] {
@@ -1314,6 +1343,16 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             })))
         }
         
+        // MARK: NAGRAM — 私下回复：在群里把别人的消息带到与其私聊里回复
+        if let replyPrivately = interfaceInteraction.replyPrivately, nagramCanReplyPrivately(message: message, accountPeerId: context.account.peerId, copyProtectionEnabled: chatPresentationInterfaceState.copyProtectionEnabled) {
+            actions.append(.replyPrivately, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.replyPrivately", chatPresentationInterfaceState.strings.baseLanguageCode), icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Replace"), color: theme.actionSheet.primaryTextColor)
+            }, action: { _, f in
+                f(.dismissWithoutContent)
+                replyPrivately(message)
+            })))
+        }
+        
         if data.messageActions.options.contains(.sendGift), !message.id.peerId.isTelegramNotifications {
             let sendGiftTitle: String
             var isIncoming = message.effectivelyIncoming(context.account.peerId)
@@ -1341,18 +1380,25 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         }
         
         if WalletConfiguration.with(appConfiguration: context.currentAppConfiguration.with { $0 }).isAvailable,
-           let peer = message.peers[message.id.peerId].flatMap(EnginePeer.init), case .user = peer,
-           message.media.contains(where: { media in
-               if let action = media as? TelegramMediaAction, case .gramTransfer = action.action {
-                   return true
+           let peerAddress = message.media.lazy.compactMap({ media -> String? in
+               if let action = media as? TelegramMediaAction, case let .gramTransfer(_, peerAddress, _, _, _) = action.action {
+                   return peerAddress
                }
-               return false
-           }) {
-            actions.append(.action(ContextMenuActionItem(text: "Send Money", icon: { theme in
+               return nil
+           }).first,
+           let transferRecipient = walletTransferMessageRecipient(chatPeer: message.peers[message.id.peerId].flatMap(EnginePeer.init), accountPeerId: context.account.peerId, peerAddress: peerAddress) {
+            let recipient: WalletSendRequest.Recipient
+            switch transferRecipient {
+            case let .peer(peer):
+                recipient = .peer(peer)
+            case let .address(address):
+                recipient = .address(address)
+            }
+            actions.append(.action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Wallet_SendMoney, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Ton"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
                 f(.dismissWithoutContent)
-                (interfaceInteraction.chatController() as? ChatControllerImpl)?.openResolved(result: .sendGrams(transfer: WalletSendRequest(recipient: .peer(peer), amountNanograms: nil)), sourceMessageId: message.id)
+                (interfaceInteraction.chatController() as? ChatControllerImpl)?.openResolved(result: .sendGrams(transfer: WalletSendRequest(recipient: recipient, amountNanograms: nil)), sourceMessageId: message.id)
             })))
         }
         
@@ -1463,18 +1509,20 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
         
         // MARK: NAGRAM force-copy — 原条件追加 && !forceCopyEnabled，开启后无视 content protection 允许复制
         let isCopyProtected = (chatPresentationInterfaceState.copyProtectionEnabled || message.isCopyProtected()) && !NagramSettings.shared.forceCopyEnabled
-        // MARK: NAGRAM — 复读：参考 Android Nagram 的 Repeat，按原消息转发回当前会话
-        if !isScheduled, data.messageActions.options.contains(.forward), !isCopyProtected, canSendMessagesToChat(chatPresentationInterfaceState), chatPresentationInterfaceState.chatLocation.peerId != nil {
+        // MARK: NAGRAM — 复读：参考 Android Nagram 的 Repeat，按原消息转发回当前会话。
+        // 与双击复读共用 nagramCanRepeatMessage：受保护消息不能转发，但开启强制复制后按新消息发送。
+        let repeatMessages = selectAll ? messages : [message]
+        if !isScheduled, repeatMessages.allSatisfy({ nagramCanRepeatMessage($0, chatCopyProtectionEnabled: chatPresentationInterfaceState.copyProtectionEnabled, forceCopyEnabled: NagramSettings.shared.forceCopyEnabled) }), canSendMessagesToChat(chatPresentationInterfaceState), chatPresentationInterfaceState.chatLocation.peerId != nil {
             actions.append(.repeat, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.repeat", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/RepeatPlusOne"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
-                let _ = controllerInteraction.nagramRepeatMessages(selectAll ? messages : [message], false)
+                let _ = controllerInteraction.nagramRepeatMessages(repeatMessages, false)
                 f(.dismissWithoutContent)
             })))
             actions.append(.repeatWithoutQuote, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.repeatWithoutQuote", context.sharedContext.currentPresentationData.with { $0 }.strings.baseLanguageCode), icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/RepeatPlusOne"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
-                let _ = controllerInteraction.nagramRepeatMessages(selectAll ? messages : [message], true)
+                let _ = controllerInteraction.nagramRepeatMessages(repeatMessages, true)
                 f(.dismissWithoutContent)
             })))
         }
@@ -1968,17 +2016,23 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
-        if let message = messages.first, message.id.namespace == Namespaces.Message.Cloud, let channel = message.peers[message.id.peerId] as? TelegramChannel, !channel.isMonoForum, !(message.media.first is TelegramMediaAction), !isReplyThreadHead, !isMigrated {
+        if let message = messages.first, let copyLinkKind = chatMessageCopyLinkKind(message: message), let channel = message.peers[message.id.peerId] as? TelegramChannel, !isReplyThreadHead, !isMigrated {
             actions.append(.copyLink, .action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuCopyLink, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Link"), color: theme.actionSheet.primaryTextColor)
             }, action: { _, f in
                 var threadMessageId: EngineMessage.Id?
-                if case let .replyThread(replyThreadMessage) = chatPresentationInterfaceState.chatLocation {
+                // A direct-messages conversation is a sublist keyed by the user's peer id, not a reply thread.
+                if case let .replyThread(replyThreadMessage) = chatPresentationInterfaceState.chatLocation, copyLinkKind != .directMessages {
                     threadMessageId = replyThreadMessage.effectiveMessageId
                 }
                 let _ = (context.engine.messages.exportMessageLink(peerId: message.id.peerId, messageId: message.id, isThread: threadMessageId != nil)
                 |> map { result -> String? in
-                    return result
+                    switch copyLinkKind {
+                    case .channelMessage:
+                        return result
+                    case .directMessages:
+                        return directMessagesMessageLink(exportedLink: result, messageId: message.id)
+                    }
                 }
                 |> deliverOnMainQueue).startStandalone(next: { link in
                     if let link = link {
@@ -1987,7 +2041,9 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                         let presentationData = context.sharedContext.currentPresentationData.with { $0 }
                         
                         var warnAboutPrivate = false
-                        if case .peer = chatPresentationInterfaceState.chatLocation {
+                        if copyLinkKind == .directMessages {
+                            warnAboutPrivate = true
+                        } else if case .peer = chatPresentationInterfaceState.chatLocation {
                             if channel.addressName == nil {
                                 warnAboutPrivate = true
                             }
@@ -2165,6 +2221,19 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        // MARK: NAGRAM — 长按群/频道消息快捷添加过滤规则：预填转义后的消息文字，默认只在当前聊天生效
+        if NagramSettings.shared.regexFiltersEnabled, message.effectivelyIncoming(context.account.peerId), !message.text.isEmpty, message.id.peerId.namespace == Namespaces.Peer.CloudGroup || message.id.peerId.namespace == Namespaces.Peer.CloudChannel, let chatPeer = message.peers[message.id.peerId] {
+            let filterText = message.text
+            let filterPeerId = message.id.peerId.toInt64()
+            let filterPeerTitle = EnginePeer(chatPeer).compactDisplayTitle
+            actions.append(.addToRegexFilter, .action(ContextMenuActionItem(text: ngI18n("Nagram.MessageMenu.Item.addToRegexFilter", chatPresentationInterfaceState.strings.baseLanguageCode), icon: { theme in
+                return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Restrict"), color: theme.actionSheet.primaryTextColor)
+            }, action: { _, f in
+                f(.dismissWithoutContent)
+                controllerInteraction.navigationController()?.pushViewController(nagramRegexFilterQuickAddController(context: context, text: filterText, peerId: filterPeerId, peerTitle: filterPeerTitle))
+            })))
+        }
+        
         if data.messageActions.options.contains(.report) {
             actions.append(.report, .action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextMenuReport, icon: { theme in
                 return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Report"), color: theme.actionSheet.primaryTextColor)
@@ -2193,7 +2262,11 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                 }
             }
             
-            if infoSummaryData.canViewStats, forwards >= 1 || views >= 100 {
+            // MARK: NAGRAM — as on Android: an admin sees a post's statistics as soon as it has a view or forward,
+            // also in a channel the server keeps no statistics for (under 50 subscribers), where the screen shows the
+            // post's own counts.
+            let nagramCanViewStats = (channel.flags.contains(.isCreator) || channel.adminRights != nil) && (forwards >= 1 || views >= 1)
+            if (infoSummaryData.canViewStats && (forwards >= 1 || views >= 100)) || nagramCanViewStats {
                 actions.append(.viewStats, .action(ContextMenuActionItem(text: chatPresentationInterfaceState.strings.Conversation_ContextViewStats, icon: { theme in
                     return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Statistics"), color: theme.actionSheet.primaryTextColor)
                 }, action: { c, _ in
@@ -2388,27 +2461,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                         searchThreadId = nil
                     }
                     
-                    let _ = (context.account.postbox.transaction { transaction -> [EngineMessage.Id] in
-                        let limit = 500
-                        var ids: [EngineMessage.Id] = []
-                        transaction.withAllMessages(peerId: message.id.peerId, { searchMessage in
-                            if ids.count >= limit {
-                                return false
-                            }
-                            guard searchMessage.author?.id == author.id else {
-                                return true
-                            }
-                            if let searchThreadId, searchMessage.threadId != searchThreadId {
-                                return true
-                            }
-                            if searchMessage.media.contains(where: { $0 is TelegramMediaAction }) {
-                                return true
-                            }
-                            ids.append(searchMessage.id)
-                            return true
-                        })
-                        return ids
-                    }
+                    let _ = (context.engine.messages.nagramLocalMessageIds(peerId: message.id.peerId, authorId: author.id, threadId: searchThreadId, limit: 500)
                     |> deliverOnMainQueue).startStandalone(next: { ids in
                         if ids.isEmpty {
                             f(.default)
@@ -2517,7 +2570,7 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
                     readStats = MessageReadStats(reactionCount: 0, peers: [], readTimestamps: [:])
                 }
 
-                actions.insert(.custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: hasReadReports, isEdit: false, stats: readStats, action: { c, f, stats, customReactionEmojiPacks, firstCustomEmojiReaction in
+                actions.insert(.custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: hasReadReports, info: nil, stats: readStats, action: { c, f, stats, customReactionEmojiPacks, firstCustomEmojiReaction in
                     if message.id.peerId.namespace == Namespaces.Peer.CloudUser {
                         if let stats, stats.peers.isEmpty {
                             c.dismiss(completion: {
@@ -2613,11 +2666,43 @@ func contextMenuForChatPresentationInterfaceState(chatPresentationInterfaceState
             }
         }
         
+        // Bubble mode off: a message shows no time of its own (the first of a run has it next to the name) and a post no
+        // signature, so an incoming message's menu starts with them, in one block with the other rows about the message
+        // (spec 5.9).
+        var isMessageOptions = false
+        if case .messageOptions = chatPresentationInterfaceState.subject {
+            isMessageOptions = true
+        }
+        let showsBubblelessInfoRows = !chatPresentationInterfaceState.bubbleCorners.bubbleMode && chatMessageBubblelessMenuShowsInfoRows(bubbleMode: false, isMessageOptions: isMessageOptions, incoming: message.effectivelyIncoming(context.account.peerId), isAd: message.adAttribute != nil, isService: chatMessageMediaKind(message) == .service)
+        
         if isEdited {
             if !actions.isEmpty {
                 actions.insert(.separator, at: 0)
             }
-            actions.insert(.custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: false, isEdit: true, stats: MessageReadStats(reactionCount: 0, peers: [], readTimestamps: [:]), action: nil), false), at: 0)
+            actions.insert(.custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: false, info: .edited, usesInfoRowMetrics: showsBubblelessInfoRows, stats: MessageReadStats(reactionCount: 0, peers: [], readTimestamps: [:]), action: nil), false), at: 0)
+        }
+        
+        if showsBubblelessInfoRows {
+            let noStats = MessageReadStats(reactionCount: 0, peers: [], readTimestamps: [:])
+            var authorTitle = messageTimestampStatusAuthorTitle(context: context, message: EngineMessage(message), strings: chatPresentationInterfaceState.strings, nameDisplayOrder: chatPresentationInterfaceState.nameDisplayOrder)
+            if authorTitle?.isEmpty == true {
+                authorTitle = nil
+            }
+            // The "Edited" row shows when the message was sent where the server asks for it (`infoText()`).
+            let editedRowShowsSentTime = isEdited && (context.getAppConfigValue("message_primary_edited_date") as? Bool ?? false)
+            let infoRows: [ContextMenuItem] = chatMessageBubblelessMenuInfoRows(hasAuthor: authorTitle != nil, editedRowShowsSentTime: editedRowShowsSentTime).map { row in
+                switch row {
+                case .sent:
+                    return .custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: false, info: .sent, usesInfoRowMetrics: true, stats: noStats, action: nil), false)
+                case .author:
+                    return .custom(ChatReadReportContextItem(context: context, message: message, hasReadReports: false, info: .author(authorTitle ?? ""), usesInfoRowMetrics: true, stats: noStats, action: nil), false)
+                }
+            }
+            if let first = actions.first, case let .custom(firstItem, _) = first.item, firstItem is ChatReadReportContextItem { // MARK: NAGRAM
+            } else if !actions.isEmpty && !infoRows.isEmpty {
+                actions.insert(.separator, at: 0)
+            }
+            actions.insert(contentsOf: infoRows.map { NagramManagedMessageMenuItem(id: nil, item: $0) }, at: editedRowShowsSentTime ? 1 : 0) // MARK: NAGRAM
         }
         
         if !actions.isEmpty, case .separator = actions[0].item { // MARK: NAGRAM
@@ -3585,18 +3670,31 @@ private final class ChatMessageAuthorContextItemNode: ASDisplayNode, ContextMenu
 }
 
 final class ChatReadReportContextItem: ContextMenuCustomItem {
+    /// A row about the message itself rather than about who read it or reacted to it.
+    enum Info {
+        case edited
+        /// Bubble mode off: when the message was sent, since only the first message of a run shows its time.
+        case sent
+        /// Bubble mode off: who signed a post, since its header shows just the time.
+        case author(String)
+    }
+    
     fileprivate let context: AccountContext
     fileprivate let message: EngineRawMessage
     fileprivate let hasReadReports: Bool
-    fileprivate let isEdit: Bool
+    fileprivate let info: Info?
+    /// The compact row (private chats' metrics): the bubble-free info rows, and the "Edited" row among them. Groups and
+    /// channels otherwise keep master's.
+    fileprivate let usesInfoRowMetrics: Bool
     fileprivate let stats: MessageReadStats?
     fileprivate let action: ((ContextControllerProtocol, @escaping (ContextMenuActionResult) -> Void, MessageReadStats?, [StickerPackCollectionInfo], TelegramMediaFile?) -> Void)?
 
-    init(context: AccountContext, message: EngineRawMessage, hasReadReports: Bool, isEdit: Bool, stats: MessageReadStats?, action: ((ContextControllerProtocol, @escaping (ContextMenuActionResult) -> Void, MessageReadStats?, [StickerPackCollectionInfo], TelegramMediaFile?) -> Void)?) {
+    init(context: AccountContext, message: EngineRawMessage, hasReadReports: Bool, info: Info?, usesInfoRowMetrics: Bool = false, stats: MessageReadStats?, action: ((ContextControllerProtocol, @escaping (ContextMenuActionResult) -> Void, MessageReadStats?, [StickerPackCollectionInfo], TelegramMediaFile?) -> Void)?) {
         self.context = context
         self.message = message
         self.hasReadReports = hasReadReports
-        self.isEdit = isEdit
+        self.info = info
+        self.usesInfoRowMetrics = usesInfoRowMetrics
         self.stats = stats
         self.action = action
     }
@@ -3670,11 +3768,18 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
         self.buttonNode.accessibilityLabel = presentationData.strings.VoiceChat_StopRecording
 
         self.iconNode = ASImageNode()
-        if self.item.isEdit {
-            if let useEditedTimestamp = self.item.context.getAppConfigValue("message_primary_edited_date") as? Bool, useEditedTimestamp {
+        if let info = self.item.info {
+            switch info {
+            case .edited:
+                if let useEditedTimestamp = self.item.context.getAppConfigValue("message_primary_edited_date") as? Bool, useEditedTimestamp {
+                    self.iconNode.image = generateScaledImage(image: generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Time"), color: presentationData.theme.contextMenu.primaryColor), size: CGSize(width: 20.0, height: 20.0), opaque: false)
+                } else {
+                    self.iconNode.image = generateTintedImage(image: UIImage(bundleImageName: "Chat/Message/MenuEditIcon"), color: presentationData.theme.contextMenu.primaryColor)
+                }
+            case .sent:
                 self.iconNode.image = generateScaledImage(image: generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Time"), color: presentationData.theme.contextMenu.primaryColor), size: CGSize(width: 20.0, height: 20.0), opaque: false)
-            } else {
-                self.iconNode.image = generateTintedImage(image: UIImage(bundleImageName: "Chat/Message/MenuEditIcon"), color: presentationData.theme.contextMenu.primaryColor)
+            case .author:
+                self.iconNode.image = generateScaledImage(image: generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/User"), color: presentationData.theme.contextMenu.primaryColor), size: CGSize(width: 20.0, height: 20.0), opaque: false)
             }
         } else if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser {
             self.iconNode.image = generateTintedImage(image: UIImage(bundleImageName: "Chat/Message/MenuReadIcon"), color: presentationData.theme.contextMenu.primaryColor)
@@ -3712,7 +3817,15 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
             }
         }
         
-        if !customEmojiFiles.isEmpty {
+        var isBubblelessInfoRow = false
+        switch item.info {
+        case .sent, .author:
+            // The bubble-free info rows offer no reaction tips.
+            isBubblelessInfoRow = true
+        case .edited, nil:
+            break
+        }
+        if !customEmojiFiles.isEmpty, !isBubblelessInfoRow {
             self.customEmojiPacksDisposable = (item.context.engine.stickers.resolveInlineStickers(fileIds: Array(customEmojiFiles))
             |> mapToSignal { customEmoji -> Signal<([StickerPackCollectionInfo], TelegramMediaFile?), NoError> in
                 var stickerPackSignals: [Signal<StickerPackCollectionInfo?, NoError>] = []
@@ -3781,7 +3894,7 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
             })
         }
         
-        if !self.item.isEdit {
+        if self.item.info == nil {
             item.context.account.viewTracker.updateReactionsForMessageIds(messageIds: [item.message.id], force: true)
         }
     }
@@ -3801,6 +3914,50 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
 
     private var validLayout: (calculatedWidth: CGFloat, size: CGSize)?
 
+    private func timestampText(_ timestamp: Int32, today: @escaping (String) -> String, yesterday: @escaping (String) -> String, date: @escaping (String) -> String) -> String {
+        return humanReadableStringForTimestamp(strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, timestamp: timestamp, alwaysShowTime: true, allowYesterday: true, format: HumanReadableStringFormat(
+            dateFormatString: { value in
+                return PresentationStrings.FormattedString(string: date(value), ranges: [])
+            },
+            tomorrowFormatString: { value in
+                return PresentationStrings.FormattedString(string: today(value), ranges: [])
+            },
+            todayFormatString: { value in
+                return PresentationStrings.FormattedString(string: today(value), ranges: [])
+            },
+            yesterdayFormatString: { value in
+                return PresentationStrings.FormattedString(string: yesterday(value), ranges: [])
+            }
+        )).string
+    }
+    
+    private func sentTimestampText(_ timestamp: Int32) -> String {
+        let strings = self.presentationData.strings
+        return self.timestampText(timestamp, today: { strings.Chat_PrivateMessageSentTimestamp_TodayAt($0).string }, yesterday: { strings.Chat_PrivateMessageSentTimestamp_YesterdayAt($0).string }, date: { strings.Chat_PrivateMessageSentTimestamp_Date($0).string })
+    }
+    
+    /// The line of a row about the message itself, if this is one.
+    private func infoText() -> String? {
+        guard let info = self.item.info else {
+            return nil
+        }
+        switch info {
+        case .edited:
+            guard let editedTime = self.item.message.editedTime, editedTime != 0 else {
+                return nil
+            }
+            if let useEditedTimestamp = self.item.context.getAppConfigValue("message_primary_edited_date") as? Bool, useEditedTimestamp {
+                return self.sentTimestampText(self.item.message.timestamp)
+            }
+            let strings = self.presentationData.strings
+            return self.timestampText(editedTime, today: { strings.Chat_PrivateMessageEditTimestamp_TodayAt($0).string }, yesterday: { strings.Chat_PrivateMessageEditTimestamp_YesterdayAt($0).string }, date: { strings.Chat_PrivateMessageEditTimestamp_Date($0).string })
+        case .sent:
+            return self.sentTimestampText(self.item.message.timestamp)
+        case let .author(title):
+            return title
+        }
+    }
+    
     func updateStats(stats: MessageReadStats, transition: ContainedViewLayoutTransition) {
         if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser {
             self.buttonNode.isUserInteractionEnabled = self.item.action != nil && stats.peers.isEmpty
@@ -3823,7 +3980,7 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
         let verticalInset: CGFloat
         let rightTextInset: CGFloat
         
-        if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser {
+        if chatReadReportRowUsesCompactMetrics(isCloudUserChat: self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser, isBubblelessInfoRow: self.item.usesInfoRowMetrics) {
             verticalInset = 7.0
             rightTextInset = 8.0
         } else {
@@ -3849,41 +4006,8 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
             reactionCount = currentStats.reactionCount
             
             if currentStats.peers.isEmpty {
-                if self.item.isEdit, let editedTime = self.item.message.editedTime, editedTime != 0 {
-                    let dateText: String
-                    if let useEditedTimestamp = self.item.context.getAppConfigValue("message_primary_edited_date") as? Bool, useEditedTimestamp {
-                        dateText = humanReadableStringForTimestamp(strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, timestamp: self.item.message.timestamp, alwaysShowTime: true, allowYesterday: true, format: HumanReadableStringFormat(
-                            dateFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageSentTimestamp_Date(value).string, ranges: [])
-                            },
-                            tomorrowFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageSentTimestamp_TodayAt(value).string, ranges: [])
-                            },
-                            todayFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageSentTimestamp_TodayAt(value).string, ranges: [])
-                            },
-                            yesterdayFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageSentTimestamp_YesterdayAt(value).string, ranges: [])
-                            }
-                        )).string
-                    } else {
-                        dateText = humanReadableStringForTimestamp(strings: self.presentationData.strings, dateTimeFormat: self.presentationData.dateTimeFormat, timestamp: editedTime, alwaysShowTime: true, allowYesterday: true, format: HumanReadableStringFormat(
-                            dateFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageEditTimestamp_Date(value).string, ranges: [])
-                            },
-                            tomorrowFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageEditTimestamp_TodayAt(value).string, ranges: [])
-                            },
-                            todayFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageEditTimestamp_TodayAt(value).string, ranges: [])
-                            },
-                            yesterdayFormatString: { value in
-                                return PresentationStrings.FormattedString(string: self.presentationData.strings.Chat_PrivateMessageEditTimestamp_YesterdayAt(value).string, ranges: [])
-                            }
-                        )).string
-                    }
-                    
-                    self.textNode.attributedText = NSAttributedString(string: dateText, font: Font.regular(floor(self.presentationData.listsFontSize.baseDisplaySize * 0.8)), textColor: self.presentationData.theme.contextMenu.primaryColor)
+                if let infoText = self.infoText() {
+                    self.textNode.attributedText = NSAttributedString(string: infoText, font: Font.regular(floor(self.presentationData.listsFontSize.baseDisplaySize * 0.8)), textColor: self.presentationData.theme.contextMenu.primaryColor)
                 } else if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser {
                     let text = NSAttributedString(string: self.presentationData.strings.Chat_ContextMenuReadDate_ReadAvailablePrefix, font: Font.regular(floor(self.presentationData.listsFontSize.baseDisplaySize * 0.8)), textColor: self.presentationData.theme.contextMenu.primaryColor)
                     if self.textNode.attributedText != text {
@@ -4052,7 +4176,7 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
 
             if !iconSize.width.isZero {
                 var iconFrame = CGRect(origin: CGPoint(x: sideInset + 6.0, y: floor((size.height - iconSize.height) / 2.0)), size: iconSize)
-                if self.item.isEdit {
+                if self.item.info != nil {
                     iconFrame.origin.x += 1.0
                 }
                 transition.updateFrameAdditive(node: self.iconNode, frame: iconFrame)
@@ -4062,7 +4186,7 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
             let placeholderAvatarsContent: AnimatedAvatarSetContext.Content
 
             var avatarsPeers: [EnginePeer] = []
-            if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser || self.item.isEdit {
+            if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser || self.item.info != nil {
             } else if let recentPeers = self.item.message.reactionsAttribute?.recentPeers, !recentPeers.isEmpty {
                 for recentPeer in recentPeers {
                     if let peer = self.item.message.peers[recentPeer.peerId] {
@@ -4147,7 +4271,7 @@ private final class ChatReadReportContextItemNode: ASDisplayNode, ContextMenuCus
         if self.item.action == nil {
             return false
         }
-        if self.item.isEdit {
+        if self.item.info != nil {
             return false
         }
         if self.item.message.id.peerId.namespace == Namespaces.Peer.CloudUser {

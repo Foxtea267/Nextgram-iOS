@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import ComponentFlow
@@ -167,8 +166,7 @@ private final class StoryQualityUpgradeSheetContentComponent: Component {
                     color: nil,
                     startingPosition: .begin,
                     size: CGSize(width: 100.0, height: 100.0),
-                    loop: true,
-                    lottieSettings: component.context.lottieRenderingSettings
+                    loop: true
                 )),
                 environment: {},
                 containerSize: CGSize(width: 100.0, height: 100.0)
@@ -329,7 +327,7 @@ private final class StoryQualityUpgradeSheetScreenComponent: Component {
                 metrics: environment.metrics,
                 deviceMetrics: environment.deviceMetrics,
                 isDisplaying: environment.isVisible,
-                isCentered: environment.metrics.widthClass == .regular,
+                isCentered: environment.presentsFloatingPanels,
                 hasInputHeight: !environment.inputHeight.isZero,
                 regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                 dismiss: { [weak self] _ in

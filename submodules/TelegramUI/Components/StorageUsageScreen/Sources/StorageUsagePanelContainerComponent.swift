@@ -184,6 +184,19 @@ final class StorageUsagePanelContainerComponent: Component {
             return panel.view
         }
         
+        // VoiceOver: the tabs, then the current panel only; the neighbouring panels kept beside it for paging are not
+        // read.
+        override var accessibilityElements: [Any]? {
+            get {
+                var elements: [Any] = [self.tabsBackgroundContainer]
+                if let currentPanelView = self.currentPanelView {
+                    elements.append(currentPanelView)
+                }
+                return elements
+            } set(value) {
+            }
+        }
+        
         func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
             return false
         }
@@ -309,9 +322,9 @@ final class StorageUsagePanelContainerComponent: Component {
             let tabsHeight: CGFloat = 40.0
             let tabsTopInset: CGFloat = component.insets.top + 10.0
             let tabsBottomInset: CGFloat = 10.0
-            let tabsSideInset: CGFloat = 16.0 + component.insets.left
-
-            let tabsContainerSize = CGSize(width: availableSize.width - tabsSideInset * 2.0, height: tabsHeight)
+            // Per side: on iPhone Duo one side's inset is the side strip, and the tabs are centered in the band
+            // between the insets. With equal insets this is the old symmetric layout.
+            let tabsContainerSize = CGSize(width: availableSize.width - 16.0 * 2.0 - component.insets.left - component.insets.right, height: tabsHeight)
 
             transition.setFrame(layer: self.panelsBackgroundLayer, frame: CGRect(origin: CGPoint(x: 0.0, y: component.insets.top), size: CGSize(width: availableSize.width, height: availableSize.height - component.insets.top)))
 
@@ -372,7 +385,7 @@ final class StorageUsagePanelContainerComponent: Component {
 
             let tabContainerFrame = CGRect(
                 origin: CGPoint(
-                    x: floorToScreenPixels((availableSize.width - tabsContainerEffectiveSize.width) / 2.0),
+                    x: floorToScreenPixels(component.insets.left + (availableSize.width - component.insets.left - component.insets.right - tabsContainerEffectiveSize.width) / 2.0),
                     y: tabsTopInset
                 ),
                 size: tabsContainerEffectiveSize

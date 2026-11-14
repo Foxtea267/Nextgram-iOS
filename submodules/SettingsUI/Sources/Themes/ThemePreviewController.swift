@@ -59,7 +59,7 @@ public final class ThemePreviewController: ViewController {
         self.presentationData = context.sharedContext.currentPresentationData.with { $0 }
         self.presentationTheme.set(.single(previewTheme))
         
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationTheme: self.previewTheme, presentationStrings: self.presentationData.strings, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationTheme: self.previewTheme, presentationStrings: self.presentationData.strings))
         
         self._hasGlassStyle = true
         
@@ -157,7 +157,7 @@ public final class ThemePreviewController: ViewController {
                 let titleView = CounterControllerTitleView(theme: strongSelf.previewTheme)
                 titleView.title = CounterControllerTitle(title: themeName, counter: hasInstallsCount ? strongSelf.presentationData.strings.Theme_UsersCount(max(1, theme.installCount ?? 0)) : "")
                 strongSelf.navigationItem.titleView = titleView
-                strongSelf.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationTheme: presentationTheme, presentationStrings: strongSelf.presentationData.strings, style: .glass), transition: .immediate)
+                strongSelf.navigationBar?.updatePresentationData(NavigationBarPresentationData(presentationTheme: presentationTheme, presentationStrings: strongSelf.presentationData.strings), transition: .immediate)
             }
         })
         
@@ -389,25 +389,27 @@ public final class ThemePreviewController: ViewController {
                     
                     var updatedSettings: PresentationThemeSettings
                     if autoNightModeTriggered {
-                        if case .builtin = currentSettings.automaticThemeSwitchSetting.theme {
-                            previousDefaultTheme = (currentSettings.automaticThemeSwitchSetting.theme, currentSettings.themeSpecificAccentColors[currentSettings.automaticThemeSwitchSetting.theme.index], true, updatedTheme, existing)
+                        if case .builtin = currentSettings.currentModeAutomaticThemeSwitchSetting.theme {
+                            previousDefaultTheme = (currentSettings.currentModeAutomaticThemeSwitchSetting.theme, currentSettings.themeSpecificAccentColors[currentSettings.currentModeAutomaticThemeSwitchSetting.theme.index], true, updatedTheme, existing)
                         }
                         
-                        var automaticThemeSwitchSetting = currentSettings.automaticThemeSwitchSetting
+                        var automaticThemeSwitchSetting = currentSettings.currentModeAutomaticThemeSwitchSetting
                         automaticThemeSwitchSetting.theme = updatedTheme
-                        updatedSettings = currentSettings.withUpdatedAutomaticThemeSwitchSetting(automaticThemeSwitchSetting)
+                        updatedSettings = currentSettings
+                        updatedSettings.currentModeAutomaticThemeSwitchSetting = automaticThemeSwitchSetting
                     } else {
-                        if case .builtin = currentSettings.theme {
-                            previousDefaultTheme = (currentSettings.theme, currentSettings.themeSpecificAccentColors[currentSettings.theme.index], false, updatedTheme, existing)
+                        if case .builtin = currentSettings.currentModeTheme {
+                            previousDefaultTheme = (currentSettings.currentModeTheme, currentSettings.themeSpecificAccentColors[currentSettings.currentModeTheme.index], false, updatedTheme, existing)
                         }
                          
-                        updatedSettings = currentSettings.withUpdatedTheme(updatedTheme)
+                        updatedSettings = currentSettings
+                        updatedSettings.currentModeTheme = updatedTheme
                     }
                     
                     var themeSpecificAccentColors = updatedSettings.themeSpecificAccentColors
                     if case let .cloud(info) = updatedTheme, let settings = info.theme.settings?.first {
                         let baseThemeReference = PresentationThemeReference.builtin(PresentationBuiltinThemeReference(baseTheme: settings.baseTheme))
-                        themeSpecificAccentColors[baseThemeReference.index] = PresentationThemeAccentColor(themeIndex: updatedTheme.index)
+                        themeSpecificAccentColors = updatedSettings.accentColors(afterApplyingCloudTheme: updatedTheme.index, basedOn: baseThemeReference)
                     }
                     
                     var themeSpecificChatWallpapers = updatedSettings.themeSpecificChatWallpapers
@@ -462,11 +464,13 @@ public final class ThemePreviewController: ViewController {
                                             let _ = updatePresentationThemeSettingsInteractively(accountManager: context.sharedContext.accountManager, { current -> PresentationThemeSettings in
                                                 var updated: PresentationThemeSettings
                                                 if autoNightMode {
-                                                    var automaticThemeSwitchSetting = current.automaticThemeSwitchSetting
+                                                    var automaticThemeSwitchSetting = current.currentModeAutomaticThemeSwitchSetting
                                                     automaticThemeSwitchSetting.theme = previousDefaultTheme
-                                                    updated = current.withUpdatedAutomaticThemeSwitchSetting(automaticThemeSwitchSetting)
+                                                    updated = current
+                                                    updated.currentModeAutomaticThemeSwitchSetting = automaticThemeSwitchSetting
                                                 } else {
-                                                    updated = current.withUpdatedTheme(previousDefaultTheme)
+                                                    updated = current
+                                                    updated.currentModeTheme = previousDefaultTheme
                                                 }
                                                 
                                                 var themeSpecificAccentColors = current.themeSpecificAccentColors
@@ -524,7 +528,7 @@ public final class ThemePreviewController: ViewController {
                 subject = .media(media, nil)
                 preferredAction = .default
         }
-        let controller = self.context.sharedContext.makeShareController(context: self.context, params: ShareControllerParams(subject: subject, preferredAction: preferredAction))
+        let controller = self.context.sharedContext.makeShareScreen(context: self.context, params: ShareControllerParams(subject: subject, preferredAction: preferredAction))
         self.present(controller, in: .window(.root), blockInteraction: true)
     }
 }

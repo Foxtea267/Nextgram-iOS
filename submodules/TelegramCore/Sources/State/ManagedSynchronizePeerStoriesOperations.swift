@@ -1,7 +1,7 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 import MtProtoKit
 
 private final class ManagedSynchronizePeerStoriesOperationsHelper {
@@ -115,7 +115,7 @@ func managedSynchronizePeerStoriesOperations(postbox: Postbox, network: Network,
 }
 
 private func pushStoriesAreSeen(postbox: Postbox, network: Network, stateManager: AccountStateManager, peer: Peer, operation: SynchronizePeerStoriesOperation) -> Signal<Void, NoError> {
-    return _internal_pollPeerStories(postbox: postbox, network: network, accountPeerId: stateManager.accountPeerId, peerId: peer.id, peerReference: PeerReference(peer))
+    return _internal_pollPeerStories(postbox: postbox, network: network, accountPeerId: stateManager.accountPeerId, peerId: peer.id, peerReference: PeerReference(peer), stateManager: stateManager)
     |> map { _ -> Void in
     }
 }

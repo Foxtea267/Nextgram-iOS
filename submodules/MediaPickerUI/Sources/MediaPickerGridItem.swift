@@ -468,7 +468,7 @@ final class MediaPickerGridItemNode: GridItemNode {
                  |> deliverOnMainQueue).start(next: { [weak self] status in
                      if let self {
                          switch status {
-                         case .none, .completed:
+                         case .none, .completed, .failed:
                              self.updateProgress(nil, animated: true)
                          case let .progress(progress):
                              self.updateProgress(progress, animated: true)
@@ -935,7 +935,7 @@ class SpoilerOverlayNode: ASDisplayNode {
     }
 }
 
-private func blurredImage(_ image: UIImage) -> UIImage? {
+func blurredImage(_ image: UIImage) -> UIImage? {
     guard let image = image.cgImage else {
         return nil
     }

@@ -1,5 +1,11 @@
 # 上游同步记录
 
+## Nagram / Telegram 13.2
+
+- 同步至 `ee0594301be2824a41d795f7c15c146ef58e377a`（2026-11-12 UTC），包含[聊天与资料页的展开、返回动画](https://github.com/NextAlone/Nagram-iOS/commit/2a9978bb1215)及后续修复。
+- Nextgram 版本从 `13.2.0.1` 开始；构建工具链同步至 Xcode 27.2 和 Bazel 9.2。
+- 保留 Nextgram 设置首页与底栏编辑器、聊天筛选、删除消息拦截与编辑历史，以及四包构建发布流程。
+
 ## Nagram / Telegram 13.0
 
 - 上游仓库：<https://github.com/NextAlone/Nagram-iOS>

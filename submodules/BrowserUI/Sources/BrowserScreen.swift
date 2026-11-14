@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import SwiftSignalKit
 import Display
@@ -86,6 +85,7 @@ private final class BrowserScreenComponent: CombinedComponent {
     
     static var body: Body {
         let navigationBar = Child(BrowserNavigationBarComponent.self)
+        let sideColumnCloseButton = Child(GlassBarButtonComponent.self)
         let toolbar = Child(BrowserToolbarComponent.self)
         let addressList = Child(BrowserAddressListComponent.self)
         
@@ -104,6 +104,7 @@ private final class BrowserScreenComponent: CombinedComponent {
             let navigationContent: AnyComponentWithIdentity<BrowserNavigationBarEnvironment>?
             var navigationLeftItems: [AnyComponentWithIdentity<Empty>]
             var navigationRightItems: [AnyComponentWithIdentity<Empty>]
+            var showsSideColumnClose = false
             if context.component.presentationState.isSearching {
                 navigationContent = AnyComponentWithIdentity(
                     id: "search",
@@ -168,12 +169,19 @@ private final class BrowserScreenComponent: CombinedComponent {
                                     ),
                                     action: {
                                         performAction.invoke(.close)
-                                    }
+                                    },
+                                    accessibility: ComponentAccessibility(label: environment.strings.Common_Close)
                                 ).minSize(CGSize(width: 44.0, height: 44.0))
                             )
                         )
                     ]
-                                        
+                    if environment.sideColumnNavigationButtonFrame != nil {
+                        // iPhone Duo: the close button goes in the side strip (added after the bar below), not in
+                        // the bar's row.
+                        navigationLeftItems.removeAll()
+                        showsSideColumnClose = true
+                    }
+
                     if isTablet {
 //                        #if DEBUG
 //                        navigationLeftItems.append(
@@ -211,7 +219,8 @@ private final class BrowserScreenComponent: CombinedComponent {
                                             ),
                                             action: {
                                                 performAction.invoke(.navigateBack)
-                                            }
+                                            },
+                                            accessibility: ComponentAccessibility(label: environment.strings.Common_Back, traits: canGoBack ? [] : .notEnabled)
                                         ).minSize(CGSize(width: 44.0, height: 44.0))
                                     )
                                 )
@@ -229,7 +238,8 @@ private final class BrowserScreenComponent: CombinedComponent {
                                             ),
                                             action: {
                                                 performAction.invoke(.navigateForward)
-                                            }
+                                            },
+                                            accessibility: ComponentAccessibility(label: environment.strings.VoiceOver_Browser_Forward, traits: canGoForward ? [] : .notEnabled)
                                         ).minSize(CGSize(width: 44.0, height: 44.0))
                                     )
                                 )
@@ -249,14 +259,14 @@ private final class BrowserScreenComponent: CombinedComponent {
                                             ),
                                             color: environment.theme.chat.inputPanel.panelControlColor,
                                             size: CGSize(width: 34.0, height: 34.0),
-                                            playOnce: moreButtonPlayOnce,
-                                            lottieSettings: context.component.context.lottieRenderingSettings
+                                            playOnce: moreButtonPlayOnce
                                         )
                                     ),
                                     action: {
                                         performAction.invoke(.openSettings)
                                         moreButtonPlayOnce.invoke(Void())
-                                    }
+                                    },
+                                    accessibility: ComponentAccessibility(label: environment.strings.Common_More)
                                 ).minSize(CGSize(width: 44.0, height: 44.0)).tagged(settingsTag)
                             )
                         )
@@ -277,7 +287,8 @@ private final class BrowserScreenComponent: CombinedComponent {
                                             ),
                                             action: {
                                                 performAction.invoke(.openBookmarks)
-                                            }
+                                            },
+                                            accessibility: ComponentAccessibility(label: environment.strings.WebBrowser_Bookmarks_Title)
                                         ).minSize(CGSize(width: 44.0, height: 44.0))
                                     )
                                 ),
@@ -298,7 +309,8 @@ private final class BrowserScreenComponent: CombinedComponent {
                                             ),
                                             action: {
                                                 performAction.invoke(.share)
-                                            }
+                                            },
+                                            accessibility: ComponentAccessibility(label: environment.strings.WebBrowser_Share)
                                         ).minSize(CGSize(width: 44.0, height: 44.0))
                                     )
                                 ),
@@ -319,7 +331,8 @@ private final class BrowserScreenComponent: CombinedComponent {
                                             ),
                                             action: {
                                                 performAction.invoke(.openIn)
-                                            }
+                                            },
+                                            accessibility: ComponentAccessibility(label: environment.strings.InstantPage_OpenInBrowser("Safari").string)
                                         ).minSize(CGSize(width: 44.0, height: 44.0))
                                     )
                                 )
@@ -336,7 +349,9 @@ private final class BrowserScreenComponent: CombinedComponent {
                     theme: environment.theme,
                     topInset: environment.statusBarHeight,
                     height: environment.navigationHeight - environment.statusBarHeight + 8.0,
-                    sideInset: environment.safeInsets.left,
+                    leftInset: environment.safeInsets.left,
+                    rightInset: environment.safeInsets.right,
+                    trailingButtonsInset: environment.navigationBarTrailingButtonsInset,
                     metrics: environment.metrics,
                     externalState: navigationBarExternalState,
                     leftItems: navigationLeftItems,
@@ -372,6 +387,7 @@ private final class BrowserScreenComponent: CombinedComponent {
                     component: AnyComponent(
                         NavigationToolbarContentComponent(
                             theme: environment.theme,
+                            strings: environment.strings,
                             canGoBack: context.component.contentState?.canGoBack ?? false,
                             canGoForward: context.component.contentState?.canGoForward ?? false,
                             canOpenIn: canOpenIn,
@@ -394,11 +410,14 @@ private final class BrowserScreenComponent: CombinedComponent {
             if isTablet && !context.component.presentationState.isSearching {
                 
             } else {
+                // The bottom toolbar spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom.
+                let toolbarSideInsets = environment.bottomEdgeSideInsets()
                 let toolbar = toolbar.update(
                     component: BrowserToolbarComponent(
                         theme: environment.theme,
                         bottomInset: toolbarBottomInset,
-                        sideInset: environment.safeInsets.left,
+                        leftInset: toolbarSideInsets.left,
+                        rightInset: toolbarSideInsets.right,
                         item: toolbarContent,
                         collapseFraction: 0.0
                     ),
@@ -457,7 +476,31 @@ private final class BrowserScreenComponent: CombinedComponent {
             context.add(navigationBar
                 .position(CGPoint(x: context.availableSize.width / 2.0, y: navigationBar.size.height / 2.0))
             )
-            
+
+            // iPhone Duo: the bar's close button, centred in the side strip's navigation button frame, above the bar.
+            if showsSideColumnClose, let sideColumnFrame = environment.sideColumnNavigationButtonFrame {
+                let sideColumnCloseButton = sideColumnCloseButton.update(
+                    component: GlassBarButtonComponent(
+                        size: CGSize(width: 44.0, height: 44.0),
+                        backgroundColor: nil,
+                        isDark: environment.theme.overallDarkAppearance,
+                        state: .glass,
+                        component: AnyComponentWithIdentity(id: "close", component: AnyComponent(
+                            BundleIconComponent(name: "Navigation/Close", tintColor: environment.theme.chat.inputPanel.panelControlColor)
+                        )),
+                        action: { _ in
+                            performAction.invoke(.close)
+                        },
+                        accessibility: ComponentAccessibility(label: environment.strings.Common_Close)
+                    ),
+                    availableSize: CGSize(width: 44.0, height: 44.0),
+                    transition: context.transition
+                )
+                context.add(sideColumnCloseButton
+                    .position(CGPoint(x: sideColumnFrame.midX, y: sideColumnFrame.midY))
+                )
+            }
+
             return context.availableSize
         }
     }
@@ -510,6 +553,30 @@ public class BrowserScreen: ViewController, MinimizableController {
         private let context: AccountContext
         
         private let contentContainerView = UIView()
+        
+        /// VoiceOver: the bar (close, title, more) first, then the page, then the toolbar. The bar and the toolbar
+        /// share one host view added above the page, so UIKit's order would read the page first or the bars together.
+        override var screenAccessibilityElements: [Any]? {
+            guard let hostView = self.componentHost.view, hostView.superview === self.view else {
+                return nil
+            }
+            var top: [Any] = []
+            var bottom: [Any] = []
+            for subview in hostView.subviews where !subview.isHidden && subview.alpha > 0.01 && subview.frame.intersects(hostView.bounds) {
+                if subview.frame.minY > hostView.bounds.midY {
+                    bottom.append(subview)
+                } else {
+                    top.append(subview)
+                }
+            }
+            var elements: [Any] = top
+            elements.append(self.contentContainerView)
+            elements.append(contentsOf: bottom)
+            for subview in self.view.subviews where subview !== hostView && subview !== self.contentContainerView && !subview.isHidden && subview.alpha > 0.01 {
+                elements.append(subview)
+            }
+            return elements
+        }
         fileprivate let contentNavigationContainer = ComponentView<Empty>()
         private(set) var content: [BrowserContent] = []
         fileprivate var contentState: BrowserContentState?
@@ -657,7 +724,7 @@ public class BrowserScreen: ViewController, MinimizableController {
                     } else {
                         subject = .url(url)
                     }
-                    let shareController = self.context.sharedContext.makeShareController(context: self.context, params: ShareControllerParams(subject: subject, actionCompleted: { [weak self] in
+                    let shareController = self.context.sharedContext.makeShareScreen(context: self.context, params: ShareControllerParams(subject: subject, actionCompleted: { [weak self] in
                         self?.controller?.present(UndoOverlayController(presentationData: presentationData, content: .linkCopied(title: nil, text: presentationData.strings.Conversation_LinkCopied), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .window(.root))
                     }, completed: { [weak self] peerIds in
                         guard let self else {
@@ -885,6 +952,7 @@ public class BrowserScreen: ViewController, MinimizableController {
                     return
                 }
                 self.presentationData = presentationData
+                self.controller?.statusBar.statusBarStyle = presentationData.theme.rootController.statusBarStyle.style
                 for content in self.content {
                     content.updatePresentationData(presentationData)
                 }
@@ -1195,7 +1263,7 @@ public class BrowserScreen: ViewController, MinimizableController {
                 }
             }
             
-            let source: ContextContentSource = .reference(BrowserReferenceContentSource(controller: controller, sourceView: referenceView))
+            let source: ContextContentSource = .reference(BrowserReferenceContentSource(controller: controller, sourceView: BrowserNavigationBarComponent.menuSourceView(itemView: referenceView)))
             
             let items: Signal<ContextController.Items, NoError> = combineLatest(
                 queue: Queue.mainQueue(),
@@ -1468,8 +1536,11 @@ public class BrowserScreen: ViewController, MinimizableController {
             
             self.validLayout = (layout, navigationBarHeight)
             
+            // The status height the navigation bar is laid out under (`navigationBarHeight` comes from it), so the
+            // bar keeps its height beside iPhone Duo's status island; its right items clear the island.
             let environment = ViewControllerComponentContainer.Environment(
-                statusBarHeight: layout.statusBarHeight ?? 0.0,
+                statusBarHeight: layout.navigationBarStatusBarHeight ?? 0.0,
+                fullStatusBarHeight: layout.statusBarHeight ?? 0.0,
                 navigationHeight: navigationBarHeight,
                 safeInsets: UIEdgeInsets(
                     top: layout.intrinsicInsets.top + layout.safeInsets.top,
@@ -1477,6 +1548,10 @@ public class BrowserScreen: ViewController, MinimizableController {
                     bottom: layout.intrinsicInsets.bottom + layout.safeInsets.bottom,
                     right: layout.safeInsets.right
                 ),
+                reservedCorners: layout.reservedCorners,
+                navigationBarTrailingButtonsInset: layout.navigationBarTrailingButtonsInset,
+                // iPhone Duo: the close button goes in the side strip (see `BrowserScreenComponent`); nil elsewhere.
+                sideColumnNavigationButtonFrame: layout.sideColumnNavigationButtonFrame,
                 additionalInsets: layout.additionalInsets,
                 inputHeight: layout.inputHeight ?? 0.0,
                 metrics: layout.metrics,
@@ -1541,7 +1616,7 @@ public class BrowserScreen: ViewController, MinimizableController {
                         BrowserContentComponent(
                             content: content,
                             insets: UIEdgeInsets(
-                                top: layout.statusBarHeight ?? 0.0,
+                                top: layout.navigationBarStatusBarHeight ?? 0.0,
                                 left: layout.safeInsets.left,
                                 bottom: layout.intrinsicInsets.bottom,
                                 right: layout.safeInsets.right
@@ -1657,6 +1732,9 @@ public class BrowserScreen: ViewController, MinimizableController {
         self._hasGlassStyle = true
         
         self.navigationPresentation = .modalInCompactLayout
+        self.fillsScreenBesideStatusIsland = true
+        // Used where the browser fills the screen (beside iPhone Duo's status island); a card ignores it.
+        self.statusBar.statusBarStyle = context.sharedContext.currentPresentationData.with { $0 }.theme.rootController.statusBarStyle.style
         
         self.supportedOrientations = ViewControllerSupportedOrientations(regularSize: .all, compactSize: .allButUpsideDown)
         
@@ -1780,7 +1858,7 @@ private final class BrowserReferenceContentSource: ContextReferenceContentSource
     }
 
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }
 

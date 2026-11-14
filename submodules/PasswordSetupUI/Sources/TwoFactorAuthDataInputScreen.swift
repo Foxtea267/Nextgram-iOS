@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AppBundle
 import AsyncDisplayKit
@@ -72,9 +71,9 @@ public final class TwoFactorDataInputScreen: ViewController {
         
         self.presentationData = self.sharedContext.currentPresentationData.with { $0 }
         
-        let navigationBarTheme = NavigationBarTheme(rootControllerTheme: self.presentationData.theme, enableBackgroundBlur: false, hideBackground: true, edgeEffectColor: .clear, style: .glass)
+        let navigationBarTheme = NavigationBarTheme(rootControllerTheme: self.presentationData.theme, edgeEffectColor: .clear)
         
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: navigationBarTheme, strings: NavigationBarStrings(back: self.presentationData.strings.Common_Back, close: self.presentationData.strings.Common_Close)))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: navigationBarTheme, strings: NavigationBarStrings(back: self.presentationData.strings.Common_Back, close: self.presentationData.strings.Common_Close, more: self.presentationData.strings.Common_More, done: self.presentationData.strings.Common_Done)))
         
         self.statusBar.statusBarStyle = self.presentationData.theme.rootController.statusBarStyle.style
         self.navigationPresentation = presentation
@@ -109,7 +108,13 @@ public final class TwoFactorDataInputScreen: ViewController {
     }
     
     override public func loadDisplayNode() {
-        self.displayNode = TwoFactorDataInputScreenNode(sharedContext: self.sharedContext, presentationData: self.presentationData, mode: self.mode, action: { [weak self] in
+        let isAuthorizationFlow: Bool
+        if case .unauthorized = self.engine {
+            isAuthorizationFlow = true
+        } else {
+            isAuthorizationFlow = false
+        }
+        self.displayNode = TwoFactorDataInputScreenNode(sharedContext: self.sharedContext, presentationData: self.presentationData, mode: self.mode, isAuthorizationFlow: isAuthorizationFlow, action: { [weak self] in
             guard let strongSelf = self else {
                 return
             }
@@ -1272,6 +1277,7 @@ private final class TwoFactorDataInputTextNode: ASDisplayNode, UITextFieldDelega
 private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASScrollViewDelegate {
     private var presentationData: PresentationData
     private let mode: TwoFactorDataInputMode
+    private let isAuthorizationFlow: Bool
     private let action: () -> Void
     private let skipAction: () -> Void
     private let changeEmailAction: () -> Void
@@ -1310,9 +1316,10 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
     
     private var skipIsHiddenUntilError = false
     
-    init(sharedContext: SharedAccountContext, presentationData: PresentationData, mode: TwoFactorDataInputMode, action: @escaping () -> Void, skipAction: @escaping () -> Void, changeEmailAction: @escaping () -> Void, resendCodeAction: @escaping () -> Void) {
+    init(sharedContext: SharedAccountContext, presentationData: PresentationData, mode: TwoFactorDataInputMode, isAuthorizationFlow: Bool, action: @escaping () -> Void, skipAction: @escaping () -> Void, changeEmailAction: @escaping () -> Void, resendCodeAction: @escaping () -> Void) {
         self.presentationData = presentationData
         self.mode = mode
+        self.isAuthorizationFlow = isAuthorizationFlow
         self.action = action
         self.skipAction = skipAction
         self.changeEmailAction = changeEmailAction
@@ -1329,19 +1336,19 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
         
         switch mode {
         case .password, .passwordRecovery, .emailAddress, .updateEmailAddress:
-            self.monkeyNode = ManagedMonkeyAnimationNode(lottieSettings: .noAccountFallback)
+            self.monkeyNode = ManagedMonkeyAnimationNode()
         case .emailConfirmation, .passwordRecoveryEmail:
-            let animatedStickerNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+            let animatedStickerNode = DefaultAnimatedStickerNodeImpl()
             animatedStickerNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "TwoFactorSetupMail"), width: 272, height: 272, playbackMode: .once, mode: .direct(cachePathPrefix: nil))
                 animatedStickerNode.visibility = true
             self.animatedStickerNode = animatedStickerNode
         case .passwordHint:
-            let animatedStickerNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+            let animatedStickerNode = DefaultAnimatedStickerNodeImpl()
             animatedStickerNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "TwoFactorSetupHint"), width: 272, height: 272, playbackMode: .once, mode: .direct(cachePathPrefix: nil))
             animatedStickerNode.visibility = true
             self.animatedStickerNode = animatedStickerNode
         case .rememberPassword:
-            let animatedStickerNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+            let animatedStickerNode = DefaultAnimatedStickerNodeImpl()
             animatedStickerNode.setup(source: AnimatedStickerNodeLocalFileSource(name: "TwoFactorSetupRemember"), width: 272, height: 272, playbackMode: .count(3), mode: .direct(cachePathPrefix: nil))
             animatedStickerNode.visibility = true
             self.animatedStickerNode = animatedStickerNode
@@ -1890,6 +1897,12 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
         
         let sideInset: CGFloat = 32.0
         let buttonSideInset: CGFloat = 48.0
+        // The bands for iPhone Duo's side strip (twoFactorDataInputHorizontalLayout); across the screen elsewhere.
+        let horizontalLayout = twoFactorDataInputHorizontalLayout(layout: layout, isAuthorizationFlow: self.isAuthorizationFlow, rowSideInset: buttonSideInset)
+        let bandMinX = horizontalLayout.contentMinX
+        let bandWidth = horizontalLayout.contentWidth
+        let bottomBandMinX = horizontalLayout.bottomMinX
+        let bottomBandWidth = horizontalLayout.bottomWidth
         let iconSpacing: CGFloat
         switch self.mode {
         case .passwordHint, .emailConfirmation:
@@ -1918,11 +1931,12 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
             iconSize = CGSize(width: 100.0, height: 100.0)
         }
         
-        let titleSize = self.titleNode.updateLayout(CGSize(width: contentAreaSize.width - sideInset * 2.0, height: contentAreaSize.height))
-        let textSize = self.textNode.updateLayout(CGSize(width: contentAreaSize.width - sideInset * 2.0, height: contentAreaSize.height))
-        let skipActionSize = self.skipActionTitleNode.updateLayout(CGSize(width: contentAreaSize.width - sideInset * 2.0, height: contentAreaSize.height))
-        let changeEmailActionSize = self.changeEmailActionTitleNode.updateLayout(CGSize(width: contentAreaSize.width - sideInset * 2.0, height: contentAreaSize.height))
-        let resendCodeActionSize = self.resendCodeActionTitleNode.updateLayout(CGSize(width: contentAreaSize.width - sideInset * 2.0, height: contentAreaSize.height))
+        let titleSize = self.titleNode.updateLayout(CGSize(width: bandWidth - sideInset * 2.0, height: contentAreaSize.height))
+        let textSize = self.textNode.updateLayout(CGSize(width: bandWidth - sideInset * 2.0, height: contentAreaSize.height))
+        let skipActionSize = self.skipActionTitleNode.updateLayout(CGSize(width: bottomBandWidth - sideInset * 2.0, height: contentAreaSize.height))
+        let actionsTextWidth = horizontalLayout.actionsWidth + (buttonSideInset - sideInset) * 2.0
+        let changeEmailActionSize = self.changeEmailActionTitleNode.updateLayout(CGSize(width: actionsTextWidth, height: contentAreaSize.height))
+        let resendCodeActionSize = self.resendCodeActionTitleNode.updateLayout(CGSize(width: actionsTextWidth, height: contentAreaSize.height))
         
         var calculatedContentHeight = iconSize.height + iconSpacing + titleSize.height
         if textSize.width.isZero {
@@ -1944,20 +1958,20 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
         let areaHeight = layout.size.height - insets.top - insets.bottom
         let contentVerticalOrigin = max(layout.statusBarHeight ?? 0.0, floor((areaHeight - calculatedContentHeight) / 2.0))
         
-        let iconFrame = CGRect(origin: CGPoint(x: floor((contentAreaSize.width - iconSize.width) / 2.0), y: contentVerticalOrigin), size: iconSize)
+        let iconFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - iconSize.width) / 2.0), y: contentVerticalOrigin), size: iconSize)
         if let animatedStickerNode = self.animatedStickerNode {
             animatedStickerNode.updateLayout(size: iconFrame.size)
             transition.updateFrame(node: animatedStickerNode, frame: iconFrame)
         } else if let monkeyNode = self.monkeyNode {
             transition.updateFrame(node: monkeyNode, frame: iconFrame)
         }
-        let titleFrame = CGRect(origin: CGPoint(x: floor((contentAreaSize.width - titleSize.width) / 2.0), y: iconFrame.maxY + iconSpacing), size: titleSize)
+        let titleFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - titleSize.width) / 2.0), y: iconFrame.maxY + iconSpacing), size: titleSize)
         transition.updateFrameAdditive(node: self.titleNode, frame: titleFrame)
         let textFrame: CGRect
         if textSize.width.isZero {
-            textFrame = CGRect(origin: CGPoint(x: floor((contentAreaSize.width - textSize.width) / 2.0), y: titleFrame.maxY), size: textSize)
+            textFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - textSize.width) / 2.0), y: titleFrame.maxY), size: textSize)
         } else {
-            textFrame = CGRect(origin: CGPoint(x: floor((contentAreaSize.width - textSize.width) / 2.0), y: titleFrame.maxY + titleSpacing), size: textSize)
+            textFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - textSize.width) / 2.0), y: titleFrame.maxY + titleSpacing), size: textSize)
         }
         transition.updateFrameAdditive(node: self.textNode, frame: textFrame)
         
@@ -1968,7 +1982,7 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
             contentHeight += textSpacing
         }
         
-        let rowWidth = contentAreaSize.width - buttonSideInset * 2.0
+        let rowWidth = bandWidth - buttonSideInset * 2.0
         
         for i in 0 ..< self.inputNodes.count {
             let inputNode = self.inputNodes[i]
@@ -1976,7 +1990,7 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
                 contentHeight += rowSpacing
             }
             let inputNodeSize = CGSize(width: rowWidth, height: 52.0)
-            transition.updateFrame(node: inputNode, frame: CGRect(origin: CGPoint(x: buttonSideInset, y: contentHeight), size: inputNodeSize))
+            transition.updateFrame(node: inputNode, frame: CGRect(origin: CGPoint(x: bandMinX + buttonSideInset, y: contentHeight), size: inputNodeSize))
             inputNode.updateLayout(size: inputNodeSize, transition: transition)
             contentHeight += inputNodeSize.height
         }
@@ -1985,11 +1999,11 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
         let buttonBottomInset = layout.intrinsicInsets.bottom + minimalBottomInset
         let bottomInset = layout.intrinsicInsets.bottom + buttonSpacing
         
-        let buttonWidth = contentAreaSize.width - buttonSideInset * 2.0
+        let buttonWidth = bottomBandWidth - buttonSideInset * 2.0
         
         let maxButtonY = min(areaHeight - buttonSpacing, layout.size.height - buttonBottomInset) - buttonHeight * 2.0
         
-        let buttonFrame = CGRect(origin: CGPoint(x: floor((contentAreaSize.width - buttonWidth) / 2.0), y: max(contentHeight + buttonSpacing, maxButtonY)), size: CGSize(width: buttonWidth, height: buttonHeight))
+        let buttonFrame = CGRect(origin: CGPoint(x: bottomBandMinX + floor((bottomBandWidth - buttonWidth) / 2.0), y: max(contentHeight + buttonSpacing, maxButtonY)), size: CGSize(width: buttonWidth, height: buttonHeight))
         let _ = self.button.update(
             transition: ComponentTransition(transition),
             component: AnyComponent(ButtonComponent(
@@ -2038,15 +2052,17 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
         let changeEmailActionButtonFrame: CGRect
         let resendCodeActionFrame: CGRect
         let resendCodeActionButtonFrame: CGRect
-        if changeEmailActionSize.width + resendCodeActionSize.width > layout.size.width - buttonFrame.minX * 2.0 - 32.0 {
-            changeEmailActionButtonFrame = CGRect(origin: CGPoint(x: buttonFrame.minX, y: buttonFrame.minY), size: CGSize(width: buttonFrame.width, height: buttonFrame.height))
+        // The actions take the button's place, in the fields' row (the button's frame in the login flow).
+        let actionsFrame = CGRect(origin: CGPoint(x: horizontalLayout.actionsMinX, y: buttonFrame.minY), size: CGSize(width: horizontalLayout.actionsWidth, height: buttonFrame.height))
+        if changeEmailActionSize.width + resendCodeActionSize.width > actionsFrame.width - 32.0 {
+            changeEmailActionButtonFrame = CGRect(origin: CGPoint(x: actionsFrame.minX, y: actionsFrame.minY), size: CGSize(width: actionsFrame.width, height: actionsFrame.height))
             changeEmailActionFrame = CGRect(origin: CGPoint(x: changeEmailActionButtonFrame.minX + floor((changeEmailActionButtonFrame.width - changeEmailActionSize.width) / 2.0), y: changeEmailActionButtonFrame.minY + floor((changeEmailActionButtonFrame.height - changeEmailActionSize.height) / 2.0)), size: changeEmailActionSize)
-            resendCodeActionButtonFrame = CGRect(origin: CGPoint(x: buttonFrame.minX, y: buttonFrame.maxY), size: CGSize(width: buttonFrame.width, height: buttonFrame.height))
+            resendCodeActionButtonFrame = CGRect(origin: CGPoint(x: actionsFrame.minX, y: actionsFrame.maxY), size: CGSize(width: actionsFrame.width, height: actionsFrame.height))
             resendCodeActionFrame = CGRect(origin: CGPoint(x: resendCodeActionButtonFrame.minX + floor((resendCodeActionButtonFrame.width - resendCodeActionSize.width) / 2.0), y: resendCodeActionButtonFrame.minY + floor((resendCodeActionButtonFrame.height - resendCodeActionSize.height) / 2.0)), size: resendCodeActionSize)
         } else {
-            changeEmailActionButtonFrame = CGRect(origin: CGPoint(x: buttonFrame.minX, y: buttonFrame.minY), size: CGSize(width: floor(buttonFrame.width / 2.0), height: buttonFrame.height))
+            changeEmailActionButtonFrame = CGRect(origin: CGPoint(x: actionsFrame.minX, y: actionsFrame.minY), size: CGSize(width: floor(actionsFrame.width / 2.0), height: actionsFrame.height))
             changeEmailActionFrame = CGRect(origin: CGPoint(x: changeEmailActionButtonFrame.minX, y: changeEmailActionButtonFrame.minY + floor((changeEmailActionButtonFrame.height - changeEmailActionSize.height) / 2.0)), size: changeEmailActionSize)
-            resendCodeActionButtonFrame = CGRect(origin: CGPoint(x: buttonFrame.maxX - floor(buttonFrame.width / 2.0), y: buttonFrame.minY), size: CGSize(width: floor(buttonFrame.width / 2.0), height: buttonFrame.height))
+            resendCodeActionButtonFrame = CGRect(origin: CGPoint(x: actionsFrame.maxX - floor(actionsFrame.width / 2.0), y: actionsFrame.minY), size: CGSize(width: floor(actionsFrame.width / 2.0), height: actionsFrame.height))
             resendCodeActionFrame = CGRect(origin: CGPoint(x: resendCodeActionButtonFrame.maxX - resendCodeActionSize.width, y: resendCodeActionButtonFrame.minY + floor((resendCodeActionButtonFrame.height - resendCodeActionSize.height) / 2.0)), size: resendCodeActionSize)
         }
         
@@ -2056,9 +2072,17 @@ private final class TwoFactorDataInputScreenNode: ViewControllerTracingNode, ASS
         transition.updateFrame(node: self.changeEmailActionTitleNode, frame: changeEmailActionFrame)
         transition.updateFrame(node: self.resendCodeActionTitleNode, frame: resendCodeActionFrame)
         
+        // The content reaches the lowest row below the fields: the skip action's, or the actions' second row where they
+        // stack (in the fields' narrower row on iPhone Duo they stack in English too), which stays under the keyboard
+        // otherwise. Typing hides the actions without a layout, so this counts them whenever the mode has them.
+        var contentMaxY = skipButtonFrame.maxY
+        if let resendCodeActionText = self.resendCodeActionTitleNode.attributedText, resendCodeActionText.length != 0 {
+            contentMaxY = max(contentMaxY, resendCodeActionButtonFrame.maxY)
+        }
+        
         transition.animateView {
             self.scrollNode.view.contentInset = UIEdgeInsets(top: 0.0, left: 0.0, bottom: layout.insets(options: [.input]).bottom, right: 0.0)
-            self.scrollNode.view.contentSize = CGSize(width: contentAreaSize.width, height: max(availableAreaSize.height, skipButtonFrame.maxY + bottomInset))
+            self.scrollNode.view.contentSize = CGSize(width: contentAreaSize.width, height: max(availableAreaSize.height, contentMaxY + bottomInset))
         }
     }
 }

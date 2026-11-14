@@ -11,12 +11,10 @@ swift_library(
     ],
     deps = [
         "//submodules/SSignalKit/SwiftSignalKit",
-        "//submodules/LottieSettings:LottieSettings",
         "//submodules/AsyncDisplayKit",
         "//submodules/ComponentFlow",
         "//submodules/Display",
         "//submodules/TelegramCore",
-        "//submodules/Postbox",
         "//submodules/AccountContext",
         "//submodules/ChatListUI",
         "//submodules/MergeLists",
@@ -30,6 +28,8 @@ swift_library(
         "//submodules/ChatListSearchItemHeader",
         "//submodules/TelegramUI/Components/LottieComponent",
         "//submodules/Components/MultilineTextComponent",
+        "//Nagram/FlippedList:NagramFlippedList", # MARK: NAGRAM
+        "//Nagram/Settings:NagramSettings", # MARK: NAGRAM
     ],
     visibility = [
         "//visibility:public",

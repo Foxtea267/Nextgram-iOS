@@ -12,6 +12,7 @@ import TelegramPresentationData
 import DustEffect
 import TooltipUI
 import TelegramNotices
+import ChatMessageItemCommon
  
 final class ChatMessageContextLocationContentSource: ContextLocationContentSource {
     private let controller: ViewController
@@ -23,7 +24,7 @@ final class ChatMessageContextLocationContentSource: ContextLocationContentSourc
     }
     
     func transitionInfo() -> ContextControllerLocationViewInfo? {
-        return ContextControllerLocationViewInfo(location: self.location, contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerLocationViewInfo(location: self.location, contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }
 
@@ -58,6 +59,21 @@ final class ChatMessageContextExtractedContentSource: ContextExtractedContentSou
             }
         }
         |> distinctUntilChanged
+    }
+    
+    // Bubble mode off: an incoming message lifts on a card on the text column, and the menu and the reactions line up
+    // with its left edge rather than each keeping a distance of its own from the screen edge (spec 5.9).
+    var actionsHorizontalAlignment: ContextActionsHorizontalAlignment {
+        guard let chatController = self.chatController, !chatController.presentationInterfaceState.bubbleCorners.bubbleMode else {
+            return .default
+        }
+        var isMessageOptions = false
+        if case .messageOptions = chatController.presentationInterfaceState.subject {
+            isMessageOptions = true
+        }
+        // A message on the page or a card lifts on a card; service messages lift alone and keep master's placement.
+        let style = chatMessageBubbleStyle(bubbleMode: false, isMessageOptions: isMessageOptions, incoming: self.message.effectivelyIncoming(self.engine.account.peerId), message: self.message._asMessage())
+        return style.isBubbleless ? .left : .default
     }
     
     init(chatController: ChatControllerImpl, chatNode: ChatControllerNode, engine: TelegramEngine, message: EngineMessage, selectAll: Bool, centerVertically: Bool = false, keepDefaultContentTouches: Bool = false, snapshot: Bool = false) {
@@ -231,7 +247,7 @@ final class ChatViewOnceMessageContextExtractedContentSource: ContextExtractedCo
             if (isIncoming || "".isEmpty) {
                 let messageItem = self.context.sharedContext.makeChatMessagePreviewItem(
                     context: self.context,
-                    messages: [self.message._asMessage()],
+                    messages: [self.message],
                     theme: self.presentationData.theme,
                     strings: self.presentationData.strings,
                     wallpaper: self.presentationData.chatWallpaper,
@@ -250,7 +266,8 @@ final class ChatViewOnceMessageContextExtractedContentSource: ContextExtractedCo
                     isStandalone: true,
                     rank: nil,
                     rankRole: nil,
-                    isGiftMessageComposerPreview: false
+                    isGiftMessageComposerPreview: false,
+                    activateGiftMessageInput: nil
                 )
                 
                 let width = chatNode.historyNode.frame.width

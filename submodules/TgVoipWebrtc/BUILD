@@ -346,6 +346,54 @@ cc_test(
 )
 
 cc_test(
+    name = "content_negotiation_test",
+    srcs = ["tgcalls/tgcalls/v2/ContentNegotiationTest.cpp"],
+    copts = [
+        "-I{}/tgcalls/tgcalls".format("submodules/TgVoipWebrtc"),
+        "-Ithird-party/webrtc/webrtc",
+        "-Ithird-party/webrtc/dependencies",
+        "-Ithird-party/webrtc/absl",
+        "-Ithird-party/libyuv",
+        "-DRTC_ENABLE_VP9",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-w",
+    ] + select({
+        "@platforms//os:linux": ["-DWEBRTC_LINUX", "-DWEBRTC_POSIX"],
+        "//conditions:default": ["-DWEBRTC_MAC", "-DWEBRTC_POSIX"],
+    }),
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread", "-lm", "-ldl"],
+        "//conditions:default": ["-framework", "CoreFoundation", "-framework", "Security"],
+    }),
+    deps = [":tgcalls_core"],
+)
+
+cc_test(
+    name = "signaling_sctp_options_test",
+    srcs = ["tgcalls/tgcalls/v2/SignalingSctpOptionsTest.cpp"],
+    copts = [
+        "-I{}/tgcalls/tgcalls".format("submodules/TgVoipWebrtc"),
+        "-Ithird-party/webrtc/webrtc",
+        "-Ithird-party/webrtc/dependencies",
+        "-Ithird-party/webrtc/absl",
+        "-Ithird-party/libyuv",
+        "-DRTC_ENABLE_VP9",
+        "-DNDEBUG",
+        "-std=c++17",
+        "-w",
+    ] + select({
+        "@platforms//os:linux": ["-DWEBRTC_LINUX", "-DWEBRTC_POSIX"],
+        "//conditions:default": ["-DWEBRTC_MAC", "-DWEBRTC_POSIX"],
+    }),
+    linkopts = select({
+        "@platforms//os:linux": ["-lpthread", "-lm", "-ldl"],
+        "//conditions:default": ["-framework", "CoreFoundation", "-framework", "Security"],
+    }),
+    deps = [":tgcalls_core"],
+)
+
+cc_test(
     name = "streaming_audio_renderer_test",
     srcs = ["tgcalls/tgcalls/group/StreamingAudioRendererTest.cpp"],
     copts = [
@@ -488,6 +536,11 @@ cc_library(
         # shipped build it would be a remote-code-execution surface. See the
         # security note in v2wasm/CallCoreHost.cpp.
         "-DTGCALLS_ALLOW_EXTERNAL_WASM_CORE=1",
+        # CLI/dev only: lets a custom parameter re-enable behaviour the engines
+        # deliberately removed (network_reference_immediate_capture_renegotiation),
+        # so the harness can reproduce field failures. NEVER add this to the
+        # objc_library: customParameters come from the server.
+        "-DTGCALLS_ALLOW_TEST_KNOBS=1",
         "-std=c++17",
         "-w",
     ] + select({

@@ -118,6 +118,42 @@ public enum NagramRoundVideoCamera: String {
     case back
 }
 
+/// 系统设置页可隐藏的条目，按设置页分区顺序排列。Nagram 入口不在其中，以免隐藏后无法再进入。
+public enum NagramSettingsPageItem: String, CaseIterable, Hashable {
+    case emojiStatus
+    case profileColor
+    case setAvatar
+    case setUsername
+    case suggestions
+    case accounts
+    case addAccount
+    case myProfile
+    case wallet
+    case proxy
+    case miniApps
+    case savedMessages
+    case recentCalls
+    case contacts
+    case devices
+    case chatFolders
+    case notifications
+    case privacy
+    case dataAndStorage
+    case appearance
+    case powerSaving
+    case language
+    case premium
+    case stars
+    case ton
+    case business
+    case sendGift
+    case passport
+    case appleWatch
+    case support
+    case faq
+    case tips
+}
+
 public enum NagramGroupProfileSettingItem: String, CaseIterable, Hashable {
     case groupType
     case inviteLinks
@@ -179,6 +215,7 @@ public final class NagramSettings {
     public static let shared = NagramSettings()
     public static let chatListAllChatsFolderId: Int32 = -1
     public static let recentStickerLimitOptions: [Int32] = [20, 30, 40, 50, 60, 80, 100, 120, 150, 200]
+    public static let videoSeekIntervalOptions: [Int32] = [5, 10, 15, 30, 60]
     public static let messageDoubleTapSameAsUnified = "sameAsUnified"
 
     public static func isICloudSyncEnabled(defaults: UserDefaults = NagramDemoMode.userDefaults) -> Bool {
@@ -338,6 +375,12 @@ public final class NagramSettings {
     /// 隐藏「以频道身份发送」按钮
     @NagramDefault("nagram.disableSendAsButton", false)
     public var disableSendAsButton: Bool
+    /// 输入框左侧显示当前账号头像（有「以…身份发送」头像的聊天保持原样）
+    @NagramDefault("nagram.showAccountAvatarInInput", false)
+    public var showAccountAvatarInInput: Bool
+    /// 账号头像只在登录了多个账号时显示
+    @NagramDefault("nagram.showAccountAvatarInInputOnlyWithMultipleAccounts", true)
+    public var showAccountAvatarInInputOnlyWithMultipleAccounts: Bool
     /// 隐藏语音录制按钮
     @NagramDefault("nagram.hideRecordingButton", false)
     public var hideRecordingButton: Bool
@@ -359,6 +402,25 @@ public final class NagramSettings {
 
     @NagramDefault("nagram.preselectMessageModerationActions", false)
     public var preselectMessageModerationActions: Bool
+    /// 转发时默认隐藏发送者（默认关 = 原生）
+    @NagramDefault("nagram.forwardHideSenderNamesByDefault", false)
+    public var forwardHideSenderNamesByDefault: Bool
+
+    /// 群简介里的外部网址可点击（默认关 = 原生只识别 Telegram 内部链接）
+    @NagramDefault("nagram.groupDescriptionExternalLinks", false)
+    public var groupDescriptionExternalLinks: Bool
+
+    /// 未读消息全部被过滤规则隐藏的聊天自动标为已读（同步到服务器）
+    @NagramDefault("nagram.regexFilters.autoReadHidden", false)
+    public var regexFiltersAutoReadHidden: Bool
+
+    /// 频道消息在浏览数后显示转发次数
+    @NagramDefault("nagram.showChannelForwardCount", false)
+    public var showChannelForwardCount: Bool
+
+    /// 在气泡时间后显示消息 ID（仅群组、超级群组和频道，与 Android Nagram 一致）
+    @NagramDefault("nagram.showMessageId", false)
+    public var showMessageId: Bool
     /// 隐藏频道底部面板按钮
     @NagramDefault("nagram.hideChannelBottomButton", false)
     public var hideChannelBottomButton: Bool
@@ -371,12 +433,40 @@ public final class NagramSettings {
     /// 刷新消息窗口时，若刷新前位于最新消息边界，则继续保持在最新消息
     @NagramDefault("nagram.stayAtLatestMessageAfterRefresh", false)
     public var stayAtLatestMessageAfterRefresh: Bool
+    /// 底部搜索栏模式下，全局搜索结果从下往上排列（最相关的结果贴近搜索框）
+    @NagramDefault("nagram.bottomUpGlobalSearchResults", false)
+    public var bottomUpGlobalSearchResults: Bool
+    /// 聊天内搜索消息的结果列表从下往上排列（最新的结果在最下方）
+    @NagramDefault("nagram.bottomUpChatSearchResults", false)
+    public var bottomUpChatSearchResults: Bool
+    /// 单手模式：聊天内搜索框放在底部、紧贴键盘上方，而不是顶部导航栏
+    @NagramDefault("nagram.chatSearchFieldAtBottom", false)
+    public var chatSearchFieldAtBottom: Bool
     /// 通话前确认（默认关 = 保持原生无确认）
     @NagramDefault("nagram.confirmCalls", false)
     public var confirmCalls: Bool
+    /// 取消消息置顶前确认，含消息菜单的取消置顶和取消所有置顶（默认关 = 保持原生行为）
+    @NagramDefault("nagram.confirmUnpin", false)
+    public var confirmUnpin: Bool
+    /// 点击隐藏真实地址的链接（文字链接等）时跳过“打开链接？”确认（默认关 = 保持原生确认）。
+    /// 带登录信息、会伪装真实主机的链接仍然确认。
+    @NagramDefault("nagram.skipOpenLinkConfirmation", false)
+    public var skipOpenLinkConfirmation: Bool
+    /// 有封禁权限的群里，长按成员头像显示修改权限 / 封禁并删除消息（默认关 = 保持原生菜单）
+    @NagramDefault("nagram.memberAdminActionsOnAvatar", false)
+    public var memberAdminActionsOnAvatar: Bool
+    /// 有封禁权限的群里，长按消息中的 @用户名 / 提及显示修改权限 / 封禁并删除消息（默认关 = 保持原生菜单）
+    @NagramDefault("nagram.memberAdminActionsOnUsername", false)
+    public var memberAdminActionsOnUsername: Bool
+    /// 群资料成员列表的「移除」改为打开管理面板，可同时删除其全部消息、举报（默认关 = 保持原生直接移除）
+    @NagramDefault("nagram.memberAdminActionsOnMemberList", false)
+    public var memberAdminActionsOnMemberList: Bool
     /// 资料页显示数据中心 DC
     @NagramDefault("nagram.showDC", false)
     public var showDC: Bool
+    /// 拖动列表时也以屏幕最高刷新率绘制（默认关：更耗电）。按设备保存，不经 iCloud 同步
+    @NagramDefault("nagram.highRefreshRateScrolling", false)
+    public var highRefreshRateScrolling: Bool
     /// 控件玻璃高亮（默认开 = 保持原生交互反馈）
     @NagramDefault("nagram.controlHighlightEnabled", true)
     public var controlHighlightEnabled: Bool
@@ -474,7 +564,7 @@ public final class NagramSettings {
             self.bottomBarSettings = settings
         }
     }
-    /// 展示宽底栏（默认开 = 保持原生均分宽度）。兼容旧调用点。
+    /// 展示宽底栏（默认关 = 与官方一致的紧凑居中底栏）。兼容旧调用点。
     public var wideTabBar: Bool {
         get {
             return self.bottomBarSettings.buttonWidthFillRatio >= 100
@@ -505,6 +595,12 @@ public final class NagramSettings {
     /// 上滑视频开启画中画（"up" / "none"）
     @NagramDefault("nagram.videoPIPSwipeDirection", "up")
     public var videoPIPSwipeDirection: String
+    /// 视频播放控制放在进度条下方，不在画面中央显示大圆按钮（默认关 = 原生行为）
+    @NagramDefault("nagram.videoControlsInFooter", false)
+    public var videoControlsInFooter: Bool
+    /// 视频快进 / 快退步长（秒，默认 15 = 原生行为）
+    @NagramDefault("nagram.videoSeekInterval", Int32(15))
+    public var videoSeekInterval: Int32
     /// 对话列表横滑行为（"both" / "switch" / "quick" / "none"）
     @NagramDefault("nagram.chatListSwipeAction", NagramChatListSwipeAction.both.rawValue)
     public var chatListSwipeAction: String
@@ -517,6 +613,9 @@ public final class NagramSettings {
     /// 在列表中隐藏收藏夹和归档会话的具体预览（默认关 = 保持 Telegram 原生行为）
     @NagramDefault("nagram.hideSavedAndArchivedMessagesInList", false)
     public var hideSavedAndArchivedMessagesInList: Bool
+    /// 列表停在顶部时，新消息会话保持在可见顶部（默认关 = 保持 Telegram 原生行为）
+    @NagramDefault("nagram.keepNewChatsVisibleAtTop", false)
+    public var keepNewChatsVisibleAtTop: Bool
     /// 禁用 Community 将多个聊天合并为一个列表项（默认关 = 保持 Telegram 原生行为）
     @NagramDefault("nagram.disableCommunityChatGrouping", false)
     public var disableCommunityChatGrouping: Bool
@@ -533,11 +632,32 @@ public final class NagramSettings {
     /// 首页分组标签紧凑布局
     @NagramDefault("nagram.chatListFolderTabsCompact", false)
     public var chatListFolderTabsCompact: Bool
+    /// 首页分组标签放在底栏上方（默认关 = 原生顶部）
+    @NagramDefault("nagram.chatListFolderTabsAtBottom", false)
+    public var chatListFolderTabsAtBottom: Bool
+    /// 在最后一个分组继续左滑回到第一个分组，不再弹出 Premium 分组上限提示（默认关 = 原生）
+    @NagramDefault("nagram.chatListFolderSwipeWraps", false)
+    public var chatListFolderSwipeWraps: Bool
+    /// 隐藏首页右上角的新建对话按钮（默认关 = 原生）
+    @NagramDefault("nagram.hideChatListComposeButton", false)
+    public var hideChatListComposeButton: Bool
+    /// 隐藏首页左上角的编辑按钮（默认关 = 原生）
+    @NagramDefault("nagram.hideChatListEditButton", false)
+    public var hideChatListEditButton: Bool
+    /// 底栏没有设置入口时，隐藏首页顶部补上的设置按钮（默认关）
+    @NagramDefault("nagram.hideChatListSettingsButton", false)
+    public var hideChatListSettingsButton: Bool
+    /// 自定义首页标题；留空 = 原生「聊天」。
+    @NagramDefault("nagram.chatListTitle", "")
+    public var chatListTitle: String
     @NagramDefault("nagram.hideFolderUnreadCount", false)
     public var hideFolderUnreadCount: Bool
     /// 隐藏首页的“全部会话”分组（至少存在一个自定义分组时生效）
     @NagramDefault("nagram.hideAllChatsFolder", false)
     public var hideAllChatsFolder: Bool
+    /// 「全部聊天」置顶满额时改为本机置顶（默认关 = 原生 Premium 上限提示）
+    @NagramDefault("nagram.localPinnedChatsEnabled", false)
+    public var localPinnedChatsEnabled: Bool
     /// 分享面板显示聊天文件夹标签
     @NagramDefault("nagram.showFoldersInShareSheet", true)
     public var showFoldersInShareSheet: Bool
@@ -674,6 +794,9 @@ public final class NagramSettings {
     @NagramDefault("nagram.translationLLMTemperatureTenths", 7)
     public var translationLLMTemperatureTenths: Int32
     /// 发送前翻译:长按发送按钮菜单显示「翻译」项,译文回填输入框(NAG-75)。
+    /// 消息旁显示翻译按钮：点一下在气泡里显示译文，再点回到原文（只在本地显示）
+    @NagramDefault("nagram.messageTranslateButton", false)
+    public var messageTranslateButton: Bool
     @NagramDefault("nagram.translateBeforeSend", false)
     public var translateBeforeSend: Bool
     /// 发送前翻译的目标语言代码(popularTranslationLanguages 短列表)。
@@ -693,6 +816,10 @@ public final class NagramSettings {
     public var sttLanguage: String
     @NagramDefault("nagram.sttPrompt", "")
     public var sttPrompt: String
+    /// 本机识别（系统）的语言：auto = 系统首选语言，app = 应用界面语言，其余为 Apple 语音识别的 locale 标识。
+    @NagramDefault("nagram.sttSystemLanguage", "auto")
+    public var sttSystemLanguage: String
+    public static let sttSystemLanguageOptions = ["auto", "app", "zh-CN", "zh-TW", "zh-HK", "en-US", "ja-JP", "ko-KR"]
 
     public static let sttSettingsDidChangeNotification = Notification.Name("NagramSTTSettingsDidChange")
 
@@ -716,7 +843,7 @@ public final class NagramSettings {
     public var defaultMessageFormatValue: NagramDefaultMessageFormat {
         return NagramDefaultMessageFormat(rawValue: self.defaultMessageFormat) ?? .plain
     }
-    /// 选中文本时显示文字样式工具栏
+    /// 旧版文字样式工具栏开关，仅用于迁移到 textStyleToolbarMode（见 NagramTextStyleToolbarMode.swift）
     @NagramDefault("nagram.showTextStyleToolbar", true)
     public var showTextStyleToolbar: Bool
     /// 发送时自动插入中英文空格
@@ -755,9 +882,15 @@ public final class NagramSettings {
     /// 资料页显示注册日期（默认关 = 保持原生）
     @NagramDefault("nagram.showRegDate", false)
     public var showRegDate: Bool
+    /// 用户资料页显示「共同群发言」入口（默认关 = 原生资料页）
+    @NagramDefault("nagram.showCommonGroupMessages", false)
+    public var showCommonGroupMessages: Bool
     /// 群组资料页直接展示的设置项；默认不展示，用户需逐项启用。
     @NagramDefault("nagram.groupProfileSettingItems", "")
     private var groupProfileSettingItems: String
+    /// 系统设置页隐藏的条目；默认为空 = 原生设置页。
+    @NagramDefault("nagram.hiddenSettingsPageItems", "")
+    public var hiddenSettingsPageItemsValue: String
     /// 设置/资料页隐藏手机号（默认关 = 保持原生）
     @NagramDefault("nagram.hidePhoneInSettings", false)
     public var hidePhoneInSettings: Bool
@@ -767,6 +900,11 @@ public final class NagramSettings {
 
     @NagramDefault("nagram.fixLinkPreviews", false)
     public var fixLinkPreviews: Bool
+
+    /// 注册 Telegram 链接（tg:// / telegram://）。iOS 无法在运行时取消 scheme 注册，
+    /// 关闭后链接仍会先打开 Nagram，再转交给官方 Telegram；未安装官方 Telegram 时由 Nagram 自己处理。
+    @NagramDefault("nagram.registerTelegramLinks", true)
+    public var registerTelegramLinks: Bool
 
     @NagramDefault("nagram.autoInlineBotEnabled", false)
     public var autoInlineBotEnabled: Bool
@@ -786,6 +924,29 @@ public final class NagramSettings {
             .filter { items.contains($0) }
             .map(\.rawValue)
             .joined(separator: ",")
+    }
+
+    public var hiddenSettingsPageItems: Set<NagramSettingsPageItem> {
+        return NagramSettings.settingsPageItems(from: self.hiddenSettingsPageItemsValue)
+    }
+
+    public func setSettingsPageItemHidden(_ item: NagramSettingsPageItem, hidden: Bool) {
+        var items = self.hiddenSettingsPageItems
+        if hidden {
+            items.insert(item)
+        } else {
+            items.remove(item)
+        }
+        self.hiddenSettingsPageItemsValue = NagramSettingsPageItem.allCases
+            .filter { items.contains($0) }
+            .map(\.rawValue)
+            .joined(separator: ",")
+    }
+
+    public static func settingsPageItems(from value: String) -> Set<NagramSettingsPageItem> {
+        return Set(value.split(separator: ",").compactMap {
+            NagramSettingsPageItem(rawValue: String($0))
+        })
     }
 
     private var visibleGroupProfileSettingItems: Set<NagramGroupProfileSettingItem> {
@@ -820,14 +981,26 @@ private func nagramTranslationLLMURL(baseURLString: String, endpoint: String, de
         endpointPath = String(endpointPath.dropFirst(3))
     }
 
-    components.percentEncodedPath = basePath + endpointPath
-    components.percentEncodedQuery = nil
+    // The endpoint is typed by the user, and the percentEncodedPath setter traps on anything that
+    // is not a valid encoded path (a space, a "?query", non-ASCII). Take the path from a parse
+    // instead: its getter only ever returns a valid one.
+    guard let endpointComponents = URLComponents(string: endpointPath), endpointComponents.host == nil else {
+        return nil
+    }
+    components.percentEncodedPath = basePath + endpointComponents.percentEncodedPath
+    components.percentEncodedQuery = endpointComponents.percentEncodedQuery
     components.fragment = nil
     return components.url
 }
 
 public extension NagramSettings {
     static let defaultTranslationLLMPrompt = "Translate to @toLang:\n\n@text"
+
+    /// 有效的快进步长；存储值不在可选列表中时按原生的 15 秒处理。
+    public var videoSeekIntervalValue: Int32 {
+        let value = self.videoSeekInterval
+        return NagramSettings.videoSeekIntervalOptions.contains(value) ? value : 15
+    }
 
     var recentStickerLimitValue: Int {
         guard NagramSettings.recentStickerLimitOptions.contains(self.recentStickerLimit) else {

@@ -276,11 +276,21 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
             let dismissalOffset = scrollView.contentSize.height - scrollView.contentInset.top  + scrollView.contentSize.height
             let delta = dismissalOffset - contentOffset
             
-            let initialVelocity = !delta.isZero ? velocity.y / delta : 0.0
+            // UIKit reports the release velocity in points per millisecond, positive while the content moves up. The
+            // dismissal reads it as a pan gesture's (points per second, positive down), as AttachmentContainer's does:
+            // a fling down dismisses, and the dismissal starts at the finger's speed.
+            let downwardVelocity = -velocity.y * 1000.0
+            let initialVelocity = !delta.isZero ? max(0.0, downwardVelocity) / delta : 0.0
             
             let currentContentOffset = scrollView.contentOffset
+            // Scrolled within a sheet taller than the screen, resting on its top: it decelerates, no further down than
+            // that rest.
+            let scrollsWithinSheet = self.currentRestsOnTop && currentContentOffset.y > 0.0
+            let proposedContentOffset = targetContentOffset.pointee
             targetContentOffset.pointee = currentContentOffset
-            if velocity.y > 300.0 {
+            if scrollsWithinSheet {
+                targetContentOffset.pointee = CGPoint(x: proposedContentOffset.x, y: max(0.0, proposedContentOffset.y))
+            } else if downwardVelocity > 300.0 && contentOffset > 0.0 {
                 self.component?.willDismiss()
                 self.animateOut(initialVelocity: initialVelocity, completion: {
                     self.dismiss?(false)
@@ -395,6 +405,7 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
         }
         
         private var currentHasInputHeight = false
+        private var currentRestsOnTop = false
         private var isCentered = false
         private var currentAvailableSize: CGSize?
         func update(component: SheetComponent<ChildEnvironmentType>, availableSize: CGSize, state: EmptyComponentState, environment: Environment<EnvironmentType>, transition: ComponentTransition) -> CGSize {
@@ -432,6 +443,13 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
                 topCornerRadius = 12.0
                 bottomCornerRadius = 12.0
             }
+            // iPhone Duo's cover screen: a glass sheet at the bottom edge rounds each bottom corner by its own screen
+            // corner (8pt on the hinge side, 59pt outside), 2pt inside it like the single radius above. Nil wherever the
+            // screen's corners are uniform, which keeps that radius.
+            var bottomCornerRadii: (left: CGFloat, right: CGFloat)?
+            if case .glass = component.style, !sheetEnvironment.isCentered, let controllerEnvironment = environment[ChildEnvironmentType.self].value as? ViewControllerComponentContainer.Environment {
+                bottomCornerRadii = controllerEnvironment.screenCornerRadii.sheetBottomCornerRadii(inset: 2.0)
+            }
             
             var backgroundColor: UIColor = .clear
             var blurEffectStyle: UIBlurEffect.Style?
@@ -453,6 +471,19 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
                         
             transition.setFrame(view: self.dimView, frame: CGRect(origin: CGPoint(), size: availableSize), completion: nil)
             
+            // Beside iPhone Duo's side strip in landscape the sheet keeps to the band between the side insets, clear
+            // of the strip and its corner block, and its content's environment has no side insets to keep.
+            var sheetMinX: CGFloat = 0.0
+            var sheetWidth = availableSize.width
+            let contentEnvironment: ChildEnvironmentType
+            if !sheetEnvironment.isCentered, let controllerEnvironment = environment[ChildEnvironmentType.self].value as? ViewControllerComponentContainer.Environment, let placement = sheetBandPlacement(containerSize: availableSize, safeInsets: controllerEnvironment.safeInsets), let adjusted = controllerEnvironment.withSideSafeInsets(left: placement.contentSideInsets.left, right: placement.contentSideInsets.right) as? ChildEnvironmentType {
+                sheetMinX = placement.minX
+                sheetWidth = placement.width
+                contentEnvironment = adjusted
+            } else {
+                contentEnvironment = environment[ChildEnvironmentType.self].value
+            }
+
             var containerSize: CGSize
             if sheetEnvironment.isCentered {
                 let verticalInset: CGFloat = 44.0
@@ -463,7 +494,7 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
                     containerSize = regularMetricsSize
                 }
             } else {
-                containerSize = CGSize(width: availableSize.width - glassInset * 2.0, height: .greatestFiniteMagnitude)
+                containerSize = CGSize(width: sheetWidth - glassInset * 2.0, height: .greatestFiniteMagnitude)
             }
             
             self.contentView.parentState = state
@@ -471,7 +502,7 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
                 transition: transition,
                 component: component.content,
                 environment: {
-                    environment[ChildEnvironmentType.self]
+                    contentEnvironment
                 },
                 containerSize: containerSize
             )
@@ -485,6 +516,8 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
                 }
                 contentView.clipsToBounds = component.clipsContent
                 contentView.layer.cornerRadius = topCornerRadius
+                // Its bottom corners stay within the sheet's where those follow the screen's (iPhone Duo's cover screen).
+                let _ = contentView.layer.applyCornerRadiiIfNeeded(bottomCornerRadii.map { CornerRadii(topLeft: topCornerRadius, topRight: topCornerRadius, bottomLeft: min(topCornerRadius, $0.left), bottomRight: min(topCornerRadius, $0.right)) })
                 
                 if sheetEnvironment.isCentered {
                     let y: CGFloat = floorToScreenPixels((availableSize.height - contentSize.height) / 2.0)
@@ -502,27 +535,27 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
                 } else {
                     switch component.style {
                     case .glass:
-                        let clipFrame = CGRect(origin: CGPoint(x: glassInset, y: -glassInset), size: CGSize(width: contentSize.width, height: contentSize.height))
-                        self.clipView.update(size: clipFrame.size, color: .clear, topCornerRadius: topCornerRadius - 1.5, bottomCornerRadius: bottomCornerRadius, transition: transition)
+                        let clipFrame = CGRect(origin: CGPoint(x: sheetMinX + glassInset, y: -glassInset), size: contentSize)
+                        self.clipView.update(size: clipFrame.size, color: .clear, topCornerRadius: topCornerRadius - 1.5, bottomCornerRadius: bottomCornerRadius, bottomCornerRadii: bottomCornerRadii, transition: transition)
                         transition.setFrame(view: self.clipView, frame: clipFrame)
                         transition.setFrame(view: contentView, frame: CGRect(origin: .zero, size: CGSize(width: contentSize.width, height: contentSize.height)), completion: nil)
-                        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(x: glassInset, y: -glassInset), size: CGSize(width: contentSize.width, height: contentSize.height)), completion: nil)
+                        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(x: sheetMinX + glassInset, y: -glassInset), size: contentSize), completion: nil)
                         if let effectView = self.effectView, let blurEffectStyle = blurEffectStyle {
-                            transition.setFrame(view: effectView, frame: CGRect(origin: CGPoint(x: glassInset, y: -glassInset), size: CGSize(width: contentSize.width, height: contentSize.height)), completion: nil)
-                            effectView.update(style: blurEffectStyle, size: contentSize, topCornerRadius: topCornerRadius + 1.5, bottomCornerRadius: bottomCornerRadius, transition: transition)
+                            transition.setFrame(view: effectView, frame: CGRect(origin: CGPoint(x: sheetMinX + glassInset, y: -glassInset), size: contentSize), completion: nil)
+                            effectView.update(style: blurEffectStyle, size: contentSize, topCornerRadius: topCornerRadius + 1.5, bottomCornerRadius: bottomCornerRadius, bottomCornerRadii: bottomCornerRadii, transition: transition)
                         }
                     case .legacy:
-                        let clipFrame = CGRect(origin: .zero, size: CGSize(width: contentSize.width, height: contentSize.height + 100.0))
+                        let clipFrame = CGRect(origin: CGPoint(x: sheetMinX, y: 0.0), size: CGSize(width: contentSize.width, height: contentSize.height + 100.0))
                         self.clipView.update(size: clipFrame.size, color: .clear, topCornerRadius: topCornerRadius, bottomCornerRadius: bottomCornerRadius, transition: transition)
                         transition.setFrame(view: self.clipView, frame: clipFrame)
                         transition.setFrame(view: contentView, frame: CGRect(origin: .zero, size: clipFrame.size), completion: nil)
-                        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: .zero, size: CGSize(width: contentSize.width, height: contentSize.height + 1000.0)), completion: nil)
+                        transition.setFrame(view: self.backgroundView, frame: CGRect(origin: CGPoint(x: sheetMinX, y: 0.0), size: CGSize(width: contentSize.width, height: contentSize.height + 1000.0)), completion: nil)
                         if let effectView = self.effectView, let blurEffectStyle = blurEffectStyle {
-                            transition.setFrame(view: effectView, frame: CGRect(origin: .zero, size: CGSize(width: contentSize.width, height: contentSize.height + 1000.0)), completion: nil)
+                            transition.setFrame(view: effectView, frame: CGRect(origin: CGPoint(x: sheetMinX, y: 0.0), size: CGSize(width: contentSize.width, height: contentSize.height + 1000.0)), completion: nil)
                             effectView.update(style: blurEffectStyle, size: CGSize(width: contentSize.width, height: contentSize.height + 1000.0), topCornerRadius: topCornerRadius + 1.5, bottomCornerRadius: bottomCornerRadius, transition: transition)
                         }
                     }
-                    self.backgroundView.update(size: contentSize, color: backgroundColor, topCornerRadius: topCornerRadius + 1.5, bottomCornerRadius: bottomCornerRadius, transition: transition)
+                    self.backgroundView.update(size: contentSize, color: backgroundColor, topCornerRadius: topCornerRadius + 1.5, bottomCornerRadius: bottomCornerRadius, bottomCornerRadii: bottomCornerRadii, transition: transition)
                 }
             }
             transition.setFrame(view: self.scrollView, frame: CGRect(origin: CGPoint(), size: availableSize), completion: nil)
@@ -542,7 +575,7 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
                     environment: {},
                     containerSize: CGSize(width: contentSize.width, height: 44.0)
                 )
-                let headerFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((availableSize.width - headerSize.width) / 2.0), y: self.backgroundView.frame.minY - headerSize.height - 10.0), size: headerSize)
+                let headerFrame = CGRect(origin: CGPoint(x: sheetMinX + floorToScreenPixels((sheetWidth - headerSize.width) / 2.0), y: self.backgroundView.frame.minY - headerSize.height - 10.0), size: headerSize)
                 if let headerView = headerView.view {
                     if headerView.superview == nil {
                         self.scrollView.addSubview(headerView)
@@ -566,15 +599,31 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
             self.scrollView.isScrollEnabled = component.isScrollEnabled
             
             self.ignoreScrolling = false
+            // A sheet taller than the screen rests with its top in view and scrolls up to its bottom.
+            let restingOffset = sheetRestingScrollOffset(contentHeight: contentSize.height, containerHeight: availableSize.height, keepsBottomVisible: sheetEnvironment.isCentered || sheetEnvironment.hasInputHeight || !component.isScrollEnabled)
+            self.currentRestsOnTop = restingOffset < contentSize.height - availableSize.height
             if let currentAvailableSize = self.currentAvailableSize, currentAvailableSize.height != availableSize.height {
-                self.scrollView.contentOffset = CGPoint(x: 0.0, y: -(availableSize.height - contentSize.height))
+                // The scroll extents depend on the container's height (a rotation, a fold): without them the drag to
+                // dismiss kept measuring against the previous height, and after portrait to landscape a sheet could
+                // hardly be dragged away. Nothing here is a drag, so the dismissal check sits out.
+                self.ignoreScrolling = true
+                updateContentSize()
+                self.scrollView.contentOffset = CGPoint(x: 0.0, y: restingOffset)
+                self.ignoreScrolling = false
             } else if component.followContentSizeChanges, !previousContentSize.height.isZero, previousContentSize != contentSize {
-                transition.setBounds(view: self.scrollView, bounds: CGRect(origin: CGPoint(x: 0.0, y: -(availableSize.height - contentSize.height)), size: availableSize), completion: { _ in
+                transition.setBounds(view: self.scrollView, bounds: CGRect(origin: CGPoint(x: 0.0, y: restingOffset), size: availableSize), completion: { _ in
                     updateContentSize()
                 })
             }
             if self.currentHasInputHeight != previousHasInputHeight {
-                transition.setBounds(view: self.scrollView, bounds: CGRect(origin: CGPoint(x: 0.0, y: -(availableSize.height - contentSize.height)), size: self.scrollView.bounds.size))
+                // When the keyboard goes down, a sheet taller than the screen stays where it was, down to its new bottom,
+                // so what sat just above the keyboard (a comment field's Send) stays in view instead of the sheet
+                // jumping to its top.
+                var targetOffset = restingOffset
+                if previousHasInputHeight, !self.currentHasInputHeight, self.currentRestsOnTop {
+                    targetOffset = max(restingOffset, min(self.scrollView.bounds.minY, contentSize.height - availableSize.height))
+                }
+                transition.setBounds(view: self.scrollView, bounds: CGRect(origin: CGPoint(x: 0.0, y: targetOffset), size: self.scrollView.bounds.size))
             }
             
             self.currentAvailableSize = availableSize
@@ -613,6 +662,7 @@ public final class SheetComponent<ChildEnvironmentType: Sendable & Equatable>: C
 public final class SheetBackgroundView: UIView {
     let topCornersView = UIView()
     let bottomCornersView = UIView()
+    private var usesBottomCornerRadii = false
     
     public override init(frame: CGRect) {
         super.init(frame: frame)
@@ -633,9 +683,21 @@ public final class SheetBackgroundView: UIView {
         preconditionFailure()
     }
     
-    public func update(size: CGSize, color: UIColor, topCornerRadius: CGFloat, bottomCornerRadius: CGFloat, transition: ComponentTransition) {
+    /// `bottomCornerRadii`, where given (iPhone Duo's cover screen, see `CornerRadii.sheetBottomCornerRadii`), rounds
+    /// each bottom corner by its own radius where the OS has per-corner radii, and by the larger of the two otherwise.
+    public func update(size: CGSize, color: UIColor, topCornerRadius: CGFloat, bottomCornerRadius: CGFloat, bottomCornerRadii: (left: CGFloat, right: CGFloat)? = nil, transition: ComponentTransition) {
         transition.setCornerRadius(layer: self.topCornersView.layer, cornerRadius: topCornerRadius)
-        transition.setCornerRadius(layer: self.bottomCornersView.layer, cornerRadius: bottomCornerRadius)
+        if let bottomCornerRadii, CALayer.cornerRadiiSupported {
+            self.usesBottomCornerRadii = true
+            self.bottomCornersView.layer.setCornerRadii(CornerRadii(topLeft: 0.0, topRight: 0.0, bottomLeft: bottomCornerRadii.left, bottomRight: bottomCornerRadii.right))
+        } else {
+            let radius = bottomCornerRadii.map { max($0.left, $0.right) } ?? bottomCornerRadius
+            if self.usesBottomCornerRadii {
+                self.usesBottomCornerRadii = false
+                self.bottomCornersView.layer.setCornerRadii(CornerRadii(uniform: radius))
+            }
+            transition.setCornerRadius(layer: self.bottomCornersView.layer, cornerRadius: radius)
+        }
         
         transition.setFrame(view: self.topCornersView, frame: CGRect(origin: .zero, size: size))
         transition.setFrame(view: self.bottomCornersView, frame: CGRect(origin: .zero, size: size))
@@ -660,13 +722,13 @@ private final class SheetBackgroundBlurView: UIView {
         preconditionFailure()
     }
     
-    func update(style: UIBlurEffect.Style, size: CGSize, topCornerRadius: CGFloat, bottomCornerRadius: CGFloat, transition: ComponentTransition) {
+    func update(style: UIBlurEffect.Style, size: CGSize, topCornerRadius: CGFloat, bottomCornerRadius: CGFloat, bottomCornerRadii: (left: CGFloat, right: CGFloat)? = nil, transition: ComponentTransition) {
         if self.currentStyle != style {
             self.currentStyle = style
             self.effectView.effect = UIBlurEffect(style: style)
         }
         
-        self.clipView.update(size: size, color: .clear, topCornerRadius: topCornerRadius, bottomCornerRadius: bottomCornerRadius, transition: transition)
+        self.clipView.update(size: size, color: .clear, topCornerRadius: topCornerRadius, bottomCornerRadius: bottomCornerRadius, bottomCornerRadii: bottomCornerRadii, transition: transition)
         transition.setFrame(view: self.clipView, frame: CGRect(origin: .zero, size: size))
         transition.setFrame(view: self.effectView, frame: CGRect(origin: .zero, size: size))
     }

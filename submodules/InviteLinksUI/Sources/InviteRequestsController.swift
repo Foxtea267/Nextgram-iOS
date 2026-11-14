@@ -18,6 +18,7 @@ import TelegramStringFormatting
 import ItemListPeerActionItem
 import ItemListPeerItem
 import UndoUI
+import NagramStrings // MARK: NAGRAM
 
 private final class InviteRequestsControllerArguments {
     let context: AccountContext
@@ -261,6 +262,20 @@ public func inviteRequestsController(context: AccountContext, updatedPresentatio
                 })
             })))
             
+            // MARK: NAGRAM — 拒绝申请并把申请人加入封禁列表，供人工审核的群快速处理广告号
+            if case let .channel(channel) = chatPeer, channel.hasPermission(.banMembers) {
+                items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.MemberRequests.DismissAndBan", presentationData.strings.baseLanguageCode), textColor: .destructive, icon: { theme in
+                    return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Restrict"), color: theme.contextMenu.destructiveColor)
+                }, action: { _, f in
+                    f(.dismissWithoutContent)
+                    
+                    Queue.mainQueue().after(0.3, {
+                        denyRequestImpl(peer)
+                        let _ = context.engine.peers.updateChannelMemberBannedRights(peerId: peerId, memberId: peer.id, rights: TelegramChatBannedRights(flags: [.banReadMessages], untilDate: Int32.max)).startStandalone()
+                    })
+                })))
+            }
+            
             let dismissPromise = ValuePromise<Bool>(false)
             let source = InviteRequestsContextExtractedContentSource(sourceNode: node, keepInPlace: false, blurBackground: true, centerVertically: true, shouldBeDismissed: dismissPromise.get())
     //        sourceNode.requestDismiss = {
@@ -424,10 +439,10 @@ final class InviteRequestsContextExtractedContentSource: ContextExtractedContent
     }
     
     func takeView() -> ContextControllerTakeViewInfo? {
-        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: mainWindowScreenBounds)
     }
     
     func putBack() -> ContextControllerPutBackViewInfo? {
-        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }

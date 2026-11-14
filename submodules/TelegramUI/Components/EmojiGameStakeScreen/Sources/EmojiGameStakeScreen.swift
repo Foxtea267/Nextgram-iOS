@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -513,7 +512,7 @@ private final class EmojiGameStakeSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         screenSize: context.availableSize,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in
@@ -1319,8 +1318,7 @@ private final class ResultCellComponent: Component {
                             placeholderColor: component.theme.list.mediaPlaceholderColor,
                             startingPosition: .end,
                             size: CGSize(width: 50.0, height: 50.0),
-                            loop: false,
-                            lottieSettings: component.context.lottieRenderingSettings
+                            loop: false
                         )
                     )))
                 }

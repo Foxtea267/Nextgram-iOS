@@ -18,6 +18,8 @@ swift_library(
         "//submodules/TelegramStringFormatting:TelegramStringFormatting",
         "//submodules/SearchBarNode:SearchBarNode",
         "//submodules/AppBundle:AppBundle",
+        "//submodules/AnimatedStickerNode:AnimatedStickerNode",
+        "//submodules/TelegramAnimatedStickerNode:TelegramAnimatedStickerNode",
         "//submodules/ComponentFlow",
         "//submodules/Components/BundleIconComponent",
         "//submodules/TelegramUI/Components/EdgeEffect",

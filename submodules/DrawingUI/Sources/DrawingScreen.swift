@@ -23,8 +23,11 @@ import EntityKeyboard
 import TelegramUIPreferences
 import FastBlur
 import MediaEditor
+import MediaEditorBottomControls
 import StickerPickerScreen
 import ImageObjectSeparation
+import ImageInpainting
+import SaveProgressScreen
 import GlassBarButtonComponent
 import GlassControls
 import BundleIconComponent
@@ -499,11 +502,37 @@ enum DrawingMode: Int {
     case text
 }
 
+public func drawingScreenUsesIconTextEditingButtons(sourceHint: DrawingScreen.SourceHint?) -> Bool {
+    switch sourceHint {
+    case .chatMediaEditor, .storyEditor:
+        return true
+    case .none:
+        return false
+    }
+}
+
+public func drawingScreenSkipsBottomControls(sourceHint: DrawingScreen.SourceHint?, externalControls: Bool) -> Bool {
+    return externalControls
+}
+
+public func drawingScreenExternalControlsAreVisible(isDrawing: Bool, isInteractingWithEntities: Bool, isEditingText: Bool) -> Bool {
+    return !isDrawing && !isInteractingWithEntities && !isEditingText
+}
+
+private let drawingScreenTopButtonsBlurRadius: CGFloat = 8.0
+
+enum DrawingScreenExternalAction {
+    case apply
+    case dismiss
+    case mode(DrawingMode)
+}
+
 private final class DrawingScreenComponent: CombinedComponent {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
     
     let context: AccountContext
     let sourceHint: DrawingScreen.SourceHint?
+    let externalControls: Bool
     let existingStickerPickerInputData: Promise<StickerPickerInput>?
     let isVideo: Bool
     let isAvatar: Bool
@@ -530,6 +559,8 @@ private final class DrawingScreenComponent: CombinedComponent {
     let presentGallery: (() -> Void)?
     let apply: ActionSlot<Void>
     let dismiss: ActionSlot<Void>
+    let externalAction: ActionSlot<DrawingScreenExternalAction>
+    let externalStateUpdated: (DrawingMode, Bool) -> Void
     
     let presentColorPicker: (DrawingColor) -> Void
     let presentFastColorPicker: (UIView) -> Void
@@ -540,6 +571,7 @@ private final class DrawingScreenComponent: CombinedComponent {
     init(
         context: AccountContext,
         sourceHint: DrawingScreen.SourceHint?,
+        externalControls: Bool,
         existingStickerPickerInputData: Promise<StickerPickerInput>?,
         isVideo: Bool,
         isAvatar: Bool,
@@ -566,6 +598,8 @@ private final class DrawingScreenComponent: CombinedComponent {
         presentGallery: (() -> Void)?,
         apply: ActionSlot<Void>,
         dismiss: ActionSlot<Void>,
+        externalAction: ActionSlot<DrawingScreenExternalAction>,
+        externalStateUpdated: @escaping (DrawingMode, Bool) -> Void,
         presentColorPicker: @escaping (DrawingColor) -> Void,
         presentFastColorPicker: @escaping (UIView) -> Void,
         updateFastColorPickerPan: @escaping (CGPoint) -> Void,
@@ -574,6 +608,7 @@ private final class DrawingScreenComponent: CombinedComponent {
     ) {
         self.context = context
         self.sourceHint = sourceHint
+        self.externalControls = externalControls
         self.existingStickerPickerInputData = existingStickerPickerInputData
         self.isVideo = isVideo
         self.isAvatar = isAvatar
@@ -600,6 +635,8 @@ private final class DrawingScreenComponent: CombinedComponent {
         self.presentGallery = presentGallery
         self.apply = apply
         self.dismiss = dismiss
+        self.externalAction = externalAction
+        self.externalStateUpdated = externalStateUpdated
         self.presentColorPicker = presentColorPicker
         self.presentFastColorPicker = presentFastColorPicker
         self.updateFastColorPickerPan = updateFastColorPickerPan
@@ -675,6 +712,11 @@ private final class DrawingScreenComponent: CombinedComponent {
         private let endEditingTextEntityView: ActionSlot<(UUID, Bool)>
         private let entityViewForEntity: (DrawingEntity) -> DrawingEntityView?
         private let present: (ViewController) -> Void
+        private let isVideo: Bool
+        
+        private let cleanupPreparationDisposable = MetaDisposable()
+        private var isPreparingCleanup = false
+        private weak var cleanupProgressScreen: SaveProgressScreen?
         
         var currentMode: DrawingMode
         var drawingState: DrawingState
@@ -702,9 +744,11 @@ private final class DrawingScreenComponent: CombinedComponent {
             updateEntityView: ActionSlot<(UUID, Bool)>,
             endEditingTextEntityView: ActionSlot<(UUID, Bool)>,
             entityViewForEntity: @escaping (DrawingEntity) -> DrawingEntityView?,
-            present: @escaping (ViewController) -> Void)
+            present: @escaping (ViewController) -> Void,
+            isVideo: Bool)
         {
             self.context = context
+            self.isVideo = isVideo
             self.updateToolState = updateToolState
             self.insertEntity = insertEntity
             self.deselectEntity = deselectEntity
@@ -805,6 +849,10 @@ private final class DrawingScreenComponent: CombinedComponent {
             }
         }
         
+        deinit {
+            self.cleanupPreparationDisposable.dispose()
+        }
+        
         func loadToolState() {
             let _ = (self.context.sharedContext.accountManager.sharedData(keys: [ApplicationSpecificSharedDataKeys.drawingSettings])
             |> take(1)
@@ -876,6 +924,67 @@ private final class DrawingScreenComponent: CombinedComponent {
             if update {
                 self.updated(transition: .easeInOut(duration: 0.2))
             }
+            
+            self.prepareCleanupIfNeeded()
+        }
+        
+        private func prepareCleanupIfNeeded() {
+            #if DEBUG
+            guard #available(iOS 17.0, *), !self.isVideo, self.drawingState.selectedTool == .eraser, ImageInpainter.shared == nil, !self.isPreparingCleanup else {
+                return
+            }
+            self.isPreparingCleanup = true
+            let signal = imageInpaintingAvailability(context: self.context)
+            |> mapToSignal { availability -> Signal<(ImageInpaintingAvailability, Bool), NoError> in
+                if case .available = availability {
+                    return ImageInpainter.loadShared()
+                    |> map { inpainter in
+                        return (availability, inpainter != nil)
+                    }
+                } else {
+                    return .single((availability, false))
+                }
+            }
+            |> deliverOnMainQueue
+            self.cleanupPreparationDisposable.set(signal.start(next: { [weak self] availability, isLoaded in
+                guard let self else {
+                    return
+                }
+                let text = "Downloading Model"
+                switch availability {
+                case let .progress(progress):
+                    if let screen = self.cleanupProgressScreen {
+                        screen.content = .progress(text, progress)
+                    } else {
+                        let screen = SaveProgressScreen(context: self.context, content: .progress(text, progress))
+                        screen.cancelled = { [weak self] in
+                            guard let self else {
+                                return
+                            }
+                            self.cleanupProgressScreen = nil
+                            self.isPreparingCleanup = false
+                            self.cleanupPreparationDisposable.set(nil)
+                            if self.drawingState.selectedTool == .eraser {
+                                self.updateSelectedTool(.pen)
+                            }
+                        }
+                        self.present(screen)
+                        self.cleanupProgressScreen = screen
+                    }
+                case .available, .unavailable:
+                    self.isPreparingCleanup = false
+                    if isLoaded {
+                        self.cleanupProgressScreen?.content = .completion("Cleanup Model Ready", icon: .succeeded)
+                    } else {
+                        self.cleanupProgressScreen?.dismiss()
+                        if self.drawingState.selectedTool == .eraser {
+                            self.updateSelectedTool(.pen)
+                        }
+                    }
+                    self.cleanupProgressScreen = nil
+                }
+            }))
+            #endif
         }
         
         func updateBrushSize(_ size: CGFloat) {
@@ -989,7 +1098,7 @@ private final class DrawingScreenComponent: CombinedComponent {
                 )
             ]
             let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }.withUpdated(theme: defaultDarkPresentationTheme)
-            let contextController = makeContextController(presentationData: presentationData, source: .reference(ReferenceContentSource(sourceView: sourceView, contentArea: UIScreen.main.bounds, customPosition: CGPoint(x: 7.0, y: 3.0))), items: .single(ContextController.Items(content: .list(items))))
+            let contextController = makeContextController(presentationData: presentationData, source: .reference(ReferenceContentSource(sourceView: sourceView, contentArea: mainWindowScreenBounds, customPosition: CGPoint(x: 7.0, y: 3.0))), items: .single(ContextController.Items(content: .list(items))))
             self.present(contextController)
         }
         
@@ -1051,7 +1160,8 @@ private final class DrawingScreenComponent: CombinedComponent {
             updateEntityView: self.updateEntityView,
             endEditingTextEntityView: self.endEditingTextEntityView,
             entityViewForEntity: self.entityViewForEntity,
-            present: self.present
+            present: self.present,
+            isVideo: self.isVideo
         )
     }
     
@@ -1141,6 +1251,31 @@ private final class DrawingScreenComponent: CombinedComponent {
             component.updateSelectedEntity.connect { [weak state] entity in
                 state?.updateSelectedEntity(entity)
             }
+            component.externalAction.connect { [weak state] action in
+                guard let state else {
+                    return
+                }
+                switch action {
+                case .apply:
+                    dismissEyedropper.invoke(Void())
+                    state.saveToolState()
+                    apply.invoke(Void())
+                case .dismiss:
+                    dismissEyedropper.invoke(Void())
+                    state.saveToolState()
+                    dismiss.invoke(Void())
+                case let .mode(mode):
+                    dismissEyedropper.invoke(Void())
+                    switch mode {
+                    case .drawing:
+                        state.updateCurrentMode(.drawing)
+                    case .sticker:
+                        state.presentStickerPicker()
+                    case .text:
+                        state.addTextEntity()
+                    }
+                }
+            }
             component.requestPresentColorPicker.connect { [weak state] _ in
                 if let state = state {
                     presentColorPicker(state.currentColor)
@@ -1165,23 +1300,65 @@ private final class DrawingScreenComponent: CombinedComponent {
                     controlsBottomInset = -50.0
                 }
             }
-            let previewBottomInset = context.availableSize.height - previewSize.height - previewTopInset
+            // Clamped like the story editor's: a 9:16 preview much taller than the screen (iPhone Duo's unfolded
+            // screen in portrait, 238pt over) would otherwise put the bottom bar below the screen. There the bar also
+            // takes the editor's offset, so it does not move when drawing opens over the editor.
+            let unclampedPreviewBottomInset = context.availableSize.height - previewSize.height - previewTopInset
+            var bottomPanelLift: CGFloat = 0.0
+            if unclampedPreviewBottomInset < 0.0 {
+                controlsBottomInset = -62.0
+                if environment.navigationBarTrailingButtonsInset > 0.0 {
+                    // Beside a status island the bottom bar mirrors the top row: its 44pt buttons centred as far above
+                    // the bottom edge as the top row's are below the top one (compact status height + 31). The rows
+                    // above it move up with it.
+                    let mirroredControlsBottomInset = -(environment.statusBarHeight + 31.0 + 30.0)
+                    bottomPanelLift = max(0.0, controlsBottomInset - mirroredControlsBottomInset)
+                    controlsBottomInset -= bottomPanelLift
+                } else {
+                    // Elsewhere (folded) the editor's bar is 62pt above the home indicator; so is this one, and the rows
+                    // above it move up with it.
+                    bottomPanelLift = environment.safeInsets.bottom
+                    controlsBottomInset -= bottomPanelLift
+                }
+            }
+            var cameraRowBarMinY: CGFloat?
+            if component.sourceHint == .storyEditor, mediaEditorStoryBottomControlsAlignWithCameraRow(deviceMetrics: environment.deviceMetrics, isTablet: environment.metrics.isTablet, hasReservedCorners: environment.reservedCorners != .none) {
+                cameraRowBarMinY = mediaEditorStoryCameraRowBottomControlsGeometry(size: context.availableSize, homeIndicatorInset: environment.safeInsets.bottom).panelFrame.minY
+            }
+            let previewBottomInset = max(0.0, unclampedPreviewBottomInset)
             
             var topInset = environment.safeInsets.top + 31.0
             if component.sourceHint == .storyEditor {
                 topInset = previewTopInset + 31.0
+            } else if component.sourceHint == .chatMediaEditor {
+                topInset = max(environment.safeInsets.top, environment.fullStatusBarHeight) + 31.0
+            }
+            if environment.navigationBarTrailingButtonsInset > 0.0 {
+                // iPhone Duo unfolded portrait: the top row sits on the status island's clock line, as a navigation
+                // bar beside the island does (its right group stops left of the island, see topTrailingInset).
+                topInset = environment.statusBarHeight + 31.0
             }
 
             let bottomInset: CGFloat = environment.inputHeight > 0.0 ? environment.inputHeight : 145.0
             
-            var leftEdge: CGFloat = environment.safeInsets.left
-            var rightEdge: CGFloat = context.availableSize.width - environment.safeInsets.right
+            // The bottom controls span iPhone Duo's side strip; they keep clear only of a corner block at the bottom.
+            let bottomEdgeInsets = environment.bottomEdgeSideInsets()
+            var leftEdge: CGFloat = bottomEdgeInsets.left
+            var rightEdge: CGFloat = context.availableSize.width - bottomEdgeInsets.right
             var availableWidth = context.availableSize.width
             if case .regular = environment.metrics.widthClass {
                 availableWidth = 430.0
                 leftEdge = floorToScreenPixels((context.availableSize.width - availableWidth) / 2.0)
                 rightEdge = floorToScreenPixels((context.availableSize.width - availableWidth) / 2.0) + availableWidth
             }
+            // The bottom control bars center between the edges: the screen's center unless a corner block of iPhone
+            // Duo's strip reaches the bottom (folded landscape-left), where they keep to the band and narrow by the strip.
+            let controlsCenterX = (leftEdge + rightEdge) / 2.0
+            // iPhone Duo unfolded portrait: the top row's right buttons stop left of the status island, which stays on
+            // screen while the editor hides the status bar; 0 elsewhere.
+            let topTrailingInset = environment.navigationBarTrailingButtonsInset
+            let controlsStripInset: CGFloat = environment.safeInsets.left != environment.safeInsets.right ? environment.safeInsets.left + environment.safeInsets.right : 0.0
+            let bottomControlsStripInset: CGFloat = environment.safeInsets.left != environment.safeInsets.right ? bottomEdgeInsets.left + bottomEdgeInsets.right : 0.0
             
             if component.sourceHint != .storyEditor {
                 let topGradient = topGradient.update(
@@ -1213,7 +1390,12 @@ private final class DrawingScreenComponent: CombinedComponent {
             
             var additionalBottomInset: CGFloat = 0.0
             if component.sourceHint == .storyEditor {
-                additionalBottomInset = max(0.0, previewBottomInset - environment.safeInsets.bottom - 49.0)
+                additionalBottomInset = max(0.0, previewBottomInset - environment.safeInsets.bottom - 49.0) + bottomPanelLift
+                if let cameraRowBarMinY {
+                    let swatchRowBottomOffset: CGFloat = 57.0
+                    let swatchRowToBottomControlsSpacing: CGFloat = 16.0
+                    additionalBottomInset = context.availableSize.height - environment.safeInsets.bottom - swatchRowBottomOffset - (cameraRowBarMinY - swatchRowToBottomControlsSpacing)
+                }
             } else {
                 additionalBottomInset = 8.0
             }
@@ -1293,11 +1475,11 @@ private final class DrawingScreenComponent: CombinedComponent {
                         },
                         toggleKeyboard: nil
                     ),
-                    availableSize: CGSize(width: availableWidth - 84.0, height: 44.0),
+                    availableSize: CGSize(width: availableWidth - 84.0 - bottomControlsStripInset, height: 44.0),
                     transition: context.transition
                 )
                 context.add(textSettings
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: context.availableSize.height - environment.safeInsets.bottom - textSettings.size.height / 2.0 - 89.0 - additionalBottomInset))
+                    .position(CGPoint(x: controlsCenterX, y: context.availableSize.height - environment.safeInsets.bottom - textSettings.size.height / 2.0 - 89.0 - additionalBottomInset))
                     .appear(ComponentTransition.Appear({ _, view, transition in
                         if let view = view as? TextSettingsComponent.View, !transition.animation.isImmediate {
                             view.animateIn()
@@ -1582,11 +1764,11 @@ private final class DrawingScreenComponent: CombinedComponent {
                             previewBrushSize.invoke(nil)
                         }
                     ),
-                    availableSize: CGSize(width: availableWidth - environment.safeInsets.left - environment.safeInsets.right, height: 120.0),
+                    availableSize: CGSize(width: availableWidth - bottomEdgeInsets.left - bottomEdgeInsets.right, height: 120.0),
                     transition: context.transition
                 )
                 context.add(tools
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: context.availableSize.height - environment.safeInsets.bottom - tools.size.height / 2.0 - 78.0 - additionalBottomInset))
+                    .position(CGPoint(x: controlsCenterX, y: context.availableSize.height - environment.safeInsets.bottom - tools.size.height / 2.0 - 78.0 - additionalBottomInset))
                     .appear(ComponentTransition.Appear({ _, view, transition in
                         if let view = view as? ToolsComponent.View, !transition.animation.isImmediate {
                             view.animateIn(completion: {})
@@ -1760,6 +1942,10 @@ private final class DrawingScreenComponent: CombinedComponent {
                 .opacity(sizeSliderVisible && controlsAreVisible ? 1.0 : 0.0)
             )
 
+            if component.externalControls {
+                component.externalStateUpdated(state.currentMode, drawingScreenExternalControlsAreVisible(isDrawing: state.drawingViewState.isDrawing, isInteractingWithEntities: component.isInteractingWithEntities, isEditingText: isEditingText))
+            }
+
             var leftItems: [GlassControlGroupComponent.Item] = []
             var rightItems: [GlassControlGroupComponent.Item] = []
 
@@ -1876,10 +2062,11 @@ private final class DrawingScreenComponent: CombinedComponent {
                 ))
             }
 
+            let usesIconTextEditingButtons = drawingScreenUsesIconTextEditingButtons(sourceHint: component.sourceHint)
             if isEditingText {
                 leftItems.append(GlassControlGroupComponent.Item(
                     id: "cancel",
-                    content: .text(strings.Common_Cancel),
+                    content: usesIconTextEditingButtons ? .icon("Navigation/Close") : .text(strings.Common_Cancel),
                     action: { [weak state] in
                         if let entity = state?.selectedEntity as? DrawingTextEntity {
                             endEditingTextEntityView.invoke((entity.uuid, true))
@@ -1889,7 +2076,7 @@ private final class DrawingScreenComponent: CombinedComponent {
 
                 rightItems.append(GlassControlGroupComponent.Item(
                     id: "done",
-                    content: .text(strings.Common_Done),
+                    content: usesIconTextEditingButtons ? .icon("Navigation/Done") : .text(strings.Common_Done),
                     action: { [weak state] in
                         if let entity = state?.selectedEntity as? DrawingTextEntity {
                             endEditingTextEntityView.invoke((entity.uuid, false))
@@ -1911,17 +2098,21 @@ private final class DrawingScreenComponent: CombinedComponent {
                     ),
                     rightItem: rightItems.isEmpty ? nil : GlassControlPanelComponent.Item(
                         items: rightItems,
-                        background: .panel
+                        background: usesIconTextEditingButtons && isEditingText ? .color(UIColor(rgb: 0x0088ff)) : .panel
                     ),
                     centerAlignmentIfPossible: true,
                     isDark: true,
                     tag: topButtonsTag
                 ),
-                availableSize: CGSize(width: context.availableSize.width - 32.0, height: 44.0),
+                availableSize: CGSize(width: context.availableSize.width - 32.0 - controlsStripInset - topTrailingInset, height: 44.0),
                 transition: context.transition
             )
+            // The panel spans the band beside the strip, so it centres on the band: in a regular-width layout
+            // (iPhone Duo's unfolded screen in landscape) `controlsCenterX` is the 430pt column's centre, which put the
+            // panel's right end under the strip. Without a strip it stays `controlsCenterX`.
+            let topButtonsCenterX: CGFloat = controlsStripInset > 0.0 ? (environment.safeInsets.left + context.availableSize.width - environment.safeInsets.right) / 2.0 : controlsCenterX
             context.add(topButtons
-                .position(CGPoint(x: context.availableSize.width / 2.0, y: topInset))
+                .position(CGPoint(x: topButtonsCenterX - topTrailingInset * 0.5, y: topInset))
                 //.opacity(isEditingText ? 1.0 : 0.0)
             )
                                     
@@ -2020,140 +2211,148 @@ private final class DrawingScreenComponent: CombinedComponent {
                 .opacity(controlsAreVisible ? 1.0 : 0.0)
             )
             
-            let doneButton = doneButton.update(
-                component: GlassBarButtonComponent(
-                    size: CGSize(width: 44.0, height: 44.0),
-                    backgroundColor: UIColor(rgb: 0x0088ff),
-                    isDark: true,
-                    state: .tintedGlass,
-                    component: AnyComponentWithIdentity(
-                        id: "icon",
-                        component: AnyComponent(
-                            BundleIconComponent(name: "Navigation/Done", tintColor: .white)
-                        )
+            if !drawingScreenSkipsBottomControls(sourceHint: component.sourceHint, externalControls: component.externalControls) {
+                let doneButton = doneButton.update(
+                    component: GlassBarButtonComponent(
+                        size: CGSize(width: 44.0, height: 44.0),
+                        backgroundColor: UIColor(rgb: 0x0088ff),
+                        isDark: true,
+                        state: .tintedGlass,
+                        component: AnyComponentWithIdentity(
+                            id: "icon",
+                            component: AnyComponent(
+                                BundleIconComponent(name: "Navigation/Done", tintColor: .white)
+                            )
+                        ),
+                        action: { [weak state] _ in
+                            dismissEyedropper.invoke(Void())
+                            state?.saveToolState()
+                            apply.invoke(Void())
+                        },
+                        tag: doneButtonTag
                     ),
-                    action: { [weak state] _ in
-                        dismissEyedropper.invoke(Void())
-                        state?.saveToolState()
-                        apply.invoke(Void())
-                    },
-                    tag: doneButtonTag
-                ),
-                availableSize: CGSize(width: 44.0, height: 44.0),
-                transition: .immediate
-            )
+                    availableSize: CGSize(width: 44.0, height: 44.0),
+                    transition: .immediate
+                )
             
-            var doneButtonPosition = CGPoint(x: context.availableSize.width - environment.safeInsets.right - doneButton.size.width / 2.0 - 14.0, y: context.availableSize.height - environment.safeInsets.bottom - doneButton.size.height / 2.0 - 2.0 - UIScreenPixel)
-            if component.sourceHint == .storyEditor {
-                doneButtonPosition.x = doneButtonPosition.x - 2.0
-                if case .regular = environment.metrics.widthClass {
-                    doneButtonPosition.x -= 20.0
+                var doneButtonPosition = CGPoint(x: context.availableSize.width - bottomEdgeInsets.right - doneButton.size.width / 2.0 - 14.0, y: context.availableSize.height - environment.safeInsets.bottom - doneButton.size.height / 2.0 - 2.0 - UIScreenPixel)
+                if component.sourceHint == .storyEditor {
+                    doneButtonPosition.x = doneButtonPosition.x - 2.0
+                    if case .regular = environment.metrics.widthClass {
+                        doneButtonPosition.x -= 20.0
+                    }
+                    doneButtonPosition.y = floorToScreenPixels(context.availableSize.height - previewBottomInset + 3.0 + doneButton.size.height / 2.0) + controlsBottomInset + 5.0
+                } else {
+                    doneButtonPosition.x = doneButtonPosition.x - 12.0
+                    doneButtonPosition.y -= 3.0 - UIScreenPixel
                 }
-                doneButtonPosition.y = floorToScreenPixels(context.availableSize.height - previewBottomInset + 3.0 + doneButton.size.height / 2.0) + controlsBottomInset + 5.0
-            } else {
-                doneButtonPosition.x = doneButtonPosition.x - 12.0
-                doneButtonPosition.y -= 3.0 - UIScreenPixel
-            }
-            context.add(doneButton
-                .position(doneButtonPosition)
-                .appear(ComponentTransition.Appear { _, view, transition in
-                    transition.animateScale(view: view, from: 0.1, to: 1.0)
-                    transition.animateAlpha(view: view, from: 0.0, to: 1.0)
+                context.add(doneButton
+                    .position(doneButtonPosition)
+                    .appear(ComponentTransition.Appear { _, view, transition in
+                        transition.animateScale(view: view, from: 0.1, to: 1.0)
+                        transition.animateAlpha(view: view, from: 0.0, to: 1.0)
                     
-                    transition.animatePosition(view: view, from: CGPoint(x: 12.0, y: 0.0), to: CGPoint(), additive: true)
-                })
-                .disappear(ComponentTransition.Disappear { view, transition, completion in
-                    transition.setScale(view: view, scale: 0.1)
-                    transition.setAlpha(view: view, alpha: 0.0, completion: { _ in
-                        completion()
+                        transition.animatePosition(view: view, from: CGPoint(x: 12.0, y: 0.0), to: CGPoint(), additive: true)
                     })
-                    transition.animatePosition(view: view, from: CGPoint(), to: CGPoint(x: 12.0, y: 0.0), additive: true)
-                })
-                .opacity(controlsAreVisible ? 1.0 : 0.0)
-            )
+                    .disappear(ComponentTransition.Disappear { view, transition, completion in
+                        transition.setScale(view: view, scale: 0.1)
+                        transition.setAlpha(view: view, alpha: 0.0, completion: { _ in
+                            completion()
+                        })
+                        transition.animatePosition(view: view, from: CGPoint(), to: CGPoint(x: 12.0, y: 0.0), additive: true)
+                    })
+                    .opacity(controlsAreVisible ? 1.0 : 0.0)
+                )
             
-            let modeConstrainedWidth: CGFloat
-            if component.sourceHint == .storyEditor {
-                modeConstrainedWidth = context.availableSize.width - 66.0 * 2.0
-            } else {
-                modeConstrainedWidth = context.availableSize.width - 76.0 * 2.0
-            }
-            let mode = mode.update(
-                component: ModeComponent(
-                    isTablet: false,
-                    strings: environment.strings,
-                    tintColor: .white,
-                    availableModes: [.drawing, .sticker, .text],
-                    currentMode: state.currentMode,
-                    updatedMode: { [weak state] mode in
-                        if let state {
-                            dismissEyedropper.invoke(Void())
-                            switch mode {
-                            case .drawing:
-                                state.updateCurrentMode(.drawing)
-                            case .sticker:
-                                state.presentStickerPicker()
-                            case .text:
-                                state.addTextEntity()
-                            }
-                        }
-                    },
-                    tag: modeTag
-                ),
-                availableSize: CGSize(width: modeConstrainedWidth, height: 44.0),
-                transition: context.transition
-            )
-            var modePosition = CGPoint(x: context.availableSize.width / 2.0 - (modeRightInset - 57.0) / 2.0, y: context.availableSize.height - environment.safeInsets.bottom - mode.size.height / 2.0 - 9.0)
-            if component.sourceHint == .storyEditor {
-                modePosition.y = floorToScreenPixels(context.availableSize.height - previewBottomInset + 8.0 + mode.size.height / 2.0) + controlsBottomInset
-            } else {
-                modePosition.y += 4.0
-            }
-            context.add(mode
-                .position(modePosition)
-                .opacity(controlsAreVisible ? 1.0 : 0.0)
-            )
-            
-            let backButton = backButton.update(
-                component: GlassBarButtonComponent(
-                    size: CGSize(width: 44.0, height: 44.0),
-                    backgroundColor: nil,
-                    isDark: true,
-                    state: .glass,
-                    component: AnyComponentWithIdentity(
-                        id: "icon",
-                        component: AnyComponent(
-                            BundleIconComponent(name: "Navigation/Close", tintColor: .white)
-                        )
-                    ),
-                    action: { [weak state] _ in
-                        if let state {
-                            dismissEyedropper.invoke(Void())
-                            state.saveToolState()
-                            dismiss.invoke(Void())
-                        }
-                    },
-                    tag: cancelButtonTag
-                ),
-                availableSize: CGSize(width: 44.0, height: 44.0),
-                transition: .immediate
-            )
-            var backButtonPosition = CGPoint(x: environment.safeInsets.left + backButton.size.width / 2.0 + 14.0, y: context.availableSize.height - environment.safeInsets.bottom - backButton.size.height / 2.0 - 2.0 - UIScreenPixel)
-            if component.sourceHint == .storyEditor {
-                backButtonPosition.x = backButtonPosition.x + 2.0
-                if case .regular = environment.metrics.widthClass {
-                    backButtonPosition.x += 20.0
+                // Between the back and Done buttons, which span iPhone Duo's side strip unless its corner block is at the
+                // bottom: then the strip's width comes off too (`bottomControlsStripInset` is 0 otherwise).
+                let modeConstrainedWidth: CGFloat
+                if component.sourceHint == .storyEditor {
+                    modeConstrainedWidth = context.availableSize.width - 66.0 * 2.0 - bottomControlsStripInset
+                } else {
+                    modeConstrainedWidth = context.availableSize.width - 76.0 * 2.0 - bottomControlsStripInset
                 }
-                backButtonPosition.y = floorToScreenPixels(context.availableSize.height - previewBottomInset + 3.0 + backButton.size.height / 2.0) + controlsBottomInset + 5.0
-            } else {
-                backButtonPosition.x = backButtonPosition.x + 12.0
-                backButtonPosition.y -= 3.0 - UIScreenPixel
-            }
-            context.add(backButton
-                .position(backButtonPosition)
-                .opacity(controlsAreVisible ? 1.0 : 0.0)
-            )
+                let mode = mode.update(
+                    component: ModeComponent(
+                        isTablet: false,
+                        strings: environment.strings,
+                        tintColor: .white,
+                        availableModes: [.drawing, .sticker, .text],
+                        currentMode: state.currentMode,
+                        updatedMode: { [weak state] mode in
+                            if let state {
+                                dismissEyedropper.invoke(Void())
+                                switch mode {
+                                case .drawing:
+                                    state.updateCurrentMode(.drawing)
+                                case .sticker:
+                                    state.presentStickerPicker()
+                                case .text:
+                                    state.addTextEntity()
+                                }
+                            }
+                        },
+                        tag: modeTag
+                    ),
+                    availableSize: CGSize(width: modeConstrainedWidth, height: 44.0),
+                    transition: context.transition
+                )
+                // Centred between the back and Done buttons: on the band beside iPhone Duo's strip where its corner block
+                // reaches the bottom (folded landscape-left; on the screen's centre the pill would run under Done, which
+                // keeps clear of the block); on the tools column in a regular-width layout. Otherwise the screen's centre.
+                let modeCenterX: CGFloat = controlsCenterX
+                var modePosition = CGPoint(x: modeCenterX - (modeRightInset - 57.0) / 2.0, y: context.availableSize.height - environment.safeInsets.bottom - mode.size.height / 2.0 - 9.0)
+                if component.sourceHint == .storyEditor {
+                    modePosition.y = floorToScreenPixels(context.availableSize.height - previewBottomInset + 8.0 + mode.size.height / 2.0) + controlsBottomInset
+                } else {
+                    modePosition.y += 4.0
+                }
+                context.add(mode
+                    .position(modePosition)
+                    .opacity(controlsAreVisible ? 1.0 : 0.0)
+                )
             
+                let backButton = backButton.update(
+                    component: GlassBarButtonComponent(
+                        size: CGSize(width: 44.0, height: 44.0),
+                        backgroundColor: nil,
+                        isDark: true,
+                        state: .glass,
+                        component: AnyComponentWithIdentity(
+                            id: "icon",
+                            component: AnyComponent(
+                                BundleIconComponent(name: "Navigation/Close", tintColor: .white)
+                            )
+                        ),
+                        action: { [weak state] _ in
+                            if let state {
+                                dismissEyedropper.invoke(Void())
+                                state.saveToolState()
+                                dismiss.invoke(Void())
+                            }
+                        },
+                        tag: cancelButtonTag
+                    ),
+                    availableSize: CGSize(width: 44.0, height: 44.0),
+                    transition: .immediate
+                )
+                var backButtonPosition = CGPoint(x: bottomEdgeInsets.left + backButton.size.width / 2.0 + 14.0, y: context.availableSize.height - environment.safeInsets.bottom - backButton.size.height / 2.0 - 2.0 - UIScreenPixel)
+                if component.sourceHint == .storyEditor {
+                    backButtonPosition.x = backButtonPosition.x + 2.0
+                    if case .regular = environment.metrics.widthClass {
+                        backButtonPosition.x += 20.0
+                    }
+                    backButtonPosition.y = floorToScreenPixels(context.availableSize.height - previewBottomInset + 3.0 + backButton.size.height / 2.0) + controlsBottomInset + 5.0
+                } else {
+                    backButtonPosition.x = backButtonPosition.x + 12.0
+                    backButtonPosition.y -= 3.0 - UIScreenPixel
+                }
+                context.add(backButton
+                    .position(backButtonPosition)
+                    .opacity(controlsAreVisible ? 1.0 : 0.0)
+                )
+            }
+
             return context.availableSize
         }
     }
@@ -2186,6 +2385,9 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
         
         private let apply: ActionSlot<Void>
         private let dismiss: ActionSlot<Void>
+        fileprivate let externalAction: ActionSlot<DrawingScreenExternalAction>
+        fileprivate weak var externalCancelSourceView: UIView?
+        private var lastExternalState: DrawingScreen.ExternalControlsState?
         
         fileprivate let componentHost: ComponentView<ViewControllerComponentContainer.Environment>
                 
@@ -2218,6 +2420,24 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                         strongSelf.updateState.invoke(state)
                     }
                 }
+                self._drawingView?.cleanupEnabled = !controller.isVideo
+                self._drawingView?.getCleanupSourceImage = { [weak self] in
+                    guard let self, let controller = self.controller, let currentImage = controller.getCurrentImage()?.cgImage, let drawingView = self._drawingView else {
+                        return nil
+                    }
+                    let size = drawingView.imageSize
+                    guard let imageContext = DrawingContext(size: size, scale: 1.0, opaque: true, clear: false) else {
+                        return nil
+                    }
+                    imageContext.withFlippedContext { c in
+                        let bounds = CGRect(origin: .zero, size: size)
+                        c.draw(currentImage, in: bounds)
+                        if let drawingImage = drawingView.drawingImage?.cgImage {
+                            c.draw(drawingImage, in: bounds)
+                        }
+                    }
+                    return imageContext.generateImage()
+                }
                 self._drawingView?.requestedColorPicker = { [weak self] in
                     if let self, let interaction = self.interaction {
                         if let _ = interaction.colorPickerScreen {
@@ -2241,8 +2461,8 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                     if let self {
                         if case .clear = action {
                             let sourceView: UIView
-                            if let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View, let rightItemView = topButtonsView.rightItemView, let clearAllView = rightItemView.itemView(id: AnyHashable("clearAll")) {
-                                sourceView = clearAllView
+                            if let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View, let rightItemView = topButtonsView.rightItemView, rightItemView.itemView(id: AnyHashable("clearAll")) != nil {
+                                sourceView = rightItemView.menuSourceView
                             } else {
                                 sourceView = self.view
                             }
@@ -2256,7 +2476,7 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                                 }))
                             ]
                             let presentationData = self.presentationData.withUpdated(theme: defaultDarkPresentationTheme)
-                            let contextController = makeContextController(presentationData: presentationData, source: .reference(ReferenceContentSource(sourceView: sourceView, contentArea: UIScreen.main.bounds, customPosition: CGPoint(), actionsPosition: .bottom)), items: .single(ContextController.Items(content: .list(items))))
+                            let contextController = makeContextController(presentationData: presentationData, source: .reference(ReferenceContentSource(sourceView: sourceView, contentArea: mainWindowScreenBounds, customPosition: CGPoint(), actionsPosition: .bottom)), items: .single(ContextController.Items(content: .list(items))))
                             self.controller?.present(contextController, in: .window(.root))
                         } else {
                             self._drawingView?.performAction(action)
@@ -2406,6 +2626,7 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             self.endEditingTextEntityView = ActionSlot<(UUID, Bool)>()
             self.apply = ActionSlot<Void>()
             self.dismiss = ActionSlot<Void>()
+            self.externalAction = ActionSlot<DrawingScreenExternalAction>()
             
             self.presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
             
@@ -2421,7 +2642,7 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             self.dismiss.connect { [weak self] _ in
                 if let strongSelf = self {
                     if strongSelf.drawingView.canUndo || strongSelf.entitiesView.hasChanges {
-                        let sourceView = strongSelf.componentHost.findTaggedView(tag: cancelButtonTag) ?? strongSelf.view
+                        let sourceView = strongSelf.externalCancelSourceView ?? (strongSelf.componentHost.findTaggedView(tag: cancelButtonTag) as? GlassBarButtonComponent.View)?.menuSourceView ?? strongSelf.view
                         let items: [ContextMenuItem] = [
                             .action(ContextMenuActionItem(text: strongSelf.presentationData.strings.PhotoEditor_DiscardChanges, textColor: .destructive, icon: { _ in
                                 return nil
@@ -2431,7 +2652,7 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                             }))
                         ]
                         let presentationData = strongSelf.presentationData.withUpdated(theme: defaultDarkPresentationTheme)
-                        let contextController = makeContextController(presentationData: presentationData, source: .reference(ReferenceContentSource(sourceView: sourceView, contentArea: UIScreen.main.bounds, customPosition: CGPoint())), items: .single(ContextController.Items(content: .list(items))))
+                        let contextController = makeContextController(presentationData: presentationData, source: .reference(ReferenceContentSource(sourceView: sourceView, contentArea: mainWindowScreenBounds, customPosition: CGPoint())), items: .single(ContextController.Items(content: .list(items))))
                         strongSelf.controller?.present(contextController, in: .window(.root))
                     } else {
                         strongSelf.controller?.requestDismiss()
@@ -2445,6 +2666,13 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             
             self.view.disablesInteractiveKeyboardGestureRecognizer = true
             self.view.disablesInteractiveTransitionGestureRecognizer = true
+            defer {
+                if self.controller?.externalControls == true {
+                    self.interaction?.onTextEditingStarted = { [weak self] in
+                        self?.requestTextEditingUpdate()
+                    }
+                }
+            }
             
             guard let controller = self.controller else {
                 return
@@ -2478,7 +2706,12 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                         self.requestUpdate(transition: .easeInOut(duration: 0.2))
                     }
                 },
-                onTextEditingEnded: { _ in },
+                onTextEditingEnded: { [weak self] _ in
+                    guard let self, self.controller?.externalControls == true else {
+                        return
+                    }
+                    self.requestTextEditingUpdate()
+                },
                 editEntity: { _ in },
                 shouldDeleteEntity: { _ in
                     return true
@@ -2502,6 +2735,20 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             )
         }
         
+        func externalStateUpdated(mode: DrawingMode, controlsAreVisible: Bool) {
+            let externalState = DrawingScreen.ExternalControlsState(mode: DrawingScreen.Mode(mode), controlsAreVisible: controlsAreVisible)
+            if self.lastExternalState == externalState {
+                return
+            }
+            self.lastExternalState = externalState
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let controller = self.controller, self.lastExternalState == externalState else {
+                    return
+                }
+                controller.externalControlsStateUpdated?(externalState)
+            }
+        }
+
         func animateIn() {
             self.entitiesView.selectEntity(nil)
             
@@ -2511,7 +2758,10 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             if let view = self.componentHost.findTaggedView(tag: bottomGradientTag) {
                 view.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.3)
             }
-            if let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View {
+            if self.controller?.externalControls == true, let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View {
+                topButtonsView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.3)
+                ComponentTransition.easeInOut(duration: 0.3).animateBlur(layer: topButtonsView.layer, fromRadius: drawingScreenTopButtonsBlurRadius, toRadius: 0.0)
+            } else if let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View {
                 topButtonsView.layer.animateAlpha(from: 0.0, to: 1.0, duration: 0.3)
                 
                 if let leftItemView = topButtonsView.leftItemView {
@@ -2566,7 +2816,10 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                 }
                 view.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false)
             }
-            if let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View {
+            if self.controller?.externalControls == true, let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View {
+                topButtonsView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false)
+                ComponentTransition.easeInOut(duration: 0.3).animateBlur(layer: topButtonsView.layer, fromRadius: 0.0, toRadius: drawingScreenTopButtonsBlurRadius, removeOnCompletion: false)
+            } else if let topButtonsView = self.componentHost.findTaggedView(tag: topButtonsTag) as? GlassControlPanelComponent.View {
                 topButtonsView.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: false)
                 
                 if let view = topButtonsView.leftItemView {
@@ -2589,11 +2842,12 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                 view.layer.animatePosition(from: CGPoint(), to: CGPoint(x: -33.0, y: 0.0), duration: 0.3, removeOnCompletion: false, additive: true)
             }
             
+            let keepsColorsOut = self.controller?.externalControls == true
             for tag in colorTags {
                 if let view = self.componentHost.findTaggedView(tag: tag) {
                     view.alpha = 0.0
-                    view.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3)
-                    view.layer.animateScale(from: 1.0, to: 0.01, duration: 0.3)
+                    view.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.3, removeOnCompletion: !keepsColorsOut)
+                    view.layer.animateScale(from: 1.0, to: 0.01, duration: 0.3, removeOnCompletion: !keepsColorsOut)
                 }
             }
             
@@ -2630,6 +2884,15 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             return result
         }
         
+        func requestTextEditingUpdate() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self, let (layout, orientation) = self.validLayout else {
+                    return
+                }
+                self.containerLayoutUpdated(layout: layout, orientation: orientation, forceUpdate: true, transition: .easeInOut(duration: 0.2))
+            }
+        }
+
         func requestUpdate(transition: ComponentTransition = .immediate) {
             if let (layout, orientation) = self.validLayout {
                 self.containerLayoutUpdated(layout: layout, orientation: orientation, transition: transition)
@@ -2644,7 +2907,8 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             self.validLayout = (layout, orientation)
                         
             let environment = ViewControllerComponentContainer.Environment(
-                statusBarHeight: layout.statusBarHeight ?? 0.0,
+                statusBarHeight: layout.navigationBarStatusBarHeight ?? 0.0,
+                fullStatusBarHeight: layout.statusBarHeight ?? 0.0,
                 navigationHeight: 0.0,
                 safeInsets: UIEdgeInsets(
                     top: layout.intrinsicInsets.top + layout.safeInsets.top,
@@ -2652,6 +2916,8 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                     bottom: layout.intrinsicInsets.bottom + layout.safeInsets.bottom,
                     right: layout.safeInsets.right
                 ),
+                reservedCorners: layout.reservedCorners,
+                navigationBarTrailingButtonsInset: layout.navigationBarTrailingButtonsInset,
                 additionalInsets: layout.additionalInsets,
                 inputHeight: layout.inputHeight ?? 0.0,
                 metrics: layout.metrics,
@@ -2679,6 +2945,7 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                     DrawingScreenComponent(
                         context: self.context,
                         sourceHint: controller.sourceHint,
+                        externalControls: controller.externalControls,
                         existingStickerPickerInputData: controller.existingStickerPickerInputData,
                         isVideo: controller.isVideo,
                         isAvatar: controller.isAvatar,
@@ -2713,6 +2980,10 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                         presentGallery: self.controller?.presentGallery,
                         apply: self.apply,
                         dismiss: self.dismiss,
+                        externalAction: self.externalAction,
+                        externalStateUpdated: { [weak self] mode, controlsAreVisible in
+                            self?.externalStateUpdated(mode: mode, controlsAreVisible: controlsAreVisible)
+                        },
                         presentColorPicker: { [weak self] initialColor in
                             self?.interaction?.presentColorPicker(initialColor: initialColor)
                         },
@@ -2747,6 +3018,7 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
                 
                 if isFirstTime {
                     self.animateIn()
+                    self.updateState.invoke(self.drawingView.internalState)
                 }
             }
             
@@ -2760,10 +3032,60 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
     
     public enum SourceHint {
         case storyEditor
+        case chatMediaEditor
+    }
+
+    public enum Mode: Equatable {
+        case drawing
+        case sticker
+        case text
+
+        fileprivate init(_ mode: DrawingMode) {
+            switch mode {
+            case .drawing:
+                self = .drawing
+            case .sticker:
+                self = .sticker
+            case .text:
+                self = .text
+            }
+        }
+
+        fileprivate var drawingMode: DrawingMode {
+            switch self {
+            case .drawing:
+                return .drawing
+            case .sticker:
+                return .sticker
+            case .text:
+                return .text
+            }
+        }
+    }
+
+    public struct ExternalControlsState: Equatable {
+        public let mode: Mode
+        public let controlsAreVisible: Bool
+    }
+
+    public var externalControlsStateUpdated: ((ExternalControlsState) -> Void)?
+
+    public func setMode(_ mode: Mode) {
+        self.node.externalAction.invoke(.mode(mode.drawingMode))
+    }
+
+    public func requestExternalApply() {
+        self.node.externalAction.invoke(.apply)
+    }
+
+    public func requestExternalDismiss(sourceView: UIView?) {
+        self.node.externalCancelSourceView = sourceView
+        self.node.externalAction.invoke(.dismiss)
     }
     
     private let context: AccountContext
     private let sourceHint: SourceHint?
+    fileprivate let externalControls: Bool
     private let size: CGSize
     private let originalSize: CGSize
     private let isVideo: Bool
@@ -2780,9 +3102,10 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
     
     public var presentGallery: (() -> Void)?
     
-    public init(context: AccountContext, sourceHint: SourceHint? = nil, size: CGSize, originalSize: CGSize, isVideo: Bool, isAvatar: Bool, drawingView: DrawingView?, entitiesView: (UIView & TGPhotoDrawingEntitiesView)?, selectionContainerView: DrawingSelectionContainerView?, existingStickerPickerInputData: Promise<StickerPickerInput>? = nil) {
+    public init(context: AccountContext, sourceHint: SourceHint? = nil, externalControls: Bool = false, size: CGSize, originalSize: CGSize, isVideo: Bool, isAvatar: Bool, drawingView: DrawingView?, entitiesView: (UIView & TGPhotoDrawingEntitiesView)?, selectionContainerView: DrawingSelectionContainerView?, existingStickerPickerInputData: Promise<StickerPickerInput>? = nil) {
         self.context = context
         self.sourceHint = sourceHint
+        self.externalControls = externalControls
         self.size = size
         self.originalSize = originalSize
         self.isVideo = isVideo
@@ -2942,6 +3265,14 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
     }
     
     public func adapterContainerLayoutUpdatedSize(_ size: CGSize, intrinsicInsets: UIEdgeInsets, safeInsets: UIEdgeInsets, statusBarHeight: CGFloat, inputHeight: CGFloat, orientation: UIInterfaceOrientation, isRegular: Bool, animated: Bool) {
+        let reservedCorners = reservedCornersForHostedLayout(size: size, orientation: orientation)
+        var statusBarHeight = statusBarHeight
+        if let island = reservedCorners.topRight, safeInsets.left.isZero, safeInsets.right.isZero {
+            // iPhone Duo unfolded portrait: the host reports the system's 2pt status sliver beside the status island,
+            // while the window takes the island's height as the status height. Taking it here too puts the top row on
+            // the island's clock line, as when the screen is presented directly.
+            statusBarHeight = max(statusBarHeight, island.height)
+        }
         var intrinsicInsets = intrinsicInsets
         if intrinsicInsets.top.isZero {
             intrinsicInsets.top = statusBarHeight
@@ -2952,6 +3283,10 @@ public class DrawingScreen: ViewController, TGPhotoDrawingInterfaceController, U
             deviceMetrics: DeviceMetrics(screenSize: size, scale: UIScreen.main.scale, statusBarHeight: statusBarHeight, onScreenNavigationHeight: nil),
             intrinsicInsets: intrinsicInsets,
             safeInsets: safeInsets,
+            // The host's screen corners (iPhone Duo's status corner or island; `.none` elsewhere), so the screen keeps its
+            // top row beside the island as it does when presented directly.
+            reservedCorners: reservedCorners,
+            division: nil,
             additionalInsets: .zero,
             statusBarHeight: statusBarHeight,
             inputHeight: inputHeight,
@@ -3012,6 +3347,7 @@ public final class DrawingToolsInteraction {
     
     private let onInteractionUpdated: (Bool) -> Void
     private let onTextEditingEnded: (Bool) -> Void
+    public var onTextEditingStarted: (() -> Void)?
     private let editEntity: (DrawingEntity) -> Void
     private let shouldDeleteEntity: (DrawingEntity) -> Bool
     
@@ -3107,6 +3443,7 @@ public final class DrawingToolsInteraction {
             if self.currentMenuController != nil {
                 if let entityView = entityView as? DrawingTextEntityView {
                     entityView.beginEditing(accessoryView: self.textEditAccessoryView)
+                    self.onTextEditingStarted?()
                 }
                 return
             }
@@ -3157,6 +3494,7 @@ public final class DrawingToolsInteraction {
                 actions.append(ContextMenuAction(content: .text(title: presentationData.strings.Paint_Edit, accessibilityLabel: presentationData.strings.Paint_Edit), action: { [weak self, weak entityView] in
                     if let self, let entityView {
                         entityView.beginEditing(accessoryView: self.textEditAccessoryView)
+                        self.onTextEditingStarted?()
                         self.entitiesView.selectEntity(entityView.entity)
                     }
                 }))
@@ -3250,6 +3588,7 @@ public final class DrawingToolsInteraction {
         if let entityView = self.entitiesView.getView(for: entity.uuid) {
             if let textEntityView = entityView as? DrawingTextEntityView {
                 textEntityView.beginEditing(accessoryView: self.textEditAccessoryView)
+                self.onTextEditingStarted?()
                 
                 textEntityView.replaceWithImage = { [weak self] image, isSticker in
                     if let self {
@@ -3597,6 +3936,17 @@ public final class DrawingToolsInteraction {
             if let componentView = self.textEditAccessoryHost.view, componentView.superview != nil {
                 isFirstTime = false
             }
+            var accessoryBandMinX: CGFloat = 0.0
+            var accessoryBandWidth = layout.size.width
+            var accessoryWidth = layout.size.width
+            if layout.safeInsets.left != layout.safeInsets.right {
+                accessoryBandMinX = layout.safeInsets.left
+                accessoryBandWidth = layout.size.width - layout.safeInsets.left - layout.safeInsets.right
+            } else if let window = self.entitiesView.window, layout.size.width < window.bounds.width - 0.5 {
+                let canvasFrame = self.entitiesView.convert(self.entitiesView.bounds, to: window)
+                accessoryBandMinX = canvasFrame.midX - layout.size.width / 2.0
+                accessoryWidth = window.bounds.width
+            }
             UIView.performWithoutAnimation {
                 let accessorySize = self.textEditAccessoryHost.update(
                     transition: isFirstTime ? .immediate : .easeInOut(duration: 0.2),
@@ -3715,15 +4065,15 @@ public final class DrawingToolsInteraction {
                     ),
                     environment: {},
                     forceUpdate: true,
-                    containerSize: CGSize(width: layout.size.width, height: 44.0)
+                    containerSize: CGSize(width: accessoryBandWidth, height: 44.0)
                 )
                 if let componentView = self.textEditAccessoryHost.view {
                     if componentView.superview == nil {
                         self.textEditAccessoryView.addSubview(componentView)
                     }
                     
-                    self.textEditAccessoryView.frame = CGRect(origin: .zero, size: accessorySize)
-                    componentView.frame = CGRect(origin: .zero, size: accessorySize)
+                    self.textEditAccessoryView.frame = CGRect(origin: .zero, size: CGSize(width: accessoryWidth, height: accessorySize.height))
+                    componentView.frame = CGRect(origin: CGPoint(x: accessoryBandMinX, y: 0.0), size: accessorySize)
                 }
             }
         }

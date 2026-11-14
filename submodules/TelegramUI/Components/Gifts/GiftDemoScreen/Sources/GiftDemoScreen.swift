@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -313,8 +312,7 @@ private final class DemoSheetContent: CombinedComponent {
                 color: theme.list.itemCheckColors.foregroundColor,
                 startingPosition: .begin,
                 size: CGSize(width: 28.0, height: 28.0),
-                playOnce: state.playButtonAnimation,
-                lottieSettings: component.context.lottieRenderingSettings
+                playOnce: state.playButtonAnimation
             ))))
             buttonTitle.append(AnyComponentWithIdentity(id: 1, component: AnyComponent(ButtonTextContentComponent(
                 text: strings.Gift_Demo_Understood,
@@ -406,7 +404,7 @@ private final class DemoSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         hasInputHeight: !environment.inputHeight.isZero,
                         regularMetricsSize: nil,
                         dismiss: { animated in

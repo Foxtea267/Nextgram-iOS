@@ -60,7 +60,7 @@ private enum LanguageListEntry: Comparable, Identifiable {
         case let .localizationTitle(text, section):
             return ItemListSectionHeaderItem(presentationData: ItemListPresentationData(presentationData), text: text, sectionId: section)
         case let .localization(_, info, type, isEnabled):
-            return LocalizationListItem(presentationData: ItemListPresentationData(presentationData), id: info?.languageCode ?? "", title: info?.title ?? " ", subtitle: info?.localizedTitle ?? " ", checked: false, activity: false, loading: info == nil, editing: LocalizationListItemEditing(editable: false, editing: false, revealed: false, reorderable: false), enabled: isEnabled, sectionId: type == .official ? LanguageListSection.official.rawValue : LanguageListSection.unofficial.rawValue, alwaysPlain: searchMode, action: {
+            return LocalizationListItem(presentationData: ItemListPresentationData(presentationData), systemStyle: .glass, id: info?.languageCode ?? "", title: info?.title ?? " ", subtitle: info?.localizedTitle ?? " ", checked: false, activity: false, loading: info == nil, editing: LocalizationListItemEditing(editable: false, editing: false, revealed: false, reorderable: false), enabled: isEnabled, sectionId: type == .official ? LanguageListSection.official.rawValue : LanguageListSection.unofficial.rawValue, alwaysPlain: searchMode, action: {
                 if let info {
                     selectLocalization(info)
                 }
@@ -452,9 +452,11 @@ final class LanguageSelectionScreenNode: ViewControllerTracingNode {
         var listInsets = layout.insets(options: [.input])
         listInsets.top += navigationBarHeight
         if layout.size.width >= 320.0 {
-            let inset = max(16.0, floor((layout.size.width - 674.0) / 2.0))
-            listInsets.left += inset
-            listInsets.right += inset
+            // iPhone Duo: a side with a side strip keeps the list 16pt clear of it; without a strip both
+            // margins are today's.
+            let margins = layout.listSideMargins(base: max(16.0, floor((layout.size.width - 674.0) / 2.0)))
+            listInsets.left += margins.left
+            listInsets.right += margins.right
         } else {
             listInsets.left += layout.safeInsets.left
             listInsets.right += layout.safeInsets.right

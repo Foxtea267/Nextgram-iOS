@@ -296,6 +296,13 @@ private final class ItemListInviteLinkUsageLimitItemNode: ListViewItemNode {
                 if let strongSelf = self {
                     strongSelf.item = item
                     strongSelf.layoutParams = params
+                    // VoiceOver: the slider with its stop labels is one adjustable element named by its section,
+                    // valued by the current stop; swiping up/down moves a stop, as dragging does.
+                    strongSelf.isAccessibilityElement = true
+                    strongSelf.accessibilityLabel = item.strings.InviteLink_Create_UsersLimit
+                    strongSelf.accessibilityTraits = item.enabled ? .adjustable : [.adjustable, .notEnabled]
+                    let accessibilityStops: [String] = ["1", "10", "100", item.strings.InviteLink_Create_UsersLimitNoLimit]
+                    strongSelf.accessibilityValue = !customTextString.isEmpty ? customTextString : accessibilityStops[max(0, min(accessibilityStops.count - 1, item.value.position))]
                     
                     strongSelf.backgroundNode.backgroundColor = item.theme.list.itemBlocksBackgroundColor
                     strongSelf.topStripeNode.backgroundColor = item.theme.list.itemBlocksSeparatorColor
@@ -341,7 +348,7 @@ private final class ItemListInviteLinkUsageLimitItemNode: ListViewItemNode {
                     strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: item.systemStyle == .glass) : nil
                     
                     strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                     strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
                     strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width - bottomStripeInset, height: separatorHeight))
                     
@@ -383,7 +390,7 @@ private final class ItemListInviteLinkUsageLimitItemNode: ListViewItemNode {
                         }
                         
                         sliderView.frame = CGRect(origin: CGPoint(x: params.leftInset + 15.0, y: 37.0), size: CGSize(width: params.width - params.leftInset - params.rightInset - 15.0 * 2.0, height: 44.0))
-                        sliderView.hitTestEdgeInsets = UIEdgeInsets(top: -sliderView.frame.minX, left: 0.0, bottom: 0.0, right: -sliderView.frame.minX)
+                        sliderView.hitTestEdgeInsets = UIEdgeInsets(top: -sliderView.frame.minX, left: 0.0, bottom: 0.0, right: -(params.rightInset + 15.0))
                         
                         strongSelf.updateSliderView()
                     }
@@ -398,6 +405,24 @@ private final class ItemListInviteLinkUsageLimitItemNode: ListViewItemNode {
     
     override func animateRemoved(_ currentTimestamp: Double, duration: Double) {
         self.layer.animateAlpha(from: 1.0, to: 0.0, duration: 0.15, removeOnCompletion: false)
+    }
+    
+    override func accessibilityIncrement() {
+        self.accessibilityStep(1)
+    }
+    
+    override func accessibilityDecrement() {
+        self.accessibilityStep(-1)
+    }
+    
+    private func accessibilityStep(_ delta: Int) {
+        guard let item = self.item, item.enabled else {
+            return
+        }
+        let position = max(0, min(3, item.value.position + delta))
+        if position != item.value.position {
+            item.updated(InviteLinkUsageLimit(position: position))
+        }
     }
     
     @objc func sliderValueChanged() {

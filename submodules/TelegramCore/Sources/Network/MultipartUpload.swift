@@ -1,6 +1,6 @@
 import Foundation
 import Postbox
-import TelegramApi
+internal import TelegramApi
 import SwiftSignalKit
 import MtProtoKit
 import CryptoUtils
@@ -11,7 +11,7 @@ import NagramSettings
 private typealias SignalKitTimer = SwiftSignalKit.Timer
 
 
-private struct UploadPart {
+struct UploadPart {
     let fileId: Int64
     let index: Int
     let data: Data
@@ -26,7 +26,7 @@ private func md5(_ data: Data) -> Data {
     }
 }
 
-private final class MultipartUploadState {
+final class MultipartUploadState {
     let aesKey: Data
     var aesIv: Data
     var effectiveSize: Int64 = 0
@@ -81,7 +81,7 @@ private final class MultipartUploadState {
     }
 }
 
-private struct MultipartIntermediateResult {
+struct MultipartIntermediateResult {
     let id: Int64
     let partCount: Int32
     let md5Digest: String
@@ -89,7 +89,7 @@ private struct MultipartIntermediateResult {
     let bigTotalParts: Int?
 }
 
-private enum MultipartUploadData {
+enum MultipartUploadData {
     case resourceData(MediaResourceData)
     case data(Data)
     
@@ -111,13 +111,13 @@ private enum MultipartUploadData {
     }
 }
 
-private enum HeaderPartState {
+enum HeaderPartState {
     case notStarted
     case uploading
     case ready
 }
 
-private final class MultipartUploadManager {
+final class MultipartUploadManager {
     let parallelParts: Int
     var defaultPartSize: Int64
     var bigTotalParts: Int?
@@ -142,10 +142,13 @@ private final class MultipartUploadManager {
     var resourceData: MultipartUploadData?
     
     var headerPartState: HeaderPartState
+    let headerSize: () -> Int64
+    var heldHeaderLength: Int64 = 0
+    var pendingHeaderOffsets: [Int64] = []
     
     let state: MultipartUploadState
     
-    init(headerSize: Int32, data: Signal<MultipartUploadData, NoError>, encryptionKey: SecretFileEncryptionKey?, hintFileSize: Int64?, hintFileIsLarge: Bool, forceNoBigParts: Bool, useLargerParts: Bool, increaseParallelParts: Bool, uploadPart: @escaping (UploadPart) -> Signal<Void, UploadPartError>, progress: @escaping (Float) -> Void, completed: @escaping (MultipartIntermediateResult?) -> Void) {
+    init(headerSize: @escaping () -> Int64, data: Signal<MultipartUploadData, NoError>, encryptionKey: SecretFileEncryptionKey?, hintFileSize: Int64?, hintFileIsLarge: Bool, forceNoBigParts: Bool, useLargerParts: Bool, increaseParallelParts: Bool, uploadPart: @escaping (UploadPart) -> Signal<Void, UploadPartError>, progress: @escaping (Float) -> Void, completed: @escaping (MultipartIntermediateResult?) -> Void) {
         self.dataSignal = data
         
         var fileId: Int64 = 0
@@ -168,7 +171,8 @@ private final class MultipartUploadManager {
         self.progress = progress
         self.completed = completed
         
-        if headerSize == 0 {
+        self.headerSize = headerSize
+        if headerSize() == 0 {
             self.headerPartState = .ready
         } else {
             self.headerPartState = .notStarted
@@ -226,6 +230,12 @@ private final class MultipartUploadManager {
     }
     
     func checkState() {
+        if let resourceData = self.resourceData, !resourceData.complete, !self.bigParts, !self.forceNoBigParts, resourceData.size > 10 * 1024 * 1024, self.uploadedParts.isEmpty, self.uploadingParts.isEmpty {
+            self.defaultPartSize = 512 * 1024
+            self.bigTotalParts = nil
+            self.bigParts = true
+            self.committedOffset = 0
+        }
         if let resourceData = self.resourceData, resourceData.complete && resourceData.size != 0 {
             if self.committedOffset == 0 && self.uploadedParts.isEmpty && self.uploadingParts.isEmpty {
                 if resourceData.size > 10 * 1024 * 1024, !self.forceNoBigParts {
@@ -270,45 +280,26 @@ private final class MultipartUploadManager {
                     }
                     self.completed(MultipartIntermediateResult(id: self.fileId, partCount: effectivePartCount, md5Digest: "", size: resourceData.size, bigTotalParts: currentBigTotalParts))
                 case .notStarted:
-                    let partOffset: Int64 = 0
-                    let partSize = min(resourceData.size - partOffset, self.defaultPartSize)
-                    let partIndex = Int(partOffset / self.defaultPartSize)
-                    let fileData: Data?
-                    switch resourceData {
-                        case let .resourceData(data):
-                            fileData = try? Data(contentsOf: URL(fileURLWithPath: data.path), options: [.alwaysMapped])
-                        case let .data(data):
-                            fileData = data
+                    let headerLength = self.heldHeaderLength > 0 ? self.heldHeaderLength : self.defaultPartSize
+                    var offsets = Array(stride(from: Int64(0), to: min(headerLength, resourceData.size), by: Int(self.defaultPartSize)))
+                    if offsets.isEmpty {
+                        offsets = [0]
                     }
-                    if let fileData = fileData {
-                        let partData = self.state.transformHeader(data: fileData.subdata(in: Int(partOffset) ..< Int(partOffset + partSize)))
-                        var currentBigTotalParts: Int? = nil
-                        if self.bigParts {
-                            let totalParts = (resourceData.size / self.defaultPartSize) + (resourceData.size % self.defaultPartSize == 0 ? 0 : 1)
-                            currentBigTotalParts = Int(totalParts)
-                        }
-                        self.headerPartState = .uploading
-                        let part = self.uploadPart(UploadPart(fileId: self.fileId, index: partIndex, data: partData, bigTotalParts: currentBigTotalParts, bigPart: self.bigParts))
-                        |> deliverOn(self.queue)
-                        self.uploadingParts[0] = (partSize, part.startStrict(error: { [weak self] _ in
-                            self?.completed(nil)
-                        }, completed: { [weak self] in
-                            if let strongSelf = self {
-                                strongSelf.uploadingParts.removeValue(forKey: 0)?.1.dispose()
-                                strongSelf.headerPartState = .ready
-                                strongSelf.checkState()
-                            }
-                        }))
-                    }
+                    self.pendingHeaderOffsets = offsets
+                    self.headerPartState = .uploading
+                    self.uploadPendingHeaderParts(resourceData: resourceData)
                 case .uploading:
-                    break
+                    self.uploadPendingHeaderParts(resourceData: resourceData)
             }
         } else if let resourceData = self.resourceData, self.state.aesKey.isEmpty || resourceData.complete {
             while uploadingParts.count < self.parallelParts {
                 switch self.headerPartState {
                     case .notStarted:
-                        if self.committedOffset == 0, !resourceData.complete {
-                            self.committedOffset += self.defaultPartSize
+                        if self.committedOffset == 0, !resourceData.complete, resourceData.size > 0 {
+                            let headerSize = max(1, self.headerSize())
+                            let headerParts = headerSize / self.defaultPartSize + (headerSize % self.defaultPartSize == 0 ? 0 : 1)
+                            self.heldHeaderLength = headerParts * self.defaultPartSize
+                            self.committedOffset += self.heldHeaderLength
                         }
                     case .ready, .uploading:
                         break
@@ -327,28 +318,7 @@ private final class MultipartUploadManager {
                 
                 if nextOffset < resourceData.size && partSize > 0 && (resourceData.complete || partSize == self.defaultPartSize) {
                     let partIndex = Int(partOffset / self.defaultPartSize)
-                    let partData: Data?
-                    switch resourceData {
-                        case let .resourceData(data):
-                            if let file = ManagedFile(queue: nil, path: data.path, mode: .read) {
-                                let _ = file.seek(position: Int64(partOffset))
-                                let data = file.readData(count: Int(partSize))
-                                if data.count == partSize {
-                                    partData = data
-                                } else {
-                                    partData = nil
-                                }
-                            } else {
-                                partData = nil
-                            }
-                        case let .data(data):
-                            if data.count >= partOffset + partSize {
-                                partData = data.subdata(in: Int(partOffset) ..< Int(partOffset + partSize))
-                            } else {
-                                partData = nil
-                            }
-                    }
-                    if let partData = partData {
+                    if let partData = self.readPart(resourceData: resourceData, offset: partOffset, size: partSize) {
                         let partData = self.state.transform(data: partData)
                         var currentBigTotalParts = self.bigTotalParts
                         if self.bigParts && resourceData.complete && partOffset + partSize == resourceData.size {
@@ -384,6 +354,54 @@ private final class MultipartUploadManager {
                     break
                 }
             }
+        }
+    }
+    
+    private func readPart(resourceData: MultipartUploadData, offset: Int64, size: Int64) -> Data? {
+        switch resourceData {
+            case let .resourceData(data):
+                guard let file = ManagedFile(queue: nil, path: data.path, mode: .read) else {
+                    return nil
+                }
+                let _ = file.seek(position: offset)
+                let partData = file.readData(count: Int(size))
+                return partData.count == size ? partData : nil
+            case let .data(data):
+                if data.count >= offset + size {
+                    return data.subdata(in: Int(offset) ..< Int(offset + size))
+                } else {
+                    return nil
+                }
+        }
+    }
+    
+    private func uploadPendingHeaderParts(resourceData: MultipartUploadData) {
+        while !self.pendingHeaderOffsets.isEmpty && self.uploadingParts.count < self.parallelParts {
+            let partOffset = self.pendingHeaderOffsets.removeFirst()
+            let partSize = min(resourceData.size - partOffset, self.defaultPartSize)
+            guard let fileData = self.readPart(resourceData: resourceData, offset: partOffset, size: partSize) else {
+                self.pendingHeaderOffsets.removeAll()
+                self.completed(nil)
+                return
+            }
+            let partData = self.state.transformHeader(data: fileData)
+            var currentBigTotalParts: Int? = nil
+            if self.bigParts {
+                currentBigTotalParts = Int(resourceData.size / self.defaultPartSize) + (resourceData.size % self.defaultPartSize == 0 ? 0 : 1)
+            }
+            let part = self.uploadPart(UploadPart(fileId: self.fileId, index: Int(partOffset / self.defaultPartSize), data: partData, bigTotalParts: currentBigTotalParts, bigPart: self.bigParts))
+            |> deliverOn(self.queue)
+            self.uploadingParts[partOffset] = (partSize, part.startStrict(error: { [weak self] _ in
+                self?.completed(nil)
+            }, completed: { [weak self] in
+                if let strongSelf = self {
+                    strongSelf.uploadingParts.removeValue(forKey: partOffset)?.1.dispose()
+                    if strongSelf.pendingHeaderOffsets.isEmpty && strongSelf.uploadingParts.isEmpty {
+                        strongSelf.headerPartState = .ready
+                    }
+                    strongSelf.checkState()
+                }
+            }))
         }
     }
 }
@@ -442,18 +460,19 @@ func multipartUpload(network: Network, postbox: Postbox, source: MultipartUpload
             }
             
             let dataSignal: Signal<MultipartUploadData, NoError>
-            let headerSize: Int32
+            let headerSize: () -> Int64
             let fetchedResource: Signal<Void, FetchResourceError>
             switch source {
                 case let .resource(resource):
                     dataSignal = postbox.mediaBox.resourceData(resource.resource, option: .incremental(waitUntilFetchStatus: true)) |> map { MultipartUploadData.resourceData($0) }
-                    headerSize = resource.resource.headerSize
+                    let resourceValue = resource.resource
+                    headerSize = { Int64(resourceValue.headerSize) }
                     fetchedResource = fetchedMediaResource(mediaBox: postbox.mediaBox, userLocation: .other, userContentType: .other, reference: resource)
                     |> map { _ in }
                 case let .tempFile(file):
                     if let size = fileSize(file.path) {
                         dataSignal = .single(.resourceData(MediaResourceData(path: file.path, offset: 0, size: size, complete: true)))
-                        headerSize = 0
+                        headerSize = { 0 }
                         fetchedResource = .complete()
                     } else {
                         subscriber.putError(.generic)
@@ -461,10 +480,10 @@ func multipartUpload(network: Network, postbox: Postbox, source: MultipartUpload
                     }
                 case let .data(data):
                     dataSignal = .single(.data(data))
-                    headerSize = 0
+                    headerSize = { 0 }
                     fetchedResource = .complete()
                 case let .custom(signal):
-                    headerSize = 1024
+                    headerSize = { 1024 }
                     dataSignal = signal
                     |> map { data in
                         print("**data \(data) \(data.complete)")

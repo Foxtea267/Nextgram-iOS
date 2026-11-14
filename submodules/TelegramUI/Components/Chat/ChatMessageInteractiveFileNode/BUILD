@@ -11,7 +11,6 @@ swift_library(
     ],
     deps = [
         "//submodules/AsyncDisplayKit",
-        "//submodules/Postbox",
         "//submodules/SSignalKit/SwiftSignalKit",
         "//submodules/Display",
         "//submodules/TelegramCore",
@@ -47,6 +46,7 @@ swift_library(
         "//submodules/AudioWaveform",
         "//submodules/DeviceProximity",
         "//Nagram/Settings:NagramSettings", # MARK: NAGRAM // MARK: NEXTGRAM
+        "//submodules/TelegramUI/Components/StaticGlassBackground",
     ],
     visibility = [
         "//visibility:public",

@@ -1,7 +1,4 @@
 
-[submodule "submodules/rlottie/rlottie"]
-	path = submodules/rlottie/rlottie
-	url = https://github.com/TelegramMessenger/rlottie.git
 [submodule "build-system/bazel-rules/rules_apple"]
 	path = build-system/bazel-rules/rules_apple
 url=https://github.com/ali-fareed/rules_apple.git
@@ -37,4 +34,4 @@ url=https://github.com/bazelbuild/rules_swift.git
 	url = https://github.com/dkaraush/tlottie.git
 [submodule "third-party/mtproto-engine"]
 	path = third-party/mtproto-engine
-	url = https://github.com/macosswift/mtproto-engine.git
+	url = https://github.com/TelegramMessenger/mtproto-engine.git

@@ -11,7 +11,6 @@ swift_library(
     ],
     deps = [
         "//submodules/AsyncDisplayKit",
-        "//submodules/LottieSettings:LottieSettings",
         "//submodules/Display",
         "//submodules/TelegramCore",
         "//submodules/SSignalKit/SwiftSignalKit",
@@ -71,6 +70,8 @@ swift_library(
         "//submodules/TelegramUI/Components/AlertComponent/AlertTransferHeaderComponent",
         "//submodules/TelegramUI/Components/AlertComponent/AlertTableComponent",
         "//submodules/TelegramUI/Components/AlertComponent/AlertInputFieldComponent",
+        "//submodules/WalletContext",
+        "//submodules/PhoneNumberFormat",
         "//submodules/TelegramUI/Components/GlassControls",
         "//submodules/TelegramUI/Components/EdgeEffect",
         "//submodules/Components/ResizableSheetComponent",

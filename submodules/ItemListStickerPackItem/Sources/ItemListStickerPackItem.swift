@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -378,7 +377,7 @@ class ItemListStickerPackItemNode: ItemListRevealOptionsItemNode {
             
             let packRevealOptions: [ItemListRevealOption]
             if item.editing.editable && item.enabled && !item.editing.editing {
-                packRevealOptions = [ItemListRevealOption(key: 0, title: item.presentationData.strings.Common_Delete, icon: .none, color: item.presentationData.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.presentationData.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.presentationData.theme.list.itemSecondaryTextColor)]
+                packRevealOptions = [ItemListRevealOption(key: 0, title: item.presentationData.strings.Common_Delete, icon: .none, color: item.presentationData.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.presentationData.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.presentationData.theme.list.itemSecondaryTextColor, isDestructive: true)]
             } else {
                 packRevealOptions = []
             }
@@ -556,11 +555,16 @@ class ItemListStickerPackItemNode: ItemListRevealOptionsItemNode {
                     strongSelf.activateArea.frame = CGRect(origin: CGPoint(x: params.leftInset, y: 0.0), size: CGSize(width: params.width - params.leftInset - params.rightInset, height: layout.contentSize.height))
                     strongSelf.activateArea.accessibilityLabel = titleAttributedString?.string ?? ""
                     strongSelf.activateArea.accessibilityValue = statusAttributedString?.string ?? ""
-                    if item.enabled {
-                        strongSelf.activateArea.accessibilityTraits = []
-                    } else {
-                        strongSelf.activateArea.accessibilityTraits = .notEnabled
+                    var accessibilityTraits: UIAccessibilityTraits = []
+                    if item.action != nil {
+                        accessibilityTraits.insert(.button)
                     }
+                    if !item.enabled {
+                        accessibilityTraits.insert(.notEnabled)
+                    }
+                    strongSelf.activateArea.accessibilityTraits = accessibilityTraits
+                    let accessibilityCustomActions = strongSelf.revealOptionsAccessibilityCustomActions(packRevealOptions)
+                    strongSelf.activateArea.view.accessibilityCustomActions = accessibilityCustomActions.isEmpty ? nil : accessibilityCustomActions
                     
                     if fileUpdated {
                         strongSelf.currentThumbnailItem = thumbnailItem
@@ -791,7 +795,7 @@ class ItemListStickerPackItemNode: ItemListRevealOptionsItemNode {
                     
                     strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
                     strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: strongSelf.backgroundNode.frame.size)
-                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                     transition.updateFrame(node: strongSelf.topStripeNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight)))
                     transition.updateFrame(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width - bottomStripeInset - params.rightInset - separatorRightInset, height: separatorHeight)))
                     
@@ -824,7 +828,7 @@ class ItemListStickerPackItemNode: ItemListRevealOptionsItemNode {
                                 if let current = strongSelf.animationNode {
                                     animationNode = current
                                 } else {
-                                    animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: item.context.lottieRenderingSettings)
+                                    animationNode = DefaultAnimatedStickerNodeImpl()
                                     animationNode.started = { [weak self] in
                                         self?.removePlaceholder(animated: false)
                                     }
@@ -879,7 +883,7 @@ class ItemListStickerPackItemNode: ItemListRevealOptionsItemNode {
                         strongSelf.imageNode.setSignal(updatedImageSignal)
                     }
                     
-                    strongSelf.updateRevealOptionsHighlightedBackgroundFrame(strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -UIScreenPixel), size: CGSize(width: params.width, height: strongSelf.backgroundNode.frame.height + UIScreenPixel + UIScreenPixel)), transition: transition)
+                    strongSelf.updateRevealOptionsHighlightedBackgroundFrame(strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: -UIScreenPixel), size: CGSize(width: params.width, height: strongSelf.backgroundNode.frame.height + UIScreenPixel + UIScreenPixel)), transition: transition, aboveNodes: [strongSelf.bottomStripeNode, strongSelf.topStripeNode, strongSelf.backgroundNode])
                     
                     strongSelf.updateLayout(size: layout.contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
                     
@@ -898,7 +902,7 @@ class ItemListStickerPackItemNode: ItemListRevealOptionsItemNode {
         super.setHighlighted(highlighted, at: point, animated: animated)
         
         self.isHighlighted = highlighted
-        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted || self.isRevealOptionsActive, transition: (animated && !highlighted) ? .animated(duration: 0.3, curve: .easeInOut) : .immediate, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
+        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted, transition: (animated && !highlighted) ? .animated(duration: 0.3, curve: .easeInOut) : .immediate, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
     }
     
     override func animateInsertion(_ currentTimestamp: Double, duration: Double, options: ListViewItemAnimationOptions) {
@@ -942,7 +946,7 @@ class ItemListStickerPackItemNode: ItemListRevealOptionsItemNode {
     override func revealOptionsActiveStateUpdated(isActive: Bool, transition: ContainedViewLayoutTransition) {
         super.revealOptionsActiveStateUpdated(isActive: isActive, transition: transition)
 
-        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted || self.isRevealOptionsActive, transition: transition, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
+        self.updateRevealOptionsHighlightedBackgroundNode(self.highlightedBackgroundNode, isHighlighted: self.isHighlighted, transition: transition, aboveNodes: [self.bottomStripeNode, self.topStripeNode, self.backgroundNode])
     }
     
     override func revealOptionsInteractivelyOpened() {

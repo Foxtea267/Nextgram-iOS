@@ -249,6 +249,7 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
         self.infoButtonNode.hitTestSlop = UIEdgeInsets(top: -6.0, left: -6.0, bottom: -6.0, right: -10.0)
         
         self.accessibilityArea = AccessibilityAreaNode()
+        self.accessibilityArea.accessibilityTraits = .button
         
         super.init(layerBacked: false, rotated: false, seeThrough: false)
         
@@ -285,35 +286,7 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
         }
     }
     
-    override func setHighlighted(_ highlighted: Bool, at point: CGPoint, animated: Bool) {
-        super.setHighlighted(highlighted, at: point, animated: animated)
-        
-        if highlighted {
-            self.highlightedBackgroundNode.alpha = 1.0
-            if self.highlightedBackgroundNode.supernode == nil {
-                if self.backgroundNode.supernode != nil {
-                    self.insertSubnode(self.highlightedBackgroundNode, aboveSubnode: self.backgroundNode)
-                } else {
-                    self.insertSubnode(self.highlightedBackgroundNode, at: 0)
-                }
-            }
-        } else {
-            if self.highlightedBackgroundNode.supernode != nil {
-                if animated {
-                    self.highlightedBackgroundNode.layer.animateAlpha(from: self.highlightedBackgroundNode.alpha, to: 0.0, duration: 0.4, completion: { [weak self] completed in
-                        if let strongSelf = self {
-                            if completed {
-                                strongSelf.highlightedBackgroundNode.removeFromSupernode()
-                            }
-                        }
-                    })
-                    self.highlightedBackgroundNode.alpha = 0.0
-                } else {
-                    self.highlightedBackgroundNode.removeFromSupernode()
-                }
-            }
-        }
-    }
+
     
     func asyncLayout() -> (_ item: CallListCallItem, _ params: ListViewItemLayoutParams, _ first: Bool, _ last: Bool, _ firstWithHeader: Bool, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, (Bool) -> (Signal<Void, NoError>?, (Bool) -> Void)) {
         let makeTitleLayout = TextNode.asyncLayout(self.titleNode)
@@ -581,6 +554,9 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
             
             return (nodeLayout, { [weak self] synchronousLoads in
                 if let strongSelf = self {
+                    var revealTopSeparatorIsHidden = false
+                    var revealBottomSeparatorIsHidden = false
+
                     if let peer = item.topMessage.peers[item.topMessage.id.peerId] {
                         var overrideImage: AvatarNodeImageOverride?
                         if peer.isDeleted {
@@ -654,7 +630,7 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
                                     if strongSelf.maskNode.supernode != nil {
                                         strongSelf.maskNode.removeFromSupernode()
                                     }
-                                    transition.updateFrameAdditive(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: leftInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - leftInset - separatorRightInset, height: separatorHeight)))
+                                    transition.updateFrameAdditive(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: leftInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - leftInset - params.rightInset - separatorRightInset, height: separatorHeight)))
                                 case .blocks:
                                     if strongSelf.backgroundNode.supernode == nil {
                                         strongSelf.insertSubnode(strongSelf.backgroundNode, at: 0)
@@ -673,26 +649,28 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
                                     var hasBottomCorners = false
                                     switch neighbors.top {
                                         case .sameSection(false):
-                                            strongSelf.topStripeNode.isHidden = true
+                                            revealTopSeparatorIsHidden = true
                                         default:
                                             hasTopCorners = true
-                                            strongSelf.topStripeNode.isHidden = hasCorners
+                                            revealTopSeparatorIsHidden = hasCorners
                                     }
                                     let bottomStripeInset: CGFloat
                                     switch neighbors.bottom {
                                         case .sameSection(false):
                                             bottomStripeInset = leftInset
-                                            strongSelf.bottomStripeNode.isHidden = false
+                                            revealBottomSeparatorIsHidden = false
                                         default:
                                             bottomStripeInset = 0.0
                                             hasBottomCorners = true
-                                            strongSelf.bottomStripeNode.isHidden = hasCorners
+                                            revealBottomSeparatorIsHidden = hasCorners
                                     }
                                 
                                     strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: item.systemStyle == .glass) : nil
                                     
                                     strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                                    // Per side: the margins differ beside iPhone Duo's strip.
+                                    let backgroundFrame = strongSelf.backgroundNode.frame
+                                    strongSelf.maskNode.frame = CGRect(x: backgroundFrame.minX + params.leftInset, y: backgroundFrame.minY, width: backgroundFrame.width - params.leftInset - params.rightInset, height: backgroundFrame.height)
                                     strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: nodeLayout.size.width, height: separatorHeight))
                                     transition.updateFrameAdditive(node: strongSelf.bottomStripeNode, frame: CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height - separatorHeight), size: CGSize(width: nodeLayout.size.width - bottomStripeInset - params.rightInset - separatorRightInset, height: separatorHeight)))
                             }
@@ -780,19 +758,25 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
                             topHighlightInset -= nodeLayout.insets.top
                             strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: nodeLayout.contentSize.width, height: nodeLayout.contentSize.height))
                             strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: strongSelf.backgroundNode.frame.size)
-                            strongSelf.highlightedBackgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -nodeLayout.insets.top - topHighlightInset), size: CGSize(width: nodeLayout.size.width, height: nodeLayout.size.height + topHighlightInset))
+                            // Plain style: the highlight spans the full-width separator's extent (ChatListItem's rule), out of the
+                            // side safe areas and ending where the separators end when there is a right inset (iPhone Duo's strip).
+                            let highlightLeftInset: CGFloat = item.style == .plain ? params.leftInset : 0.0
+                            let highlightRightInset: CGFloat = item.style == .plain && !params.rightInset.isZero ? params.rightInset + separatorRightInset : 0.0
+                            strongSelf.updateRevealOptionsHighlightedBackgroundFrame(strongSelf.highlightedBackgroundNode, frame: CGRect(origin: CGPoint(x: highlightLeftInset, y: -nodeLayout.insets.top - topHighlightInset), size: CGSize(width: nodeLayout.size.width - highlightLeftInset - highlightRightInset, height: nodeLayout.size.height + topHighlightInset)), aboveNodes: [strongSelf.backgroundNode])
                             
+                            strongSelf.updateRevealOptionsSeparatorNodes(top: strongSelf.topStripeNode, bottom: strongSelf.bottomStripeNode, topIsHidden: revealTopSeparatorIsHidden, bottomIsHidden: revealBottomSeparatorIsHidden)
                             strongSelf.updateLayout(size: nodeLayout.contentSize, leftInset: params.leftInset, rightInset: params.rightInset)
                             
                             strongSelf.accessibilityArea.accessibilityLabel = titleAttributedString?.string
-                            strongSelf.accessibilityArea.accessibilityValue = statusAccessibilityString
+                            strongSelf.accessibilityArea.accessibilityValue = [statusAccessibilityString, dateText].filter { !$0.isEmpty }.joined(separator: ", ")
                             strongSelf.accessibilityArea.frame = CGRect(origin: CGPoint(), size: nodeLayout.contentSize)
                             
                             strongSelf.infoButtonNode.accessibilityLabel = item.presentationData.strings.Conversation_Info
+                            strongSelf.infoButtonNode.accessibilityTraits = .button
                             
-                            strongSelf.view.accessibilityCustomActions = [UIAccessibilityCustomAction(name: item.presentationData.strings.Common_Delete, target: strongSelf, selector: #selector(strongSelf.performLocalAccessibilityCustomAction(_:)))]
+                            strongSelf.accessibilityArea.accessibilityCustomActions = [UIAccessibilityCustomAction(name: item.presentationData.strings.Common_Delete, target: strongSelf, selector: #selector(strongSelf.performLocalAccessibilityCustomAction(_:)))]
                             
-                            strongSelf.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.presentationData.strings.Common_Delete, icon: .none, color: item.presentationData.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.presentationData.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.presentationData.theme.list.itemSecondaryTextColor)]))
+                            strongSelf.setRevealOptions((left: [], right: [ItemListRevealOption(key: 0, title: item.presentationData.strings.Common_Delete, icon: .none, color: item.presentationData.theme.list.itemDisclosureActions.destructive.fillColor, iconColor: item.presentationData.theme.list.itemDisclosureActions.destructive.foregroundColor, textColor: item.presentationData.theme.list.itemSecondaryTextColor, isDestructive: true)]))
                             strongSelf.setRevealOptionsOpened(item.revealed, animated: animated)
                         }
                     })
@@ -890,6 +874,19 @@ class CallListCallItemNode: ItemListRevealOptionsItemNode {
         }
     }
 
+    /// The row first, then its info button (hidden while editing). The row's elements live in `containerNode`, whose
+    /// frame starts where the row's does, so the collector's frame sort alone would read the info button first.
+    override var accessibilityElements: [Any]? {
+        get {
+            var elements: [Any] = [self.accessibilityArea.view]
+            if self.infoButtonNode.alpha > 0.0 && !self.infoButtonNode.isHidden {
+                elements.append(self.infoButtonNode.view)
+            }
+            return elements
+        } set(value) {
+        }
+    }
+    
     override func revealOptionSelected(_ option: ItemListRevealOption, animated: Bool) {
         self.setRevealOptionsOpened(false, animated: true)
         self.revealOptionsInteractivelyClosed()

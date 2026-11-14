@@ -1,7 +1,7 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 
 
 public struct ChatListFilterPeerCategories: OptionSet, Hashable {
@@ -173,6 +173,27 @@ extension ChatListFilterIncludePeers {
 // This mirrors what synchronizePinnedChats does for the root chat list's pinned order.
 func isLocalOnlyChatListFilterPeer(_ peerId: PeerId) -> Bool {
     return peerId.namespace == Namespaces.Peer.SecretChat
+}
+
+// MARK: NAGRAM — a folder with no chat type and no chat the server can address (Nagram's Recent folder,
+// whose chats come from local history) is refused by messages.updateDialogFilter (FILTER_INCLUDE_EMPTY).
+// The refusal is swallowed, so the next sync replaced the local list with the server's and the folder
+// vanished. Such folders stay local: they are not uploaded and are put back where they were after a sync.
+func isLocalOnlyChatListFilter(_ filter: ChatListFilter) -> Bool {
+    guard case let .filter(_, _, _, data) = filter, !data.isShared else {
+        return false
+    }
+    return data.categories.isEmpty && data.includePeers.peers.allSatisfy(isLocalOnlyChatListFilterPeer)
+}
+
+// MARK: NAGRAM
+private func mergingLocalOnlyFilters(_ filters: [ChatListFilter], local: [ChatListFilter]) -> [ChatListFilter] {
+    var result = filters
+    for (index, filter) in local.enumerated() where isLocalOnlyChatListFilter(filter) {
+        result.removeAll(where: { $0.id == filter.id })
+        result.insert(filter, at: min(index, result.count))
+    }
+    return result
 }
 
 private func mergingLocalOnlyPeerIds(remote: [PeerId], local: [PeerId]) -> [PeerId] {
@@ -1059,7 +1080,10 @@ func loadAndStorePeerChatInfos(accountPeerId: PeerId, postbox: Postbox, network:
                         
                         ttlPeriods[peer.peerId] = .known(ttlPeriod.flatMap(CachedPeerAutoremoveTimeout.Value.init(peerValue:)))
                         
-                        transaction.resetIncomingReadStates([peerId: [Namespaces.Message.Cloud: .idBased(maxIncomingReadId: readInboxMaxId, maxOutgoingReadId: readOutboxMaxId, maxKnownId: topMessage, count: unreadCount, markedUnread: false)]])
+                        // A channel the account is not a member of keeps no read state (NonMemberChannelReadState.swift).
+                        if dialogReadStateIsKept(peerId: peerId, responseChats: chats, storedPeer: transaction.getPeer(peerId)) {
+                            transaction.resetIncomingReadStates([peerId: [Namespaces.Message.Cloud: .idBased(maxIncomingReadId: readInboxMaxId, maxOutgoingReadId: readOutboxMaxId, maxKnownId: topMessage, count: unreadCount, markedUnread: false)]])
+                        }
                         
                         transaction.replaceMessageTagSummary(peerId: peerId, threadId: nil, tagMask: .unseenPersonalMessage, namespace: Namespaces.Message.Cloud, customTag: nil, count: unreadMentionsCount, maxId: topMessage)
                         transaction.replaceMessageTagSummary(peerId: peerId, threadId: nil, tagMask: .unseenReaction, namespace: Namespaces.Message.Cloud, customTag: nil, count: unreadReactionsCount, maxId: topMessage)
@@ -1677,8 +1701,9 @@ private func synchronizeChatListFilters(transaction: Transaction, accountPeerId:
     switch operation.content {
     case .sync:
         let settings = transaction.getPreferencesEntry(key: PreferencesKeys.chatListFilters)?.get(ChatListFiltersState.self) ?? ChatListFiltersState.default
-        let localFilters = settings.filters
-        let locallyKnownRemoteFilters = settings.remoteFilters ?? []
+        // MARK: NAGRAM — local-only folders take no part in the sync.
+        let localFilters = settings.filters.filter { !isLocalOnlyChatListFilter($0) }
+        let locallyKnownRemoteFilters = (settings.remoteFilters ?? []).filter { !isLocalOnlyChatListFilter($0) }
         let localDisplayTags = settings.displayTags
         let locallyKnownRemoteDisplayTags = settings.remoteDisplayTags ?? false
         
@@ -1692,10 +1717,11 @@ private func synchronizeChatListFilters(transaction: Transaction, accountPeerId:
                     let _ = updateChatListFiltersState(transaction: transaction, { state in
                         var state = state
                         let currentFilters = state.filters
-                        state.filters = remoteFilters.map { remoteFilter in
+                        let syncedFilters = remoteFilters.map { remoteFilter in
                             return remoteFilter.withLocalOnlyPeers(from: currentFilters.first(where: { $0.id == remoteFilter.id }))
                         }
-                        state.remoteFilters = state.filters
+                        state.filters = mergingLocalOnlyFilters(syncedFilters, local: currentFilters) // MARK: NAGRAM
+                        state.remoteFilters = syncedFilters
                         state.displayTags = remoteTagsEnabled
                         state.remoteDisplayTags = state.displayTags
                         return state
@@ -1798,8 +1824,8 @@ private func synchronizeChatListFilters(transaction: Transaction, accountPeerId:
                 postbox.transaction { transaction -> Void in
                     let _ = updateChatListFiltersState(transaction: transaction, { state in
                         var state = state
-                        state.filters = mergedFilters
-                        state.remoteFilters = state.filters
+                        state.filters = mergingLocalOnlyFilters(mergedFilters, local: state.filters) // MARK: NAGRAM
+                        state.remoteFilters = mergedFilters
                         state.remoteDisplayTags = state.displayTags
                         return state
                     })

@@ -70,6 +70,22 @@ final class StarsStatisticsScreenComponent: Component {
     }
     
     private final class ScrollViewImpl: UIScrollView {
+        /// VoiceOver: the full-size container of the transactions starts at the top of the content, so it would be read
+        /// first; the sections above it are read top to bottom, the transactions last.
+        weak var accessibilityLastView: UIView?
+        
+        override var accessibilityElements: [Any]? {
+            get {
+                guard let lastView = self.accessibilityLastView, lastView.superview === self else {
+                    return super.accessibilityElements
+                }
+                let shown = self.subviews.filter { !$0.isHidden && $0.alpha >= 0.01 && !$0.accessibilityElementsHidden && $0 !== lastView }
+                return shown.sorted(by: { $0.frame.minY < $1.frame.minY }) + [lastView]
+            } set(value) {
+                super.accessibilityElements = value
+            }
+        }
+        
         override func touchesShouldCancel(in view: UIView) -> Bool {
             return true
         }
@@ -161,6 +177,7 @@ final class StarsStatisticsScreenComponent: Component {
             self.addSubview(self.scrollView)
             
             self.scrollView.addSubview(self.scrollContainerView)
+            self.scrollView.accessibilityLastView = self.scrollContainerView
             self.scrollContainerView.addSubview(self.transactionsBackground)
             
             self.addSubview(self.headerOffsetContainer)
@@ -372,6 +389,10 @@ final class StarsStatisticsScreenComponent: Component {
             var contentHeight: CGFloat = 0.0
                         
             let sideInsets: CGFloat = environment.safeInsets.left + environment.safeInsets.right + 16 * 2.0
+            // Sections and the title are centered in the band between the side insets (the screen's center unless one
+            // is iPhone Duo's strip).
+            let bandMinX = environment.safeInsets.left
+            let bandWidth = availableSize.width - environment.safeInsets.left - environment.safeInsets.right
              
             contentHeight += environment.navigationHeight
             contentHeight += 31.0
@@ -391,9 +412,11 @@ final class StarsStatisticsScreenComponent: Component {
             )
             if let titleView = self.titleView.view {
                 if titleView.superview == nil {
+                    // The screen's title in the navigation bar.
+                    titleView.accessibilityTraits = .header
                     component.overNavigationContainer.addSubview(titleView)
                 }
-                let titlePosition = CGPoint(x: availableSize.width / 2.0, y: environment.statusBarHeight + (environment.navigationHeight - environment.statusBarHeight) / 2.0)
+                let titlePosition = CGPoint(x: bandMinX + bandWidth / 2.0, y: environment.statusBarHeight + (environment.navigationHeight - environment.statusBarHeight) / 2.0)
                 transition.setPosition(view: titleView, position: titlePosition)
                 transition.setBounds(view: titleView, bounds: CGRect(origin: .zero, size: titleSize))
             }
@@ -424,7 +447,7 @@ final class StarsStatisticsScreenComponent: Component {
                     environment: {},
                     containerSize: CGSize(width: availableSize.width - sideInsets, height: availableSize.height)
                 )
-                let chartFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((availableSize.width - chartSize.width) / 2.0), y: contentHeight), size: chartSize)
+                let chartFrame = CGRect(origin: CGPoint(x: bandMinX + floorToScreenPixels((bandWidth - chartSize.width) / 2.0), y: contentHeight), size: chartSize)
                 if let chartView = self.chartView.view {
                     if chartView.superview == nil {
                         self.scrollView.addSubview(chartView)
@@ -484,7 +507,7 @@ final class StarsStatisticsScreenComponent: Component {
                 environment: {},
                 containerSize: CGSize(width: availableSize.width - sideInsets, height: availableSize.height)
             )
-            let proceedsFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((availableSize.width - proceedsSize.width) / 2.0), y: contentHeight), size: proceedsSize)
+            let proceedsFrame = CGRect(origin: CGPoint(x: bandMinX + floorToScreenPixels((bandWidth - proceedsSize.width) / 2.0), y: contentHeight), size: proceedsSize)
             if let proceedsView = self.proceedsView.view {
                 if proceedsView.superview == nil {
                     self.scrollView.addSubview(proceedsView)
@@ -627,7 +650,7 @@ final class StarsStatisticsScreenComponent: Component {
                 environment: {},
                 containerSize: CGSize(width: availableSize.width - sideInsets, height: availableSize.height)
             )
-            let balanceFrame = CGRect(origin: CGPoint(x: floorToScreenPixels((availableSize.width - balanceSize.width) / 2.0), y: contentHeight), size: balanceSize)
+            let balanceFrame = CGRect(origin: CGPoint(x: bandMinX + floorToScreenPixels((bandWidth - balanceSize.width) / 2.0), y: contentHeight), size: balanceSize)
             if let balanceView = self.balanceView.view {
                 if balanceView.superview == nil {
                     self.scrollView.addSubview(balanceView)

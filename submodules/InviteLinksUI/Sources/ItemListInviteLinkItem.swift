@@ -157,6 +157,7 @@ public class ItemListInviteLinkItem: ListViewItem, ItemListItem {
 }
 
 public class ItemListInviteLinkItemNode: ListViewItemNode, ItemListItemNode {
+    private var moreAccessibilityAction: UIAccessibilityCustomAction?
     private let backgroundNode: ASDisplayNode
     private let topStripeNode: ASDisplayNode
     private let bottomStripeNode: ASDisplayNode
@@ -533,6 +534,24 @@ public class ItemListInviteLinkItemNode: ListViewItemNode, ItemListItemNode {
                                         
                     strongSelf.accessibilityLabel = titleAttributedString.string
                     strongSelf.accessibilityValue = subtitleAttributedString.string
+                    // The row opens the link (tap); its long-press menu is "More". The action is created once.
+                    strongSelf.accessibilityTraits = .button
+                    if item.contextAction != nil {
+                        if strongSelf.moreAccessibilityAction == nil {
+                            strongSelf.moreAccessibilityAction = UIAccessibilityCustomAction(name: item.presentationData.strings.Common_More, actionHandler: { [weak strongSelf] _ in
+                                guard let strongSelf, let item = strongSelf.layoutParams?.0, let invite = item.invite, let contextAction = item.contextAction else {
+                                    return false
+                                }
+                                contextAction(invite, strongSelf.contextSourceNode, nil)
+                                return true
+                            })
+                        }
+                        if strongSelf.view.accessibilityCustomActions == nil {
+                            strongSelf.view.accessibilityCustomActions = strongSelf.moreAccessibilityAction.flatMap { [$0] }
+                        }
+                    } else if strongSelf.view.accessibilityCustomActions != nil {
+                        strongSelf.view.accessibilityCustomActions = nil
+                    }
                     
                     strongSelf.containerNode.frame = CGRect(origin: CGPoint(), size: layout.contentSize)
                     strongSelf.contextSourceNode.frame = CGRect(origin: CGPoint(), size: layout.contentSize)
@@ -541,7 +560,7 @@ public class ItemListInviteLinkItemNode: ListViewItemNode, ItemListItemNode {
                     strongSelf.containerNode.isGestureEnabled = item.contextAction != nil
                     
                     let nonExtractedRect = CGRect(origin: CGPoint(), size: CGSize(width: layout.contentSize.width - 16.0, height: layout.contentSize.height))
-                    let extractedRect = CGRect(origin: CGPoint(), size: layout.contentSize).insetBy(dx: 16.0 + params.leftInset, dy: 0.0)
+                    let extractedRect = CGRect(origin: CGPoint(x: 16.0 + params.leftInset, y: 0.0), size: CGSize(width: layout.contentSize.width - 32.0 - params.leftInset - params.rightInset, height: layout.contentSize.height))
                     strongSelf.extractedRect = extractedRect
                     strongSelf.nonExtractedRect = nonExtractedRect
                     
@@ -643,7 +662,7 @@ public class ItemListInviteLinkItemNode: ListViewItemNode, ItemListItemNode {
                             strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.presentationData.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: item.systemStyle == .glass) : nil
                             
                             strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                            strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                            strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                             strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: separatorHeight))
                             strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height - separatorHeight), size: CGSize(width: params.width - bottomStripeInset - params.rightInset - separatorRightInset, height: separatorHeight))
                     }

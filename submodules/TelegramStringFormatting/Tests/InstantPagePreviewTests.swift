@@ -23,7 +23,7 @@ final class InstantPagePreviewTests: XCTestCase {
             case let .photos(count): return "\(count) Photos"
             case let .videos(count): return "\(count) Videos"
             }
-        }, formatDate: { _, _ in "FORMATTED" }, media: media))
+        }, formatDate: { _, _ in "FORMATTED" }, media: { id in media[id].map(EngineMedia.init) }))
     }
 
     private func caption(_ text: RichText = .empty) -> InstantPageCaption {
@@ -226,6 +226,19 @@ final class InstantPagePreviewTests: XCTestCase {
         let emoji = text.attribute(ChatTextInputAttributes.customEmoji, at: 0, effectiveRange: nil) as? ChatTextInputTextCustomEmojiAttribute
         XCTAssertTrue(emoji?.file === file)
         XCTAssertEqual(emoji?.fileId, 42)
+    }
+
+    func testEmptyAltEmojiIsVisibleOnlyAsAGlyphWhenResolved() {
+        // Without the file the run stays text, so an empty alt text shows a placeholder; with it, the glyph covers U+FFFC.
+        let unresolved = preview([.paragraph(.textCustomEmoji(fileId: 42, alt: ""))])
+        XCTAssertEqual(unresolved.string, "�")
+        XCTAssertNil(unresolved.attribute(ChatTextInputAttributes.customEmoji, at: 0, effectiveRange: nil))
+
+        let id = MediaId(namespace: Namespaces.Media.CloudFile, id: 42)
+        let file = TelegramMediaFile(fileId: id, partialReference: nil, resource: LocalFileMediaResource(fileId: 42), previewRepresentations: [], videoThumbnails: [], immediateThumbnailData: nil, mimeType: "image/webp", size: nil, attributes: [], alternativeRepresentations: [])
+        let resolved = preview([.paragraph(.textCustomEmoji(fileId: 42, alt: ""))], media: [id: file])
+        XCTAssertEqual(resolved.string, "\u{fffc}")
+        XCTAssertNotNil(resolved.attribute(ChatTextInputAttributes.customEmoji, at: 0, effectiveRange: nil))
     }
 
     func testMissingIconFallbackRespectsBodyBudget() {

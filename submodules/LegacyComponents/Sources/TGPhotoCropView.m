@@ -20,6 +20,10 @@ const CGFloat TGPhotoCropViewOverscreenSize = 1000;
     CGSize _originalSize;
 
     STimer *_confirmTimer;
+    // MARK: NAGRAM
+    STimer *_zoomOutTimer;
+    CGFloat _zoomOutHeldDuration;
+    bool _pushedAgainstEdge;
     bool _animatingConfirm;
     bool _cropAreaChanged;
     
@@ -164,6 +168,8 @@ const CGFloat TGPhotoCropViewOverscreenSize = 1000;
             [strongSelf setIntefaceHidden:true animated:true];
 
             [strongSelf->_scrollView resetRotationStartValues];
+            // MARK: NAGRAM
+            [strongSelf _startZoomOutTimer];
             
             if (strongSelf.interactionBegan != nil)
                 strongSelf.interactionBegan();
@@ -173,6 +179,9 @@ const CGFloat TGPhotoCropViewOverscreenSize = 1000;
             __strong TGPhotoCropView *strongSelf = weakSelf;
             if (strongSelf == nil)
                 return;
+            
+            // MARK: NAGRAM
+            [strongSelf _stopZoomOutTimer];
             
             [strongSelf startConfirmCountdown];
         };
@@ -247,6 +256,9 @@ const CGFloat TGPhotoCropViewOverscreenSize = 1000;
 
 - (void)dealloc
 {
+    // MARK: NAGRAM
+    [_zoomOutTimer invalidate];
+    
     if (_confirmTimer != nil)
     {
         [_confirmTimer invalidate];
@@ -410,19 +422,221 @@ const CGFloat TGPhotoCropViewOverscreenSize = 1000;
 {
     _cropAreaChanged = true;
     
-    _areaView.frame = [self _cappedAreaViewRectWithRect:_areaView.frame];
-    
-    CGPoint translationOffset = CGPointMake(_previousAreaFrame.origin.x - _areaView.frame.origin.x,
-                                            _previousAreaFrame.origin.y - _areaView.frame.origin.y);
-    
-    [_scrollView translateContentViewWithOffset:translationOffset];
-    _previousAreaFrame = _areaView.frame;
-    
-    _scrollView.frame = _areaView.frame;
-    [_scrollView fitContentInsideBoundsAllowScale:true animated:false completion:nil];
+    // MARK: NAGRAM
+    // A dragged side stops at the photo's edge. Growing the area past it used to scale the photo up
+    // to cover the area, which pushed the photo out past the other sides and did not undo itself
+    // when the side was dragged back.
+    CGRect startFrame = _previousAreaFrame;
+    CGRect requestedFrame = _areaView.frame;
+    CGRect targetFrame = [self _cappedAreaViewRectWithRect:requestedFrame];
+    if (!_CGRectEqualToRectWithEpsilon(requestedFrame, targetFrame, 0.5f))
+        _pushedAgainstEdge = true;
+    if ([_scrollView contentCoversBounds])
+    {
+        [self _moveAreaFrameWithinContentFrom:startFrame towards:targetFrame];
+    }
+    else
+    {
+        [self _setAreaFrameKeepingContentInPlace:targetFrame];
+        [_scrollView fitContentInsideBoundsAllowScale:true animated:false completion:nil];
+    }
     
     [self _layoutRotationView];
     
+    [self _layoutOverlayViewsWithFrame:_areaView.frame animated:false];
+}
+
+// MARK: NAGRAM
+- (void)_setAreaFrameKeepingContentInPlace:(CGRect)frame
+{
+    CGPoint translationOffset = CGPointMake(_previousAreaFrame.origin.x - frame.origin.x,
+                                            _previousAreaFrame.origin.y - frame.origin.y);
+    
+    [_scrollView translateContentViewWithOffset:translationOffset];
+    _previousAreaFrame = frame;
+    
+    _areaView.frame = frame;
+    _scrollView.frame = frame;
+}
+
+// MARK: NAGRAM
+// Moves the area from a frame the photo covers towards another one, as far as the photo still
+// covers it, and returns the frame it reached.
+- (CGRect)_moveAreaFrameWithinContentFrom:(CGRect)fromFrame to:(CGRect)toFrame
+{
+    CGRect (^frameAt)(CGFloat) = ^CGRect(CGFloat progress)
+    {
+        return CGRectMake(fromFrame.origin.x + (toFrame.origin.x - fromFrame.origin.x) * progress,
+                          fromFrame.origin.y + (toFrame.origin.y - fromFrame.origin.y) * progress,
+                          fromFrame.size.width + (toFrame.size.width - fromFrame.size.width) * progress,
+                          fromFrame.size.height + (toFrame.size.height - fromFrame.size.height) * progress);
+    };
+    
+    [self _setAreaFrameKeepingContentInPlace:toFrame];
+    if ([_scrollView contentCoversBounds])
+        return toFrame;
+    
+    CGFloat covered = 0.0f;
+    CGFloat uncovered = 1.0f;
+    for (NSInteger i = 0; i < 8; i++)
+    {
+        CGFloat progress = (covered + uncovered) / 2.0f;
+        [self _setAreaFrameKeepingContentInPlace:frameAt(progress)];
+        if ([_scrollView contentCoversBounds])
+            covered = progress;
+        else
+            uncovered = progress;
+    }
+    
+    CGRect reachedFrame = frameAt(covered);
+    [self _setAreaFrameKeepingContentInPlace:reachedFrame];
+    return reachedFrame;
+}
+
+// MARK: NAGRAM
+// With a free aspect ratio the two directions are limited one after the other, so a corner whose
+// one side has reached the photo's edge still moves along it.
+- (void)_moveAreaFrameWithinContentFrom:(CGRect)startFrame towards:(CGRect)targetFrame
+{
+    if (_areaView.lockAspectRatio)
+    {
+        [self _moveAreaFrameWithinContentFrom:startFrame to:targetFrame];
+    }
+    else
+    {
+        CGRect horizontalFrame = CGRectMake(targetFrame.origin.x, startFrame.origin.y, targetFrame.size.width, startFrame.size.height);
+        CGRect reachedFrame = [self _moveAreaFrameWithinContentFrom:startFrame to:horizontalFrame];
+        CGRect verticalFrame = CGRectMake(reachedFrame.origin.x, targetFrame.origin.y, reachedFrame.size.width, targetFrame.size.height);
+        [self _moveAreaFrameWithinContentFrom:reachedFrame to:verticalFrame];
+    }
+}
+
+#pragma mark - Zooming out at the available area's edge
+
+// MARK: NAGRAM
+// While a side is held against the edge of the available area and the photo continues past it,
+// the photo and the area shrink together towards the opposite side and the held side goes back to
+// the edge, so the area takes in more of the photo without the finger moving. It starts only once
+// the finger has pushed the side past the edge, so holding a side that already rests there does
+// nothing.
+const CGFloat TGPhotoCropViewZoomOutInterval = 1.0f / 60.0f;
+const CGFloat TGPhotoCropViewZoomOutDelay = 0.15f;
+const CGFloat TGPhotoCropViewZoomOutRampDuration = 0.35f;
+const CGFloat TGPhotoCropViewZoomOutSpeed = 260.0f;
+
+- (void)_startZoomOutTimer
+{
+    [_zoomOutTimer invalidate];
+    _zoomOutHeldDuration = 0.0f;
+    _pushedAgainstEdge = false;
+    
+    __weak TGPhotoCropView *weakSelf = self;
+    _zoomOutTimer = [[STimer alloc] initWithTimeout:TGPhotoCropViewZoomOutInterval repeat:true completion:^(__unused STimer *timer) {
+        __strong TGPhotoCropView *strongSelf = weakSelf;
+        if (strongSelf != nil)
+            [strongSelf _zoomOutIfHeldAtEdge];
+    } nativeQueue:dispatch_get_main_queue()];
+    [_zoomOutTimer start];
+}
+
+- (void)_stopZoomOutTimer
+{
+    [_zoomOutTimer invalidate];
+    _zoomOutTimer = nil;
+}
+
+- (CGRect)_areaFrame:(CGRect)frame withEdge:(UIRectEdge)edge movedBy:(CGFloat)distance
+{
+    switch (edge)
+    {
+        case UIRectEdgeTop:
+            return CGRectMake(frame.origin.x, frame.origin.y - distance, frame.size.width, frame.size.height + distance);
+        case UIRectEdgeLeft:
+            return CGRectMake(frame.origin.x - distance, frame.origin.y, frame.size.width + distance, frame.size.height);
+        case UIRectEdgeBottom:
+            return CGRectMake(frame.origin.x, frame.origin.y, frame.size.width, frame.size.height + distance);
+        default:
+            return CGRectMake(frame.origin.x, frame.origin.y, frame.size.width + distance, frame.size.height);
+    }
+}
+
+- (void)_zoomOutIfHeldAtEdge
+{
+    UIRectEdge edges = _areaView.trackingEdges;
+    if (!_areaView.isTracking || edges == UIRectEdgeNone || _animatingConfirm || !_pushedAgainstEdge)
+    {
+        _zoomOutHeldDuration = 0.0f;
+        return;
+    }
+    
+    CGRect frame = _areaView.frame;
+    
+    CGFloat heldExtent = 0.0f;
+    const UIRectEdge allEdges[] = { UIRectEdgeTop, UIRectEdgeLeft, UIRectEdgeBottom, UIRectEdgeRight };
+    for (NSInteger i = 0; i < 4; i++)
+    {
+        UIRectEdge edge = allEdges[i];
+        if ((edges & edge) == 0)
+            continue;
+        
+        CGRect extendedFrame = [self _areaFrame:frame withEdge:edge movedBy:1.0f];
+        if (_CGRectEqualToRectWithEpsilon([self _cappedAreaViewRectWithRect:extendedFrame], extendedFrame, 0.5f))
+            continue;
+        
+        [self _setAreaFrameKeepingContentInPlace:extendedFrame];
+        bool photoContinues = [_scrollView contentCoversBounds];
+        [self _setAreaFrameKeepingContentInPlace:frame];
+        
+        if (photoContinues)
+            heldExtent = MAX(heldExtent, (edge == UIRectEdgeTop || edge == UIRectEdgeBottom) ? frame.size.height : frame.size.width);
+    }
+    
+    if (heldExtent < FLT_EPSILON)
+    {
+        _zoomOutHeldDuration = 0.0f;
+        _pushedAgainstEdge = false;
+        return;
+    }
+    
+    _zoomOutHeldDuration += TGPhotoCropViewZoomOutInterval;
+    CGFloat ramp = MIN(1.0f, (_zoomOutHeldDuration - TGPhotoCropViewZoomOutDelay) / TGPhotoCropViewZoomOutRampDuration);
+    if (ramp <= 0.0f)
+        return;
+    
+    CGFloat ratio = MAX(0.9f, 1.0f - TGPhotoCropViewZoomOutSpeed * ramp * TGPhotoCropViewZoomOutInterval / heldExtent);
+    
+    CGPoint anchor = CGPointMake(CGRectGetMidX(frame), CGRectGetMidY(frame));
+    if (edges & UIRectEdgeLeft)
+        anchor.x = CGRectGetMaxX(frame);
+    else if (edges & UIRectEdgeRight)
+        anchor.x = CGRectGetMinX(frame);
+    if (edges & UIRectEdgeTop)
+        anchor.y = CGRectGetMaxY(frame);
+    else if (edges & UIRectEdgeBottom)
+        anchor.y = CGRectGetMinY(frame);
+    
+    CGRect scaledFrame = CGRectMake(anchor.x + (frame.origin.x - anchor.x) * ratio,
+                                    anchor.y + (frame.origin.y - anchor.y) * ratio,
+                                    frame.size.width * ratio,
+                                    frame.size.height * ratio);
+    if (scaledFrame.size.width < TGPhotoCropCornerControlSize.width || scaledFrame.size.height < TGPhotoCropCornerControlSize.height)
+        return;
+    
+    [_scrollView scaleContentBy:ratio aroundPoint:CGPointMake(anchor.x - frame.origin.x, anchor.y - frame.origin.y)];
+    [self _setAreaFrameKeepingContentInPlace:scaledFrame];
+    
+    CGRect targetFrame = frame;
+    if (!_areaView.lockAspectRatio)
+    {
+        CGFloat minX = (edges & UIRectEdgeLeft) ? CGRectGetMinX(frame) : CGRectGetMinX(scaledFrame);
+        CGFloat maxX = (edges & UIRectEdgeRight) ? CGRectGetMaxX(frame) : CGRectGetMaxX(scaledFrame);
+        CGFloat minY = (edges & UIRectEdgeTop) ? CGRectGetMinY(frame) : CGRectGetMinY(scaledFrame);
+        CGFloat maxY = (edges & UIRectEdgeBottom) ? CGRectGetMaxY(frame) : CGRectGetMaxY(scaledFrame);
+        targetFrame = CGRectMake(minX, minY, maxX - minX, maxY - minY);
+    }
+    [self _moveAreaFrameWithinContentFrom:scaledFrame towards:targetFrame];
+    
+    _cropAreaChanged = true;
     [self _layoutOverlayViewsWithFrame:_areaView.frame animated:false];
 }
 

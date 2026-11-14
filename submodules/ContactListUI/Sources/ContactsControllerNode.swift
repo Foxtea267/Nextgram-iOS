@@ -13,11 +13,14 @@ import SearchUI
 import AppBundle
 import ContextUI
 import ChatListHeaderComponent
+import NavigationBarComponent
 import ChatListTitleView
 import ComponentFlow
 import SwiftUI
 import ContactsUI
 import EdgeEffect
+import UndoUI // MARK: NAGRAM
+import NagramStrings // MARK: NAGRAM
 
 private final class ContextControllerContentSourceImpl: ContextControllerContentSource {
     let controller: ViewController
@@ -251,6 +254,15 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         self.contactListNode.openContactAccessPicker = {
             presentContactAccessPicker(context: context)
         }
+        
+        // MARK: NAGRAM — 双向联系人说明
+        self.contactListNode.displayMutualContactInfo = { [weak self] in
+            guard let self else {
+                return
+            }
+            let presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
+            self.controller?.present(UndoOverlayController(presentationData: presentationData, content: .info(title: nil, text: ngI18n("Nagram.MutualContact.Description", presentationData.strings.baseLanguageCode), timeout: nil, customUndoText: nil), elevatedLayout: false, animateInAsReplacement: false, action: { _ in return false }), in: .current)
+        }
     }
     
     deinit {
@@ -301,14 +313,16 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         let tabsNodeIsSearch = false
         
         let title: String
-        let leftButton: AnyComponentWithIdentity<NavigationButtonComponentEnvironment>?
-        let rightButtons: [AnyComponentWithIdentity<NavigationButtonComponentEnvironment>]
+        var leftButton: NavigationBarComponent.Button?
+        var rightButtons: [NavigationBarComponent.Button]
+        // MARK: NAGRAM — 推入模式：左侧让给返回按钮，排序移到右侧
+        let nagramIsPushed = self.controller?.nagramIsPushed ?? true
         
         if let selectionState = self.contactListNode.selectionState {
             title = self.presentationData.strings.Contacts_SelectedContacts(Int32(selectionState.selectedPeerIndices.count))
-            leftButton = AnyComponentWithIdentity(id: "done", component: AnyComponent(NavigationButtonComponent(
+            leftButton = NavigationBarComponent.Button(id: "done",
                 content: .text(title: self.presentationData.strings.Common_Done, isBold: true),
-                pressed: { [weak self] sourceView in
+                action: { [weak self] sourceView in
                     guard let self else {
                         return
                     }
@@ -316,39 +330,52 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                         return nil
                     }
                 }
-            )))
+            )
             rightButtons = []
         } else {
             title = self.presentationData.strings.Contacts_Title
-            leftButton = AnyComponentWithIdentity(id: "sort", component: AnyComponent(NavigationButtonComponent(
+            let sortButton = NavigationBarComponent.Button(id: "sort",
                 content: .text(title: self.presentationData.strings.Contacts_Sort, isBold: false),
-                pressed: { [weak self] sourceView in
+                action: { [weak self] sourceView in
                     guard let self else {
                         return
                     }
                     
                     self.controller?.presentSortMenu(sourceView: sourceView, gesture: nil)
                 }
-            )))
-            rightButtons = [AnyComponentWithIdentity(id: "add", component: AnyComponent(NavigationButtonComponent(
+            )
+            let addButton = NavigationBarComponent.Button(id: "add",
                 content: .icon(imageName: "Chat List/AddIcon"),
-                pressed: { [weak self] _ in
+                overflow: NavigationBarComponent.OverflowInfo(title: self.presentationData.strings.Contacts_VoiceOver_AddContact, iconName: nil, priority: nil),
+                action: { [weak self] _ in
                     guard let self else {
                         return
                     }
                     self.controller?.addPressed()
                 }
-            )))]
+            )
+            if nagramIsPushed {
+                // The left is the back button's: Sort stands on the right, its own capsule beside Add.
+                leftButton = nil
+                rightButtons = [sortButton, addButton]
+            } else {
+                // MARK: NAGRAM — as a bottom-bar tab, Sort keeps the left.
+                leftButton = sortButton
+                rightButtons = [addButton]
+            }
         }
         
+        // Pushed (from Settings) the header has a back button.
+        let backPressed: (() -> Void)? = { [weak self] in
+            self?.controller?.navigationController?.popViewController(animated: true)
+        }
         let primaryContent = ChatListHeaderComponent.Content(
             title: self.presentationData.strings.Contacts_Title,
-            navigationBackTitle: nil,
             titleComponent: nil,
             chatListTitle: NetworkStatusTitle(text: title, activity: false, hasProxy: false, connectsViaProxy: false, isPasscodeSet: false, isManuallyLocked: false, peerStatus: nil),
             leftButton: leftButton,
             rightButtons: rightButtons,
-            backPressed: nil
+            backPressed: nagramIsPushed ? backPressed : nil // MARK: NAGRAM — a bottom-bar tab has no back button
         )
         
         let navigationBarSize = self.navigationBarView.update(
@@ -357,9 +384,10 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 context: self.context,
                 theme: self.presentationData.theme,
                 strings: self.presentationData.strings,
-                statusBarHeight: layout.statusBarHeight ?? 0.0,
+                statusBarHeight: layout.navigationBarStatusBarHeight ?? 0.0,
                 leftInset: layout.safeInsets.left,
                 rightInset: layout.safeInsets.right,
+                trailingButtonsInset: layout.navigationBarTrailingButtonsInset,
                 search: ChatListNavigationBar.Search(isEnabled: true),
                 activeSearch: self.isSearchDisplayControllerActive,
                 primaryContent: primaryContent,
@@ -436,7 +464,7 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
         var headerInsets = layout.insets(options: [.input])
         headerInsets.top = navigationBarLayout.navigationHeight - navigationBarLayout.storiesInset - ChatListNavigationBar.searchScrollHeight
         
-        let innerLayout = ContainerViewLayout(size: layout.size, metrics: layout.metrics, deviceMetrics: layout.deviceMetrics, intrinsicInsets: insets, safeInsets: layout.safeInsets, additionalInsets: layout.additionalInsets, statusBarHeight: layout.statusBarHeight, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet)
+        let innerLayout = ContainerViewLayout(size: layout.size, metrics: layout.metrics, deviceMetrics: layout.deviceMetrics, intrinsicInsets: insets, safeInsets: layout.safeInsets, reservedCorners: layout.reservedCorners, division: layout.division, additionalInsets: layout.additionalInsets, statusBarHeight: layout.statusBarHeight, inputHeight: layout.inputHeight, inputHeightIsInteractivellyChanging: layout.inputHeightIsInteractivellyChanging, inVoiceOver: layout.inVoiceOver, presentedInFormSheet: layout.presentedInFormSheet)
         
         if let searchDisplayController = self.searchDisplayController {
             searchDisplayController.containerLayoutUpdated(innerLayout, navigationBarHeight: navigationBarLayout.navigationHeight, transition: transition)
@@ -517,13 +545,21 @@ final class ContactsControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 }
             }
         }, placeholder: placeholderNode)
+        // The search results cover the list: VoiceOver must not read the list behind them.
+        self.contactListNode.accessibilityElementsHidden = true
     }
     
-    func deactivateSearch(placeholderNode: SearchBarPlaceholderNode?, animated: Bool) {
+    /// Ends the search; the returned closure animates the search bar out into `placeholderNode` and is called once the
+    /// navigation bar has been laid out without the active search.
+    func deactivateSearch(placeholderNode: SearchBarPlaceholderNode?, animated: Bool) -> (() -> Void)? {
         self.isSearchDisplayControllerActive = nil
-        if let searchDisplayController = self.searchDisplayController {
+        self.contactListNode.accessibilityElementsHidden = false
+        guard let searchDisplayController = self.searchDisplayController else {
+            return nil
+        }
+        self.searchDisplayController = nil
+        return { [weak placeholderNode] in
             searchDisplayController.deactivate(placeholder: placeholderNode, animated: animated)
-            self.searchDisplayController = nil
         }
     }
 }
@@ -543,11 +579,11 @@ private final class ContactContextExtractedContentSource: ContextExtractedConten
     }
     
     func takeView() -> ContextControllerTakeViewInfo? {
-        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerTakeViewInfo(containingItem: .node(self.sourceNode), contentAreaInScreenSpace: mainWindowScreenBounds)
     }
     
     func putBack() -> ContextControllerPutBackViewInfo? {
-        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerPutBackViewInfo(contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }
 

@@ -146,6 +146,13 @@ extension CoreVirtualListView {
 
         let loadedRange = window.startIndex..<(window.endIndex + 1)
         let pending = AttachmentRuns.pendingRuns(in: items, loadedRange: loadedRange)
+        // Nothing to assign and nothing to depart. Returning here also skips `assignSerials`' identity map,
+        // which is built over the WHOLE collection on every window change: a list without attachments (the
+        // News feeds) paid for it on every row a scroll loaded, more the further its pages reached.
+        if pending.isEmpty && (sourceWindow?.attachments ?? []).isEmpty {
+            window.attachments = []
+            return
+        }
 
         let prior: [AttachmentRuns.PriorRun] = (sourceWindow?.attachments ?? []).map { attachment in
             AttachmentRuns.PriorRun(
@@ -327,6 +334,16 @@ extension CoreVirtualListView {
         activeScrollFlight?.settledOffset ?? engine.offset
     }
 
+    /// Re-solves the attachments for a display area change (`attachmentDisplayInsets`): the solve is a pure
+    /// function of the settled window, the offset and the area, so this only moves what the area moves.
+    public func updateAttachmentDisplayInsets(_ insets: UIEdgeInsets?) {
+        guard self.attachmentDisplayInsets != insets else {
+            return
+        }
+        self.attachmentDisplayInsets = insets
+        self.renderAttachments()
+    }
+
     /// Solves every loaded attachment and writes its settled frame. Pure function of the settled
     /// window and the solve offset, so running it twice in one turn is a no-op.
     func renderAttachments() {
@@ -434,9 +451,10 @@ extension CoreVirtualListView {
             && attachment.edge == .bottom
             && attachment.endsCollectionRun
             ? attachment.measuredHeight : 0
+        let displayInsets = attachmentDisplayInsets ?? insets
         let anchor = attachment.edge == .top
-            ? insets.top
-            : logicalHeight - insets.bottom - attachment.measuredHeight
+            ? displayInsets.top
+            : logicalHeight - displayInsets.bottom - attachment.measuredHeight
         var yield: (partners: [AttachmentOffsetMap], gap: CGFloat)?
         if let declared = attachment.stackingYield {
             // The partners are the OTHER attachments tagged into the named group. Built here rather

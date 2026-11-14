@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -13,6 +12,7 @@ import AccountContext
 import TelegramPresentationData
 import PresentationDataUtils
 import TelegramCore
+import AuthorizationUtils
 
 public enum TwoFactorAuthSplashMode {
     public struct Intro {
@@ -58,9 +58,9 @@ public final class TwoFactorAuthSplashScreen: ViewController {
         
         self.presentationData = self.sharedContext.currentPresentationData.with { $0 }
         
-        let navigationBarTheme = NavigationBarTheme(rootControllerTheme: self.presentationData.theme, enableBackgroundBlur: false, hideBackground: true, edgeEffectColor: .clear, style: .glass)
+        let navigationBarTheme = NavigationBarTheme(rootControllerTheme: self.presentationData.theme, edgeEffectColor: .clear)
         
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: navigationBarTheme, strings: NavigationBarStrings(back: self.presentationData.strings.Common_Back, close: self.presentationData.strings.Common_Close)))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(theme: navigationBarTheme, strings: NavigationBarStrings(back: self.presentationData.strings.Common_Back, close: self.presentationData.strings.Common_Close, more: self.presentationData.strings.Common_More, done: self.presentationData.strings.Common_Done)))
 
         self.navigationPresentation = presentation
         
@@ -98,7 +98,13 @@ public final class TwoFactorAuthSplashScreen: ViewController {
     }
     
     override public func loadDisplayNode() {
-        self.displayNode = TwoFactorAuthSplashScreenNode(sharedContext: self.sharedContext, presentationData: self.presentationData, mode: self.mode, action: { [weak self] in
+        let isAuthorizationFlow: Bool
+        if case .unauthorized = self.engine {
+            isAuthorizationFlow = true
+        } else {
+            isAuthorizationFlow = false
+        }
+        self.displayNode = TwoFactorAuthSplashScreenNode(sharedContext: self.sharedContext, presentationData: self.presentationData, mode: self.mode, isAuthorizationFlow: isAuthorizationFlow, action: { [weak self] in
             guard let strongSelf = self else {
                 return
             }
@@ -139,6 +145,7 @@ public final class TwoFactorAuthSplashScreen: ViewController {
 private final class TwoFactorAuthSplashScreenNode: ViewControllerTracingNode {
     private var presentationData: PresentationData
     private let mode: TwoFactorAuthSplashMode
+    private let isAuthorizationFlow: Bool
     
     private var animationSize: CGSize = CGSize()
     private var animationOffset: CGPoint = CGPoint()
@@ -157,11 +164,12 @@ private final class TwoFactorAuthSplashScreenNode: ViewControllerTracingNode {
         }
     }
     
-    init(sharedContext: SharedAccountContext, presentationData: PresentationData, mode: TwoFactorAuthSplashMode, action: @escaping () -> Void) {
+    init(sharedContext: SharedAccountContext, presentationData: PresentationData, mode: TwoFactorAuthSplashMode, isAuthorizationFlow: Bool, action: @escaping () -> Void) {
         self.presentationData = presentationData
         self.mode = mode
+        self.isAuthorizationFlow = isAuthorizationFlow
         
-        self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: .noAccountFallback)
+        self.animationNode = DefaultAnimatedStickerNodeImpl()
         
         let title: String
         let texts: [NSAttributedString]
@@ -266,6 +274,19 @@ private final class TwoFactorAuthSplashScreenNode: ViewControllerTracingNode {
     }
     
     func containerLayoutUpdated(layout: ContainerViewLayout, navigationHeight: CGFloat, transition: ContainedViewLayoutTransition) {
+        // The content above the button lays out in the band between the side insets when they differ (iPhone Duo's
+        // side strip: the text ran under it); across the screen otherwise. In the login flow (password recovery done) it
+        // is centered on the full width on the unfolded screen, as the other login screens do (authorizationContentBand).
+        let insetsDiffer = layout.safeInsets.left != layout.safeInsets.right
+        let bandMinX: CGFloat
+        let bandWidth: CGFloat
+        if self.isAuthorizationFlow {
+            (bandMinX, bandWidth) = authorizationContentBand(layout: layout)
+        } else {
+            bandMinX = insetsDiffer ? layout.safeInsets.left : 0.0
+            bandWidth = insetsDiffer ? layout.size.width - layout.safeInsets.left - layout.safeInsets.right : layout.size.width
+        }
+        
         let sideInset: CGFloat = 32.0
         let buttonSideInset: CGFloat = 48.0
         let iconSpacing: CGFloat = 8.0
@@ -281,9 +302,9 @@ private final class TwoFactorAuthSplashScreenNode: ViewControllerTracingNode {
             break
         }
         
-        let titleSize = self.titleNode.updateLayout(CGSize(width: layout.size.width - sideInset * 2.0, height: layout.size.height))
+        let titleSize = self.titleNode.updateLayout(CGSize(width: bandWidth - sideInset * 2.0, height: layout.size.height))
         let textSizes = self.textNodes.map {
-            $0.updateLayout(CGSize(width: layout.size.width - sideInset * 2.0, height: layout.size.height))
+            $0.updateLayout(CGSize(width: bandWidth - sideInset * 2.0, height: layout.size.height))
         }
         var combinedTextHeight: CGFloat = 0.0
         let textSpacing: CGFloat = 32.0
@@ -298,9 +319,21 @@ private final class TwoFactorAuthSplashScreenNode: ViewControllerTracingNode {
         let minimalBottomInset: CGFloat = 60.0
         let bottomInset = layout.intrinsicInsets.bottom + minimalBottomInset
         
-        let buttonWidth = layout.size.width - buttonSideInset * 2.0
+        // The bottom button spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom. In the
+        // login flow it keeps to the content's axis (authorizationBottomBand): unfolded as above, folded in the content
+        // band.
+        let bottomBandMinX: CGFloat
+        let bottomBandWidth: CGFloat
+        if self.isAuthorizationFlow {
+            (bottomBandMinX, bottomBandWidth) = authorizationBottomBand(layout: layout)
+        } else {
+            let bottomSideInsets = layout.bottomEdgeSideInsets()
+            bottomBandMinX = insetsDiffer ? bottomSideInsets.left : 0.0
+            bottomBandWidth = insetsDiffer ? layout.size.width - bottomSideInsets.left - bottomSideInsets.right : layout.size.width
+        }
+        let buttonWidth = bottomBandWidth - buttonSideInset * 2.0
         
-        let buttonFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - buttonWidth) / 2.0), y: layout.size.height - bottomInset - buttonHeight), size: CGSize(width: buttonWidth, height: buttonHeight))
+        let buttonFrame = CGRect(origin: CGPoint(x: bottomBandMinX + floor((bottomBandWidth - buttonWidth) / 2.0), y: layout.size.height - bottomInset - buttonHeight), size: CGSize(width: buttonWidth, height: buttonHeight))
         let _ = self.button.update(
             transition: ComponentTransition(transition),
             component: AnyComponent(ButtonComponent(
@@ -338,21 +371,21 @@ private final class TwoFactorAuthSplashScreenNode: ViewControllerTracingNode {
         
         contentVerticalOrigin = min(contentVerticalOrigin, maxContentVerticalOrigin)
         
-        let iconFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - iconSize.width) / 2.0) + self.animationOffset.x, y: contentVerticalOrigin + self.animationOffset.y), size: iconSize).offsetBy(dx: iconOffset.x, dy: iconOffset.y)
+        let iconFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - iconSize.width) / 2.0) + self.animationOffset.x, y: contentVerticalOrigin + self.animationOffset.y), size: iconSize).offsetBy(dx: iconOffset.x, dy: iconOffset.y)
         self.animationNode.updateLayout(size: iconFrame.size)
         transition.updateFrameAdditive(node: self.animationNode, frame: iconFrame)
-        let titleFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - titleSize.width) / 2.0), y: iconFrame.maxY + iconSpacing), size: titleSize)
+        let titleFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - titleSize.width) / 2.0), y: iconFrame.maxY + iconSpacing), size: titleSize)
         transition.updateFrameAdditive(node: self.titleNode, frame: titleFrame)
 
         var nextTextOrigin: CGFloat = titleFrame.maxY + titleSpacing
         for i in 0 ..< self.textNodes.count {
-            let textFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - textSizes[i].width) / 2.0), y: nextTextOrigin), size: textSizes[i])
+            let textFrame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - textSizes[i].width) / 2.0), y: nextTextOrigin), size: textSizes[i])
             transition.updateFrameAdditive(node: self.textNodes[i], frame: textFrame)
 
             if i != 0 {
                 if let image = self.textArrowNodes[i - 1].image {
                     let scaledImageSize = CGSize(width: floor(image.size.width * 0.7), height: floor(image.size.height * 0.7))
-                    self.textArrowNodes[i - 1].frame = CGRect(origin: CGPoint(x: floor((layout.size.width - scaledImageSize.width) / 2.0), y: nextTextOrigin - textSpacing + floor((textSpacing - scaledImageSize.height) / 2.0)), size: scaledImageSize)
+                    self.textArrowNodes[i - 1].frame = CGRect(origin: CGPoint(x: bandMinX + floor((bandWidth - scaledImageSize.width) / 2.0), y: nextTextOrigin - textSpacing + floor((textSpacing - scaledImageSize.height) / 2.0)), size: scaledImageSize)
                 }
             }
 

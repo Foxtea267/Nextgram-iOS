@@ -10,6 +10,7 @@ import LegacyComponents
 import NagramLoginUI
 import SolidRoundedButtonNode
 import RMIntro
+import AuthorizationUtils
 
 public final class AuthorizationSequenceSplashController: ViewController {
     private var controllerNode: AuthorizationSequenceSplashControllerNode {
@@ -82,6 +83,12 @@ public final class AuthorizationSequenceSplashController: ViewController {
         
         self.controller = RMIntroViewController(backgroundColor: theme.list.plainBackgroundColor, primaryColor: theme.list.itemPrimaryTextColor, buttonColor: theme.intro.startButtonColor, accentColor: theme.list.itemAccentColor, regularDotColor: theme.intro.dotColor, highlightedDotColor: theme.list.itemAccentColor, suggestedLocalizationSignal: localizationSignal)
         
+        // The tour is shown in English (it reads the en bundle); the page indicator's VoiceOver label follows it.
+        self.controller.pageAccessibilityLabel = defaultPresentationStrings.VoiceOver_Common_Page
+        self.controller.pageAccessibilityValue = { page, count in
+            return defaultPresentationStrings.Items_NOfM("\(page)", "\(count)").string
+        }
+
         // MARK: NAGRAM
         // MARK: NEXTGRAM
         self.startButton = SolidRoundedButtonNode(title: "Start with Nextgram", theme: SolidRoundedButtonTheme(theme: theme), glass: false, height: 50.0, cornerRadius: 50.0 * 0.5, isShimmering: true)
@@ -167,8 +174,10 @@ public final class AuthorizationSequenceSplashController: ViewController {
         self.controller.animateIn()
     }
     
+    // The intro view may sit in a band (iPhone Duo's side strip, see introFrame(layout:)); these frames are
+    // handed to the next screen's node, which fills the window, so they are offset out of the intro view.
     var buttonFrame: CGRect {
-        return self.startButton.frame
+        return self.startButton.frame.offsetBy(dx: self.controller.defaultFrame.minX, dy: self.controller.defaultFrame.minY)
     }
     
     var buttonTitle: String {
@@ -176,18 +185,36 @@ public final class AuthorizationSequenceSplashController: ViewController {
     }
     
     var animationSnapshot: UIView? {
-        return self.controller.createAnimationSnapshot()
+        let snapshotView: UIView? = self.controller.createAnimationSnapshot()
+        guard let snapshot = snapshotView else {
+            return nil
+        }
+        snapshot.frame = snapshot.frame.offsetBy(dx: self.controller.defaultFrame.minX, dy: self.controller.defaultFrame.minY)
+        return snapshot
     }
     
     var textSnaphot: UIView? {
-        return self.controller.createTextSnapshot()
+        let snapshotView: UIView? = self.controller.createTextSnapshot()
+        guard let snapshot = snapshotView else {
+            return nil
+        }
+        snapshot.frame = snapshot.frame.offsetBy(dx: self.controller.defaultFrame.minX, dy: self.controller.defaultFrame.minY)
+        return snapshot
+    }
+    
+    // iPhone Duo: beside a side strip the intro (logo, pages, Start Messaging) keeps to the band between the
+    // side insets, centered on the full width on the unfolded screen (authorizationContentBand). With equal insets
+    // (every other phone) it fills the window as before.
+    private func introFrame(layout: ContainerViewLayout) -> CGRect {
+        let (bandMinX, bandWidth) = authorizationContentBand(layout: layout)
+        return CGRect(origin: CGPoint(x: bandMinX, y: 0.0), size: CGSize(width: bandWidth, height: layout.size.height))
     }
     
     private func addControllerIfNeeded() {
         if !self.controller.isViewLoaded || self.controller.view.superview == nil {
             self.displayNode.view.addSubview(self.controller.view)
             if let layout = self.validLayout {
-                controller.view.frame = CGRect(origin: CGPoint(), size: layout.size)
+                controller.view.frame = self.introFrame(layout: layout)
             }
             self.controller.viewDidAppear(false)
         }
@@ -223,7 +250,7 @@ public final class AuthorizationSequenceSplashController: ViewController {
         super.containerLayoutUpdated(layout, transition: transition)
         
         self.validLayout = layout
-        let controllerFrame = CGRect(origin: CGPoint(), size: layout.size)
+        let controllerFrame = self.introFrame(layout: layout)
         self.controller.defaultFrame = controllerFrame
         
         self.controllerNode.containerLayoutUpdated(layout, navigationBarHeight: 0.0, transition: transition)

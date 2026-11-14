@@ -235,8 +235,18 @@ public func entityPreservingFallbackAttributedString(
         return result
     }
 
-    func appendParagraph(_ paragraph: NSAttributedString, blockAttribute: ChatTextInputTextQuoteAttribute?) {
-        if paragraph.length == 0 {
+    // MARK: NAGRAM — inside a quote a blank line is part of the quote's text, so it is kept (see `.blockQuote`).
+    var quoteDepth = 0
+
+    func isEmptyParagraph(_ block: ChatInputBlock) -> Bool {
+        if case let .paragraph(paragraph) = block {
+            return attributedRuns(paragraph.runs).length == 0
+        }
+        return false
+    }
+
+    func appendParagraph(_ paragraph: NSAttributedString, blockAttribute: ChatTextInputTextQuoteAttribute?, keepIfEmpty: Bool = false) {
+        if paragraph.length == 0 && !keepIfEmpty {
             return
         }
         appendSeparatorIfNeeded()
@@ -255,7 +265,7 @@ public func entityPreservingFallbackAttributedString(
         for block in content.blocks {
             switch block {
             case let .paragraph(paragraph):
-                appendRuns(paragraph.runs, blockAttribute: inheritedBlockAttribute)
+                appendParagraph(attributedRuns(paragraph.runs), blockAttribute: inheritedBlockAttribute, keepIfEmpty: quoteDepth > 0)
             case let .code(code):
                 let blockAttribute = inheritedBlockAttribute ?? ChatTextInputTextQuoteAttribute(kind: .code(language: code.language), isCollapsed: false)
                 appendParagraph(attributedRuns(code.runs, preserveInlineAttributes: inheritedBlockAttribute != nil), blockAttribute: blockAttribute)
@@ -265,7 +275,33 @@ public func entityPreservingFallbackAttributedString(
                 appendRuns(pullQuote.author, blockAttribute: inheritedBlockAttribute)
             case let .blockQuote(blockQuote):
                 let quoteAttribute = inheritedBlockAttribute ?? ChatTextInputTextQuoteAttribute(kind: .quote, isCollapsed: blockQuote.collapsed)
-                appendContent(blockQuote.content, inheritedBlockAttribute: quoteAttribute)
+                if inheritedBlockAttribute == nil {
+                    // MARK: NAGRAM — one quote must stay one quote entity. Marking each line on its own left the
+                    // "\n" between lines unmarked, so every line became its own quote, and blank lines were dropped.
+                    // Keep the blank lines between the quote's lines, trim the ones at its edges, and mark the whole
+                    // run, separators included.
+                    var quoteBlocks = blockQuote.content.blocks
+                    while let first = quoteBlocks.first, isEmptyParagraph(first) {
+                        quoteBlocks.removeFirst()
+                    }
+                    while let last = quoteBlocks.last, isEmptyParagraph(last) {
+                        quoteBlocks.removeLast()
+                    }
+                    let wasFirst = isFirst
+                    let quoteStart = result.length
+                    quoteDepth += 1
+                    appendContent(ChatInputContent(blocks: quoteBlocks), inheritedBlockAttribute: quoteAttribute)
+                    quoteDepth -= 1
+                    var start = quoteStart
+                    if !wasFirst && start < result.length && (result.string as NSString).character(at: start) == 0x0A {
+                        start += 1
+                    }
+                    if start < result.length {
+                        result.addAttribute(ChatTextInputAttributes.block, value: quoteAttribute, range: NSRange(location: start, length: result.length - start))
+                    }
+                } else {
+                    appendContent(blockQuote.content, inheritedBlockAttribute: quoteAttribute)
+                }
                 appendRuns(blockQuote.author, blockAttribute: inheritedBlockAttribute)
             case let .details(details):
                 // Defensive entity-path fallback (details normally forces the rich path): flatten the title
@@ -398,16 +434,13 @@ public func chatInputContent(from attributedText: NSAttributedString) -> ChatInp
     }
     // Each maximal `.block`/.quote run becomes one carve (adjacent equal-valued runs are already merged by
     // `enumerateAttribute`), so a multi-line quote stays one block and its interior "\n"s become inner paragraphs.
-    // MARK: NAGRAM — a quoted trailing "\n" does not pull the empty last line into the quote.
-    var nagramQuoteSeparators = Set<Int>()
+    // MARK: NAGRAM — a quoted trailing "\n" does not pull the empty last line into the quote. The empty line
+    // after it comes from the trailing-separator rule below.
     attributedText.enumerateAttribute(ChatTextInputAttributes.block, in: NSRange(location: 0, length: attributedText.length), options: []) { value, range, _ in
         if let q = value as? ChatTextInputTextQuoteAttribute, case .quote = q.kind {
             var quoteRange = range
             if quoteRange.length > 0 && full.character(at: quoteRange.location + quoteRange.length - 1) == 0x0A {
                 quoteRange.length -= 1
-                if quoteRange.length > 0 {
-                    nagramQuoteSeparators.insert(quoteRange.location + quoteRange.length)
-                }
             }
             if quoteRange.length > 0 {
                 carves.append((range: quoteRange, kind: .quote(collapsed: q.isCollapsed)))
@@ -424,8 +457,21 @@ public func chatInputContent(from attributedText: NSAttributedString) -> ChatInp
     var cursor = 0
     for carve in carves {
         var gapEnd = carve.range.location
-        if gapEnd > cursor && full.character(at: gapEnd - 1) == 0x0A { gapEnd -= 1 }
-        if gapEnd > cursor { blocks.append(contentsOf: paragraphBlocks(in: NSRange(location: cursor, length: gapEnd - cursor))) }
+        var gapHadSeparator = false
+        if gapEnd > cursor && full.character(at: gapEnd - 1) == 0x0A {
+            gapEnd -= 1
+            gapHadSeparator = true
+        }
+        if gapEnd > cursor {
+            blocks.append(contentsOf: paragraphBlocks(in: NSRange(location: cursor, length: gapEnd - cursor)))
+        } else if gapHadSeparator {
+            // The gap is exactly one "\n": the separator BEFORE this carve, with the cursor already past
+            // the separator after the previous block (or at the start). Between those two separators is
+            // one EMPTY line — `"A\n\nB"` between two quotes or code blocks is `[A] [p ""] [B]`, which
+            // `attributedString(from:)` encodes exactly so. Emitting nothing lost that line on every edit
+            // load of a sent message (composer harness p20, `HarnessSendPathBlankLineReloadTests`).
+            blocks.append(.paragraph(ChatInputParagraph(style: .body, runs: [])))
+        }
         switch carve.kind {
         case let .code(language):
             blocks.append(.code(ChatInputCode(
@@ -442,13 +488,20 @@ public func chatInputContent(from attributedText: NSAttributedString) -> ChatInp
                 collapsed: true)))
         }
         cursor = carve.range.location + carve.range.length
-        if cursor < full.length && full.character(at: cursor) == 0x0A { cursor += 1 }
+        if cursor < full.length && full.character(at: cursor) == 0x0A {
+            cursor += 1
+            if cursor == full.length {
+                // The separator after the block is the text's LAST character, so an empty line
+                // follows it: `"abc\n"` is `[code "abc"] [p ""]`, which `attributedString(from:)`
+                // encodes exactly so. Emitting nothing dropped the line, and the legacy composer,
+                // which writes the model back into its text view, then removed the line break
+                // outside UIKit's undo stack — the next Undo raised `NSRangeException`
+                // (`HarnessLegacyDeleteLineAfterBlockUndoTests`).
+                blocks.append(.paragraph(ChatInputParagraph(style: .body, runs: [])))
+            }
+        }
     }
     if cursor < full.length { blocks.append(contentsOf: paragraphBlocks(in: NSRange(location: cursor, length: full.length - cursor))) }
-    // MARK: NAGRAM
-    if cursor == full.length && nagramQuoteSeparators.contains(full.length - 1) {
-        blocks.append(.paragraph(ChatInputParagraph(style: .body, runs: [])))
-    }
 
     if blocks.isEmpty { blocks = [.paragraph(ChatInputParagraph())] }
     return ChatInputContent(blocks: blocks)

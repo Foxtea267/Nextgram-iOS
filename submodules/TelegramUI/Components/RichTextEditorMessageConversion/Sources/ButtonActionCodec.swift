@@ -1,5 +1,4 @@
 import Foundation
-import Postbox
 import TelegramCore
 import RichTextEditorCore
 
@@ -7,7 +6,7 @@ import RichTextEditorCore
 /// Both directions live here so they cannot drift — the `MentionDateMarkers.swift` precedent.
 ///
 /// `RichTextEditorCore` is Telegram-free, so it can name only the actions the editor can author or
-/// meaningfully describe (`url`, `copyText`, `disabled`). Everything else is preserved verbatim as
+/// meaningfully describe (`url`, `copyText`, `userProfile`, `disabled`). Everything else is preserved verbatim as
 /// `.unsupported(kind:payload:)`, whose `payload` is the base64 of the action's own Postbox blob.
 /// Nothing outside this file may read or construct those two fields.
 
@@ -21,14 +20,16 @@ public func buttonAction(from action: ReplyMarkupButtonAction) -> ButtonAction {
         return .url(url)
     case let .copyText(payload):
         return .copyText(payload)
+    case let .openUserProfile(peerId):
+        return .userProfile(peerId: peerId.toInt64())
     case .disabled:
         return .disabled
-    case .callback, .urlAuth, .openWebView, .switchInline, .openUserProfile, .openWebApp, .payment,
+    case .callback, .urlAuth, .openWebView, .switchInline, .openWebApp, .payment,
          .text, .requestPhone, .requestMap, .setupPoll, .requestPeer:
         // `ReplyMarkupButtonAction` is deliberately WIDER than the page-button schema: the last five
         // come only from `Api.ButtonType` and cannot occur on a page button. They are handled anyway
         // because the type admits them.
-        let encoder = PostboxEncoder()
+        let encoder = EnginePostboxEncoder()
         action.encode(encoder)
         return .unsupported(kind: unsupportedActionKind, payload: encoder.makeData().base64EncodedString())
     }
@@ -40,6 +41,14 @@ public func replyMarkupButtonAction(from action: ButtonAction) -> ReplyMarkupBut
         return .url(url)
     case let .copyText(payload):
         return .copyText(payload: payload)
+    case let .userProfile(peerId):
+        // The schema's profile button names a user (`user_id`). An id of another namespace can only come
+        // from a crafted clipboard or `.rtdoc`; it degrades like an undecodable action.
+        let peerId = EnginePeer.Id(peerId)
+        guard peerId.namespace == Namespaces.Peer.CloudUser else {
+            return .disabled
+        }
+        return .openUserProfile(peerId: peerId)
     case .disabled:
         return .disabled
     case let .unsupported(kind, payload):
@@ -48,7 +57,7 @@ public func replyMarkupButtonAction(from action: ButtonAction) -> ReplyMarkupBut
         guard kind == unsupportedActionKind, let data = Data(base64Encoded: payload), !data.isEmpty else {
             return .disabled
         }
-        return ReplyMarkupButtonAction(decoder: PostboxDecoder(buffer: MemoryBuffer(data: data)))
+        return ReplyMarkupButtonAction(decoder: EnginePostboxDecoder(buffer: EngineMemoryBuffer(data: data)))
     }
 }
 

@@ -11,6 +11,9 @@ import PhotoResources
 import DirectMediaImageCache
 import TelegramStringFormatting
 import TooltipUI
+import ButtonComponent
+import ComponentDisplayAdapters
+import EdgeEffect
 
 private enum SelectionTransition {
     case begin
@@ -1001,7 +1004,7 @@ public final class CalendarMessageScreen: ViewController {
         private let dayEnvironment: DayEnvironment
 
         private var validLayout: (layout: ContainerViewLayout, navigationHeight: CGFloat)?
-        private var scrollLayout: (width: CGFloat, contentHeight: CGFloat, frames: [Int: CGRect])?
+        private var scrollLayout: (width: CGFloat, sideInsets: UIEdgeInsets, contentHeight: CGFloat, frames: [Int: CGRect])?
 
         private var calendarState: SparseMessageCalendar.State?
 
@@ -1010,7 +1013,9 @@ public final class CalendarMessageScreen: ViewController {
 
         private weak var currentGestureDayView: DayComponent.View?
 
-        private var selectionToolbarNode: ToolbarNode?
+        private var selectionPanelView: UIView?
+        private var selectionPanelEdgeEffectView: EdgeEffectView?
+        private var selectionPanelButton: ComponentView<Empty>?
         private(set) var selectionState: SelectionState?
 
         private var ignoreContentOffset: Bool = false
@@ -1240,22 +1245,30 @@ public final class CalendarMessageScreen: ViewController {
             let isFirstLayout = self.validLayout == nil
             self.validLayout = (layout, navigationHeight)
 
-            var tabBarHeight: CGFloat
             var options: ContainerViewLayoutInsetOptions = []
             if layout.metrics.widthClass == .regular {
                 options.insert(.input)
             }
             let bottomInset: CGFloat = layout.insets(options: options).bottom
-            if !layout.safeInsets.left.isZero {
-                tabBarHeight = 34.0 + bottomInset
-            } else {
-                tabBarHeight = 49.0 + bottomInset
-            }
 
-            let tabBarFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - tabBarHeight), size: CGSize(width: layout.size.width, height: tabBarHeight))
+            // The compact landscape panel wherever a compact layout has a side inset in landscape: iPhone Duo's folded
+            // screen has one on the left OR the right (its side strip), so testing the left one alone gave its two
+            // landscapes different panels. Elsewhere a left inset implies landscape and the right one is equal.
+            let hasLandscapeSideInset = layout.metrics.widthClass == .compact && layout.size.width > layout.size.height && (!layout.safeInsets.left.isZero || !layout.safeInsets.right.isZero)
+            let panelTopInset: CGFloat = 8.0
+            let panelBottomInset: CGFloat
+            if bottomInset == 0.0 {
+                panelBottomInset = panelTopInset
+            } else if !layout.safeInsets.left.isZero || hasLandscapeSideInset {
+                panelBottomInset = max(panelTopInset, bottomInset)
+            } else {
+                panelBottomInset = bottomInset + 10.0
+            }
+            let panelButtonHeight: CGFloat = 52.0
+            let panelHeight: CGFloat = panelTopInset + panelButtonHeight + panelBottomInset
+            let panelFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - panelHeight), size: CGSize(width: layout.size.width, height: panelHeight))
 
             if let selectionState = self.selectionState {
-                let selectionToolbarNode: ToolbarNode
                 let toolbarText: String
                 
                 var selectedCount = 0
@@ -1281,41 +1294,85 @@ public final class CalendarMessageScreen: ViewController {
                     toolbarText = self.presentationData.strings.MessageCalendar_ClearHistoryForTheseDays
                 }
                 
-                if let currrent = self.selectionToolbarNode {
-                    selectionToolbarNode = currrent
-                    
-                    transition.updateFrame(node: selectionToolbarNode, frame: tabBarFrame)
-                    selectionToolbarNode.updateLayout(size: tabBarFrame.size, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, additionalSideInsets: layout.additionalInsets, bottomInset: bottomInset, toolbar: Toolbar(leftAction: nil, rightAction: nil, middleAction: ToolbarAction(title: toolbarText, isEnabled: true, color: .custom(self.selectionState?.dayRange != nil ? self.presentationData.theme.list.itemDestructiveColor : self.presentationData.theme.list.itemDisabledTextColor))), transition: transition)
+                // The bottom selection panel spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom.
+                let bottomSideInsets = layout.bottomEdgeSideInsets()
+                
+                let selectionPanelView: UIView
+                let selectionPanelEdgeEffectView: EdgeEffectView
+                let selectionPanelButton: ComponentView<Empty>
+                var panelTransition = transition
+                var animateIn = false
+                if let currentView = self.selectionPanelView, let currentEdgeEffectView = self.selectionPanelEdgeEffectView, let currentButton = self.selectionPanelButton {
+                    selectionPanelView = currentView
+                    selectionPanelEdgeEffectView = currentEdgeEffectView
+                    selectionPanelButton = currentButton
                 } else {
-                    selectionToolbarNode = ToolbarNode(
-                        theme: ToolbarTheme(
-                        rootControllerTheme: self.presentationData.theme),
-                        displaySeparator: true,
-                        left: {
-                        },
-                        right: {
-                        },
-                        middle: { [weak self] in
+                    selectionPanelView = UIView()
+                    selectionPanelEdgeEffectView = EdgeEffectView()
+                    selectionPanelEdgeEffectView.isUserInteractionEnabled = false
+                    selectionPanelView.addSubview(selectionPanelEdgeEffectView)
+                    selectionPanelButton = ComponentView<Empty>()
+                    self.view.addSubview(selectionPanelView)
+                    self.selectionPanelView = selectionPanelView
+                    self.selectionPanelEdgeEffectView = selectionPanelEdgeEffectView
+                    self.selectionPanelButton = selectionPanelButton
+                    panelTransition = .immediate
+                    animateIn = true
+                }
+                
+                panelTransition.updateFrame(view: selectionPanelView, frame: panelFrame)
+                
+                let edgeEffectFrame = CGRect(origin: CGPoint(), size: panelFrame.size)
+                panelTransition.updateFrame(view: selectionPanelEdgeEffectView, frame: edgeEffectFrame)
+                selectionPanelEdgeEffectView.update(content: self.presentationData.theme.list.plainBackgroundColor, blur: true, alpha: 1.0, rect: edgeEffectFrame, edge: .bottom, edgeSize: edgeEffectFrame.height, transition: ComponentTransition(panelTransition))
+                
+                let hasSelection = selectionState.dayRange != nil
+                let buttonSideInsets = UIEdgeInsets(top: 0.0, left: 16.0 + bottomSideInsets.left, bottom: 0.0, right: 16.0 + bottomSideInsets.right)
+                let buttonSize = selectionPanelButton.update(
+                    transition: ComponentTransition(panelTransition),
+                    component: AnyComponent(ButtonComponent(
+                        background: ButtonComponent.Background(
+                            style: .glass,
+                            color: self.presentationData.theme.list.itemDestructiveColor,
+                            foreground: .white,
+                            pressedColor: self.presentationData.theme.list.itemDestructiveColor.withMultipliedAlpha(0.9)
+                        ),
+                        content: AnyComponentWithIdentity(
+                            id: AnyHashable(toolbarText),
+                            component: AnyComponent(Text(text: toolbarText, font: Font.semibold(17.0), color: .white))
+                        ),
+                        isEnabled: hasSelection,
+                        allowActionWhenDisabled: true,
+                        action: { [weak self] in
                             self?.selectionToolbarActionSelected()
                         }
-                    )
-                    selectionToolbarNode.frame = tabBarFrame
-                    selectionToolbarNode.updateLayout(size: tabBarFrame.size, leftInset: layout.safeInsets.left, rightInset: layout.safeInsets.right, additionalSideInsets: layout.additionalInsets, bottomInset: bottomInset, toolbar: Toolbar(leftAction: nil, rightAction: nil, middleAction: ToolbarAction(title: toolbarText, isEnabled: true, color: .custom(self.selectionState?.dayRange != nil ? self.presentationData.theme.list.itemDestructiveColor : self.presentationData.theme.list.itemDisabledTextColor))), transition: .immediate)
-                    self.addSubnode(selectionToolbarNode)
-                    self.selectionToolbarNode = selectionToolbarNode
-                    transition.animatePositionAdditive(node: selectionToolbarNode, offset: CGPoint(x: 0.0, y: tabBarFrame.height))
+                    )),
+                    environment: {},
+                    containerSize: CGSize(width: panelFrame.width - buttonSideInsets.left - buttonSideInsets.right, height: panelButtonHeight)
+                )
+                if let buttonView = selectionPanelButton.view {
+                    if buttonView.superview == nil {
+                        selectionPanelView.addSubview(buttonView)
+                    }
+                    panelTransition.updateFrame(view: buttonView, frame: CGRect(origin: CGPoint(x: buttonSideInsets.left, y: panelTopInset), size: buttonSize))
                 }
-            } else if let selectionToolbarNode = self.selectionToolbarNode {
-                self.selectionToolbarNode = nil
-                transition.updatePosition(node: selectionToolbarNode, position: CGPoint(x: selectionToolbarNode.position.x, y: selectionToolbarNode.position.y + tabBarFrame.height), completion: { [weak selectionToolbarNode] _ in
-                    selectionToolbarNode?.removeFromSupernode()
+                
+                if animateIn {
+                    transition.animatePositionAdditive(layer: selectionPanelView.layer, offset: CGPoint(x: 0.0, y: panelFrame.height))
+                }
+            } else if let selectionPanelView = self.selectionPanelView {
+                self.selectionPanelView = nil
+                self.selectionPanelEdgeEffectView = nil
+                self.selectionPanelButton = nil
+                transition.updatePosition(layer: selectionPanelView.layer, position: CGPoint(x: selectionPanelView.layer.position.x, y: selectionPanelView.layer.position.y + selectionPanelView.bounds.height), completion: { [weak selectionPanelView] _ in
+                    selectionPanelView?.removeFromSuperview()
                 })
             }
 
             let _ = self.updateScrollLayoutIfNeeded()
 
             let previousInset = self.scrollView.contentInset.top
-            let updatedInset = self.selectionToolbarNode?.bounds.height ?? 0.0
+            let updatedInset = self.selectionPanelView?.bounds.height ?? 0.0
             if previousInset != updatedInset {
                 let delta = updatedInset - previousInset
                 self.ignoreContentOffset = true
@@ -1367,8 +1424,8 @@ public final class CalendarMessageScreen: ViewController {
 
         private func selectionToolbarActionSelected() {
             if self.selectionState?.dayRange == nil {
-                if let selectionToolbarNode = self.selectionToolbarNode {
-                    let toolbarFrame = selectionToolbarNode.view.convert(selectionToolbarNode.bounds, to: self.view)
+                if let buttonView = self.selectionPanelButton?.view {
+                    let toolbarFrame = buttonView.convert(buttonView.bounds, to: self.view)
                     self.controller?.present(TooltipScreen(account: self.context.account, sharedContext: self.context.sharedContext, text: .plain(text: self.presentationData.strings.MessageCalendar_EmptySelectionTooltip), style: .default, icon: .none, location: .point(toolbarFrame.insetBy(dx: 0.0, dy: 10.0), .bottom), shouldDismissOnTouch: { _, _ in
                         return .dismiss(consume: false)
                     }), in: .current)
@@ -1568,7 +1625,10 @@ public final class CalendarMessageScreen: ViewController {
             guard let (layout, navigationHeight) = self.validLayout else {
                 return false
             }
-            if self.scrollLayout?.width == layout.size.width {
+            // The month frames depend on the side insets too: iPhone Duo's folded landscape-left and landscape-right
+            // are equally wide but put the side strip on opposite sides.
+            let sideInsets = UIEdgeInsets(top: 0.0, left: layout.safeInsets.left, bottom: 0.0, right: layout.safeInsets.right)
+            if let scrollLayout = self.scrollLayout, scrollLayout.width == layout.size.width, scrollLayout.sideInsets == sideInsets {
                 return false
             }
 
@@ -1594,9 +1654,12 @@ public final class CalendarMessageScreen: ViewController {
                     environment: {
                         self.dayEnvironment
                     },
-                    containerSize: CGSize(width: layout.size.width, height: 10000.0
+                    containerSize: CGSize(width: layout.size.width - layout.safeInsets.left - layout.safeInsets.right, height: 10000.0
                 ))
-                let monthFrame = CGRect(origin: CGPoint(x: 0.0, y: contentHeight), size: monthSize)
+                // iPhone Duo: the months are laid out in the band between the side safe insets (one is the side
+                // strip). The scroll view is rotated by pi, so its x runs from the right edge: the band starts at
+                // the RIGHT inset. Equal insets (0 on phones in portrait) give the old frame.
+                let monthFrame = CGRect(origin: CGPoint(x: layout.safeInsets.right, y: contentHeight), size: monthSize)
                 contentHeight += monthSize.height
                 if i != self.months.count {
                     contentHeight += 16.0
@@ -1605,7 +1668,7 @@ public final class CalendarMessageScreen: ViewController {
             }
             contentHeight += navigationHeight
 
-            self.scrollLayout = (layout.size.width, contentHeight, frames)
+            self.scrollLayout = (layout.size.width, sideInsets, contentHeight, frames)
 
             self.contextGestureContainerNode.frame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: layout.size.width, height: layout.size.height))
             self.scrollView.frame = CGRect(origin: CGPoint(x: 0.0, y: 0.0), size: CGSize(width: layout.size.width, height: layout.size.height))
@@ -1616,7 +1679,7 @@ public final class CalendarMessageScreen: ViewController {
         }
 
         func updateMonthViews(transition: ComponentTransition) {
-            guard let (width, _, frames) = self.scrollLayout else {
+            guard let (width, sideInsets, _, frames) = self.scrollLayout else {
                 return
             }
             
@@ -1645,6 +1708,10 @@ public final class CalendarMessageScreen: ViewController {
                     self.monthViews[i] = monthView
                     self.scrollView.addSubview(monthView)
                 }
+                // Beside iPhone Duo's side strip (the side insets differ) the month is drawn at the band width it was
+                // measured at: drawn screen-wide in its band-wide frame it ran under the strip, or past the screen's
+                // edge with the strip on the left. Equal insets keep the old width.
+                let monthWidth: CGFloat = sideInsets.left != sideInsets.right ? monthFrame.width : width
                 let _ = monthView.update(
                     transition: monthTransition,
                     component: AnyComponent(MonthComponent(
@@ -1735,7 +1802,7 @@ public final class CalendarMessageScreen: ViewController {
                     environment: {
                         self.dayEnvironment
                     },
-                    containerSize: CGSize(width: width, height: 10000.0
+                    containerSize: CGSize(width: monthWidth, height: 10000.0
                 ))
                 monthView.frame = monthFrame
             }
@@ -1863,7 +1930,7 @@ public final class CalendarMessageScreen: ViewController {
 
         self.presentationData = self.context.sharedContext.currentPresentationData.with { $0 }
 
-        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData, style: .glass))
+        super.init(navigationBarPresentationData: NavigationBarPresentationData(presentationData: self.presentationData))
 
         self._hasGlassStyle = true
         self.navigationPresentation = .modal

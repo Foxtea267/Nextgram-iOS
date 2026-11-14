@@ -87,7 +87,7 @@ final class PeerInfoStoryGridScreenComponent: Component {
             self.selectionStateDisposable?.dispose()
         }
         
-        func morePressed(source: ContextReferenceContentNode) {
+        func morePressed(source: UIView) {
             guard let component = self.component, let controller = self.environment?.controller(), let pane = self.paneNode else {
                 return
             }
@@ -201,7 +201,7 @@ final class PeerInfoStoryGridScreenComponent: Component {
                 }
             }
 
-            let contextController = makeContextController(presentationData: presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceNode: source)), items: .single(ContextController.Items(content: .list(items))), gesture: nil)
+            let contextController = makeContextController(presentationData: presentationData, source: .reference(PeerInfoContextReferenceContentSource(controller: controller, sourceView: source)), items: .single(ContextController.Items(content: .list(items))), gesture: nil)
             contextController.passthroughTouchEvent = { [weak self] sourceView, point in
                 guard let self else {
                     return .ignore
@@ -368,6 +368,8 @@ final class PeerInfoStoryGridScreenComponent: Component {
                     }
                 }
                 
+                // The bottom panel spans iPhone Duo's side strip; it keeps clear only of a corner block at the bottom.
+                let selectionPanelSideInsets = environment.bottomEdgeSideInsets()
                 let selectionPanelSize = selectionPanel.update(
                     transition: selectionPanelTransition,
                     component: AnyComponent(BottomButtonPanelComponent(
@@ -375,7 +377,8 @@ final class PeerInfoStoryGridScreenComponent: Component {
                         title: buttonText,
                         label: nil,
                         isEnabled: buttonIsEnabled,
-                        insets: UIEdgeInsets(top: 0.0, left: sideInset, bottom: environment.safeInsets.bottom, right: sideInset),
+                        insets: UIEdgeInsets(top: 0.0, left: sideInset + selectionPanelSideInsets.left, bottom: environment.safeInsets.bottom, right: sideInset + selectionPanelSideInsets.right),
+                        backgroundColor: environment.theme.list.plainBackgroundColor,
                         action: { [weak self] in
                             guard let self, let component = self.component, let environment = self.environment else {
                                 return
@@ -558,10 +561,14 @@ final class PeerInfoStoryGridScreenComponent: Component {
                 applyState = true
             }
             
+            // iPhone Duo: when the side insets differ (one is the side strip, whose top corner holds the status
+            // corner), the grid is laid out in the band between them; equal insets keep the full-width grid.
+            let insetsDiffer = environment.safeInsets.left != environment.safeInsets.right
+            let paneFrame = insetsDiffer ? CGRect(x: environment.safeInsets.left, y: 0.0, width: availableSize.width - environment.safeInsets.left - environment.safeInsets.right, height: availableSize.height) : CGRect(origin: CGPoint(), size: availableSize)
             paneNode.update(
-                size: availableSize,
+                size: paneFrame.size,
                 topInset: environment.navigationHeight,
-                sideInset: environment.safeInsets.left,
+                sideInset: insetsDiffer ? 0.0 : environment.safeInsets.left,
                 bottomInset: bottomInset,
                 deviceMetrics: environment.deviceMetrics,
                 visibleHeight: availableSize.height,
@@ -572,7 +579,7 @@ final class PeerInfoStoryGridScreenComponent: Component {
                 synchronous: false,
                 transition: transition.containedViewLayoutTransition
             )
-            transition.setFrame(view: paneNode.view, frame: CGRect(origin: CGPoint(), size: availableSize))
+            transition.setFrame(view: paneNode.view, frame: paneFrame)
             
             return availableSize
         }
@@ -733,7 +740,7 @@ public class PeerInfoStoryGridScreen: ViewControllerComponentContainer {
         guard let moreBarButton = self.moreBarButton else {
             return
         }
-        componentView.morePressed(source: moreBarButton.referenceNode)
+        componentView.morePressed(source: self.navigationBar?.navigationButtonContextContainer(sourceView: moreBarButton.referenceNode.view) ?? moreBarButton.referenceNode.view)
     }
     
     @objc private func donePressed() {
@@ -753,14 +760,14 @@ public class PeerInfoStoryGridScreen: ViewControllerComponentContainer {
 
 private final class PeerInfoContextReferenceContentSource: ContextReferenceContentSource {
     private let controller: ViewController
-    private let sourceNode: ContextReferenceContentNode
+    private let sourceView: UIView
     
-    init(controller: ViewController, sourceNode: ContextReferenceContentNode) {
+    init(controller: ViewController, sourceView: UIView) {
         self.controller = controller
-        self.sourceNode = sourceNode
+        self.sourceView = sourceView
     }
     
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
-        return ContextControllerReferenceViewInfo(referenceView: self.sourceNode.view, contentAreaInScreenSpace: UIScreen.main.bounds)
+        return ContextControllerReferenceViewInfo(referenceView: self.sourceView, contentAreaInScreenSpace: mainWindowScreenBounds)
     }
 }

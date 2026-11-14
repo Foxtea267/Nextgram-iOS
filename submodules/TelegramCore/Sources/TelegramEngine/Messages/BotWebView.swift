@@ -1,7 +1,7 @@
 import Foundation
 import Postbox
 import SwiftSignalKit
-import TelegramApi
+internal import TelegramApi
 import MtProtoKit
 
 #if os(macOS)
@@ -210,7 +210,7 @@ private func keepWebViewSignal(network: Network, stateManager: AccountStateManag
                     replyFlags |= 1 << 0
                     topMsgId = Int32(clamping: threadId)
                 }
-                replyTo = .inputReplyToMessage(.init(flags: replyFlags, replyToMsgId: replyToMessageId.id, topMsgId: topMsgId, replyToPeerId: nil, quoteText: nil, quoteEntities: nil, quoteOffset: nil, monoforumPeerId: monoforumPeerId, todoItemId: nil, pollOption: nil))
+                replyTo = .inputReplyToMessage(.init(flags: replyFlags, replyToMsgId: replyToMessageId.id, topMsgId: topMsgId, replyToPeerId: nil, quoteText: nil, quoteEntities: nil, quoteOffset: nil, monoforumPeerId: monoforumPeerId, todoItemId: nil, pollOption: nil, quoteRich: nil))
             }
             let signal: Signal<Never, KeepWebViewError> = network.request(Api.functions.messages.prolongWebView(flags: flags, peer: peer, bot: bot, queryId: queryId, replyTo: replyTo, sendAs: sendAs))
             |> mapError { _ -> KeepWebViewError in
@@ -298,7 +298,7 @@ func _internal_requestWebView(postbox: Postbox, network: Network, stateManager: 
             } else if topMsgId != nil {
                 replyFlags |= 1 << 0
             }
-            replyTo = .inputReplyToMessage(.init(flags: replyFlags, replyToMsgId: replyToMessageId.id, topMsgId: topMsgId, replyToPeerId: nil, quoteText: nil, quoteEntities: nil, quoteOffset: nil, monoforumPeerId: monoforumPeerId, todoItemId: nil, pollOption: nil))
+            replyTo = .inputReplyToMessage(.init(flags: replyFlags, replyToMsgId: replyToMessageId.id, topMsgId: topMsgId, replyToPeerId: nil, quoteText: nil, quoteEntities: nil, quoteOffset: nil, monoforumPeerId: monoforumPeerId, todoItemId: nil, pollOption: nil, quoteRich: nil))
         } else if let monoforumPeerId {
             replyTo = .inputReplyToMonoForum(.init(monoforumPeerId: monoforumPeerId))
         }
@@ -564,8 +564,8 @@ public struct TelegramBotStorageState: Codable, Equatable {
     }
 }
 
-private func _internal_updateBotStorageState(account: Account, peerId: EnginePeer.Id, update: @escaping (TelegramBotStorageState?) -> TelegramBotStorageState) -> Signal<Never, BotStorageError> {
-    return account.postbox.transaction { transaction -> Signal<Never, BotStorageError> in
+private func _internal_updateBotStorageState(postbox: Postbox, peerId: EnginePeer.Id, update: @escaping (TelegramBotStorageState?) -> TelegramBotStorageState) -> Signal<Never, BotStorageError> {
+    return postbox.transaction { transaction -> Signal<Never, BotStorageError> in
         let previousState = transaction.getPreferencesEntry(key: PreferencesKeys.botStorageState(peerId: peerId))?.get(TelegramBotStorageState.self)
         let updatedState = update(previousState)
         
@@ -578,7 +578,7 @@ private func _internal_updateBotStorageState(account: Account, peerId: EnginePee
         }
         
         transaction.setPreferencesEntry(key: PreferencesKeys.botStorageState(peerId: peerId), value: PreferencesEntry(updatedState))
-        return .never()
+        return .complete()
     }
     |> castError(BotStorageError.self)
     |> switchToLatest
@@ -589,8 +589,8 @@ public enum BotStorageError {
     case quotaExceeded
 }
 
-func _internal_setBotStorageValue(account: Account, peerId: EnginePeer.Id, key: String, value: String?) -> Signal<Never, BotStorageError> {
-    return _internal_updateBotStorageState(account: account, peerId: peerId, update: { current in
+func _internal_setBotStorageValue(postbox: Postbox, peerId: EnginePeer.Id, key: String, value: String?) -> Signal<Never, BotStorageError> {
+    return _internal_updateBotStorageState(postbox: postbox, peerId: peerId, update: { current in
         var data = current?.data ?? [:]
         if let value {
             data[key] = value
@@ -601,8 +601,8 @@ func _internal_setBotStorageValue(account: Account, peerId: EnginePeer.Id, key: 
     })
 }
 
-func _internal_clearBotStorage(account: Account, peerId: EnginePeer.Id) -> Signal<Never, BotStorageError> {
-    return _internal_updateBotStorageState(account: account, peerId: peerId, update: { _ in
+func _internal_clearBotStorage(postbox: Postbox, peerId: EnginePeer.Id) -> Signal<Never, BotStorageError> {
+    return _internal_updateBotStorageState(postbox: postbox, peerId: peerId, update: { _ in
         return TelegramBotStorageState(data: [:])
     })
 }

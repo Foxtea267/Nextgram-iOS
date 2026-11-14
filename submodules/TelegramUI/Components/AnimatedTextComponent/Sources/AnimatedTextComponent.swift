@@ -23,6 +23,15 @@ extension ComponentTransition {
     }
 }
 
+/// A number item as the component draws it: the decimal digits, zero-padded to `minDigits` (any Int width).
+public func animatedTextNumberString(_ value: Int, minDigits: Int) -> String {
+    var valueText: String = "\(value)"
+    while valueText.count < minDigits {
+        valueText.insert("0", at: valueText.startIndex)
+    }
+    return valueText
+}
+
 public final class AnimatedTextComponent: Component {
     public struct Item: Equatable {
         public enum Content: Equatable {
@@ -51,6 +60,9 @@ public final class AnimatedTextComponent: Component {
     public let preferredDirectionIsDown: Bool
     public let blur: Bool
     public let useTransitionAnimation: Bool
+    /// Its text drawn by `SplitTintTextView`s: in white, coloured by their text layers' multiply colour
+    /// (`textTintLayers`), emoji apart and untinted, so a transition can run the colour on the render server.
+    public let splitsEmoji: Bool
     
     public init(
         font: UIFont,
@@ -61,7 +73,8 @@ public final class AnimatedTextComponent: Component {
         animateSlide: Bool = true,
         preferredDirectionIsDown: Bool = false,
         blur: Bool = false,
-        useTransitionAnimation: Bool = false
+        useTransitionAnimation: Bool = false,
+        splitsEmoji: Bool = false
     ) {
         self.font = font
         self.color = color
@@ -72,6 +85,7 @@ public final class AnimatedTextComponent: Component {
         self.preferredDirectionIsDown = preferredDirectionIsDown
         self.blur = blur
         self.useTransitionAnimation = useTransitionAnimation
+        self.splitsEmoji = splitsEmoji
     }
 
     public static func ==(lhs: AnimatedTextComponent, rhs: AnimatedTextComponent) -> Bool {
@@ -102,6 +116,9 @@ public final class AnimatedTextComponent: Component {
         if lhs.useTransitionAnimation != rhs.useTransitionAnimation {
             return false
         }
+        if lhs.splitsEmoji != rhs.splitsEmoji {
+            return false
+        }
         return true
     }
     
@@ -114,10 +131,79 @@ public final class AnimatedTextComponent: Component {
     public final class View: UIView {
         private var characters: [CharacterKey: ComponentView<Empty>] = [:]
         
+        /// The layers its text is coloured through (`splitsEmoji`): their multiply colour is the text's colour, emoji
+        /// drawn apart.
+        public var textTintLayers: [CALayer] {
+            return self.characters.values.compactMap { ($0.view as? SplitTintTextView)?.tintView.layer }
+        }
+        
         private var spaceSize: CGSize?
         
         private var component: AnimatedTextComponent?
         private weak var state: EmptyComponentState?
+        
+        // VoiceOver: a visible text is a static-text element reading exactly what it shows, unless a call site
+        // decides otherwise (anything it sets wins). A parent that is itself an element (a button) hides it as usual.
+        // Computed in the getters, so nothing runs while no accessibility client asks.
+        private var explicitIsAccessibilityElement: Bool?
+        private var explicitAccessibilityLabel: String??
+        private var explicitAccessibilityTraits: UIAccessibilityTraits?
+        
+        override public var isAccessibilityElement: Bool {
+            get {
+                if let explicitIsAccessibilityElement = self.explicitIsAccessibilityElement {
+                    return explicitIsAccessibilityElement
+                }
+                if self.isHidden || self.alpha < 0.01 {
+                    return false
+                }
+                guard let label = self.accessibilityLabel, !label.isEmpty else {
+                    return false
+                }
+                // Silent when an element drawn over it already speaks these words (a hand-labelled area beside it).
+                return !accessibilityTextIsSpokenByCoveringElement(self, text: label)
+            } set(value) {
+                self.explicitIsAccessibilityElement = value
+            }
+        }
+        
+        override public var accessibilityLabel: String? {
+            get {
+                if let explicitAccessibilityLabel = self.explicitAccessibilityLabel {
+                    return explicitAccessibilityLabel
+                }
+                if self.explicitIsAccessibilityElement == false {
+                    // Turned off by the call site: nothing to announce from here either.
+                    return nil
+                }
+                return self.component.flatMap { component -> String? in
+                    let text = component.items.compactMap { item -> String? in
+                        switch item.content {
+                        case let .text(value):
+                            return value
+                        case let .number(value, minDigits):
+                            return animatedTextNumberString(value, minDigits: minDigits)
+                        case .icon:
+                            return nil
+                        }
+                    }.joined()
+                    return text.isEmpty ? nil : text
+                }
+            } set(value) {
+                self.explicitAccessibilityLabel = .some(value)
+            }
+        }
+        
+        override public var accessibilityTraits: UIAccessibilityTraits {
+            get {
+                if let explicitAccessibilityTraits = self.explicitAccessibilityTraits {
+                    return explicitAccessibilityTraits
+                }
+                return self.explicitIsAccessibilityElement == false ? [] : .staticText
+            } set(value) {
+                self.explicitAccessibilityTraits = value
+            }
+        }
         
         override init(frame: CGRect) {
             super.init(frame: frame)
@@ -275,9 +361,17 @@ public final class AnimatedTextComponent: Component {
                                 addTrailingSpace = true
                             }
                             
-                            characterComponent = AnyComponent(MultilineTextComponent(
-                                text: .plain(NSAttributedString(string: text, font: component.font, textColor: component.color))
-                            ))
+                            if component.splitsEmoji {
+                                characterComponent = AnyComponent(SplitTintTextComponent(
+                                    text: text,
+                                    font: component.font,
+                                    color: component.color
+                                ))
+                            } else {
+                                characterComponent = AnyComponent(MultilineTextComponent(
+                                    text: .plain(NSAttributedString(string: text, font: component.font, textColor: component.color))
+                                ))
+                            }
                         }
                     case let .icon(iconName, tint, offset, scaleFactor):
                         characterComponent = AnyComponent(BundleIconComponent(
@@ -339,7 +433,7 @@ public final class AnimatedTextComponent: Component {
                             }
                             
                             if component.animateScale {
-                                motionTransition.animateScale(layer: characterComponentView.layer, from: 0.001, to: 1.0, delay: delayNorm * delayWidth)
+                                motionTransition.animateScale(layer: characterComponentView.layer, from: 0.001, to: 1.0, delay: delayNorm * delayWidth, completion: characterComponentView.layer.beginRasterizedAnimation())
                             }
                             if component.blur {
                                 ComponentTransition.easeInOut(duration: 0.2).animateBlur(layer: characterComponentView.layer, from: transitionBlurRadius, to: 0.0, delay: delayNorm * delayWidth)
@@ -377,6 +471,8 @@ public final class AnimatedTextComponent: Component {
                             delayWidth = max(0.0, delayWidth)
                             
                             if component.animateScale {
+                                characterComponentView.layer.rasterizationScale = UIScreenScale
+                                characterComponentView.layer.shouldRasterize = true
                                 motionTransition.setScale(view: characterComponentView, scale: 0.01, delay: delayNorm * delayWidth)
                             }
                             let targetY: CGFloat
@@ -446,5 +542,38 @@ public extension AnimatedTextComponent {
         }
         
         return textItems
+    }
+}
+
+/// One line of text drawn by a `SplitTintTextView`: white, coloured by its text layer's multiply colour, emoji untinted.
+private final class SplitTintTextComponent: Component {
+    let text: String
+    let font: UIFont
+    let color: UIColor
+
+    init(text: String, font: UIFont, color: UIColor) {
+        self.text = text
+        self.font = font
+        self.color = color
+    }
+
+    static func ==(lhs: SplitTintTextComponent, rhs: SplitTintTextComponent) -> Bool {
+        return lhs.text == rhs.text && lhs.font == rhs.font && lhs.color == rhs.color
+    }
+
+    final class View: SplitTintTextView {
+        func update(component: SplitTintTextComponent, availableSize: CGSize) -> CGSize {
+            self.attributedText = NSAttributedString(string: component.text, font: component.font, textColor: .white)
+            self.textColor = component.color
+            return self.updateLayout(availableSize)
+        }
+    }
+
+    func makeView() -> View {
+        return View(frame: CGRect())
+    }
+
+    func update(view: View, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
+        return view.update(component: self, availableSize: availableSize)
     }
 }

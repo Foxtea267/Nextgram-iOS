@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display
@@ -91,7 +90,7 @@ public final class ContextControllerActionsListActionItemNode: HighlightTracking
         
         self.isAccessibilityElement = true
         self.accessibilityLabel = item.text
-        self.accessibilityTraits = [.button]
+        self.accessibilityTraits = item.accessibilityIsSelected ? [.button, .selected] : [.button]
         
         self.addSubnode(self.titleLabelNode)
         self.addSubnode(self.subtitleNode)
@@ -207,6 +206,7 @@ public final class ContextControllerActionsListActionItemNode: HighlightTracking
     public func setItem(item: ContextMenuActionItem) {
         self.item = item
         self.accessibilityLabel = item.text
+        self.accessibilityTraits = item.accessibilityIsSelected ? [.button, .selected] : [.button]
     }
     
     public func update(presentationData: PresentationData, constrainedSize: CGSize) -> (minSize: CGSize, apply: (_ size: CGSize, _ transition: ContainedViewLayoutTransition) -> Void) {
@@ -280,6 +280,8 @@ public final class ContextControllerActionsListActionItemNode: HighlightTracking
             self.titleLabelNode.maximumNumberOfLines = 0
             self.titleLabelNode.lineSpacing = 0.1
         }
+        // VoiceOver: the second line ("1 Person" under "Who Can See") is the item's value.
+        self.accessibilityValue = subtitle?.string
         
         let titleColor: UIColor
         let linkColor = presentationData.theme.list.itemAccentColor
@@ -418,8 +420,7 @@ public final class ContextControllerActionsListActionItemNode: HighlightTracking
                     content: LottieComponent.AppBundleContent(name: iconAnimation.name),
                     color: titleColor,
                     startingPosition: iconAnimation.loop ? .begin : .end,
-                    loop: iconAnimation.loop,
-                    lottieSettings: self.context?.lottieRenderingSettings ?? .noAccountFallback
+                    loop: iconAnimation.loop
                 )),
                 environment: {},
                 containerSize: animatedIconSize
@@ -683,6 +684,8 @@ private final class ContextControllerActionsListSeparatorItemNode: ASDisplayNode
         
         super.init()
         
+        // A divider between groups of items, not content.
+        self.separatorView.accessibilityElementsHidden = true
         self.view.addSubview(self.separatorView)
     }
     
@@ -1470,6 +1473,10 @@ private final class ItemSelectionRecognizer: UIGestureRecognizer {
 }
 
 public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, ContextControllerActionsStackNode {
+    public var usesClearGlass: Bool = false
+    public var glassBlurRadius: CGFloat?
+    public var minimumListWidth: CGFloat?
+
     final class NavigationContainer: ASDisplayNode, ASGestureRecognizerDelegate {
         let backgroundContainer: GlassBackgroundContainerView
         let contentContainer: LensTransitionContainer
@@ -1556,11 +1563,11 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
             self.contentContainer.animateIn(from: sourceView, sourceRect: sourceRect, sourcePath: sourcePath, alongsideAnimations: alongsideAnimations)
         }
 
-        func animateOut(alongsideAnimations: @escaping () -> Void, completion: @escaping () -> Void) {
-            self.contentContainer.animateOut(alongsideAnimations: alongsideAnimations, completion: completion)
+        func animateOut(currentSource: (view: UIView, sourceRect: CGRect, sourcePath: UIBezierPath?)?, alongsideAnimations: @escaping () -> Void, completion: @escaping () -> Void) {
+            self.contentContainer.animateOut(currentSource: currentSource, alongsideAnimations: alongsideAnimations, completion: completion)
         }
 
-        func update(presentationData: PresentationData, presentation: Presentation, size: CGSize, transition: ContainedViewLayoutTransition) {
+        func update(presentationData: PresentationData, presentation: Presentation, size: CGSize, usesClearGlass: Bool, glassBlurRadius: CGFloat?, transition: ContainedViewLayoutTransition) {
             let transition = ComponentTransition(transition)
             
             transition.setFrame(view: self.backgroundContainer, frame: CGRect(origin: CGPoint(), size: size))
@@ -1568,7 +1575,9 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
             
             transition.setPosition(view: self.contentContainer, position: CGRect(origin: CGPoint(), size: size).center)
             transition.setBounds(view: self.contentContainer, bounds: CGRect(origin: CGPoint(), size: size))
-            self.contentContainer.update(size: size, cornerRadius: min(30.0, size.height * 0.5), isDark: presentationData.theme.overallDarkAppearance, transition: transition)
+            self.backgroundContainer.nativeBlurRadius = glassBlurRadius
+            self.contentContainer.nativeBlurRadius = glassBlurRadius
+            self.contentContainer.update(size: size, cornerRadius: min(30.0, size.height * 0.5), isDark: presentationData.theme.overallDarkAppearance, tintColor: GlassBackgroundView.TintColor(kind: usesClearGlass ? .custom(style: .clear, color: .clear) : .panel), transition: transition)
         }
     }
     
@@ -1775,6 +1784,14 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
     
     public var storedScrollingState: CGFloat? {
         return self.itemContainers.last?.storedScrollingState
+    }
+    
+    /// The submenu on top, when one has been pushed onto the root menu.
+    public var topPushedItemId: ObjectIdentifier? {
+        guard self.itemContainers.count > 1, let itemContainer = self.itemContainers.last else {
+            return nil
+        }
+        return ObjectIdentifier(itemContainer)
     }
     
     public init(
@@ -2039,7 +2056,7 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
                 }
             } else {
                 itemContainerConstrainedSize = CGSize(width: constrainedSize.width, height: itemConstrainedHeight)
-                standardMinWidth = 220.0
+                standardMinWidth = self.minimumListWidth ?? 220.0
                 standardMaxWidth = 240.0
                 additionalBottomInset = 0.0
             }
@@ -2100,7 +2117,7 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
         let previousNavigationContainerFrame = self.navigationContainer.frame
         transition.updateFrame(node: self.navigationContainer, frame: navigationContainerFrame, beginWithCurrentState: true)
         if !navigationContainerFrame.isEmpty {
-            self.navigationContainer.update(presentationData: presentationData, presentation: presentation, size: navigationContainerFrame.size, transition: transition)
+            self.navigationContainer.update(presentationData: presentationData, presentation: presentation, size: navigationContainerFrame.size, usesClearGlass: self.usesClearGlass, glassBlurRadius: self.glassBlurRadius, transition: transition)
         }
         
         for i in 0 ..< self.itemContainers.count {
@@ -2236,9 +2253,10 @@ public final class ContextControllerActionsStackNodeImpl: ASDisplayNode, Context
         })
     }
 
-    func animateOut(alongsideAnimations: @escaping () -> Void, completion: @escaping () -> Void) {
+    /// `currentSource` is the morph source's outline resolved for this close, as `animateIn` was given it at opening.
+    func animateOut(currentSource: (view: UIView, sourceRect: CGRect, sourcePath: UIBezierPath?)?, alongsideAnimations: @escaping () -> Void, completion: @escaping () -> Void) {
         let accessories = self.subnodes?.filter { $0 !== self.navigationContainer } ?? []
-        self.navigationContainer.animateOut(alongsideAnimations: {
+        self.navigationContainer.animateOut(currentSource: currentSource, alongsideAnimations: {
             for node in accessories {
                 node.alpha = 0.0
             }

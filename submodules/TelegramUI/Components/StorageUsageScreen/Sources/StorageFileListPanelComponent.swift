@@ -137,7 +137,7 @@ private final class FileListItemComponent: Component {
     let selectionState: SelectionState
     let hasNext: Bool
     let action: (EngineMessage.Id) -> Void
-    let contextAction: (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture) -> Void
+    let contextAction: (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture?) -> Void
     
     init(
         context: AccountContext,
@@ -151,7 +151,7 @@ private final class FileListItemComponent: Component {
         selectionState: SelectionState,
         hasNext: Bool,
         action: @escaping (EngineMessage.Id) -> Void,
-        contextAction: @escaping (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture) -> Void
+        contextAction: @escaping (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture?) -> Void
     ) {
         self.context = context
         self.theme = theme
@@ -315,8 +315,33 @@ private final class FileListItemComponent: Component {
             component.action(component.messageId)
         }
         
+        private var moreAccessibilityAction: UIAccessibilityCustomAction?
+        
         func update(component: FileListItemComponent, availableSize: CGSize, state: EmptyComponentState, environment: Environment<Empty>, transition: ComponentTransition) -> CGSize {
             let themeUpdated = self.component?.theme !== component.theme
+            
+            // VoiceOver: the row is one button (title; subtitle and size as the value; selected while picked in edit
+            // mode); its long-press menu is the "More" custom action.
+            self.containerButton.isAccessibilityElement = true
+            self.containerButton.accessibilityLabel = component.title
+            self.containerButton.accessibilityValue = [component.subtitle, component.label].filter { !$0.isEmpty }.joined(separator: ", ")
+            if case .editing(true) = component.selectionState {
+                self.containerButton.accessibilityTraits = [.button, .selected]
+            } else {
+                self.containerButton.accessibilityTraits = .button
+            }
+            if self.moreAccessibilityAction == nil {
+                // Created once per row view (the strings are read here, not on every update).
+                let title = component.context.sharedContext.currentPresentationData.with { $0 }.strings.Common_More
+                self.moreAccessibilityAction = UIAccessibilityCustomAction(name: title, actionHandler: { [weak self] _ in
+                    guard let self, self.isGestureEnabled, let component = self.component else {
+                        return false
+                    }
+                    component.contextAction(component.messageId, self.extractedContainerView, nil)
+                    return true
+                })
+            }
+            self.containerButton.accessibilityCustomActions = self.moreAccessibilityAction.flatMap { [$0] }
             
             var hasSelectionUpdated = false
             if let previousComponent = self.component {
@@ -669,14 +694,14 @@ final class StorageFileListPanelComponent: Component {
     let items: Items?
     let selectionState: StorageUsageScreenComponent.SelectionState?
     let action: (EngineMessage.Id) -> Void
-    let contextAction: (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture) -> Void
+    let contextAction: (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture?) -> Void
 
     init(
         context: AccountContext,
         items: Items?,
         selectionState: StorageUsageScreenComponent.SelectionState?,
         action: @escaping (EngineMessage.Id) -> Void,
-        contextAction: @escaping (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture) -> Void
+        contextAction: @escaping (EngineMessage.Id, ContextExtractedContentContainingView, ContextGesture?) -> Void
     ) {
         self.context = context
         self.items = items
@@ -702,6 +727,7 @@ final class StorageFileListPanelComponent: Component {
         let containerInsets: UIEdgeInsets
         let containerWidth: CGFloat
         let sideInset: CGFloat
+        let rightSideInset: CGFloat
         let itemHeight: CGFloat
         let itemCount: Int
 
@@ -711,12 +737,14 @@ final class StorageFileListPanelComponent: Component {
             containerInsets: UIEdgeInsets,
             containerWidth: CGFloat,
             sideInset: CGFloat,
+            rightSideInset: CGFloat,
             itemHeight: CGFloat,
             itemCount: Int
         ) {
             self.containerInsets = containerInsets
             self.containerWidth = containerWidth
             self.sideInset = sideInset
+            self.rightSideInset = rightSideInset
             self.itemHeight = itemHeight
             self.itemCount = itemCount
 
@@ -740,7 +768,7 @@ final class StorageFileListPanelComponent: Component {
         }
 
         func itemFrame(for index: Int) -> CGRect {
-            return CGRect(origin: CGPoint(x: self.sideInset, y: self.containerInsets.top + CGFloat(index) * self.itemHeight), size: CGSize(width: self.containerWidth - self.sideInset * 2.0, height: self.itemHeight))
+            return CGRect(origin: CGPoint(x: self.sideInset, y: self.containerInsets.top + CGFloat(index) * self.itemHeight), size: CGSize(width: self.containerWidth - self.sideInset - self.rightSideInset, height: self.itemHeight))
         }
     }
     
@@ -767,8 +795,10 @@ final class StorageFileListPanelComponent: Component {
         override init(frame: CGRect) {
             self.scrollView = ScrollViewImpl()
             self.listBackgroundView = UIImageView()
+            self.listBackgroundView.accessibilityElementsHidden = true // decoration
             self.listBackgroundView.image = generateStretchableFilledCircleImage(diameter: 26.0 * 2.0, color: .white)?.withRenderingMode(.alwaysTemplate)
             self.listMaskView = UIImageView()
+            self.listMaskView.accessibilityElementsHidden = true // decoration
             self.listMaskView.image = generateImage(CGSize(width: 16.0 + 26.0 * 2.0 + 16.0, height: 26.0 * 2.0), rotatedContext: { size, context in
                 context.clear(CGRect(origin: CGPoint(), size: size))
                 context.setFillColor(UIColor.white.cgColor)
@@ -835,8 +865,8 @@ final class StorageFileListPanelComponent: Component {
             distanceToTop = max(-100.0, distanceToTop)
             distanceToBottom = max(-100.0, distanceToBottom)
 
-            let listBackgroundFrame = CGRect(origin: CGPoint(x: 16.0, y: distanceToTop), size: CGSize(width: max(1.0, size.width - 16.0 * 2.0), height: max(1.0, size.height - distanceToBottom - distanceToTop)))
-            let listMaskFrame = CGRect(origin: CGPoint(x: 0.0, y: listBackgroundFrame.minY), size: CGSize(width: listBackgroundFrame.width + 16.0 * 2.0, height: listBackgroundFrame.height))
+            let listBackgroundFrame = CGRect(origin: CGPoint(x: itemLayout.sideInset, y: distanceToTop), size: CGSize(width: max(1.0, size.width - itemLayout.sideInset - itemLayout.rightSideInset), height: max(1.0, size.height - distanceToBottom - distanceToTop)))
+            let listMaskFrame = CGRect(origin: CGPoint(x: listBackgroundFrame.minX - 16.0, y: listBackgroundFrame.minY), size: CGSize(width: listBackgroundFrame.width + 16.0 * 2.0, height: listBackgroundFrame.height))
             transition.setFrame(view: self.listBackgroundView, frame: listBackgroundFrame)
             transition.setFrame(view: self.listMaskView, frame: listMaskFrame)
         }
@@ -1010,14 +1040,14 @@ final class StorageFileListPanelComponent: Component {
                             subtitle: subtitle,
                             label: dataSizeString(item.size, formatting: dataSizeFormatting),
                             icon: icon,
-                            sideInset: environment.containerInsets.left,
+                            sideInset: min(environment.containerInsets.left, environment.containerInsets.right),
                             selectionState: itemSelectionState,
                             hasNext: index != items.items.count - 1,
                             action: component.action,
                             contextAction: component.contextAction
                         )),
                         environment: {},
-                        containerSize: CGSize(width: itemLayout.containerWidth - itemLayout.sideInset * 2.0, height: itemLayout.itemHeight)
+                        containerSize: CGSize(width: itemLayout.containerWidth - itemLayout.sideInset - itemLayout.rightSideInset, height: itemLayout.itemHeight)
                     )
                     let itemFrame = itemLayout.itemFrame(for: index)
                     if let itemComponentView = itemView.view {
@@ -1064,7 +1094,7 @@ final class StorageFileListPanelComponent: Component {
                     subtitle: "ABCDEF",
                     label: "1000",
                     icon: .fileExtension("file"),
-                    sideInset: environment.containerInsets.left,
+                    sideInset: min(environment.containerInsets.left, environment.containerInsets.right),
                     selectionState: .none,
                     hasNext: false,
                     action: { _ in
@@ -1079,7 +1109,11 @@ final class StorageFileListPanelComponent: Component {
             let itemLayout = ItemLayout(
                 containerInsets: environment.containerInsets,
                 containerWidth: availableSize.width,
-                sideInset: 16.0,
+                // iPhone Duo: the part of one side's inset beyond the other's is the side strip; the list keeps 16pt
+                // clear of it, and the rows' own inset is the part both sides share. Equal insets give 16pt
+                // margins and the left inset in the rows, as before.
+                sideInset: 16.0 + max(0.0, environment.containerInsets.left - environment.containerInsets.right),
+                rightSideInset: 16.0 + max(0.0, environment.containerInsets.right - environment.containerInsets.left),
                 itemHeight: measureItemSize.height,
                 itemCount: component.items?.items.count ?? 0
             )

@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -143,6 +142,11 @@ private final class ThemeGridThemeItemIconNode : ASDisplayNode {
         item.action(item.themeReference)
     }
     
+    override func accessibilityActivate() -> Bool {
+        self.tap()
+        return true
+    }
+    
     private func removePlaceholder(animated: Bool) {
         if !animated {
             self.placeholderNode.removeFromSupernode()
@@ -233,6 +237,11 @@ private final class ThemeGridThemeItemIconNode : ASDisplayNode {
         self.textNode.frame = CGRect(origin: CGPoint(x: floorToScreenPixels((90.0 - textLayout.size.width) / 2.0), y: 83.0), size: textLayout.size)
         self.textNode.isHidden = string == nil
         
+        // VoiceOver: one button per theme ("🏠 Theme", or the theme's name), the current one selected.
+        self.isAccessibilityElement = true
+        self.accessibilityLabel = item.themeReference?.emoticon.flatMap { item.strings.Appearance_VoiceOver_Theme($0).string } ?? string ?? item.strings.Conversation_Theme_NoTheme
+        self.accessibilityTraits = item.selected ? [.button, .selected] : .button
+        
         self.containerNode.frame = CGRect(origin: CGPoint(), size: size)
         self.emojiContainerNode.frame = CGRect(origin: CGPoint(), size: size)
         
@@ -258,7 +267,7 @@ private final class ThemeGridThemeItemIconNode : ASDisplayNode {
             if let current = self.animatedStickerNode {
                 animatedStickerNode = current
             } else {
-                animatedStickerNode = DefaultAnimatedStickerNodeImpl(lottieSettings: item.context.lottieRenderingSettings)
+                animatedStickerNode = DefaultAnimatedStickerNodeImpl()
                 animatedStickerNode.started = { [weak self] in
                     self?.emojiImageNode.isHidden = true
                 }
@@ -488,7 +497,7 @@ class ThemeGridThemeItemNode: ListViewItemNode, ItemListItemNode {
                     strongSelf.maskNode.image = hasCorners ? PresentationResourcesItemList.cornersImage(item.theme, top: hasTopCorners, bottom: hasBottomCorners, glass: true) : nil
 
                     strongSelf.backgroundNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: params.width, height: contentSize.height + min(insets.top, separatorHeight) + min(insets.bottom, separatorHeight)))
-                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.insetBy(dx: params.leftInset, dy: 0.0)
+                    strongSelf.maskNode.frame = strongSelf.backgroundNode.frame.inset(by: UIEdgeInsets(top: 0.0, left: params.leftInset, bottom: 0.0, right: params.rightInset))
                     strongSelf.topStripeNode.frame = CGRect(origin: CGPoint(x: 0.0, y: -min(insets.top, separatorHeight)), size: CGSize(width: layoutSize.width, height: separatorHeight))
                     strongSelf.bottomStripeNode.frame = CGRect(origin: CGPoint(x: bottomStripeInset, y: contentSize.height + bottomStripeOffset), size: CGSize(width: layoutSize.width - bottomStripeInset, height: separatorHeight))
 

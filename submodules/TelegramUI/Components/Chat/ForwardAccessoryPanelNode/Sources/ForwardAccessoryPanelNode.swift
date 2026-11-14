@@ -26,7 +26,7 @@ import AlertComponent
 func textStringForForwardedMessage(_ message: EngineRawMessage, strings: PresentationStrings, dateTimeFormat: PresentationDateTimeFormat) -> (text: NSAttributedString, entities: [MessageTextEntity], isMedia: Bool) {
     for attribute in message.attributes {
         if let attribute = attribute as? RichTextMessageAttribute {
-            return (attribute.instantPage.previewAttributedText(strings: strings, dateTimeFormat: dateTimeFormat, associatedMedia: message.associatedMedia), [], false)
+            return (attribute.instantPage.previewAttributedText(strings: strings, dateTimeFormat: dateTimeFormat, associatedMedia: { message.associatedMedia[$0].map(EngineMedia.init) }), [], false)
         }
     }
     for media in message.media {
@@ -81,6 +81,8 @@ func textStringForForwardedMessage(_ message: EngineRawMessage, strings: Present
             return (NSAttributedString(string: strings.ForwardedPolls(1)), [], true)
         case let todo as TelegramMediaTodo:
             return (NSAttributedString(string: todo.text), [], true)
+        case _ as TelegramMediaWidget where message.text.isEmpty:
+            return (NSAttributedString(string: strings.Message_Widget), [], true)
         case let dice as TelegramMediaDice:
             return (NSAttributedString(string: dice.emoji), [], true)
         case let invoice as TelegramMediaInvoice:

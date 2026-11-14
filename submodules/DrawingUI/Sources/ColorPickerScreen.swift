@@ -1804,27 +1804,34 @@ private final class ColorPickerContent: CombinedComponent {
     typealias EnvironmentType = ViewControllerComponentContainer.Environment
     
     let context: AccountContext
+    /// The screen the sheet rises on: the sheet hands its content no height to keep to.
+    let screenSize: CGSize
     let initialColor: DrawingColor
     let colorChanged: (DrawingColor) -> Void
     let eyedropper: () -> Void
     let dismiss: () -> Void
-    
+
     init(
         context: AccountContext,
+        screenSize: CGSize,
         initialColor: DrawingColor,
         colorChanged: @escaping (DrawingColor) -> Void,
         eyedropper: @escaping () -> Void,
         dismiss: @escaping () -> Void
     ) {
         self.context = context
+        self.screenSize = screenSize
         self.initialColor = initialColor
         self.colorChanged = colorChanged
         self.eyedropper = eyedropper
         self.dismiss = dismiss
     }
-    
+
     static func ==(lhs: ColorPickerContent, rhs: ColorPickerContent) -> Bool {
         if lhs.context !== rhs.context {
+            return false
+        }
+        if lhs.screenSize != rhs.screenSize {
             return false
         }
         return true
@@ -1904,6 +1911,17 @@ private final class ColorPickerContent: CombinedComponent {
             state.colorChanged = component.colorChanged
             
             let sideInset: CGFloat = 16.0
+            let sheetSideGap = max(0.0, (component.screenSize.width - context.availableSize.width) / 2.0)
+            var bandLeft: CGFloat = 0.0
+            var bandRight: CGFloat = 0.0
+            var eyedropperRightInset = environment.safeInsets.right
+            if environment.safeInsets.left != environment.safeInsets.right {
+                bandLeft = max(0.0, environment.safeInsets.left - sheetSideGap)
+                bandRight = max(0.0, environment.safeInsets.right - sheetSideGap)
+                eyedropperRightInset = bandRight
+            }
+            let bandWidth = context.availableSize.width - bandLeft - bandRight
+            let bandCenterX = bandLeft + bandWidth / 2.0
                         
             let eyedropperButton = eyedropperButton.update(
                 component: GlassBarButtonComponent(
@@ -1923,7 +1941,7 @@ private final class ColorPickerContent: CombinedComponent {
                 transition: .immediate
             )
             context.add(eyedropperButton
-                .position(CGPoint(x: context.availableSize.width - environment.safeInsets.right - eyedropperButton.size.width / 2.0 - 16.0, y: 16.0 + eyedropperButton.size.height / 2.0))
+                .position(CGPoint(x: context.availableSize.width - eyedropperRightInset - eyedropperButton.size.width / 2.0 - 16.0, y: 16.0 + eyedropperButton.size.height / 2.0))
             )
             
             let closeButton = closeButton.update(
@@ -1944,7 +1962,7 @@ private final class ColorPickerContent: CombinedComponent {
                 transition: .immediate
             )
             context.add(closeButton
-                .position(CGPoint(x: 16.0 + closeButton.size.width / 2.0, y: 16.0 + closeButton.size.height / 2.0))
+                .position(CGPoint(x: bandLeft + 16.0 + closeButton.size.width / 2.0, y: 16.0 + closeButton.size.height / 2.0))
             )
             
             let title = title.update(
@@ -1958,11 +1976,11 @@ private final class ColorPickerContent: CombinedComponent {
                     horizontalAlignment: .center,
                     maximumNumberOfLines: 1
                 ),
-                availableSize: CGSize(width: context.availableSize.width - 100.0, height: CGFloat.greatestFiniteMagnitude),
+                availableSize: CGSize(width: bandWidth - 100.0, height: CGFloat.greatestFiniteMagnitude),
                 transition: .immediate
             )
             context.add(title
-                .position(CGPoint(x: context.availableSize.width / 2.0, y: 16.0 + 22.0))
+                .position(CGPoint(x: bandCenterX, y: 16.0 + 22.0))
             )
             
             var contentHeight: CGFloat = 76.0
@@ -1982,18 +2000,46 @@ private final class ColorPickerContent: CombinedComponent {
                         }
                     }
                 ),
-                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0, height: context.availableSize.height),
+                availableSize: CGSize(width: bandWidth - sideInset * 2.0, height: context.availableSize.height),
                 transition: .immediate
             )
             context.add(modeControl
-                .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + modeControl.size.height / 2.0))
+                .position(CGPoint(x: bandCenterX, y: contentHeight + modeControl.size.height / 2.0))
             )
             contentHeight += modeControl.size.height
             contentHeight += 20.0
             
-            let squareSize = floorToScreenPixels((context.availableSize.width - sideInset * 2.0) / 12.0)
-            let fieldSize = CGSize(width: context.availableSize.width - sideInset * 2.0, height: squareSize * 10.0)
-            
+            let bottomPanelPadding: CGFloat = 12.0
+            var bottomInset: CGFloat
+            if case .regular = environment.metrics.widthClass {
+                bottomInset = bottomPanelPadding
+            } else {
+                bottomInset = environment.safeInsets.bottom > 0.0 ? environment.safeInsets.bottom + 5.0 : bottomPanelPadding
+            }
+
+            // The field's squares also keep to the height the screen leaves: a field sized by the width alone made the
+            // sheet taller than iPhone Duo's folded screen (466x678) and its unfolded one in landscape, pushing the
+            // header above the top edge; beside the unfolded screen's status island the sheet stays below the island.
+            // A narrower field, centred, keeps its squares square. Where the width-sized field fits, nothing changes; other
+            // devices keep their layout.
+            var fieldWidth: CGFloat = bandWidth - sideInset * 2.0
+            if !environment.presentsFloatingPanels && environment.reservedCorners != .none {
+                let glassInset: CGFloat = component.screenSize.width < component.screenSize.height ? 6.0 : 0.0
+                var maxContentHeight: CGFloat = component.screenSize.height - glassInset
+                if environment.navigationBarTrailingButtonsInset > 0.0 {
+                    // The island stays while the editor hides the status bar, so its corner block counts as well.
+                    maxContentHeight -= max(environment.fullStatusBarHeight, environment.reservedCorners.topRight?.height ?? 0.0)
+                }
+                // The rows below the field: opacity title and slider, divider, preview and swatches.
+                let belowFieldHeight: CGFloat = 21.0 + 16.0 + 8.0 + 36.0 + 24.0 + 1.0 + 22.0 + 82.0 + 10.0 + bottomInset
+                let maxSquareSize = floorToScreenPixels((maxContentHeight - contentHeight - belowFieldHeight) / 10.0)
+                if maxSquareSize > 0.0 && maxSquareSize < floorToScreenPixels(fieldWidth / 12.0) {
+                    fieldWidth = maxSquareSize * 12.0
+                }
+            }
+            let squareSize = floorToScreenPixels(fieldWidth / 12.0)
+            let fieldSize = CGSize(width: fieldWidth, height: squareSize * 10.0)
+
             if state.selectedMode == 0 {
                 let colorGrid = colorGrid.update(
                     component: ColorGridComponent(
@@ -2002,11 +2048,11 @@ private final class ColorPickerContent: CombinedComponent {
                             state?.updateColor(color, keepAlpha: true)
                         }
                     ),
-                    availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0, height: context.availableSize.height),
+                    availableSize: CGSize(width: fieldWidth, height: context.availableSize.height),
                     transition: .immediate
                 )
                 context.add(colorGrid
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + colorGrid.size.height / 2.0))
+                    .position(CGPoint(x: bandCenterX, y: contentHeight + colorGrid.size.height / 2.0))
                     .appear(.default(alpha: true))
                     .disappear(.default())
                 )
@@ -2022,7 +2068,7 @@ private final class ColorPickerContent: CombinedComponent {
                     transition: .immediate
                 )
                 context.add(colorSpectrum
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + fieldSize.height / 2.0))
+                    .position(CGPoint(x: bandCenterX, y: contentHeight + fieldSize.height / 2.0))
                     .appear(.default(alpha: true))
                     .disappear(.default())
                 )
@@ -2038,7 +2084,7 @@ private final class ColorPickerContent: CombinedComponent {
                     transition: .immediate
                 )
                 context.add(colorSliders
-                    .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight + colorSliders.size.height / 2.0))
+                    .position(CGPoint(x: bandCenterX, y: contentHeight + colorSliders.size.height / 2.0))
                     .appear(.default(alpha: true))
                     .disappear(.default())
                 )
@@ -2062,7 +2108,7 @@ private final class ColorPickerContent: CombinedComponent {
                 transition: .immediate
             )
             context.add(opacityTitle
-                .position(CGPoint(x: sideInset + 5.0 + opacityTitle.size.width / 2.0, y: contentHeight + opacityTitle.size.height / 2.0))
+                .position(CGPoint(x: bandLeft + sideInset + 5.0 + opacityTitle.size.width / 2.0, y: contentHeight + opacityTitle.size.height / 2.0))
             )
             contentHeight += opacityTitle.size.height
             contentHeight += 8.0
@@ -2077,11 +2123,11 @@ private final class ColorPickerContent: CombinedComponent {
                         state.updateAlpha(value)
                     }
                 ),
-                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0 - 89.0, height: CGFloat.greatestFiniteMagnitude),
+                availableSize: CGSize(width: bandWidth - sideInset * 2.0 - 89.0, height: CGFloat.greatestFiniteMagnitude),
                 transition: .immediate
             )
             context.add(opacitySlider
-                .position(CGPoint(x: sideInset + opacitySlider.size.width / 2.0, y: contentHeight + opacitySlider.size.height / 2.0))
+                .position(CGPoint(x: bandLeft + sideInset + opacitySlider.size.width / 2.0, y: contentHeight + opacitySlider.size.height / 2.0))
             )
             
             let opacityField = opacityField.update(
@@ -2109,7 +2155,7 @@ private final class ColorPickerContent: CombinedComponent {
                 transition: .immediate
             )
             context.add(opacityField
-                .position(CGPoint(x: context.availableSize.width - sideInset - opacityField.size.width / 2.0, y: contentHeight + opacityField.size.height / 2.0))
+                .position(CGPoint(x: bandLeft + bandWidth - sideInset - opacityField.size.width / 2.0, y: contentHeight + opacityField.size.height / 2.0))
             )
             
             contentHeight += opacitySlider.size.height
@@ -2117,11 +2163,11 @@ private final class ColorPickerContent: CombinedComponent {
             
             let divider = divider.update(
                 component: Rectangle(color: UIColor(rgb: 0x48484a)),
-                availableSize: CGSize(width: context.availableSize.width - sideInset * 2.0, height: 1.0),
+                availableSize: CGSize(width: bandWidth - sideInset * 2.0, height: 1.0),
                 transition: .immediate
             )
             context.add(divider
-                .position(CGPoint(x: context.availableSize.width / 2.0, y: contentHeight))
+                .position(CGPoint(x: bandCenterX, y: contentHeight))
             )
             contentHeight += divider.size.height
             contentHeight += 22.0
@@ -2134,11 +2180,11 @@ private final class ColorPickerContent: CombinedComponent {
                 transition: .immediate
             )
             context.add(preview
-                .position(CGPoint(x: sideInset + preview.size.width / 2.0, y: contentHeight + preview.size.height / 2.0))
+                .position(CGPoint(x: bandLeft + sideInset + preview.size.width / 2.0, y: contentHeight + preview.size.height / 2.0))
             )
           
             
-            var swatchOffset: CGFloat = sideInset + preview.size.width + 38.0
+            var swatchOffset: CGFloat = bandLeft + sideInset + preview.size.width + 38.0
             let swatchSpacing: CGFloat = 20.0
             
             let swatch1Button = swatch1Button.update(
@@ -2222,15 +2268,7 @@ private final class ColorPickerContent: CombinedComponent {
             
             contentHeight += preview.size.height
             contentHeight += 10.0
-            
-            let bottomPanelPadding: CGFloat = 12.0
-            var bottomInset: CGFloat
-            if case .regular = environment.metrics.widthClass {
-                bottomInset = bottomPanelPadding
-            } else {
-                bottomInset = environment.safeInsets.bottom > 0.0 ? environment.safeInsets.bottom + 5.0 : bottomPanelPadding
-            }
-            
+
             if environment.inputHeight > 0.0 {
                 bottomInset += environment.inputHeight - bottomInset - 120.0
             }
@@ -2281,6 +2319,7 @@ private final class ColorPickerSheetComponent: CombinedComponent {
                 component: SheetComponent<EnvironmentType>(
                     content: AnyComponent<EnvironmentType>(ColorPickerContent(
                         context: context.component.context,
+                        screenSize: context.availableSize,
                         initialColor: context.component.initialColor,
                         colorChanged: { color in
                             updated(color)
@@ -2312,7 +2351,7 @@ private final class ColorPickerSheetComponent: CombinedComponent {
                         metrics: environment.metrics,
                         deviceMetrics: environment.deviceMetrics,
                         isDisplaying: environment.value.isVisible,
-                        isCentered: environment.metrics.widthClass == .regular,
+                        isCentered: environment.presentsFloatingPanels,
                         hasInputHeight: !environment.inputHeight.isZero,
                         regularMetricsSize: CGSize(width: 430.0, height: 900.0),
                         dismiss: { animated in

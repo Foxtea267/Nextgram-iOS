@@ -91,6 +91,7 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
         self.presentationData = presentationData
         
         let sideInset: CGFloat = 16.0 + safeInsets.left
+        let sideInsetRight: CGFloat = 16.0 + safeInsets.right
         let verticalInset: CGFloat = 7.0
         
         self.textNode.maximumNumberOfLines = 0
@@ -167,7 +168,15 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
         self.textNode.attributedText = attributedText
         self.textNode.visibility = true
         self.textNode.lineSpacing = 0.12
-        self.activateArea.accessibilityLabel = attributedText.string
+        // Links ("Change >") are reachable: activating follows the link, as a tap on it does.
+        let linkAction = item.linkAction
+        self.activateArea.applyAccessibilityText(attributedText, linkAttribute: NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), open: linkAction.flatMap { linkAction in
+            return { value in
+                if let url = value as? String {
+                    linkAction(.tap(url))
+                }
+            }
+        })
         
         var leftTextInset: CGFloat = 0.0
         if let icon = item.icon {
@@ -200,7 +209,7 @@ private final class PeerInfoScreenCommentItemNode: PeerInfoScreenItemNode {
             }
         }
         
-        let textSize = self.textNode.updateLayout(CGSize(width: width - sideInset * 2.0 - leftTextInset, height: .greatestFiniteMagnitude))
+        let textSize = self.textNode.updateLayout(CGSize(width: width - sideInset - sideInsetRight - leftTextInset, height: .greatestFiniteMagnitude))
         
         let textFrame = CGRect(origin: CGPoint(x: sideInset + leftTextInset, y: verticalInset), size: textSize)
         

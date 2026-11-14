@@ -74,6 +74,7 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
     let ready = ValuePromise<Bool>()
     
     private var topBackgroundNode: ASDisplayNode
+    private let bottomBackgroundNode: ASDisplayNode
     private let maskNode: ASImageNode
     
     private let customColorItemNode: ItemListActionItemNode
@@ -105,6 +106,9 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
         self.topBackgroundNode = ASDisplayNode()
         self.topBackgroundNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
         
+        self.bottomBackgroundNode = ASDisplayNode()
+        self.bottomBackgroundNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        
         self.maskNode = ASImageNode()
         self.maskNode.isUserInteractionEnabled = false
         
@@ -124,6 +128,7 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
         if case .default = controller.mode {
             self.backgroundColor = presentationData.theme.list.itemBlocksBackgroundColor
             self.gridNode.addSubnode(self.topBackgroundNode)
+            self.gridNode.addSubnode(self.bottomBackgroundNode)
             self.gridNode.addSubnode(self.customColorItemNode)
         } else {
             self.backgroundColor = presentationData.theme.list.plainBackgroundColor
@@ -231,8 +236,8 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
 
         self.gridNode.presentationLayoutUpdated = { [weak self] gridLayout, transition in
             if let strongSelf = self, let (layout, _) = strongSelf.validLayout {
-                let sideInset = max(16.0, floor((layout.size.width - 674.0) / 2.0))
-                let maskSideInset: CGFloat = layout.size.width >= 320.0 ? sideInset : 0.0
+                let sideMargins = layout.listSideMargins(base: max(16.0, floor((layout.size.width - 674.0) / 2.0)))
+                let maskSideInsets: (left: CGFloat, right: CGFloat) = layout.size.width >= 320.0 ? sideMargins : (0.0, 0.0)
 
                 let maskY: CGFloat
                 if let controller = strongSelf.controller, case .default = controller.mode {
@@ -246,7 +251,11 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
                     maskY = 0.0
                 }
 
-                transition.updateFrame(node: strongSelf.maskNode, frame: CGRect(origin: CGPoint(x: maskSideInset, y: maskY), size: CGSize(width: layout.size.width - maskSideInset * 2.0, height: gridLayout.contentSize.height + 10.0)))
+                let maskFrame = CGRect(origin: CGPoint(x: maskSideInsets.left, y: maskY), size: CGSize(width: layout.size.width - maskSideInsets.left - maskSideInsets.right, height: gridLayout.contentSize.height + 10.0))
+                transition.updateFrame(node: strongSelf.maskNode, frame: maskFrame)
+                // Below the card the node's own background (the card's color) would show between the side
+                // overlays: in the bottom inset and when scrolled past the end.
+                transition.updateFrame(node: strongSelf.bottomBackgroundNode, frame: CGRect(origin: CGPoint(x: 0.0, y: maskFrame.maxY), size: CGSize(width: layout.size.width, height: 10000.0)))
             }
         }
     }
@@ -285,6 +294,7 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
         self.rightOverlayNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
         
         self.topBackgroundNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
+        self.bottomBackgroundNode.backgroundColor = presentationData.theme.list.blocksBackgroundColor
         self.maskNode.image = PresentationResourcesItemList.cornersImage(presentationData.theme, top: true, bottom: true, glass: true)
         
         self.customColorItem = ItemListActionItem(presentationData: ItemListPresentationData(presentationData), systemStyle: .glass, title: presentationData.strings.WallpaperColors_SetCustomColor, kind: .generic, alignment: .natural, sectionId: 0, style: .blocks, action: { [weak self] in
@@ -338,8 +348,10 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
             referenceImageSize = CGSize(width: 91.0, height: 91.0)
         }
         
-        let sideInset = max(16.0, floor((layout.size.width - 674.0) / 2.0))
-        let gridWidth = layout.size.width - sideInset * 2.0
+        // iPhone Duo: a side with a side strip keeps the grid 16pt clear of it; without a strip both margins
+        // are today's.
+        let sideMargins = layout.listSideMargins(base: max(16.0, floor((layout.size.width - 674.0) / 2.0)))
+        let gridWidth = layout.size.width - sideMargins.left - sideMargins.right
         let imageCount = max(2, Int((gridWidth - padding * 2.0) / referenceImageSize.width))
         let itemWidth = floorToScreenPixels((gridWidth - padding * 2.0 - CGFloat(imageCount - 1) * minSpacing) / CGFloat(imageCount))
         let imageSize = CGSize(width: itemWidth, height: itemWidth)
@@ -354,8 +366,8 @@ final class ThemeColorsGridControllerNode: ASDisplayNode {
         
         var listInsets = insets
         if layout.size.width >= 320.0 {
-            listInsets.left = sideInset
-            listInsets.right = sideInset
+            listInsets.left = sideMargins.left
+            listInsets.right = sideMargins.right
 
             if self.leftOverlayNode.supernode == nil {
                 self.gridNode.addSubnode(self.leftOverlayNode)

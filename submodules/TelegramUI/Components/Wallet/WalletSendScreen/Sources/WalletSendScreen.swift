@@ -28,6 +28,7 @@ import WalletAuthorizationUI
 import PasscodeCore
 import QrCodeUI
 import UndoUI
+import TelegramUIPreferences
 
 private enum WalletSendAmountSource: Equatable {
     case manual
@@ -125,6 +126,19 @@ public typealias WalletSendTransferAnimation = (String, WalletSendTransferAnimat
 public protocol WalletSendTransferAnimationController: AnyObject {
     var transferAnimation: WalletSendTransferAnimation? { get set }
 }
+
+/// Debug Settings ▸ "Wallet: fake transfers", which only a dev account is offered and only a dev account is held to: the
+/// form shows a fixed balance (`walletFakeTransferBalance`), and a send closes it as a registered transfer would, with
+/// nothing sent.
+private func walletFakesTransfers(context: AccountContext) -> Bool {
+    guard context.sharedContext.immediateExperimentalUISettings.fakeWalletTransfers, let data = context.currentAppConfiguration.with({ $0 }).data, let isDev = data["dev"] as? Double, isDev == 1.0 else {
+        return false
+    }
+    return true
+}
+
+/// The balance a form shows while transfers are faked: 5 041.36 Grams, in nanograms.
+private let walletFakeTransferBalance: Int64 = 5_041_360_000_000
 
 @MainActor
 private func walletPresentSubmissionUnknown(on controller: ViewController, context: AccountContext, updatedPresentationData: (initial: PresentationData, signal: Signal<PresentationData, NoError>)) -> ViewController {
@@ -306,9 +320,13 @@ fileprivate final class WalletPeerTransferSubmission {
                             return .fail(.authorizationCancelled)
                         }
                         guard let balance = state.balance.currentValue, request.amount <= balance else {
+                            Logger.shared.log("WalletSendScreen", "event=wallet_send_ui_failed error=insufficient_balance reason=\(state.balance.currentValue == nil ? "balance_unknown" : "amount_exceeds_balance")")
                             return .fail(.insufficientBalance(required: request.amount))
                         }
-                        if request.sendAll && balance != request.amount { return .fail(.previewFailed) }
+                        if request.sendAll && balance != request.amount {
+                            Logger.shared.log("WalletSendScreen", "event=wallet_send_ui_failed error=preview_failed reason=send_all_balance_changed")
+                            return .fail(.previewFailed)
+                        }
                         return walletContext.prepareTransfer(
                             address: request.feeRequest.address,
                             amount: request.amount,
@@ -569,6 +587,7 @@ private final class WalletSendScreenComponent: Component {
 
     final class View: UIView {
         private let controlButtons = ComponentView<Empty>()
+        private let sideColumnCloseButton = ComponentView<Empty>()
         private let title = ComponentView<Empty>()
         private let recipient = ComponentView<Empty>()
         private var isRecipientScreenVisible = true
@@ -595,6 +614,10 @@ private final class WalletSendScreenComponent: Component {
 
         var isAmountInputActive: Bool {
             return self.amountField.isInputActive
+        }
+
+        var hasUnsavedInput: Bool {
+            return self.amount > 0 || self.amountField.hasInputText || self.comment?.isEmpty == false
         }
 
         private var component: WalletSendScreenComponent?
@@ -1156,20 +1179,58 @@ private final class WalletSendScreenComponent: Component {
             self.requestUpdate(transition: .easeInOut(duration: 0.25))
         }
 
-        private func dismiss() {
-            Haptics.cancelRefusal()
-            self.abandonRestoration()
-            self.cancelPendingSend()
-            self.isVisible = false
-            self.peerAddressResolution.state = .cancelled
-            self.peerAddressDisposable.set(nil)
-            guard let controller = self.environment?.controller() as? WalletSendScreen else {
+        func requestDismiss(completion: @escaping () -> Void) {
+            guard self.hasUnsavedInput, let component = self.component,
+                  let controller = self.environment?.controller() as? WalletSendScreen, controller.parentController() != nil else {
+                completion()
                 return
             }
-            if let parentController = controller.parentController() {
-                parentController.dismiss(animated: true)
-            } else {
-                controller.dismiss()
+
+            let presentationData = self.currentPresentationData(for: component)
+            var restoreInputFocus = self.amountField.isInputActive
+            let alertController = AlertScreen(
+                title: nil,
+                text: presentationData.initial.strings.Wallet_Send_DiscardAlertText,
+                actions: [
+                    .init(title: presentationData.initial.strings.Attachment_CancelSelectionAlertNo),
+                    .init(title: presentationData.initial.strings.Attachment_CancelSelectionAlertYes, type: .default, action: {
+                        restoreInputFocus = false
+                        completion()
+                    })
+                ],
+                updatedPresentationData: presentationData
+            )
+            alertController.dismissed = { [weak self, weak controller] _ in
+                DispatchQueue.main.async { [weak self, weak controller] in
+                    guard let self, restoreInputFocus, self.isVisible, self.window != nil,
+                          let controller, self.environment?.controller() === controller, !controller.isBeingDismissed,
+                          !self.isPreparingTransfer, !self.isResolvingSigningAccess, !self.isSubmittingTransfer else {
+                        return
+                    }
+                    self.amountField.activateInput()
+                }
+            }
+            controller.present(alertController, in: .window(.root))
+        }
+
+        private func dismiss() {
+            self.requestDismiss { [weak self] in
+                guard let self, let controller = self.environment?.controller() as? WalletSendScreen else {
+                    return
+                }
+                Haptics.cancelRefusal()
+                self.abandonRestoration()
+                self.cancelPendingSend()
+                self.isVisible = false
+                if self.peerAddressResolution.state == .notRequested || self.peerAddressResolution.state == .loading {
+                    self.peerAddressResolution.state = .cancelled
+                }
+                self.peerAddressDisposable.set(nil)
+                if let parentController = controller.parentController() {
+                    parentController.dismiss(animated: true)
+                } else {
+                    controller.dismiss()
+                }
             }
         }
 
@@ -1350,7 +1411,7 @@ private final class WalletSendScreenComponent: Component {
                         context: component.context,
                         initialValue: NSAttributedString(string: self.comment ?? ""),
                         placeholder: strings.Wallet_OptionalMessage,
-                        maxHeight: (controller.view.window?.bounds.height ?? UIScreen.main.bounds.height) * 0.31,
+                        maxHeight: (controller.view.window?.bounds.height ?? mainWindowScreenBounds.height) * 0.31,
                         returnKeyType: .default,
                         keyboardType: .default,
                         autocapitalizationType: .sentences,
@@ -1460,6 +1521,10 @@ private final class WalletSendScreenComponent: Component {
         }
 
         private func send() {
+            if let component = self.component, walletFakesTransfers(context: component.context) {
+                self.sendFake(component: component)
+                return
+            }
             guard let component = self.component,
                   self.isVisible, self.transferPreviewController == nil, self.commentSessionAvailable,
                   self.amount > 0,
@@ -1505,6 +1570,23 @@ private final class WalletSendScreenComponent: Component {
             self.amountField.endEditing(true)
             self.requestUpdate(transition: .immediate)
             self.performSend(component: component)
+        }
+
+        /// A send while transfers are faked (`walletFakesTransfers`): the form shows its progress as a send does, then
+        /// closes as after a registered transfer, with nothing sent.
+        private func sendFake(component: WalletSendScreenComponent) {
+            guard let controller = self.environment?.controller() as? WalletSendScreen, self.amount > 0, !self.isPreparingTransfer else {
+                return
+            }
+            self.isPreparingTransfer = true
+            self.amountField.isUserInteractionEnabled = false
+            self.requestUpdate(transition: .immediate)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self, weak controller] in
+                guard let self, let controller else {
+                    return
+                }
+                self.closeAfterTransferRegistration(nil, component: component, controller: controller)
+            }
         }
 
         private func resolveSigningAccess(walletInfo: WalletContext.WalletInfo) {
@@ -1757,6 +1839,7 @@ private final class WalletSendScreenComponent: Component {
                       self.component?.walletContext === walletContext, self.component?.peer?.id == peerId,
                       self.currentFeeRequest == request.feeRequest else { return }
                 guard case let .wallet(info) = state.phase else {
+                    Logger.shared.log("WalletSendScreen", "event=wallet_send_ui_failed error=unavailable reason=no_wallet_phase")
                     self.cancelPendingSend()
                     self.requestUpdate(transition: .easeInOut(duration: 0.2))
                     self.presentTransferError(.unavailable)
@@ -2060,7 +2143,11 @@ private final class WalletSendScreenComponent: Component {
                             self.lastKnownFee = nil
                         }
                     }
-                    self.walletBalance = walletState.balance.currentValue
+                    if let component = self.component, walletFakesTransfers(context: component.context) {
+                        self.walletBalance = walletFakeTransferBalance
+                    } else {
+                        self.walletBalance = walletState.balance.currentValue
+                    }
                     self.gaslessInfo = walletState.gaslessInfo
                     if case .idle = walletState.gaslessInfo {
                         observedWalletContext.ensureGaslessInfo()
@@ -2104,28 +2191,36 @@ private final class WalletSendScreenComponent: Component {
 
             let headerButtonSize = CGSize(width: 44.0, height: 44.0)
             let headerOriginY = environment.safeInsets.top + 16.0
+            // What the centered texts and buttons center in: the screen, unless the side insets differ (iPhone Duo's
+            // strip), where it is the band the fields are laid out in.
+            let centeringMinX: CGFloat = environment.safeInsets.left != environment.safeInsets.right ? environment.safeInsets.left : 0.0
+            let centeringWidth: CGFloat = environment.safeInsets.left != environment.safeInsets.right ? availableSize.width - environment.safeInsets.left - environment.safeInsets.right : availableSize.width
             let controlButtonsWidth = max(
                 1.0,
                 availableSize.width - environment.safeInsets.left - environment.safeInsets.right - 32.0
+            )
+            // iPhone Duo: with a side strip the screen's own Close leaves the header row for the strip, centred where a
+            // standard bar's back or close goes (the screen has no bar to put it there). The row keeps the trailing button.
+            let sideColumnCloseFrame = environment.sideColumnNavigationButtonFrame
+            let closeItem = GlassControlPanelComponent.Item(
+                items: [
+                    GlassControlGroupComponent.Item(
+                        id: AnyHashable("close"),
+                        content: .icon("Navigation/Close"),
+                        action: { [weak self] in
+                            guard let self else { return }
+                            Haptics.hit(0.4)
+                            self.dismiss()
+                        }
+                    )
+                ],
+                background: .panel
             )
             let controlButtonsSize = self.controlButtons.update(
                 transition: transition,
                 component: AnyComponent(GlassControlPanelComponent(
                     theme: theme,
-                    leftItem: GlassControlPanelComponent.Item(
-                        items: [
-                            GlassControlGroupComponent.Item(
-                                id: AnyHashable("close"),
-                                content: .icon("Navigation/Close"),
-                                action: { [weak self] in
-                                    guard let self else { return }
-                                    Haptics.hit(0.4)
-                                    self.dismiss()
-                                }
-                            )
-                        ],
-                        background: .panel
-                    ),
+                    leftItem: sideColumnCloseFrame == nil ? closeItem : nil,
                     centralItem: nil,
                     rightItem: GlassControlPanelComponent.Item(
                         items: [
@@ -2135,10 +2230,10 @@ private final class WalletSendScreenComponent: Component {
                                 action: { [weak self] in
                                     guard let self,
                                           let controlsView = self.controlButtons.view as? GlassControlPanelComponent.View,
-                                          let sourceView = controlsView.rightItemView?.itemView(id: AnyHashable("more")) else {
+                                          let rightItemView = controlsView.rightItemView, rightItemView.itemView(id: AnyHashable("more")) != nil else {
                                         return
                                     }
-                                    self.openMoreMenu(sourceView: sourceView)
+                                    self.openMoreMenu(sourceView: rightItemView.menuSourceView)
                                 }
                             )
                         ],
@@ -2162,9 +2257,40 @@ private final class WalletSendScreenComponent: Component {
                     )
                 )
             }
+            if let sideColumnCloseFrame {
+                let sideColumnCloseSize = self.sideColumnCloseButton.update(
+                    transition: transition,
+                    component: AnyComponent(GlassControlPanelComponent(
+                        theme: theme,
+                        leftItem: closeItem,
+                        centralItem: nil,
+                        rightItem: nil,
+                        isDark: theme.overallDarkAppearance
+                    )),
+                    environment: {},
+                    containerSize: headerButtonSize
+                )
+                if let sideColumnCloseView = self.sideColumnCloseButton.view {
+                    if sideColumnCloseView.superview == nil {
+                        self.addSubview(sideColumnCloseView)
+                    }
+                    transition.setFrame(
+                        view: sideColumnCloseView,
+                        frame: CGRect(
+                            origin: CGPoint(
+                                x: floorToScreenPixels(sideColumnCloseFrame.midX - sideColumnCloseSize.width * 0.5),
+                                y: floorToScreenPixels(sideColumnCloseFrame.midY - sideColumnCloseSize.height * 0.5)
+                            ),
+                            size: sideColumnCloseSize
+                        )
+                    )
+                }
+            } else if let sideColumnCloseView = self.sideColumnCloseButton.view, sideColumnCloseView.superview != nil {
+                sideColumnCloseView.removeFromSuperview()
+            }
 
             let titleInset = environment.safeInsets.left + 72.0
-            let titleAvailableWidth = max(0.0, availableSize.width - titleInset * 2.0)
+            let titleAvailableWidth = max(0.0, availableSize.width - environment.safeInsets.left - environment.safeInsets.right - 72.0 * 2.0)
             let titleSize = self.title.update(
                 transition: transition,
                 component: AnyComponent(MultilineTextComponent(
@@ -2197,6 +2323,7 @@ private final class WalletSendScreenComponent: Component {
             var recipientFrame: CGRect?
             if !isLandscape && (component.peer != nil || !self.recipientAddress.isEmpty) {
                 let presentationData = component.context.sharedContext.currentPresentationData.with { $0 }
+                let recipientDisplay = self.peerAddressResolution.display(recipientAddress: self.recipientAddress)
                 let recipientSize = self.recipient.update(
                     transition: transition,
                     component: AnyComponent(WalletSendRecipientComponent(
@@ -2206,7 +2333,8 @@ private final class WalletSendScreenComponent: Component {
                         nameDisplayOrder: presentationData.nameDisplayOrder,
                         peer: component.peer,
                         address: self.recipientAddress,
-                        isLoading: self.recipientAddress.isEmpty && (self.peerAddressResolution.state == .notRequested || self.peerAddressResolution.state == .loading),
+                        isLoading: recipientDisplay == .loading,
+                        unavailableText: recipientDisplay == .unavailable ? environment.strings.Wallet_Recipient_Error : nil,
                         openChat: self.canOpenRecipientChat ? { [weak self] in
                             self?.openRecipientChat()
                         } : nil,
@@ -2249,11 +2377,20 @@ private final class WalletSendScreenComponent: Component {
             }
 
             let isKeyboardVisible = !isInAttachmentMenu || self.hasActivatedAmountInput
+            // In portrait the keyboard at the bottom spans iPhone Duo's side strip; it keeps clear only of a corner block at
+            // the bottom. In landscape its keys are a fixed-width block under the band-centred Send button, so they keep
+            // the band and that button's axis.
+            var keyboardSafeInsets = environment.safeInsets
+            if !isLandscape {
+                let keyboardSideInsets = environment.bottomEdgeSideInsets()
+                keyboardSafeInsets.left = keyboardSideInsets.left
+                keyboardSafeInsets.right = keyboardSideInsets.right
+            }
             let keyboardSize = self.keyboard.update(
                 transition: transition,
                 component: AnyComponent(WalletSendKeyboardComponent(
                     theme: theme,
-                    safeInsets: environment.safeInsets,
+                    safeInsets: keyboardSafeInsets,
                     isLandscape: isLandscape,
                     mode: .decimal(separator: environment.dateTimeFormat.decimalSeparator),
                     deleteTitle: environment.strings.Common_Delete,
@@ -2369,10 +2506,10 @@ private final class WalletSendScreenComponent: Component {
                     animateScale: false
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - 32.0, height: 24.0)
+                containerSize: CGSize(width: centeringWidth - 32.0, height: 24.0)
             )
             let emptyHintFrame = CGRect(
-                x: floorToScreenPixels((availableSize.width - emptyHintSize.width) / 2.0),
+                x: centeringMinX + floorToScreenPixels((centeringWidth - emptyHintSize.width) / 2.0),
                 y: amountFrame.maxY + 5.0,
                 width: emptyHintSize.width,
                 height: emptyHintSize.height
@@ -2426,10 +2563,10 @@ private final class WalletSendScreenComponent: Component {
                 isVisible: environment.isVisible && showRate,
                 isEnabled: showRate && isAmountInputEnabled,
                 timing: (self.amountField as? WalletSendAnimatedAmountField)?.motionTiming,
-                maxWidth: availableSize.width - 64.0
+                maxWidth: centeringWidth - 64.0
             )
             let rateButtonFrame = CGRect(
-                x: floorToScreenPixels((availableSize.width - rateButtonSize.width) / 2.0),
+                x: centeringMinX + floorToScreenPixels((centeringWidth - rateButtonSize.width) / 2.0),
                 y: amountFrame.maxY - 1.0,
                 width: rateButtonSize.width,
                 height: rateButtonSize.height
@@ -2463,12 +2600,12 @@ private final class WalletSendScreenComponent: Component {
                     maximumNumberOfLines: 1
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - 32.0, height: 22.0)
+                containerSize: CGSize(width: centeringWidth - 32.0, height: 22.0)
             )
             let insufficientSlotFrame = CGRect(
-                x: 16.0,
+                x: centeringMinX + 16.0,
                 y: amountContentBottom + 10.0,
-                width: availableSize.width - 32.0,
+                width: centeringWidth - 32.0,
                 height: 22.0
             )
             let showDeposit = hasZeroBalance || isInsufficient || (!hasAmount && !hasPositiveBalance)
@@ -2498,7 +2635,7 @@ private final class WalletSendScreenComponent: Component {
                 transition: transition,
                 component: AnyComponent(PlainButtonComponent(
                     content: AnyComponent(HStack(depositItems, spacing: 3.0)),
-                    minSize: CGSize(width: isDepositInline ? 0.0 : availableSize.width - 32.0, height: 40.0),
+                    minSize: CGSize(width: isDepositInline ? 0.0 : centeringWidth - 32.0, height: 40.0),
                     action: { [weak self] in
                         self?.openReceive()
                     },
@@ -2506,13 +2643,13 @@ private final class WalletSendScreenComponent: Component {
                 )),
                 environment: {},
                 containerSize: CGSize(
-                    width: max(0.0, availableSize.width - 32.0 - (isDepositInline ? insufficientTextSize.width + 4.0 : 0.0)),
+                    width: max(0.0, centeringWidth - 32.0 - (isDepositInline ? insufficientTextSize.width + 4.0 : 0.0)),
                     height: 40.0
                 )
             )
-            let insufficientOriginX = floorToScreenPixels((availableSize.width - insufficientTextSize.width - (isDepositInline ? 4.0 + depositButtonSize.width : 0.0)) / 2.0)
+            let insufficientOriginX = centeringMinX + floorToScreenPixels((centeringWidth - insufficientTextSize.width - (isDepositInline ? 4.0 + depositButtonSize.width : 0.0)) / 2.0)
             let depositButtonFrame = CGRect(
-                x: isDepositInline ? insufficientOriginX + insufficientTextSize.width + 4.0 : floorToScreenPixels((availableSize.width - depositButtonSize.width) / 2.0),
+                x: isDepositInline ? insufficientOriginX + insufficientTextSize.width + 4.0 : centeringMinX + floorToScreenPixels((centeringWidth - depositButtonSize.width) / 2.0),
                 y: (isDepositInline ? insufficientSlotFrame.midY : balanceSlotY + 12.0) - depositButtonSize.height / 2.0,
                 width: depositButtonSize.width,
                 height: depositButtonSize.height
@@ -2585,7 +2722,7 @@ private final class WalletSendScreenComponent: Component {
                         maximumNumberOfLines: 1
                     )),
                     environment: {},
-                    containerSize: CGSize(width: availableSize.width - 120.0, height: 1000.0)
+                    containerSize: CGSize(width: centeringWidth - 120.0, height: 1000.0)
                 )
                 let bubbleSize = CGSize(width: commentSize.width + 34.0, height: max(34.0, commentSize.height + 14.0))
                 self.commentBackgroundView.update(
@@ -2601,7 +2738,7 @@ private final class WalletSendScreenComponent: Component {
                     commentOriginY = amountContentBottom + 15.0
                 }
                 let bubbleFrame = CGRect(
-                    x: floorToScreenPixels((availableSize.width - bubbleSize.width) / 2.0 + 3.0),
+                    x: centeringMinX + floorToScreenPixels((centeringWidth - bubbleSize.width) / 2.0 + 3.0),
                     y: commentOriginY,
                     width: bubbleSize.width,
                     height: bubbleSize.height
@@ -2659,10 +2796,10 @@ private final class WalletSendScreenComponent: Component {
                     maximumNumberOfLines: 1
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - 32.0, height: 24.0)
+                containerSize: CGSize(width: centeringWidth - 32.0, height: 24.0)
             )
             let balanceTextFrame = CGRect(
-                x: floorToScreenPixels((availableSize.width - balanceTextSize.width) / 2.0),
+                x: centeringMinX + floorToScreenPixels((centeringWidth - balanceTextSize.width) / 2.0),
                 y: balanceSlotY + floorToScreenPixels((24.0 - balanceTextSize.height) / 2.0),
                 width: balanceTextSize.width,
                 height: balanceTextSize.height
@@ -2732,11 +2869,11 @@ private final class WalletSendScreenComponent: Component {
                         feeValueComponent
                     ], spacing: 3.0)),
                     environment: {},
-                    containerSize: CGSize(width: availableSize.width - 32.0, height: 24.0)
+                    containerSize: CGSize(width: centeringWidth - 32.0, height: 24.0)
                 )
             }
             let feeTextFrame = CGRect(
-                x: floorToScreenPixels((availableSize.width - feeTextSize.width) / 2.0),
+                x: centeringMinX + floorToScreenPixels((centeringWidth - feeTextSize.width) / 2.0),
                 y: sendButtonY - 24.0 - floorToScreenPixels(feeTextSize.height / 2.0),
                 width: feeTextSize.width,
                 height: feeTextSize.height
@@ -2842,6 +2979,10 @@ private final class WalletSendScreenComponent: Component {
                 && !isInsufficient
                 && self.walletInfo != nil
                 && self.walletBalance != nil
+            // The full-width portrait button spans iPhone Duo's side strip; it keeps clear only of a corner block at the
+            // bottom. The fixed-width landscape button stays centred with the texts above it.
+            let sendButtonInsets = environment.bottomEdgeSideInsets()
+            let sendButtonWidth = max(1.0, availableSize.width - sendButtonInsets.left - sendButtonInsets.right - 32.0)
             let sendButtonSize = self.sendButton.update(
                 transition: transition,
                 component: AnyComponent(ButtonComponent(
@@ -2872,7 +3013,7 @@ private final class WalletSendScreenComponent: Component {
                 )),
                 environment: {},
                 containerSize: CGSize(
-                    width: isLandscape ? 350.0 : controlButtonsWidth,
+                    width: isLandscape ? 350.0 : sendButtonWidth,
                     height: 52.0
                 )
             )
@@ -2883,7 +3024,7 @@ private final class WalletSendScreenComponent: Component {
                 transition.setFrame(
                     view: sendButtonView,
                     frame: CGRect(
-                        x: isLandscape ? floorToScreenPixels((availableSize.width - sendButtonSize.width) / 2.0) : environment.safeInsets.left + 16.0,
+                        x: isLandscape ? centeringMinX + floorToScreenPixels((centeringWidth - sendButtonSize.width) / 2.0) : sendButtonInsets.left + 16.0,
                         y: sendButtonY,
                         width: sendButtonSize.width,
                         height: sendButtonSize.height
@@ -3121,6 +3262,21 @@ public final class WalletSendScreen: ViewControllerComponentContainer, Attachmen
         super.viewWillDisappear(animated)
     }
 
+    public func requestDismiss(completion: @escaping () -> Void) {
+        guard self.isNodeLoaded, let componentView = self.node.hostView.componentView as? WalletSendScreenComponent.View else {
+            completion()
+            return
+        }
+        componentView.requestDismiss(completion: completion)
+    }
+
+    public func shouldDismissImmediately() -> Bool {
+        guard self.isNodeLoaded, let componentView = self.node.hostView.componentView as? WalletSendScreenComponent.View else {
+            return true
+        }
+        return !componentView.hasUnsavedInput
+    }
+
     override public func dismiss(completion: (() -> Void)? = nil) {
         (self.node.hostView.componentView as? WalletSendScreenComponent.View)?.invalidateCommentSession()
         super.dismiss(completion: completion)
@@ -3156,7 +3312,7 @@ private final class WalletSendContextReferenceContentSource: ContextReferenceCon
     func transitionInfo() -> ContextControllerReferenceViewInfo? {
         return ContextControllerReferenceViewInfo(
             referenceView: self.sourceView,
-            contentAreaInScreenSpace: UIScreen.main.bounds,
+            contentAreaInScreenSpace: mainWindowScreenBounds,
             actionsPosition: .bottom
         )
     }

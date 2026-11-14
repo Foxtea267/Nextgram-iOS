@@ -38,6 +38,7 @@ final class GiftOptionsScreenComponent: Component {
     let peerId: EnginePeer.Id
     let premiumOptions: [CachedPremiumGiftOption]
     let hasBirthday: Bool
+    let opensCollectibles: Bool
     let completion: (() -> Void)?
     
     init(
@@ -47,6 +48,7 @@ final class GiftOptionsScreenComponent: Component {
         peerId: EnginePeer.Id,
         premiumOptions: [CachedPremiumGiftOption],
         hasBirthday: Bool,
+        opensCollectibles: Bool,
         completion: (() -> Void)?
     ) {
         self.context = context
@@ -55,6 +57,7 @@ final class GiftOptionsScreenComponent: Component {
         self.peerId = peerId
         self.premiumOptions = premiumOptions
         self.hasBirthday = hasBirthday
+        self.opensCollectibles = opensCollectibles
         self.completion = completion
     }
 
@@ -75,6 +78,51 @@ final class GiftOptionsScreenComponent: Component {
     }
     
     private final class ScrollView: UIScrollView {
+        /// VoiceOver: the section titles, drawn outside the scroll view (they stick under the navigation bar), are read
+        /// in their place among the content, as headings.
+        var accessibilityHeadingViews: (() -> [UIView])?
+        /// The heading elements, kept so the accessibility client's references stay valid between queries.
+        private var accessibilityHeadingElements: [UIAccessibilityElement] = []
+        
+        override var accessibilityElements: [Any]? {
+            get {
+                guard let accessibilityHeadingViews = self.accessibilityHeadingViews else {
+                    return super.accessibilityElements
+                }
+                var items: [(frame: CGRect, element: Any)] = []
+                for subview in self.subviews {
+                    if subview.isHidden || subview.alpha < 0.01 || subview.accessibilityElementsHidden {
+                        continue
+                    }
+                    items.append((subview.frame, subview))
+                }
+                let headingViews = accessibilityHeadingViews()
+                while self.accessibilityHeadingElements.count < headingViews.count {
+                    self.accessibilityHeadingElements.append(UIAccessibilityElement(accessibilityContainer: self))
+                }
+                for (index, headingView) in headingViews.enumerated() {
+                    guard headingView.superview != nil, !headingView.isHidden, headingView.alpha >= 0.01, let label = headingView.accessibilityLabel, !label.isEmpty else {
+                        continue
+                    }
+                    let element = self.accessibilityHeadingElements[index]
+                    element.accessibilityLabel = label
+                    element.accessibilityTraits = .header
+                    let frame = headingView.convert(headingView.bounds, to: self)
+                    element.accessibilityFrameInContainerSpace = frame
+                    items.append((frame, element))
+                }
+                // Top to bottom, then leading to trailing within a row of tiles.
+                return items.sorted(by: { lhs, rhs in
+                    if abs(lhs.frame.minY - rhs.frame.minY) > 0.5 {
+                        return lhs.frame.minY < rhs.frame.minY
+                    }
+                    return lhs.frame.minX < rhs.frame.minX
+                }).map(\.element)
+            } set(value) {
+                super.accessibilityElements = value
+            }
+        }
+        
         override func touchesShouldCancel(in view: UIView) -> Bool {
             return true
         }
@@ -271,6 +319,22 @@ final class GiftOptionsScreenComponent: Component {
             self.addSubview(self.scrollView)
             
             self.scrollView.layer.addSublayer(self.topOverscrollLayer)
+            
+            self.scrollView.accessibilityHeadingViews = { [weak self] in
+                guard let self else {
+                    return []
+                }
+                return [self.premiumTitle.view, self.starsTitle.view].compactMap { $0 }
+            }
+        }
+        
+        /// VoiceOver: the bar items (Close, the balance) before the content.
+        override var accessibilityElements: [Any]? {
+            get {
+                let visible = self.subviews.filter { !$0.isHidden && $0.alpha >= 0.01 && !$0.accessibilityElementsHidden }
+                return visible.filter { $0 !== self.scrollView } + [self.scrollView]
+            } set(value) {
+            }
         }
         
         required init?(coder: NSCoder) {
@@ -308,7 +372,7 @@ final class GiftOptionsScreenComponent: Component {
                     mainController = controller
                 }
                 if case let .generic(gift) = gift {
-                    if let lockedUntilDate = gift.lockedUntilDate, currentTime < lockedUntilDate {
+                    if !skipDateCheck, let lockedUntilDate = gift.lockedUntilDate, currentTime < lockedUntilDate {
                         self.loadingGiftId = gift.id
                         Queue.mainQueue().after(0.25) {
                             if self.loadingGiftId != nil {
@@ -574,9 +638,12 @@ final class GiftOptionsScreenComponent: Component {
             let visibleBounds = self.scrollView.bounds.insetBy(dx: 0.0, dy: -10.0)
             if let starGifts = self.effectiveStarGifts {
                 let sideInset: CGFloat = 16.0 + environment.safeInsets.left
+                // iPhone Duo: the right margin is the right side's own (the side strip), as for the premium options in
+                // `update`, so the third column stays out of the strip. With equal insets this is the old width.
+                let rightSideInset: CGFloat = 16.0 + environment.safeInsets.right
                 
                 let optionSpacing: CGFloat = 10.0
-                let optionWidth = (availableWidth - sideInset * 2.0 - optionSpacing * 2.0) / 3.0
+                let optionWidth = (availableWidth - sideInset - rightSideInset - optionSpacing * 2.0) / 3.0
                 let starsOptionSize = CGSize(width: optionWidth, height: 154.0)
                 
                 var validIds: [AnyHashable] = []
@@ -1039,6 +1106,9 @@ final class GiftOptionsScreenComponent: Component {
                 }
                 
                 self.resaleConfiguration = StarsSubscriptionConfiguration.with(appConfiguration: component.context.currentAppConfiguration.with { $0 })
+                if component.opensCollectibles {
+                    self.starsFilter = .resale
+                }
             }
             self.component = component
             
@@ -1071,8 +1141,16 @@ final class GiftOptionsScreenComponent: Component {
             let boldTextFont = Font.semibold(15.0)
             
             let bottomContentInset: CGFloat = 24.0
+            // iPhone Duo: one side's safe inset is the side strip; the right margin is its own and centered
+            // content is centered in the band between the insets. With equal insets these are the old values.
             let sideInset: CGFloat = 16.0 + environment.safeInsets.left
+            let rightSideInset: CGFloat = 16.0 + environment.safeInsets.right
+            let bandCenterX: CGFloat = environment.safeInsets.left + (availableSize.width - environment.safeInsets.left - environment.safeInsets.right) / 2.0
             let headerSideInset: CGFloat = 24.0 + environment.safeInsets.left
+            // The header texts are centred on the band (`bandCenterX`), so they are also measured within it: beside
+            // iPhone Duo's side strip a width of `W - 2 * headerSideInset` ran 18pt off the left edge. Equal insets
+            // give the same width as before.
+            let headerRightSideInset: CGFloat = 24.0 + environment.safeInsets.right
                         
             let premiumConfiguration = PremiumConfiguration.with(appConfiguration: component.context.currentAppConfiguration.with { $0 })
             
@@ -1179,7 +1257,14 @@ final class GiftOptionsScreenComponent: Component {
                     environment: {},
                     containerSize: barButtonSize
                 )
-                let cancelButtonFrame = CGRect(origin: CGPoint(x: environment.safeInsets.left + 16.0, y: 16.0), size: cancelButtonSize)
+                // iPhone Duo: with a side strip the screen's own Close leaves the header row for the strip, centred where a
+                // standard bar's back or close goes.
+                let cancelButtonFrame: CGRect
+                if let sideColumnButtonFrame = environment.sideColumnNavigationButtonFrame {
+                    cancelButtonFrame = CGRect(origin: CGPoint(x: floorToScreenPixels(sideColumnButtonFrame.midX - cancelButtonSize.width * 0.5), y: floorToScreenPixels(sideColumnButtonFrame.midY - cancelButtonSize.height * 0.5)), size: cancelButtonSize)
+                } else {
+                    cancelButtonFrame = CGRect(origin: CGPoint(x: environment.safeInsets.left + 16.0, y: 16.0), size: cancelButtonSize)
+                }
                 if let cancelButtonView = self.cancelButton.view {
                     if cancelButtonView.superview == nil {
                         self.addSubview(cancelButtonView)
@@ -1239,6 +1324,7 @@ final class GiftOptionsScreenComponent: Component {
             if let controller = controller(), controller._hasGlassStyle {
                 balanceInset += 6.0
             }
+            balanceInset += environment.navigationBarTrailingButtonsInset
             
             let balanceValueSize = self.balanceValue.update(
                 transition: .immediate,
@@ -1260,6 +1346,8 @@ final class GiftOptionsScreenComponent: Component {
                 if balanceTitleView.superview == nil {
                     self.addSubview(balanceTitleView)
                     self.addSubview(balanceValueView)
+                    // The Stars glyph beside the amount; "Balance" and the number are read.
+                    balanceIconView.accessibilityElementsHidden = true
                     self.addSubview(balanceIconView)
                 }
                 let navigationHeight = environment.navigationHeight - environment.statusBarHeight
@@ -1289,10 +1377,12 @@ final class GiftOptionsScreenComponent: Component {
                     horizontalAlignment: .center
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - headerSideInset * 2.0, height: 100.0)
+                containerSize: CGSize(width: availableSize.width - headerSideInset - headerRightSideInset, height: 100.0)
             )
             if let premiumTitleView = self.premiumTitle.view {
                 if premiumTitleView.superview == nil {
+                    // Read from the scroll view, in its place among the content.
+                    premiumTitleView.accessibilityElementsHidden = true
                     self.addSubview(premiumTitleView)
                 }
                 transition.setBounds(view: premiumTitleView, bounds: CGRect(origin: .zero, size: premiumTitleSize))
@@ -1365,9 +1455,9 @@ final class GiftOptionsScreenComponent: Component {
                     }
                 )),
                 environment: {},
-                containerSize: CGSize(width: availableSize.width - headerSideInset * 2.0, height: 1000.0)
+                containerSize: CGSize(width: availableSize.width - headerSideInset - headerRightSideInset, height: 1000.0)
             )
-            let premiumDescriptionFrame = CGRect(origin: CGPoint(x: floor((availableSize.width - premiumDescriptionSize.width) / 2.0), y: contentHeight), size: premiumDescriptionSize)
+            let premiumDescriptionFrame = CGRect(origin: CGPoint(x: floor(bandCenterX - premiumDescriptionSize.width / 2.0), y: contentHeight), size: premiumDescriptionSize)
             if let premiumDescriptionView = self.premiumDescription.view {
                 if premiumDescriptionView.superview == nil {
                     self.scrollView.addSubview(premiumDescriptionView)
@@ -1378,7 +1468,7 @@ final class GiftOptionsScreenComponent: Component {
             contentHeight += 11.0
             
             let optionSpacing: CGFloat = 10.0
-            let optionWidth = (availableSize.width - sideInset * 2.0 - optionSpacing * 2.0) / 3.0
+            let optionWidth = (availableSize.width - sideInset - rightSideInset - optionSpacing * 2.0) / 3.0
             
             let showStarPrice = (self.starsState?.balance.value ?? 0) > 10
             
@@ -1544,10 +1634,12 @@ final class GiftOptionsScreenComponent: Component {
                             horizontalAlignment: .center
                         )),
                         environment: {},
-                        containerSize: CGSize(width: availableSize.width - headerSideInset * 2.0, height: 100.0)
+                        containerSize: CGSize(width: availableSize.width - headerSideInset - headerRightSideInset, height: 100.0)
                     )
                     if let starsTitleView = self.starsTitle.view {
                         if starsTitleView.superview == nil {
+                            // Read from the scroll view, in its place among the content.
+                            starsTitleView.accessibilityElementsHidden = true
                             self.addSubview(starsTitleView)
                         }
                         transition.setBounds(view: starsTitleView, bounds: CGRect(origin: .zero, size: starsTitleSize))
@@ -1608,9 +1700,9 @@ final class GiftOptionsScreenComponent: Component {
                             }
                         )),
                         environment: {},
-                        containerSize: CGSize(width: availableSize.width - headerSideInset * 2.0, height: 1000.0)
+                        containerSize: CGSize(width: availableSize.width - headerSideInset - headerRightSideInset, height: 1000.0)
                     )
-                    let starsDescriptionFrame = CGRect(origin: CGPoint(x: floor((availableSize.width - starsDescriptionSize.width) / 2.0), y: contentHeight), size: starsDescriptionSize)
+                    let starsDescriptionFrame = CGRect(origin: CGPoint(x: floor(bandCenterX - starsDescriptionSize.width / 2.0), y: contentHeight), size: starsDescriptionSize)
                     if let starsDescriptionView = self.starsDescription.view {
                         if starsDescriptionView.superview == nil {
                             self.scrollView.addSubview(starsDescriptionView)
@@ -1697,7 +1789,7 @@ final class GiftOptionsScreenComponent: Component {
                     if tabSelectorView.superview == nil {
                         self.scrollView.addSubview(tabSelectorView)
                     }
-                    transition.setFrame(view: tabSelectorView, frame: CGRect(origin: CGPoint(x: floor((availableSize.width - tabSelectorSize.width) / 2.0), y: contentHeight), size: tabSelectorSize))
+                    transition.setFrame(view: tabSelectorView, frame: CGRect(origin: CGPoint(x: floor(bandCenterX - tabSelectorSize.width / 2.0), y: contentHeight), size: tabSelectorSize))
                 }
                 contentHeight += tabSelectorSize.height
                 contentHeight += 19.0
@@ -1948,6 +2040,7 @@ open class GiftOptionsScreen: ViewControllerComponentContainer, GiftOptionsScree
         peerId: EnginePeer.Id,
         premiumOptions: [CachedPremiumGiftOption],
         hasBirthday: Bool,
+        opensCollectibles: Bool = false,
         completion: (() -> Void)? = nil
     ) {
         self.context = context
@@ -1961,6 +2054,7 @@ open class GiftOptionsScreen: ViewControllerComponentContainer, GiftOptionsScree
             peerId: peerId,
             premiumOptions: premiumOptions,
             hasBirthday: hasBirthday,
+            opensCollectibles: opensCollectibles,
             completion: completion
         ), navigationBarAppearance: .none, theme: .default, updatedPresentationData: nil)
         

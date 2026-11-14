@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import TelegramPresentationData
@@ -28,6 +27,10 @@ public final class VideoPlaybackControlsComponent: Component {
     let displaySeekControls: Bool
     let togglePlayback: () -> Void
     let seek: (Bool) -> Void
+    /// VoiceOver: the buttons' names (play, pause, back, forward); without them the controls are not read.
+    let accessibilityStrings: PresentationStrings?
+    // MARK: NAGRAM — 快进按钮上显示的秒数（原生固定 15）。
+    let seekSeconds: Int
     
     public init(
         layoutParams: LayoutParams,
@@ -35,7 +38,9 @@ public final class VideoPlaybackControlsComponent: Component {
         isPlaying: Bool,
         displaySeekControls: Bool,
         togglePlayback: @escaping () -> Void,
-        seek: @escaping (Bool) -> Void
+        seek: @escaping (Bool) -> Void,
+        accessibilityStrings: PresentationStrings? = nil,
+        seekSeconds: Int = 15 // MARK: NAGRAM
     ) {
         self.layoutParams = layoutParams
         self.isVisible = isVisible
@@ -43,6 +48,8 @@ public final class VideoPlaybackControlsComponent: Component {
         self.displaySeekControls = displaySeekControls
         self.togglePlayback = togglePlayback
         self.seek = seek
+        self.accessibilityStrings = accessibilityStrings
+        self.seekSeconds = seekSeconds
     }
     
     public static func ==(lhs: VideoPlaybackControlsComponent, rhs: VideoPlaybackControlsComponent) -> Bool {
@@ -58,7 +65,22 @@ public final class VideoPlaybackControlsComponent: Component {
         if lhs.displaySeekControls != rhs.displaySeekControls {
             return false
         }
+        if lhs.seekSeconds != rhs.seekSeconds { // MARK: NAGRAM
+            return false
+        }
         return true
+    }
+    
+    private final class ControlAccessibilityElement: UIAccessibilityElement {
+        var activate: (() -> Void)?
+        
+        override func accessibilityActivate() -> Bool {
+            guard let activate = self.activate else {
+                return false
+            }
+            activate()
+            return true
+        }
     }
     
     public final class View: UIView {
@@ -106,6 +128,38 @@ public final class VideoPlaybackControlsComponent: Component {
         }
         
         deinit {
+        }
+        
+        private var accessibilityButtons: [ControlAccessibilityElement] = []
+        
+        /// VoiceOver: the visible controls as buttons (back, play/pause, forward), activating as their taps do; nothing
+        /// while the controls are hidden. The glass circles themselves are not elements.
+        override public var accessibilityElements: [Any]? {
+            get {
+                guard let component = self.component, component.isVisible, let strings = component.accessibilityStrings else {
+                    return []
+                }
+                if self.accessibilityButtons.isEmpty {
+                    self.accessibilityButtons = (0 ..< 3).map { _ in ControlAccessibilityElement(accessibilityContainer: self) }
+                }
+                var elements: [Any] = []
+                let sideVisible = component.displaySeekControls
+                let entries: [(UIView, String, () -> Void, Bool)] = [
+                    (self.leftButtonBackgroundView, strings.VoiceOver_Gallery_SeekBackward, { [weak self] in self?.component?.seek(false) }, sideVisible),
+                    (self.centerButtonBackgroundView, component.isPlaying ? strings.VoiceOver_Media_PlaybackPause : strings.VoiceOver_Media_PlaybackPlay, { [weak self] in self?.component?.togglePlayback() }, true),
+                    (self.rightButtonBackgroundView, strings.VoiceOver_Gallery_SeekForward, { [weak self] in self?.component?.seek(true) }, sideVisible)
+                ]
+                for (index, entry) in entries.enumerated() where entry.3 {
+                    let element = self.accessibilityButtons[index]
+                    element.accessibilityLabel = entry.1
+                    element.accessibilityTraits = .button
+                    element.accessibilityFrameInContainerSpace = entry.0.convert(entry.0.bounds, to: self)
+                    element.activate = entry.2
+                    elements.append(element)
+                }
+                return elements
+            } set(value) {
+            }
         }
         
         @objc private func onLeftTapGesture(_ gesture: UITapGestureRecognizer) {
@@ -175,7 +229,7 @@ public final class VideoPlaybackControlsComponent: Component {
             transition.setFrame(view: self.leftButtonBackgroundView, frame: leftButtonFrame)
             self.leftButtonBackgroundView.update(size: leftButtonFrame.size, cornerRadius: leftButtonFrame.height * 0.5, isDark: true, tintColor: buttonsTintColor, isInteractive: true, isVisible: areSideButtonsVisible, transition: transition)
             transition.setFrame(view: self.leftIconView, frame: CGRect(origin: CGPoint(), size: leftButtonFrame.size))
-            self.leftIconView.update(size: leftButtonFrame.size)
+            self.leftIconView.update(size: leftButtonFrame.size, seconds: component.seekSeconds) // MARK: NAGRAM
             transition.setAlpha(view: self.leftIconView, alpha: areSideButtonsVisible ? 1.0 : 0.0)
             transition.setBlur(layer: self.leftIconView.layer, radius: areSideButtonsVisible ? 0.0 : 10.0)
             self.leftButtonBackgroundView.isUserInteractionEnabled = areSideButtonsVisible
@@ -183,7 +237,7 @@ public final class VideoPlaybackControlsComponent: Component {
             transition.setFrame(view: self.rightButtonBackgroundView, frame: rightButtonFrame)
             self.rightButtonBackgroundView.update(size: rightButtonFrame.size, cornerRadius: rightButtonFrame.height * 0.5, isDark: true, tintColor: buttonsTintColor, isInteractive: true, isVisible: areSideButtonsVisible, transition: transition)
             transition.setFrame(view: self.rightIconView, frame: CGRect(origin: CGPoint(), size: rightButtonFrame.size))
-            self.rightIconView.update(size: rightButtonFrame.size)
+            self.rightIconView.update(size: rightButtonFrame.size, seconds: component.seekSeconds) // MARK: NAGRAM
             transition.setAlpha(view: self.rightIconView, alpha: areSideButtonsVisible ? 1.0 : 0.0)
             transition.setBlur(layer: self.rightIconView.layer, radius: areSideButtonsVisible ? 0.0 : 10.0)
             self.rightButtonBackgroundView.isUserInteractionEnabled = areSideButtonsVisible
@@ -197,7 +251,7 @@ public final class VideoPlaybackControlsComponent: Component {
             if let current = self.centerButtonIconNode, current.size == centerButtonIconSize {
                 centerButtonIconNode = current
             } else {
-                centerButtonIconNode = PlayPauseIconNode(size: centerButtonIconSize, lottieSettings: .noAccountFallback)
+                centerButtonIconNode = PlayPauseIconNode(size: centerButtonIconSize)
                 if let current = self.centerButtonIconNode {
                     centerButtonIconNode.frame = current.frame
                     current.view.removeFromSuperview()
@@ -236,10 +290,10 @@ private final class PlayPauseIconNode: ManagedAnimationNode {
     private let duration: Double = 0.35
     private var iconState: PlayPauseIconNodeState = .pause
     
-    override init(size: CGSize, lottieSettings: LottieRenderingSettings) {
+    override init(size: CGSize) {
         self.size = size
         
-        super.init(size: size, lottieSettings: lottieSettings)
+        super.init(size: size)
         
         self.trackTo(item: ManagedAnimationItem(source: .local("anim_playpause"), frames: .range(startFrame: 41, endFrame: 41), duration: 0.01))
     }
@@ -323,7 +377,7 @@ private final class PlaybackIconView: HighlightTrackingButton {
         fatalError("init(coder:) has not been implemented")
     }
     
-    func update(size: CGSize) {
+    func update(size: CGSize, seconds: Int) { // MARK: NAGRAM
         if let image = self.backgroundIconView.image {
             let factor: CGFloat = 1.4
             self.backgroundIconView.frame = CGSize(width: floor(image.size.width * factor), height: floor(image.size.height * factor)).centered(in: CGRect(origin: CGPoint(), size: size))
@@ -332,7 +386,7 @@ private final class PlaybackIconView: HighlightTrackingButton {
         let textSize = self.text.update(
             transition: .immediate,
             component: AnyComponent(MultilineTextComponent(
-                text: .plain(NSAttributedString(string: "15", font: Font.with(size: 16.0, design: .round, weight: .semibold, traits: []), textColor: .white))
+                text: .plain(NSAttributedString(string: "\(seconds)", font: Font.with(size: 16.0, design: .round, weight: .semibold, traits: []), textColor: .white))
             )),
             environment: {},
             containerSize: size

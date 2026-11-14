@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -38,7 +37,7 @@ class RecentSessionsHeaderItem: ListViewItem, ItemListItem {
     
     func nodeConfiguredForParams(async: @escaping (@escaping () -> Void) -> Void, params: ListViewItemLayoutParams, synchronousLoads: Bool, neighbors: ListViewItemNeighbors, completion: @escaping (ListViewItemNode, @escaping () -> (Signal<Void, NoError>?, (ListViewItemApply) -> Void)) -> Void) {
         async {
-            let node = RecentSessionsHeaderItemNode(lottieSettings: self.context.lottieRenderingSettings)
+            let node = RecentSessionsHeaderItemNode()
             let (layout, apply) = node.asyncLayout()(self, params, itemListNeighbors(item: self, topFacet: neighbors.previous?.base(ItemListNeighborFacet.self), bottomFacet: neighbors.next?.base(ItemListNeighborFacet.self)))
             
             node.contentSize = layout.contentSize
@@ -80,19 +79,18 @@ class RecentSessionsHeaderItemNode: ListViewItemNode {
     private var animationNode: AnimatedStickerNode
     private let buttonNode: SolidRoundedButtonNode
     private let button = ComponentView<Empty>()
+    private let titleAccessibilityArea = AccessibilityAreaNode()
     
     private var item: RecentSessionsHeaderItem?
     
-    private let lottieSettings: LottieRenderingSettings
 
-    init(lottieSettings: LottieRenderingSettings) {
-        self.lottieSettings = lottieSettings
+    init() {
         self.titleNode = TextNode()
         self.titleNode.isUserInteractionEnabled = true
         self.titleNode.contentMode = .left
         self.titleNode.contentsScale = UIScreen.main.scale
         
-        self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: lottieSettings)
+        self.animationNode = DefaultAnimatedStickerNodeImpl()
         
         self.buttonNode = SolidRoundedButtonNode(theme: SolidRoundedButtonTheme(backgroundColor: .black, foregroundColor: .white), fontSize: 16.0, height: 50.0, cornerRadius: 11.0)
         
@@ -101,6 +99,10 @@ class RecentSessionsHeaderItemNode: ListViewItemNode {
         self.addSubnode(self.titleNode)
         self.addSubnode(self.animationNode)
         //self.addSubnode(self.buttonNode)
+        // The illustration is decoration; the text (with its links) is one element over the title.
+        self.animationNode.isAccessibilityElement = false
+        self.animationNode.accessibilityElementsHidden = true
+        self.addSubnode(self.titleAccessibilityArea)
     }
     
     override public func didLoad() {
@@ -126,7 +128,6 @@ class RecentSessionsHeaderItemNode: ListViewItemNode {
         return { [weak self] item, params, neighbors in
             var updatedTheme: PresentationTheme?
             
-            let leftInset: CGFloat = 32.0 + params.leftInset
             let topInset: CGFloat = 124.0
             
             if currentItem?.theme !== item.theme {
@@ -137,7 +138,7 @@ class RecentSessionsHeaderItemNode: ListViewItemNode {
                 return (TelegramTextAttributes.URL, contents)
             }))
                 
-            let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: attributedText, backgroundColor: nil, maximumNumberOfLines: 0, truncationType: .end, constrainedSize: CGSize(width: params.width - params.rightInset - leftInset * 2.0, height: CGFloat.greatestFiniteMagnitude), alignment: .center, lineSpacing: 0.2, cutout: nil, insets: UIEdgeInsets()))
+            let (titleLayout, titleApply) = makeTitleLayout(TextNodeLayoutArguments(attributedString: attributedText, backgroundColor: nil, maximumNumberOfLines: 0, truncationType: .end, constrainedSize: CGSize(width: params.width - params.leftInset - params.rightInset - min(params.leftInset, params.rightInset) - 64.0, height: CGFloat.greatestFiniteMagnitude), alignment: .center, lineSpacing: 0.2, cutout: nil, insets: UIEdgeInsets()))
             
             let contentSize = CGSize(width: params.width, height: topInset + titleLayout.size.height + 69.0)
             let insets = itemListNeighborsGroupedInsets(neighbors, params)
@@ -163,9 +164,9 @@ class RecentSessionsHeaderItemNode: ListViewItemNode {
                     }
                     
                     let buttonSideInset: CGFloat = 16.0
-                    let buttonWidth = min(375, contentSize.width - buttonSideInset * 2.0)
+                    let buttonWidth = min(375, contentSize.width - buttonSideInset * 2.0 - abs(params.leftInset - params.rightInset))
                     let buttonHeight = 52.0
-                    let buttonFrame = CGRect(x: floorToScreenPixels((params.width - buttonWidth) / 2.0), y: contentSize.height - buttonHeight + 4.0, width: buttonWidth, height: buttonHeight)
+                    let buttonFrame = CGRect(x: params.leftInset + floorToScreenPixels((params.width - params.leftInset - params.rightInset - buttonWidth) / 2.0), y: contentSize.height - buttonHeight + 4.0, width: buttonWidth, height: buttonHeight)
                     strongSelf.buttonNode.frame = buttonFrame
                     
                     let _ = strongSelf.button.update(
@@ -190,7 +191,8 @@ class RecentSessionsHeaderItemNode: ListViewItemNode {
                             ),
                             action: {
                                 item.buttonAction()
-                            }
+                            },
+                            accessibility: ComponentAccessibility(label: item.context.sharedContext.currentPresentationData.with { $0 }.strings.AuthSessions_LinkDesktopDevice)
                         )),
                         environment: {},
                         containerSize: CGSize(width: buttonWidth, height: buttonHeight)
@@ -202,14 +204,22 @@ class RecentSessionsHeaderItemNode: ListViewItemNode {
                         buttonView.frame = buttonFrame
                     }
                     
-                    strongSelf.accessibilityLabel = attributedText.string
+                    let linkAction = item.linkAction
+                    strongSelf.titleAccessibilityArea.applyAccessibilityText(attributedText, linkAttribute: NSAttributedString.Key(rawValue: TelegramTextAttributes.URL), open: linkAction.flatMap { linkAction in
+                        return { value in
+                            if let url = value as? String {
+                                linkAction(.tap(url))
+                            }
+                        }
+                    })
                                         
                     let iconSize = CGSize(width: 128.0, height: 128.0)
-                    strongSelf.animationNode.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - iconSize.width) / 2.0), y: -10.0), size: iconSize)
+                    strongSelf.animationNode.frame = CGRect(origin: CGPoint(x: params.leftInset + floor((layout.size.width - params.leftInset - params.rightInset - iconSize.width) / 2.0), y: -10.0), size: iconSize)
                     strongSelf.animationNode.updateLayout(size: iconSize)
                     
                     let _ = titleApply()
-                    strongSelf.titleNode.frame = CGRect(origin: CGPoint(x: floor((layout.size.width - titleLayout.size.width) / 2.0), y: topInset + 8.0), size: titleLayout.size)
+                    strongSelf.titleNode.frame = CGRect(origin: CGPoint(x: params.leftInset + floor((layout.size.width - params.leftInset - params.rightInset - titleLayout.size.width) / 2.0), y: topInset + 8.0), size: titleLayout.size)
+                    strongSelf.titleAccessibilityArea.frame = strongSelf.titleNode.frame
                 }
             })
         }

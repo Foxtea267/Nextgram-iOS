@@ -409,7 +409,11 @@ extension DocumentCanvasView {
         scheduleSyntaxHighlightPass()   // debounced; a burst of keystrokes fires one pass
         if !suppressHostChangeNotification {
             refreshSelectionUI()   // step 1 of a two-step paste keeps the caret at its prior spot (no caret blink to the raw-text end); step 2 moves it to the final position
+            // The selection report on the next line asks the host for the caret reveal, so the
+            // content-size report must not ask as well (`selectionChangeFollowsContentSizeChange`).
+            selectionChangeFollowsContentSizeChange = true
             notifyContentSizeChanged()
+            selectionChangeFollowsContentSizeChange = false
             onSelectionChange?()   // an edit moves the caret too — ask the host to scroll it into view (like the arrow-key setter)
         }
     }
@@ -666,9 +670,7 @@ extension DocumentCanvasView {
     /// The class: every one of them attributes a media-delete path to this function, and **none of
     /// them is a caller.** The real paths are `deleteMediaBlock(id:)` (whole block: removes it from its
     /// OWN stack, appends an empty paragraph only if that stack would otherwise be empty, caret at the
-    /// previous block's text end) and `deleteMediaItem(blockID:itemIndex:)` (one album cell). Two
-    /// `CLAUDE.md` mentions are legitimately HISTORICAL ("the old …", "Previously the image branch
-    /// called …") and must stay; anything present-tense is wrong.
+    /// previous block's text end) and `deleteMediaItem(blockID:itemIndex:)` (one album cell).
     func deleteImageBoxOutcome(at index: Int) -> RichTextInputCaretOutcome {
         guard boxes.indices.contains(index) else { return .unchanged }
         var newBoxes = boxes

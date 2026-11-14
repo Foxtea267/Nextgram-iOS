@@ -16,6 +16,7 @@ import ComponentDisplayAdapters
 import BundleIconComponent
 import AnimatedTextComponent
 import GlassBackgroundComponent
+import ChatSearchNavigationContentNode // MARK: NAGRAM
 
 private let labelFont = Font.regular(15.0)
 
@@ -84,6 +85,24 @@ final class ChatTagSearchInputPanelNode: ChatInputPanelNode {
             if let params = self.currentLayout?.params {
                 let _ = self.update(params: params, transition: .spring(duration: 0.4))
             }
+        }
+    }
+    
+    // MARK: NAGRAM — 单手模式：聊天内搜索框作为本面板的第二行，紧贴键盘。由 ChatControllerNode 交给本面板。
+    private static let nagramSearchFieldRowHeight: CGFloat = 52.0
+    var nagramSearchFieldNode: ChatSearchNavigationContentNode? {
+        didSet {
+            if oldValue === self.nagramSearchFieldNode {
+                return
+            }
+            if let oldValue, oldValue.supernode === self {
+                oldValue.removeFromSupernode()
+            }
+            if let searchFieldNode = self.nagramSearchFieldNode {
+                self.addSubnode(searchFieldNode)
+            }
+            // 面板高度随之改变，下次排版必须重新计算。
+            self.currentLayout = nil
         }
     }
     
@@ -235,7 +254,7 @@ final class ChatTagSearchInputPanelNode: ChatInputPanelNode {
             )]
         } else if let results = params.interfaceState.search?.resultsState {
             let displayTotalCount = results.completed ? results.messageIndices.count : Int(results.totalCount)
-            if let currentId = results.currentId, let index = results.messageIndices.firstIndex(where: { $0.id == currentId }) {
+            if let position = chatSearchResultsPosition(messageIndices: results.messageIndices, currentId: results.currentId) {
                 canChangeListMode = true
                 
                 if self.alwaysShowTotalMessagesCount {
@@ -255,13 +274,11 @@ final class ChatTagSearchInputPanelNode: ChatInputPanelNode {
                         1: .text(params.interfaceState.strings.Chat_BottomSearchPanel_MessageCount(Int32(displayTotalCount)))
                     ])
                 } else {
-                    let adjustedIndex = results.messageIndices.count - 1 - index
-                    
                     resultsTextString = AnimatedTextComponent.extractAnimatedTextString(string: params.interfaceState.strings.Items_NOfM(
                         ".",
                         "."
                     ), id: "position", mapping: [
-                        0: .number(adjustedIndex + 1, minDigits: 1),
+                        0: .number(position, minDigits: 1),
                         1: .number(displayTotalCount, minDigits: 1)
                     ])
                 }
@@ -293,6 +310,16 @@ final class ChatTagSearchInputPanelNode: ChatInputPanelNode {
             height = 40.0
         } else {
             height = 40.0
+        }
+        
+        // MARK: NAGRAM — 搜索框在控件行下方：搜索框外框在本行内 y = 6、高 44，下沿与面板底部对齐。
+        var panelHeight = height
+        if let searchFieldNode = self.nagramSearchFieldNode {
+            let fieldRowSize = CGSize(width: params.width, height: 56.0)
+            let fieldRowFrame = CGRect(origin: CGPoint(x: 0.0, y: height + ChatTagSearchInputPanelNode.nagramSearchFieldRowHeight - 50.0), size: fieldRowSize)
+            transition.setFrame(view: searchFieldNode.view, frame: fieldRowFrame)
+            let _ = searchFieldNode.updateLayout(size: fieldRowSize, leftInset: params.leftInset - 16.0, rightInset: params.rightInset - 16.0, transition: transition.containedViewLayoutTransition)
+            panelHeight = height + ChatTagSearchInputPanelNode.nagramSearchFieldRowHeight
         }
         
         var modeButtonTitle: [AnimatedTextComponent.Item] = []
@@ -589,10 +616,14 @@ final class ChatTagSearchInputPanelNode: ChatInputPanelNode {
         transition.setFrame(view: self.backgroundContainerView, frame: CGRect(origin: CGPoint(), size: CGSize(width: params.width, height: height)))
         self.backgroundContainerView.update(size: CGSize(width: params.width, height: height), isDark: params.interfaceState.theme.overallDarkAppearance, transition: transition)
 
-        return height
+        return panelHeight // MARK: NAGRAM
     }
     
     override func minimalHeight(interfaceState: ChatPresentationInterfaceState, metrics: LayoutMetrics) -> CGFloat {
+        // MARK: NAGRAM
+        if self.nagramSearchFieldNode != nil {
+            return defaultHeight(metrics: metrics) + ChatTagSearchInputPanelNode.nagramSearchFieldRowHeight
+        }
         return defaultHeight(metrics: metrics)
     }
 }

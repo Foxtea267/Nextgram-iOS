@@ -1,6 +1,6 @@
 import Foundation
 import NagramSettings
-import TelegramApi
+internal import TelegramApi
 import Postbox
 import SwiftSignalKit
 import MtProtoKit

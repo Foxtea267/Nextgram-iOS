@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import CoreText
 import Metal
@@ -47,7 +46,6 @@ public enum WalletTransferArrivalAnimation {
     }
 
     static func crossing(_ point: CGPoint) -> CGFloat {
-        // Card content is inset four points in the reference's 224 x 156 canvas.
         return point.x + 4.0 + 0.35 * (point.y + 4.0) - 13.7
     }
 
@@ -121,7 +119,6 @@ private final class TransferArrivalTextView: UIView {
         } else {
             let bounds = CTFontGetBoundingRectsForGlyphs(font, .horizontal, &glyph, nil, 1).integral
             if !bounds.isEmpty && !bounds.isInfinite && !bounds.isNull {
-                // Keep color-font glyphs (for example an emoji in a peer name).
                 let format = UIGraphicsImageRendererFormat()
                 format.scale = UIScreenScale
                 image = UIGraphicsImageRenderer(size: bounds.size, format: format).image { renderer in
@@ -179,7 +176,6 @@ private final class TransferArrivalTextView: UIView {
                         if kind == 0, index >= 0, index < string.length {
                             let character = string.substring(with: string.rangeOfComposedCharacterSequence(at: index)).first
                             if let number = character?.wholeNumberValue, number < 10 {
-                                // Verify the shaped glyph: a truncation token may reuse a string index.
                                 var code = string.character(at: index)
                                 var expected: CGGlyph = 0
                                 if CTFontGetGlyphsForCharacters(font, &code, &expected, 1), expected == glyphs[i] {
@@ -624,6 +620,7 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
 
     private weak var walletContext: WalletContext?
     private var walletStateDisposable: MetaDisposable?
+    private let firstGramsSuggestionDisposable = MetaDisposable()
     private var renderedFiatState: WalletContext.FiatState?
     private var transferOperationId: String?
     private var transferTransactionHash: Data?
@@ -663,7 +660,6 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
     override public func didEnterHierarchy() {
         super.didEnterHierarchy()
         self.updateIncomingTransferVisibility()
-        // UIKit may attach the backing view to its window after the node enters hierarchy.
         DispatchQueue.main.async { [weak self] in
             self?.updateIncomingTransferVisibility()
         }
@@ -692,7 +688,7 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
         }
     }
 
-    required public init(lottieSettings: LottieRenderingSettings) {
+    required public init() {
         self.labelNode = TextNode()
         self.labelNode.isUserInteractionEnabled = false
         self.labelNode.displaysAsynchronously = false
@@ -774,7 +770,7 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
         self.ribbonTextMaskNode.displayWithoutProcessing = true
         self.ribbonTextMaskNode.image = UIImage(bundleImageName: "Wallet/MessageRibbon")
 
-        super.init(lottieSettings: lottieSettings)
+        super.init()
 
         self.cardNode.addSubnode(self.cardBackgroundNode)
         self.cardNode.addSubnode(self.amountNode)
@@ -801,6 +797,7 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
     deinit {
         self.cardBackgroundDeviceMotion?.dispose()
         self.walletStateDisposable?.dispose()
+        self.firstGramsSuggestionDisposable.dispose()
     }
 
     private func stopCardBackgroundMotion() {
@@ -884,6 +881,20 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
         diamond.isHidden = self.isAwaitingTransferFlight
         diamond.isUserInteractionEnabled = !self.isAwaitingTransferFlight && !self.isSendingTransfer
         diamond.scrollTiltProvider = self.scrollTiltProvider
+        diamond.onTap = { [weak self] in
+            guard let self, let item = self.item, self.isIncomingTransfer else {
+                return
+            }
+            self.firstGramsSuggestionDisposable.set((item.context.engine.notices.getServerProvidedSuggestions()
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { [weak self] suggestions in
+                guard let self, self.item?.message.id == item.message.id,
+                      self.visibility != .none, suggestions.contains(.walletFirstIncomingTransfer) else {
+                    return
+                }
+                let _ = item.controllerInteraction.openMessage(item.message, OpenMessageParams(mode: .default))
+            }))
+        }
         diamond.onExpansionChanged = { [weak self] isExpanded in
             guard let self else { return }
             if isExpanded {
@@ -919,7 +930,6 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
         return self.isIncomingTransfer && self.visibility != .none && self.cardNode.bounds.width > 0
             && self.isNodeLoaded && self.view.window != nil
             && self.cardIcon?.isExpanded != true
-            && self.item?.controllerInteraction.canReadHistory == true
             && UIApplication.shared.applicationState == .active
     }
 
@@ -948,7 +958,6 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
         case .finished:
             self.finishIncomingTransferAnimation()
         case nil:
-            // Prepare before visibility and history-reading readiness allow the scene to start.
             if isUnread, item.controllerInteraction.requestWalletTransferArrival != nil, self.cardIcon?.isExpanded != true {
                 self.prepareIncomingTransferAnimation(rise: item.controllerInteraction.freshWalletTransferMessageIds.contains(item.message.id))
             } else {
@@ -2028,6 +2037,7 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
                             && self.item?.message.id.peerId == item.message.id.peerId
                             && self.item?.message.stableId == item.message.stableId
                         if !isSameMessage {
+                            self.firstGramsSuggestionDisposable.set(nil)
                             self.cancelIncomingTransferAnimation()
                             self.mediaContainerNode.layer.removeAnimation(forKey: "transferFlightLanding")
                             self.stopCardBackgroundMotion()
@@ -2115,7 +2125,6 @@ public final class ChatMessageTransferBubbleContentNode: ChatMessageBubbleConten
 
                         let ribbonSize = TransferCardRibbonGeometry.size
                         if self.arrivalTextView != nil {
-                            // Apply layout in model coordinates, then restore the arrival pose below.
                             self.ribbonBackgroundNode.transform = CATransform3DIdentity
                             self.ribbonTextContainerNode.transform = CATransform3DIdentity
                         }

@@ -1,6 +1,5 @@
 import Foundation
 import PasscodeCore
-import Postbox
 import SwiftSignalKit
 import TelegramCore
 import WalletEngineFFI
@@ -115,9 +114,9 @@ public extension WalletContext {
         Task { await self.impl.openTonConnectUrl(value) }
     }
 
-    func openTonConnectRequest(sessionId: Int64, messageId: MessageId) {
+    func openTonConnectRequest(sessionId: Int64, messageId: EngineMessage.Id) {
         guard messageId.namespace == Namespaces.Message.Cloud,
-              messageId.peerId == PeerId(namespace: Namespaces.Peer.CloudUser, id: PeerId.Id._internalFromInt64Value(777000)) else { return }
+              messageId.peerId == EnginePeer.Id(namespace: Namespaces.Peer.CloudUser, id: EnginePeer.Id.Id._internalFromInt64Value(777000)) else { return }
         Task { await self.impl.enqueueTonConnectRequest(sessionId: sessionId, msgId: messageId.id, userInitiated: true) }
     }
 
@@ -1212,6 +1211,18 @@ extension WalletContextImpl {
         manifest: TonConnectManifestInfo,
         preview: SendPreview
     ) -> WalletContext.TonConnectOperationRequest {
+        return Self.tonConnectOperation(id: id, applicationName: manifest.name, domain: manifest.domain, icon: manifest.icon, preview: preview)
+    }
+
+    /// The window's request for a transaction `preview` from the requester named `applicationName` and `domain`: a dApp's
+    /// manifest, or a message widget's bot (sdk-v1 §2.18).
+    static func tonConnectOperation(
+        id: String,
+        applicationName: String,
+        domain: String,
+        icon: WalletTonConnectIcon?,
+        preview: SendPreview
+    ) -> WalletContext.TonConnectOperationRequest {
         let messages = preview.messages.enumerated().map { index, value in
             let amount: String
             switch value.amount {
@@ -1238,9 +1249,9 @@ extension WalletContextImpl {
         }
         return WalletContext.TonConnectOperationRequest(
             id: id,
-            applicationName: manifest.name,
-            domain: manifest.domain,
-            icon: manifest.icon,
+            applicationName: applicationName,
+            domain: domain,
+            icon: icon,
             method: .sendTransaction,
             messages: messages,
             feeNanograms: preview.emulation.walletFeesNanograms,

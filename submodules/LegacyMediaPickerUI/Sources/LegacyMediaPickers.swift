@@ -338,7 +338,7 @@ public func legacyEnqueueGifMessage(account: Account, data: Data, correlationId:
             let thumbnailImage = TGScaleImageToPixelSize(previewImage, thumbnailSize)!
             if let thumbnailData = thumbnailImage.jpegData(compressionQuality: 0.4) {
                 let resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max))
-                account.postbox.mediaBox.storeResourceData(resource.id, data: thumbnailData)
+                TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: thumbnailData)
                 previewRepresentations.append(TelegramMediaImageRepresentation(dimensions: PixelDimensions(thumbnailSize), resource: resource, progressiveSizes: [], immediateThumbnailData: nil, hasVideo: false, isPersonal: false))
             }
             
@@ -374,6 +374,12 @@ public struct LegacyAssetPickerEnqueueMessage {
     public var message: EnqueueMessage
     public var uniqueId: String?
     public var isFile: Bool
+    
+    public init(message: EnqueueMessage, uniqueId: String?, isFile: Bool) {
+        self.message = message
+        self.uniqueId = uniqueId
+        self.isFile = isFile
+    }
 }
 
 public func legacyAssetPickerEnqueueMessages(
@@ -405,7 +411,7 @@ public func legacyAssetPickerEnqueueMessages(
                                 let thumbnailSize = thumbnail.size.aspectFitted(CGSize(width: 320.0, height: 320.0))
                                 let thumbnailImage = TGScaleImageToPixelSize(thumbnail, thumbnailSize)!
                                 if let thumbnailData = thumbnailImage.jpegData(compressionQuality: 0.4) {
-                                    account.postbox.mediaBox.storeResourceData(resource.id, data: thumbnailData)
+                                    TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: thumbnailData)
                                     representations.append(TelegramMediaImageRepresentation(dimensions: PixelDimensions(thumbnailSize), resource: resource, progressiveSizes: [], immediateThumbnailData: nil, hasVideo: false, isPersonal: false))
                                 }
                             }
@@ -702,7 +708,7 @@ public func legacyAssetPickerEnqueueMessages(
                                         let thumbnailSize = thumbnail.size.aspectFitted(CGSize(width: 320.0, height: 320.0))
                                         let thumbnailImage = TGScaleImageToPixelSize(thumbnail, thumbnailSize)!
                                         if let thumbnailData = thumbnailImage.jpegData(compressionQuality: 0.4) {
-                                            account.postbox.mediaBox.storeResourceData(resource.id, data: thumbnailData)
+                                            TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: thumbnailData)
                                             previewRepresentations.append(TelegramMediaImageRepresentation(dimensions: PixelDimensions(thumbnailSize), resource: resource, progressiveSizes: [], immediateThumbnailData: nil, hasVideo: false, isPersonal: false))
                                         }
                                     }
@@ -853,7 +859,7 @@ public func legacyAssetPickerEnqueueMessages(
                                 let thumbnailSize = finalDimensions.aspectFitted(CGSize(width: 320.0, height: 320.0))
                                 let thumbnailImage = TGScaleImageToPixelSize(thumbnail, thumbnailSize)!
                                 if let thumbnailData = thumbnailImage.jpegData(compressionQuality: 0.4) {
-                                    account.postbox.mediaBox.storeResourceData(resource.id, data: thumbnailData)
+                                    TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: thumbnailData)
                                     previewRepresentations.append(TelegramMediaImageRepresentation(dimensions: PixelDimensions(thumbnailSize), resource: resource, progressiveSizes: [], immediateThumbnailData: nil, hasVideo: false, isPersonal: false))
                                 }
                             }
@@ -865,7 +871,7 @@ public func legacyAssetPickerEnqueueMessages(
                                 let coverSize = cover.size.aspectFitted(CGSize(width: maxSide, height: maxSide))
                                 let coverImage = TGScaleImageToPixelSize(cover, coverSize)!
                                 if let coverData = coverImage.jpegData(compressionQuality: 0.87) {
-                                    account.postbox.mediaBox.storeResourceData(resource.id, data: coverData)
+                                    TelegramEngine(account: account).resources.storeResourceData(id: EngineMediaResource.Id(resource.id), data: coverData)
                                     videoCover = TelegramMediaImage(
                                         imageId: EngineMedia.Id(namespace: 0, id: 0),
                                         representations: [
@@ -918,7 +924,7 @@ public func legacyAssetPickerEnqueueMessages(
                                     if asFile || (asAnimation && !path.contains(".jpg")) {
                                         if let size = engineFileSize(path) {
                                             resource = LocalFileMediaResource(fileId: Int64.random(in: Int64.min ... Int64.max), size: size)
-                                            account.postbox.mediaBox.moveResourceData(resource.id, fromTempPath: path)
+                                            TelegramEngine(account: account).resources.moveResourceData(id: EngineMediaResource.Id(resource.id), fromTempPath: path)
                                         } else {
                                             continue outer
                                         }

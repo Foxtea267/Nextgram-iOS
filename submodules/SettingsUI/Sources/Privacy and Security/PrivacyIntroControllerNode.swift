@@ -1,5 +1,4 @@
 import Foundation
-import LottieSettings
 import UIKit
 import Display
 import AsyncDisplayKit
@@ -58,7 +57,7 @@ final class PrivacyIntroControllerNode: ViewControllerTracingNode {
         self.proceedAction = proceedAction
         
         self.iconNode = ASImageNode()
-        self.animationNode = DefaultAnimatedStickerNodeImpl(lottieSettings: self.context.lottieRenderingSettings)
+        self.animationNode = DefaultAnimatedStickerNodeImpl()
         
         self.titleNode = ASTextNode()
         self.textNode = ASTextNode()
@@ -83,6 +82,10 @@ final class PrivacyIntroControllerNode: ViewControllerTracingNode {
             self.iconNode.isHidden = false
             self.animationNode.isHidden = true
         }
+        
+        // The icon / duck animation is decoration.
+        self.iconNode.accessibilityElementsHidden = true
+        self.animationNode.accessibilityElementsHidden = true
         
         self.addSubnode(self.iconNode)
         self.addSubnode(self.animationNode)
@@ -124,6 +127,20 @@ final class PrivacyIntroControllerNode: ViewControllerTracingNode {
         self.buttonTextNode.attributedText = NSAttributedString(string: self.mode.buttonTitle(strings: presentationData.strings), font: buttonFont, textColor: presentationData.theme.list.itemAccentColor, paragraphAlignment: .center)
         self.buttonTextNode.isAccessibilityElement = false
         self.buttonNode.accessibilityLabel = self.buttonTextNode.attributedText?.string
+        self.buttonNode.accessibilityTraits = [.button]
+        // The navigation bar already reads the same words as a heading ("Passcode Lock"): the repeat is not read again.
+        let titleString = self.titleNode.attributedText?.string
+        let titleRepeatsNavigationTitle = titleString == self.mode.controllerTitle(strings: presentationData.strings)
+        self.titleNode.isAccessibilityElement = !titleRepeatsNavigationTitle
+        self.titleNode.accessibilityElementsHidden = titleRepeatsNavigationTitle
+        self.titleNode.accessibilityLabel = titleString
+        self.titleNode.accessibilityTraits = [.header]
+        self.textNode.isAccessibilityElement = true
+        self.textNode.accessibilityLabel = self.textNode.attributedText?.string
+        self.textNode.accessibilityTraits = [.staticText]
+        self.noticeNode.isAccessibilityElement = true
+        self.noticeNode.accessibilityLabel = self.noticeNode.attributedText?.string
+        self.noticeNode.accessibilityTraits = [.staticText]
         self.buttonBackgroundNode.image = generateButtonImage(backgroundColor: presentationData.theme.list.itemBlocksBackgroundColor, highlightColor: nil)
         self.buttonHighlightedBackgroundNode.image = generateButtonImage(backgroundColor: presentationData.theme.list.itemBlocksBackgroundColor, highlightColor: presentationData.theme.list.itemHighlightedBackgroundColor)
         
@@ -161,34 +178,31 @@ final class PrivacyIntroControllerNode: ViewControllerTracingNode {
             transition.updateAlpha(node: self.iconNode, alpha: iconAlpha)
         }
         
+        // iPhone Duo: everything is laid out in the band between the side insets (one of them is the side
+        // strip); with equal insets the band is centered on the full width, as before.
+        let bandMargins = layout.listSideMargins(base: layout.size.width >= 320.0 ? max(16.0, floor((layout.size.width - 674.0) / 2.0)) : 0.0)
+        let bandWidth = layout.size.width - layout.safeInsets.left - layout.safeInsets.right
         let inset: CGFloat = 30.0
-        let titleSize = self.titleNode.measure(CGSize(width: layout.size.width - inset * 2.0, height: CGFloat.greatestFiniteMagnitude))
-        let textSize = self.textNode.measure(CGSize(width: layout.size.width - inset * 2.0, height: CGFloat.greatestFiniteMagnitude))
-        let noticeSize = self.noticeNode.measure(CGSize(width: layout.size.width - inset * 2.0, height: CGFloat.greatestFiniteMagnitude))
-        
-        let buttonInset: CGFloat
-        if layout.size.width >= 320.0 {
-            buttonInset = max(16.0, floor((layout.size.width - 674.0) / 2.0))
-        } else {
-            buttonInset = 0.0
-        }
+        let titleSize = self.titleNode.measure(CGSize(width: bandWidth - inset * 2.0, height: CGFloat.greatestFiniteMagnitude))
+        let textSize = self.textNode.measure(CGSize(width: bandWidth - inset * 2.0, height: CGFloat.greatestFiniteMagnitude))
+        let noticeSize = self.noticeNode.measure(CGSize(width: bandWidth - inset * 2.0, height: CGFloat.greatestFiniteMagnitude))
             
         let items: [AuthorizationLayoutItem] = [
             AuthorizationLayoutItem(node: self.iconNode, size: iconSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
             AuthorizationLayoutItem(node: self.animationNode, size: animationSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
             AuthorizationLayoutItem(node: self.titleNode, size: titleSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 20.0, maxValue: 30.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
             AuthorizationLayoutItem(node: self.textNode, size: textSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 16.0, maxValue: 16.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
-            AuthorizationLayoutItem(node: self.buttonNode, size: CGSize(width: layout.size.width - buttonInset * 2.0, height: 52.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 40.0, maxValue: 40.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
+            AuthorizationLayoutItem(node: self.buttonNode, size: CGSize(width: layout.size.width - bandMargins.left - bandMargins.right, height: 52.0), spacingBefore: AuthorizationLayoutItemSpacing(weight: 40.0, maxValue: 40.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 0.0, maxValue: 0.0)),
             AuthorizationLayoutItem(node: self.noticeNode, size: noticeSize, spacingBefore: AuthorizationLayoutItemSpacing(weight: 44.0, maxValue: 44.0), spacingAfter: AuthorizationLayoutItemSpacing(weight: 20.0, maxValue: 40.0))
         ]
         
-        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: 0.0, y: insets.top), size: CGSize(width: layout.size.width, height: layout.size.height - insets.top - insets.bottom - 10.0)), items: items, transition: transition, failIfDoesNotFit: false)
+        let _ = layoutAuthorizationItems(bounds: CGRect(origin: CGPoint(x: layout.safeInsets.left, y: insets.top), size: CGSize(width: bandWidth, height: layout.size.height - insets.top - insets.bottom - 10.0)), items: items, transition: transition, failIfDoesNotFit: false)
         
         transition.updateFrame(node: self.buttonBackgroundNode, frame: self.buttonNode.frame)
         transition.updateFrame(node: self.buttonHighlightedBackgroundNode, frame: self.buttonNode.frame)
         
         let buttonTextSize = self.buttonTextNode.measure(layout.size)
-        let buttonTextFrame = CGRect(origin: CGPoint(x: floor((layout.size.width - buttonTextSize.width) / 2.0), y: floor(self.buttonNode.frame.center.y - buttonTextSize.height / 2.0)), size: buttonTextSize)
+        let buttonTextFrame = CGRect(origin: CGPoint(x: floor(self.buttonNode.frame.midX - buttonTextSize.width / 2.0), y: floor(self.buttonNode.frame.center.y - buttonTextSize.height / 2.0)), size: buttonTextSize)
         transition.updateFrame(node: self.buttonTextNode, frame: buttonTextFrame)
     }
     
