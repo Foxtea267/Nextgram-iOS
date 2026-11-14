@@ -1500,6 +1500,33 @@ public final class Network: NSObject {
         }
     }
 
+    // MARK: NEXTGRAM — Use a worker on each requested DC with the account's existing proxy configuration.
+    public func nextgramDatacenterSamples(_ datacenterId: Int) -> Signal<Int?, NoError> {
+        guard (1 ... 5).contains(datacenterId), !NagramDemoMode.isEnabled else {
+            return .complete()
+        }
+        return self.download(datacenterId: datacenterId, isMedia: false, tag: nil)
+        |> take(1)
+        |> mapToSignal { worker in
+            let sample = Signal<Int?, NoError> { subscriber in
+                let startedAt = ProcessInfo.processInfo.systemUptime
+                return (worker.request(Api.functions.help.getConfig(), automaticFloodWait: false)
+                |> map { response -> Int? in
+                    guard case let .config(data) = response, data.thisDc == Int32(datacenterId) else {
+                        return nil
+                    }
+                    return max(1, Int(((ProcessInfo.processInfo.systemUptime - startedAt) * 1000.0).rounded()))
+                }
+                |> `catch` { _ -> Signal<Int?, NoError> in .single(nil) }
+                |> timeout(8.0, queue: .mainQueue(), alternate: .single(nil))
+                |> deliverOnMainQueue).start(next: { subscriber.putNext($0) }, completed: { subscriber.putCompletion() })
+            }
+            // The first request includes the time to open the worker and negotiate authorization.
+            let followUp = sample |> delay(0.15, queue: .mainQueue())
+            return sample |> then(followUp) |> then(followUp) |> then(followUp)
+        }
+    }
+
     func updateNetworkSpeedLimitedEventNotifyInterval(value: Double) {
         let _ = self.networkSpeedLimitedEventState.with { state in
             state.notifyInterval = value

@@ -86,6 +86,7 @@ public enum NagramChatListMessagePreviewStyle: String {
 }
 
 public enum NagramDeletedMessageIndicatorStyle: String {
+    case hidden
     case text
     case trash
     case trashAndText = "both"
@@ -310,6 +311,8 @@ public final class NagramSettings {
     public var deletedMessageIndicatorStyle: String
     @NagramDefault("nagram.deletedMessageIndicatorColor", "")
     public var deletedMessageIndicatorColor: String
+    @NagramDefault("nagram.deletedMessageIndicatorText", "")
+    public var deletedMessageIndicatorText: String
     @NagramDefault("nagram.deletedMessageSemiTransparent", false)
     public var deletedMessageSemiTransparent: Bool
     @NagramDefault("nagram.preserveBotMessages", false)

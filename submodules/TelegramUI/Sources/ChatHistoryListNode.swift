@@ -1975,8 +1975,15 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
         |> deliverOnMainQueue
         |> map { _ in NagramTranscriptionService.isEnabled }
         |> distinctUntilChanged
-        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), self.musicPlaylistSearchQuery ?? .single(""), nagramBoolSignal("nagram.deletedMessageSemiTransparent", defaultValue: false), customTranscriptionEnabled)
-        |> map { update, _, query, _, _ in
+        // MARK: NEXTGRAM — Reload the visible history as soon as a member is hidden or restored.
+        let hiddenGroupMembers: Signal<String, NoError>
+        if let peerId = chatLocation.peerId {
+            hiddenGroupMembers = nagramStringSignal(NextgramGroupMemberFilter.key(accountId: context.account.peerId.toInt64(), chatId: peerId.toInt64()), defaultValue: "")
+        } else {
+            hiddenGroupMembers = .single("")
+        }
+        historyViewUpdate = combineLatest(queue: .mainQueue(), historyViewUpdate, nagramRegexFiltersSignal(), self.musicPlaylistSearchQuery ?? .single(""), nagramBoolSignal("nagram.deletedMessageSemiTransparent", defaultValue: false), customTranscriptionEnabled, hiddenGroupMembers)
+        |> map { update, _, query, _, _, _ in
             let _ = currentMusicPlaylistSearchQuery.swap(query)
             return update
         }

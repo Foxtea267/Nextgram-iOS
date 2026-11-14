@@ -175,6 +175,10 @@ func chatHistoryEntriesForView(
     let nagramRegexFilterPeerId = location.peerId?.toInt64() // MARK: NAGRAM
     let nagramIncomingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: false) // MARK: NAGRAM
     let nagramOutgoingRegexFilterMatcher = NagramSettings.shared.regexFilterMatcher(peerId: nagramRegexFilterPeerId, isOutgoing: true) // MARK: NAGRAM
+    // MARK: NEXTGRAM — Apply the local per-group sender filter without modifying message storage.
+    let nextgramHiddenMembers = nagramRegexFilterPeerId.map {
+        NextgramGroupMemberFilter.hiddenMembers(accountId: context.account.peerId.toInt64(), chatId: $0)
+    } ?? []
     loop: for entry in view.entries {
         var message = entry.message.withAppliedEphemeralReplacementMessage()
         var isRead = entry.isRead
@@ -186,6 +190,9 @@ func chatHistoryEntriesForView(
         
         if pendingRemovedMessages.contains(message.id) {
             continue
+        }
+        if let author = message.author, nextgramHiddenMembers.contains(author.id.toInt64()) {
+            continue // MARK: NEXTGRAM
         }
 
         let nagramRegexFilterMatcher = message.effectivelyIncoming(context.account.peerId) ? nagramIncomingRegexFilterMatcher : nagramOutgoingRegexFilterMatcher // MARK: NAGRAM

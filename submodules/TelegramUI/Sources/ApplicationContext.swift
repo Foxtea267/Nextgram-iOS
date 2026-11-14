@@ -39,6 +39,7 @@ import NagramSettingsSignal
 
 // MARK: NEXTGRAM — Schedule a local notification when APNs is unavailable but MTProto remains online.
 func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [Message], notify: Bool) {
+    let messages = nextgramFilterHiddenMemberNotifications(messages, accountId: context.account.peerId.toInt64()) // MARK: NEXTGRAM
     guard NagramSettings.shared.localNotificationFallbackEnabled, notify, let firstMessage = messages.first else {
         return
     }
@@ -139,6 +140,17 @@ func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [
             schedule(false, displayContents, playSound)
         }
     })
+}
+
+// MARK: NEXTGRAM — Use the same sender rule for local alerts and in-app notification previews.
+private func nextgramFilterHiddenMemberNotifications(_ messages: [Message], accountId: Int64) -> [Message] {
+    guard let chatId = messages.first?.id.peerId.toInt64() else { return messages }
+    let hidden = NextgramGroupMemberFilter.hiddenMembers(accountId: accountId, chatId: chatId)
+    guard !hidden.isEmpty else { return messages }
+    return messages.filter { message in
+        guard let authorId = message.author?.id.toInt64() else { return true }
+        return !hidden.contains(authorId)
+    }
 }
 
 // MARK: NAGRAM — 从桌面角标中扣除被消息屏蔽规则隐藏的未读消息。
@@ -483,7 +495,14 @@ final class AuthorizedApplicationContext {
         }))
 
         let engine = context.engine
+        let nextgramNotificationAccountId = context.account.peerId.toInt64() // MARK: NEXTGRAM
         self.notificationMessagesDisposable.set((context.account.stateManager.notificationMessages
+        |> map { messageList -> [([Message], PeerGroupId, Bool, MessageHistoryThreadData?)] in
+            messageList.compactMap { messages, groupId, notify, threadData in
+                let visibleMessages = nextgramFilterHiddenMemberNotifications(messages, accountId: nextgramNotificationAccountId)
+                return visibleMessages.isEmpty ? nil : (visibleMessages, groupId, notify, threadData)
+            }
+        } // MARK: NEXTGRAM
         |> mapToSignal { messageList in
             return engine.data.get(EngineDataMap(
                 messageList.compactMap { item -> TelegramEngine.EngineData.Item.Messages.ChatListIndex? in

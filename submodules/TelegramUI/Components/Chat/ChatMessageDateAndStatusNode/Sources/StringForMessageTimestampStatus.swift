@@ -284,9 +284,17 @@ public func stringForMessageTimestampStatus(
     // MARK: NEXTGRAM — Make locally retained deletions visible without altering message content.
     // MARK: NAGRAM
     if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
-        let deletedText = ngI18n("Nagram.MessageDeletedRetained", strings.baseLanguageCode)
+        // MARK: NEXTGRAM — Keep marker text to a single line and reserve attachment delimiters.
+        let customText = NagramSettings.shared.deletedMessageIndicatorText
+            .components(separatedBy: .newlines).joined(separator: " ")
+            .replacingOccurrences(of: nagramDeletedMessageIconPlaceholder, with: "")
+            .replacingOccurrences(of: nagramDeletedMessageMarkerPrefix, with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let deletedText = customText.isEmpty ? ngI18n("Nagram.MessageDeletedRetained", strings.baseLanguageCode) : String(customText.prefix(24))
         let marker: String
         switch NagramSettings.shared.deletedMessageIndicatorStyleValue {
+        case .hidden:
+            return dateText // MARK: NEXTGRAM
         case .text:
             marker = deletedText
         case .trash:
@@ -294,7 +302,7 @@ public func stringForMessageTimestampStatus(
         case .trashAndText:
             marker = "\(nagramDeletedMessageIconPlaceholder) \(deletedText)"
         }
-        return "\(nagramDeletedMessageMarkerPrefix)\(marker) · \(dateText)"
+        return "\(nagramDeletedMessageMarkerPrefix)\(marker)\(nagramDeletedMessageMarkerPrefix) · \(dateText)" // MARK: NEXTGRAM
     }
     return dateText
 }

@@ -590,7 +590,11 @@ private func nagramGroups(
         NagramGroup(tab: .privacy, headerKey: "Nagram.Section.MessagePreservation", footerKey: "Nagram.Section.MessagePreservation.Footer", rows: [
             .toggle(titleKey: "Nagram.AntiRecall", get: { NagramSettings.shared.antiRecallEnabled }, set: { NagramSettings.shared.antiRecallEnabled = $0 }),
             .navigation(titleKey: "Nagram.AntiRecallRules", action: antiRecallRulesAction),
-            .choice(titleKey: "Nagram.DeletedMessageIndicatorStyle", prefix: "Nagram.DeletedMessageIndicatorStyle", options: ["text", "trash", "both"], current: { NagramSettings.shared.deletedMessageIndicatorStyleValue.rawValue }, set: { NagramSettings.shared.deletedMessageIndicatorStyle = $0 }),
+            .choice(titleKey: "Nagram.DeletedMessageIndicatorStyle", prefix: "Nagram.DeletedMessageIndicatorStyle", options: ["text", "trash", "both", "hidden"], current: { NagramSettings.shared.deletedMessageIndicatorStyleValue.rawValue }, set: { NagramSettings.shared.deletedMessageIndicatorStyle = $0 }),
+            .input(titleKey: "Nagram.DeletedMessageIndicatorText", placeholderKey: "Nagram.MessageDeletedRetained", get: { NagramSettings.shared.deletedMessageIndicatorText }, set: { NagramSettings.shared.deletedMessageIndicatorText = String($0.prefix(24)) }, isSecret: false, isVisible: {
+                let style = NagramSettings.shared.deletedMessageIndicatorStyleValue
+                return style == .text || style == .trashAndText
+            }),
             .input(titleKey: "Nagram.DeletedMessageIndicatorColor", placeholderKey: "Nagram.DeletedMessageIndicatorColor.Placeholder", get: { NagramSettings.shared.deletedMessageIndicatorColor }, set: { NagramSettings.shared.deletedMessageIndicatorColor = $0 }, isSecret: false, isVisible: { true }),
             .toggle(titleKey: "Nagram.DeletedMessageSemiTransparent", get: { NagramSettings.shared.deletedMessageSemiTransparent }, set: { NagramSettings.shared.deletedMessageSemiTransparent = $0 }),
             .toggle(titleKey: "Nagram.PreserveBotMessages", get: { NagramSettings.shared.preserveBotMessages }, set: { NagramSettings.shared.preserveBotMessages = $0 }),

@@ -20,6 +20,7 @@ enum NagramSettingsSyncKeys {
         "nagram.antiRecallBlacklist",
         "nagram.antiRecallExcludedKeywords",
         "nagram.deletedMessageIndicatorStyle",
+        "nagram.deletedMessageIndicatorText",
         "nagram.deletedMessageIndicatorColor",
         "nagram.deletedMessageSemiTransparent",
         "nagram.preserveBotMessages",

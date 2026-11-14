@@ -44,7 +44,12 @@ private func nagramAntiRecallEntity(_ peer: Peer) -> NagramAntiRecallEntity? {
     return nil
 }
 
-private func nagramShouldPreserveDeletedMessage(_ message: Message, transaction: Transaction) -> (preserve: Bool, preservedBotMessage: Bool) {
+// MARK: NEXTGRAM — A chat can opt in or out without changing the account-wide rules.
+private func nagramShouldPreserveDeletedMessage(_ message: Message, accountId: PeerId, transaction: Transaction) -> (preserve: Bool, preservedBotMessage: Bool) {
+    let policy = NextgramChatDeletionPolicy.current(accountId: accountId.toInt64(), chatId: message.id.peerId.toInt64())
+    guard policy != .allow else {
+        return (false, false)
+    }
     let settings = NagramSettings.shared
     var entities: [NagramAntiRecallEntity] = []
     if let peer = transaction.getPeer(message.id.peerId), let entity = nagramAntiRecallEntity(peer) {
@@ -57,7 +62,7 @@ private func nagramShouldPreserveDeletedMessage(_ message: Message, transaction:
         return (false, false)
     }
     let preserveBotMessage = settings.preserveBotMessages && nagramMessageWasSentByBot(message, transaction: transaction)
-    return (settings.antiRecallEnabled || preserveBotMessage, preserveBotMessage)
+    return (policy == .preserve || settings.antiRecallEnabled || preserveBotMessage, preserveBotMessage)
 }
 
 private func nagramMarkMessageAsDeleted(_ message: Message, transaction: Transaction, preservedBotMessage: Bool) {
@@ -365,7 +370,7 @@ extension ReplayContext {
             guard let currentMessage = transaction.getMessage(messageId) else {
                 continue
             }
-            let preservation = nagramShouldPreserveDeletedMessage(currentMessage, transaction: transaction)
+            let preservation = nagramShouldPreserveDeletedMessage(currentMessage, accountId: self.accountPeerId, transaction: transaction) // MARK: NEXTGRAM
             if preservation.preserve {
                 retainedGlobalIds.insert(messageId.id)
                 nagramMarkMessageAsDeleted(currentMessage, transaction: transaction, preservedBotMessage: preservation.preservedBotMessage)
@@ -389,7 +394,7 @@ extension ReplayContext {
             guard let currentMessage = transaction.getMessage(id) else {
                 continue
             }
-            let preservation = nagramShouldPreserveDeletedMessage(currentMessage, transaction: transaction)
+            let preservation = nagramShouldPreserveDeletedMessage(currentMessage, accountId: self.accountPeerId, transaction: transaction) // MARK: NEXTGRAM
             if preservation.preserve {
                 retainedIds.insert(id)
                 nagramMarkMessageAsDeleted(currentMessage, transaction: transaction, preservedBotMessage: preservation.preservedBotMessage)
@@ -404,7 +409,8 @@ extension ReplayContext {
     
     func applyUpdateMinAvailableMessage(_ id: MessageId) {
         // MARK: NEXTGRAM — A remote history clear is also a recall event.
-        if NagramSettings.shared.antiRecallEnabled || NagramSettings.shared.preserveBotMessages {
+        let policy = NextgramChatDeletionPolicy.current(accountId: self.accountPeerId.toInt64(), chatId: id.peerId.toInt64()) // MARK: NEXTGRAM
+        if policy != .allow && (policy == .preserve || NagramSettings.shared.antiRecallEnabled || NagramSettings.shared.preserveBotMessages) {
             var messages: [Message] = []
             transaction.withAllMessages(peerId: id.peerId, namespace: id.namespace, { message in
                 if message.id.id <= id.id {
@@ -415,7 +421,7 @@ extension ReplayContext {
             var deletedIds: [MessageId] = []
             var didPreserveMessage = false
             for message in messages {
-                let preservation = nagramShouldPreserveDeletedMessage(message, transaction: transaction)
+                let preservation = nagramShouldPreserveDeletedMessage(message, accountId: self.accountPeerId, transaction: transaction) // MARK: NEXTGRAM
                 if preservation.preserve {
                     didPreserveMessage = true
                     nagramMarkMessageAsDeleted(message, transaction: transaction, preservedBotMessage: preservation.preservedBotMessage)

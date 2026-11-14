@@ -4909,6 +4909,32 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                         strongSelf.activateSearch(domain: .member(peer._asPeer()))
                     })))
                 }
+                // MARK: NEXTGRAM — Hide this sender only in the group currently on screen.
+                if let chat = strongSelf.presentationInterfaceState.renderedPeer?.chatMainPeer,
+                   case .user = peer, peer.id != context.account.peerId {
+                    let isGroup: Bool
+                    switch chat {
+                    case .legacyGroup: isGroup = true
+                    case let .channel(channel):
+                        if case .group = channel.info { isGroup = true } else { isGroup = false }
+                    default: isGroup = false
+                    }
+                    if isGroup {
+                        let accountId = context.account.peerId.toInt64()
+                        let chatId = chat.id.toInt64()
+                        let memberId = peer.id.toInt64()
+                        let hidden = NextgramGroupMemberFilter.hiddenMembers(accountId: accountId, chatId: chatId).contains(memberId)
+                        let lang = strongSelf.presentationData.strings.baseLanguageCode
+                        items.append(.action(ContextMenuActionItem(
+                            text: ngI18n(hidden ? "Nagram.GroupMemberFilter.Show" : "Nagram.GroupMemberFilter.Hide", lang),
+                            icon: { theme in generateTintedImage(image: UIImage(systemName: hidden ? "eye" : "eye.slash"), color: theme.contextMenu.primaryColor) },
+                            action: { _, dismiss in
+                                dismiss(.dismissWithoutContent)
+                                NextgramGroupMemberFilter.setHidden(!hidden, memberId: memberId, accountId: accountId, chatId: chatId)
+                            }
+                        )))
+                    }
+                }
                 // MARK: NAGRAM — 长按头像显示成员管理项
                 if NagramSettings.shared.memberAdminActionsOnAvatar {
                     items.append(contentsOf: strongSelf.nagramMemberAdminMenuItems(peer: peer))
@@ -6294,6 +6320,46 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                             })))
                         }
                         appendAutoremoveItem(&items)
+                        // MARK: NEXTGRAM — Per-chat deletion interception is local and needs no admin rights.
+                        if let policyPeerId = strongSelf.chatLocation.peerId, policyPeerId.namespace != Namespaces.Peer.SecretChat {
+                            let accountId = context.account.peerId.toInt64()
+                            let chatId = policyPeerId.toInt64()
+                            let policy = NextgramChatDeletionPolicy.current(accountId: accountId, chatId: chatId)
+                            let lang = strongSelf.presentationData.strings.baseLanguageCode
+                            let title = ngI18n("Nagram.AntiRecall.ChatPolicy", lang)
+                            items.append(.action(ContextMenuActionItem(
+                                text: title + " · " + ngI18n("Nagram.AntiRecall.ChatPolicy." + policy.rawValue, lang),
+                                icon: { theme in generateTintedImage(image: UIImage(systemName: "shield"), color: theme.contextMenu.primaryColor) },
+                                action: { [weak self] _, dismiss in
+                                    dismiss(.dismissWithoutContent)
+                                    guard let self else { return }
+                                    let actions = NextgramChatDeletionPolicy.allCases.map { option in
+                                        TextAlertAction(type: option == policy ? .defaultAction : .genericAction,
+                                            title: ngI18n("Nagram.AntiRecall.ChatPolicy." + option.rawValue, lang),
+                                            action: { option.save(accountId: accountId, chatId: chatId) })
+                                    }
+                                    self.present(textAlertController(context: context, title: title,
+                                        text: ngI18n("Nagram.AntiRecall.ChatPolicy.Hint", lang),
+                                        actions: actions + [TextAlertAction(type: .genericAction, title: self.presentationData.strings.Common_Cancel, action: {})],
+                                        actionLayout: .vertical), in: .window(.root))
+                                }
+                            )))
+                        }
+                        // MARK: NEXTGRAM — Restore senders even after all of their avatars are hidden.
+                        let hiddenAccountId = context.account.peerId.toInt64()
+                        let hiddenChatId = peer.id.toInt64()
+                        let hiddenMembers = NextgramGroupMemberFilter.hiddenMembers(accountId: hiddenAccountId, chatId: hiddenChatId)
+                        if !hiddenMembers.isEmpty {
+                            let lang = strongSelf.presentationData.strings.baseLanguageCode
+                            items.append(.action(ContextMenuActionItem(text: ngI18n("Nagram.GroupMemberFilter.Manage", lang),
+                                icon: { theme in generateTintedImage(image: UIImage(systemName: "eye"), color: theme.contextMenu.primaryColor) },
+                                action: { [weak self] _, dismiss in
+                                    dismiss(.dismissWithoutContent)
+                                    guard let self else { return }
+                                    self.push(nextgramHiddenGroupMembersController(context: context, chatId: hiddenChatId))
+                                }
+                            )))
+                        }
                         items.append(.action(ContextMenuActionItem(text: strongSelf.presentationData.strings.Conversation_Search, icon: { theme in
                             return generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Search"), color: theme.actionSheet.primaryTextColor)
                         }, action: { _, f in
@@ -7792,13 +7858,18 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 adjustedReplyHistory,
                 topMessage,
                 referenceMessage ?? .single(nil),
-                nagramRegexFiltersSignal() // MARK: NAGRAM
+                nagramRegexFiltersSignal(), // MARK: NAGRAM
+                nagramStringSignal(NextgramGroupMemberFilter.key(accountId: context.account.peerId.toInt64(), chatId: peerId.toInt64()), defaultValue: "") // MARK: NEXTGRAM
             )
-            |> map { pinnedMessages, topMessages, referenceMessage, _ -> TopPinnedMessageState in
+            |> map { pinnedMessages, topMessages, referenceMessage, _, _ -> TopPinnedMessageState in
                 // MARK: NAGRAM — the pinned bar skips pinned messages a regex rule hides, as the chat does, and counts
                 // only the rest. Only hidden messages inside the loaded window are subtracted from the positions.
                 let accountPeerId = context.account.peerId
+                let hiddenMembers = NextgramGroupMemberFilter.hiddenMembers(accountId: accountPeerId.toInt64(), chatId: peerId.toInt64()) // MARK: NEXTGRAM
                 let nagramIsHidden: (Message) -> Bool = { message in
+                    if let senderId = message.author?.id.toInt64(), hiddenMembers.contains(senderId) {
+                        return true // MARK: NEXTGRAM
+                    }
                     let isOutgoing = !message.effectivelyIncoming(accountPeerId)
                     guard let matcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId.toInt64(), isOutgoing: isOutgoing) else {
                         return false
@@ -11909,7 +11980,9 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         }
 
         let repeatedMessages = nagramRepeatedMessages(messages, threadId: self.chatLocation.threadId, hideNames: hideNames, copyProtectionEnabled: self.presentationInterfaceState.copyProtectionEnabled)
-        self.chatDisplayNode.setupSendActionOnViewUpdate({}, nil)
+        self.chatDisplayNode.setupSendActionOnViewUpdate({ [weak self] in
+            self?.chatDisplayNode.historyNode.scrollToEndOfHistory() // MARK: NEXTGRAM — Reveal the repeated message.
+        }, nil)
         self.chatDisplayNode.sendMessages(repeatedMessages, nil, nil, nil, repeatedMessages.count > 1, false)
         return true
     }

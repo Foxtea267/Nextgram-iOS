@@ -149,6 +149,7 @@ public struct NextgramSettingsBackup {
         "nagram.antiRecallBlacklist": (.privacy, .string),
         "nagram.antiRecallExcludedKeywords": (.privacy, .string),
         "nagram.deletedMessageIndicatorStyle": (.privacy, .string),
+        "nagram.deletedMessageIndicatorText": (.privacy, .string),
         "nagram.deletedMessageIndicatorColor": (.privacy, .string),
         "nagram.deletedMessageSemiTransparent": (.privacy, .boolean),
         "nagram.preserveBotMessages": (.privacy, .boolean),

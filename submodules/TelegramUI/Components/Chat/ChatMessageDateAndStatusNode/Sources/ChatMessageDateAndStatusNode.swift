@@ -659,8 +659,10 @@ public class ChatMessageDateAndStatusNode: ASDisplayNode {
             var nagramDeletedMarkerText: String?
             if updatedDateText.hasPrefix(nagramDeletedMessageMarkerPrefix) {
                 updatedDateText.removeFirst(nagramDeletedMessageMarkerPrefix.count)
-                if let separatorRange = updatedDateText.range(of: " · ") {
+                // MARK: NEXTGRAM — Custom marker text may itself contain the visible separator.
+                if let separatorRange = updatedDateText.range(of: nagramDeletedMessageMarkerPrefix) {
                     nagramDeletedMarkerText = String(updatedDateText[..<separatorRange.lowerBound])
+                    updatedDateText.removeSubrange(separatorRange)
                 }
             }
             if arguments.edited {
