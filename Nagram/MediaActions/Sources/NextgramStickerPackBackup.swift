@@ -85,7 +85,7 @@ public func nextgramBackupStickerPack(context: AccountContext, info: StickerPack
 public func nextgramPresentStickerPackBackup(context: AccountContext, info: StickerPackCollectionInfo, items: [StickerPackItem], presentationData: PresentationData, present: @escaping (ViewController) -> Void) -> Disposable {
     let operation = MetaDisposable()
     weak var loadingReference: ViewController?
-    let loading = OverlayStatusController(theme: presentationData.theme, type: .loading(cancelled: {
+    let loading = OverlayStatusController(style: presentationData.theme.overallDarkAppearance ? .dark : .light, type: .loading(cancelled: {
         operation.dispose()
         loadingReference?.dismiss()
     }))
