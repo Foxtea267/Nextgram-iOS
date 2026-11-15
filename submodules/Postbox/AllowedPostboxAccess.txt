@@ -115,7 +115,6 @@ submodules/TelegramCallsUI/Sources/PresentationGroupCall.swift
 submodules/TelegramCallsUI/Sources/VideoChatScreenParticipantContextMenu.swift
 submodules/TelegramPermissionsUI/Sources/PermissionSplitTest.swift
 submodules/TelegramUI/Components/AdPanelHeaderPanelComponent/Sources/ChatAdPanelNode.swift
-submodules/TelegramUI/Components/AdminUserActionsSheet/Sources/AdminUserActionsSheet.swift
 submodules/TelegramUI/Components/AvatarEditorScreen/Sources/AvatarPreviewComponent.swift
 submodules/TelegramUI/Components/Chat/ChatAvatarNavigationNode/Sources/ChatAvatarNavigationNode.swift
 submodules/TelegramUI/Components/Chat/ChatBotInfoItem/Sources/ChatBotInfoItem.swift
