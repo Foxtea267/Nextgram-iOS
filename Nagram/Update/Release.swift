@@ -68,7 +68,7 @@ public struct NextgramUpdateRelease: Equatable, Codable, Sendable {
     ]
 
     let version: NextgramReleaseVersion
-    let bundleIdentifier: String
+    public let bundleIdentifier: String
     public let assetName: String
     let downloadURL: URL
     let size: Int64
