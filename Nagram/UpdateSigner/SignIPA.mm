@@ -188,7 +188,7 @@ static NSData *MatchingProfile(NSArray<NSData *> *profiles, NSData *certificate,
     return nil;
 }
 
-NSError *NextgramSignUpdateIPA(NSString *source, NSString *destination, NSString *installedApp,
+extern "C" NSError *NextgramSignUpdateIPA(NSString *source, NSString *destination, NSString *installedApp,
     NSString *scratch, NSString *version, NSData *certificate, NSString *password, NSArray<NSData *> *profiles) {
     static std::mutex lock;
     std::lock_guard<std::mutex> signing(lock);
