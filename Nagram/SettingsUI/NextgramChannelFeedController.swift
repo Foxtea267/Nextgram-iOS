@@ -9,6 +9,7 @@ import SwiftSignalKit
 import TelegramCore
 import TelegramPresentationData
 import UIKit
+import WallpaperBackgroundNode
 
 private struct FeedChannel: Equatable {
     let peer: EnginePeer
@@ -247,25 +248,17 @@ private final class ChannelFeed {
 
 private struct FeedEntry: ItemListNodeEntry {
     enum Id: Hashable {
-        case sources, unread, status, more, failure
+        case status, more, failure
         case post(EngineMessage.Id)
     }
 
     let stableId: Id
     let index: Int
-    let title: String
-    var detail = ""
-    var peer: EnginePeer?
-    var date: String?
-    var selected = false
+    let text: String
+    var post: NextgramFeedPost?
+    let presentationData: PresentationData
 
-    var section: ItemListSectionId {
-        switch self.stableId {
-        case .sources, .unread: return 0
-        case .post, .status: return 1
-        case .more, .failure: return 2
-        }
-    }
+    var section: ItemListSectionId { 0 }
 
     static func < (lhs: Self, rhs: Self) -> Bool {
         return lhs.index < rhs.index
@@ -273,70 +266,109 @@ private struct FeedEntry: ItemListNodeEntry {
 
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         let actions = arguments as! FeedActions
-        switch self.stableId {
-        case .status:
-            return ItemListTextItem(presentationData: presentationData, text: .plain(self.title), sectionId: self.section)
-        case .unread:
-            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: self.title,
-                                      value: self.selected, sectionId: self.section, style: .blocks, updated: actions.unreadOnly)
-        case .sources, .more, .post, .failure:
-            return ItemListDisclosureItem(
-                presentationData: presentationData, systemStyle: .glass, context: actions.context, iconPeer: self.peer,
-                title: self.title, titleBadge: self.selected ? "●" : nil, label: self.detail,
-                labelStyle: self.peer == nil ? .text : .multilineDetailText,
-                additionalDetailLabel: self.date, sectionId: self.section, style: .blocks,
-                action: { actions.activate(self.stableId) }
-            )
-        }
+        return NextgramFeedBubbleItem(context: actions.context, presentation: actions.presentation, text: self.text, post: self.post,
+                                      action: self.stableId == .status ? nil : { actions.activate(self.stableId) })
     }
 }
 
 private struct FeedActions {
     let context: AccountContext
+    let presentation: ChatPresentationData
     let activate: (FeedEntry.Id) -> Void
-    let unreadOnly: (Bool) -> Void
 }
 
-private func feedPreview(_ message: EngineMessage, peer: EnginePeer, strings: PresentationStrings) -> String? {
+private func feedPreview(_ message: EngineMessage, peer: EnginePeer, strings: PresentationStrings) -> (text: String, showsMedia: Bool)? {
     let language = strings.baseLanguageCode
     if message.media.contains(where: { $0 is TelegramMediaAction }) || message.adAttribute != nil {
         return nil
     }
     if case let .channel(channel) = peer, channel.restrictionInfo?.rules.contains(where: { $0.platform == "ios" || $0.platform == "all" }) == true {
-        return ngI18n("Nagram.ChannelFeed.Post", language)
+        return (ngI18n("Nagram.ChannelFeed.Post", language), false)
     }
     if message.attributes.contains(where: { $0 is RestrictedContentMessageAttribute }) {
-        return ngI18n("Nagram.ChannelFeed.Post", language)
+        return (ngI18n("Nagram.ChannelFeed.Post", language), false)
     }
     let hasSpoiler = message.attributes.contains { attribute in
         (attribute as? TextEntitiesMessageAttribute)?.entities.contains { $0.type == .Spoiler } ?? false
     }
     if hasSpoiler && !NagramSettings.shared.autoRevealSpoilers {
-        return ngI18n("Nagram.ChannelFeed.Spoiler", language)
+        return (ngI18n("Nagram.ChannelFeed.Spoiler", language), false)
     }
-    let text = message.text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    let rawMessage = message._asMessage()
+    let channelProtected: Bool
+    if case let .channel(channel) = peer {
+        channelProtected = channel.flags.contains(.copyProtectionEnabled)
+    } else {
+        channelProtected = false
+    }
+    let showsMedia = !channelProtected && !rawMessage.isCopyProtected() && !rawMessage.containsSecretMedia
+        && rawMessage.paidContent == nil && (NagramSettings.shared.autoRevealSpoilers || !message.attributes.contains { $0 is MediaSpoilerMessageAttribute })
+    let text = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
     if !text.isEmpty {
-        return String(text.prefix(240))
+        return (text, showsMedia)
     }
     for media in message.media {
         if media is TelegramMediaImage {
-            return strings.Message_Photo
+            return (strings.Message_Photo, showsMedia)
         }
         if let file = media as? TelegramMediaFile {
-            if file.isSticker { return strings.Message_Sticker }
-            if file.isVideo { return strings.Message_Video }
-            if file.isMusic || file.isVoice { return strings.Message_Audio }
-            return strings.Message_File
+            if file.isSticker { return (strings.Message_Sticker, false) }
+            if file.isVideo { return (strings.Message_Video, showsMedia) }
+            if file.isMusic || file.isVoice { return (strings.Message_Audio, false) }
+            return (strings.Message_File, false)
         }
     }
-    return ngI18n("Nagram.ChannelFeed.Post", language)
+    return (ngI18n("Nagram.ChannelFeed.Post", language), false)
+}
+
+private final class ChannelFeedTimelineController: ItemListController {
+    private let wallpaperNode: WallpaperBackgroundNode
+    private let wallpaperDisposable = MetaDisposable()
+    private let context: AccountContext
+
+    init(context: AccountContext, state: Signal<(ItemListControllerState, (ItemListNodeState, FeedActions)), NoError>) {
+        self.context = context
+        self.wallpaperNode = createWallpaperBackgroundNode(context: context, forChatDisplay: true, useSharedAnimationPhase: true)
+        let presentation = context.sharedContext.currentPresentationData.with { $0 }
+        super.init(presentationData: ItemListPresentationData(presentation),
+                   updatedPresentationData: context.sharedContext.presentationData |> map { ItemListPresentationData($0) },
+                   state: state, tabBarItem: nil)
+    }
+
+    required init(coder aDecoder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    deinit {
+        self.wallpaperDisposable.dispose()
+    }
+
+    override func loadDisplayNode() {
+        super.loadDisplayNode()
+        (self.displayNode as? ItemListControllerNode)?.setListBackgroundNode(self.wallpaperNode)
+        let current = self.context.sharedContext.currentPresentationData.with { $0 }
+        self.wallpaperNode.update(wallpaper: current.chatWallpaper, animated: false)
+        self.wallpaperDisposable.set((self.context.sharedContext.presentationData
+        |> map { $0.chatWallpaper }
+        |> distinctUntilChanged
+        |> deliverOnMainQueue).start(next: { [weak self] wallpaper in
+            self?.wallpaperNode.update(wallpaper: wallpaper, animated: false)
+        }))
+    }
+
+    override func containerLayoutUpdated(_ layout: ContainerViewLayout, transition: ContainedViewLayoutTransition) {
+        super.containerLayoutUpdated(layout, transition: transition)
+        self.wallpaperNode.updateLayout(size: layout.size, displayMode: .aspectFill, transition: transition)
+        transition.updateFrame(node: self.wallpaperNode, frame: CGRect(origin: .zero, size: layout.size))
+    }
 }
 
 public func nextgramChannelFeedController(context: AccountContext) -> ViewController {
     let feed = ChannelFeed(context: context)
-    let formatter = DateFormatter()
-    formatter.dateStyle = .medium
-    formatter.timeStyle = .short
+    let dayFormatter = DateFormatter()
+    dayFormatter.dateStyle = .medium
+    let timeFormatter = DateFormatter()
+    timeFormatter.timeStyle = .short
     var openSources: (() -> Void)?
     var openPost: ((EngineMessage.Id, EnginePeer) -> Void)?
     var nearBottom = false
@@ -364,11 +396,8 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
         let language = strings.baseLanguageCode
         let data = ItemListPresentationData(presentationData)
         let title = ngI18n("Nagram.ChannelFeed", language)
-        var entries = [
-            FeedEntry(stableId: .sources, index: 0, title: ngI18n("Nagram.ChannelFeed.Sources", language),
-                      detail: state.category?.name ?? ngI18n("Nagram.ChannelFeed.All", language)),
-            FeedEntry(stableId: .unread, index: 1, title: ngI18n("Nagram.ChannelFeed.Unread", language), selected: state.preferences.unreadOnly)
-        ]
+        let categoryTitle = state.category?.name ?? ngI18n("Nagram.ChannelFeed.All", language)
+        var entries: [FeedEntry] = []
         let channels = state.includedChannels
         // Stop where an unloaded channel page might still interleave with the visible posts.
         let visibleThrough = channels.filter { state.shouldLoad($0) }.compactMap { state.loadedThrough($0) }.max()
@@ -386,47 +415,53 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
         }
         posts.sort { $0.1.index > $1.1.index }
         var displayedGroups: [EnginePeer.Id: Set<Int64>] = [:]
+        var previousDay: Date?
+        let calendar = Calendar.current
         for (channel, message) in posts {
             guard let preview = feedPreview(message, peer: channel.peer, strings: strings) else { continue }
             if let group = message.groupingKey, !displayedGroups[channel.peer.id, default: []].insert(group).inserted {
                 continue
             }
-            entries.append(FeedEntry(stableId: .post(message.id), index: entries.count,
-                                     title: channel.peer.compactDisplayTitle, detail: preview, peer: channel.peer,
-                                     date: formatter.string(from: Date(timeIntervalSince1970: TimeInterval(message.timestamp))),
-                                     selected: channel.isUnread(message)))
+            let date = Date(timeIntervalSince1970: TimeInterval(message.timestamp))
+            let day = calendar.startOfDay(for: date)
+            let post = NextgramFeedPost(peer: channel.peer, message: message, showsMedia: preview.showsMedia,
+                                        day: day == previousDay ? nil : dayFormatter.string(from: date),
+                                        time: timeFormatter.string(from: date), unread: channel.isUnread(message))
+            previousDay = day
+            entries.append(FeedEntry(stableId: .post(message.id), index: entries.count, text: preview.text, post: post, presentationData: presentationData))
         }
         if state.loadingChannels || state.loadingPosts {
-            entries.append(FeedEntry(stableId: .status, index: entries.count, title: ngI18n("Nagram.ChannelFeed.Loading", language)))
+            entries.append(FeedEntry(stableId: .status, index: entries.count, text: ngI18n("Nagram.ChannelFeed.Loading", language), presentationData: presentationData))
         } else {
-            if entries.count == 2 {
-                entries.append(FeedEntry(stableId: .status, index: entries.count, title: ngI18n("Nagram.ChannelFeed.Empty", language)))
+            if entries.isEmpty {
+                entries.append(FeedEntry(stableId: .status, index: entries.count, text: ngI18n("Nagram.ChannelFeed.Empty", language), presentationData: presentationData))
             }
             if state.canLoadMore {
-                entries.append(FeedEntry(stableId: .more, index: entries.count, title: ngI18n("Nagram.ChannelFeed.More", language)))
+                entries.append(FeedEntry(stableId: .more, index: entries.count, text: ngI18n("Nagram.ChannelFeed.More", language), presentationData: presentationData))
             }
             if channels.contains(where: { state.failedChannels.contains($0.peer.id) }) {
-                entries.append(FeedEntry(stableId: .failure, index: entries.count, title: ngI18n("Nagram.ChannelFeed.Retry", language)))
+                entries.append(FeedEntry(stableId: .failure, index: entries.count, text: ngI18n("Nagram.ChannelFeed.Retry", language), presentationData: presentationData))
             }
         }
 
-        let actions = FeedActions(context: context, activate: { id in
+        let actions = FeedActions(context: context, presentation: ChatPresentationData(presentationData: presentationData), activate: { id in
             switch id {
-            case .sources: openSources?()
             case .more: feed.loadMore()
             case .failure: feed.retryFailedChannels()
             case let .post(id):
                 if let channel = channels.first(where: { $0.peer.id == id.peerId }) {
                     openPost?(id, channel.peer)
                 }
-            case .unread, .status: break
+            case .status: break
             }
-        }, unreadOnly: { value in
-            feed.updatePreferences { $0.unreadOnly = value }
         })
         let menu = ItemListNavigationButton(content: .text(ngI18n("Nagram.ChannelFeed.Actions", language)), style: .regular,
                                             enabled: !state.loadingChannels, action: {
             let alert = UIAlertController(title: title, message: nil, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: ngI18n("Nagram.ChannelFeed.Sources", language), style: .default) { _ in openSources?() })
+            alert.addAction(UIAlertAction(title: ngI18n("Nagram.ChannelFeed.Unread", language) + (state.preferences.unreadOnly ? " ✓" : ""), style: .default) { _ in
+                feed.updatePreferences { $0.unreadOnly.toggle() }
+            })
             alert.addAction(UIAlertAction(title: ngI18n("Nagram.ChannelFeed.Refresh", language), style: .default) { _ in feed.refresh() })
             alert.addAction(UIAlertAction(title: ngI18n("Nagram.ChannelFeed.AutoLoad", language) + (autoLoad ? " ✓" : ""), style: .default) { _ in
                 NagramSettings.shared.channelFeedAutoLoad = !autoLoad
@@ -443,11 +478,11 @@ public func nextgramChannelFeedController(context: AccountContext) -> ViewContro
             alert.addAction(UIAlertAction(title: strings.Common_Cancel, style: .cancel))
             context.sharedContext.applicationBindings.presentNativeController(alert)
         })
-        return (ItemListControllerState(presentationData: data, title: .text(title), leftNavigationButton: nil, rightNavigationButton: menu,
+        return (ItemListControllerState(presentationData: data, title: .textWithSubtitle(title, categoryTitle), leftNavigationButton: nil, rightNavigationButton: menu,
                                         backNavigationButton: ItemListBackButton(title: strings.Common_Back)),
-                (ItemListNodeState(presentationData: data, entries: entries, style: .blocks, animateChanges: false), actions))
+                (ItemListNodeState(presentationData: data, entries: entries, style: .plain, animateChanges: false), actions))
     }
-    let controller = ItemListController(context: context, state: state)
+    let controller = ChannelFeedTimelineController(context: context, state: state)
     controller.navigationPresentation = .default
     controller.didAppear = { firstTime in
         feed.active = true

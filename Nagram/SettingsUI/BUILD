@@ -13,6 +13,9 @@ swift_library(
     ],
     deps = [
         "//submodules/Display:Display",
+        "//submodules/AvatarNode:AvatarNode",
+        "//submodules/PhotoResources:PhotoResources",
+        "//submodules/WallpaperBackgroundNode:WallpaperBackgroundNode",
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
         "//submodules/ItemListUI:ItemListUI",
