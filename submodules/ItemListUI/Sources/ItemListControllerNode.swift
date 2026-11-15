@@ -253,6 +253,17 @@ open class ItemListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
     
     private let listNodeContainer: ASDisplayNode
     public let listNode: ListView
+    // MARK: NEXTGRAM — Allow a plain list to render over a chat wallpaper.
+    private var listBackgroundNode: ASDisplayNode?
+
+    public func setListBackgroundNode(_ node: ASDisplayNode) {
+        self.listBackgroundNode?.removeFromSupernode()
+        self.listBackgroundNode = node
+        node.isUserInteractionEnabled = false
+        self.insertSubnode(node, belowSubnode: self.listNodeContainer)
+        self.backgroundColor = .clear
+        self.listNode.backgroundColor = .clear
+    }
     private let leftOverlayNode: ASDisplayNode
     private let rightOverlayNode: ASDisplayNode
     /// The x range in which a touch can select a row: the list margins, in both styles.
@@ -1015,6 +1026,12 @@ open class ItemListControllerNode: ASDisplayNode, ASGestureRecognizerDelegate {
                 }
             }
             
+            // MARK: NEXTGRAM — Theme changes must leave the custom background visible.
+            if self.listBackgroundNode != nil {
+                self.backgroundColor = .clear
+                self.listNode.backgroundColor = .clear
+            }
+
             var options = ListViewDeleteAndInsertOptions()
             if transition.firstTime {
                 options.insert(.Synchronous)
