@@ -155,7 +155,7 @@ public final class LegacyJoinLinkPreviewController: ViewController {
                     let context = strongSelf.context
                     let navigationController = strongSelf.parentNavigationController
                     let joinedPeer = strongSelf.isRequest ? nil : peer
-                    strongSelf.dismiss(completion: {
+                    strongSelf.dismiss(completion: { [navigationController] in // MARK: NEXTGRAM
                         if let joinedPeer {
                             nagramPresentFolderPickerAfterJoining(context: context, peerId: joinedPeer.id, present: { [weak navigationController] controller in
                                 (navigationController?.viewControllers.last as? ViewController)?.present(controller, in: .window(.root))

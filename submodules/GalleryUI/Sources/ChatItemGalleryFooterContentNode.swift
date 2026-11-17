@@ -1,6 +1,5 @@
 import Foundation
 import NagramSettings // MARK: NEXTGRAM
-import LottieSettings
 import UIKit
 import AsyncDisplayKit
 import Display

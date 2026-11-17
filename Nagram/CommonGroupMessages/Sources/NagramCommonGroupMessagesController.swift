@@ -381,7 +381,7 @@ public func nagramCommonGroupMessagesController(context: AccountContext, userPee
     controller.navigationPresentation = .default
     controller.willDisappear = { _ in loader.pause() }
     controller.beganInteractiveDragging = { [weak controller] in controller?.view.endEditing(true) }
-    actionImpl = { [weak controller] id in
+    actionImpl = { id in
         let data = context.sharedContext.currentPresentationData.with { $0 }
         let lang = data.strings.baseLanguageCode
         switch id {

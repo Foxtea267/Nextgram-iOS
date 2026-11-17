@@ -770,10 +770,10 @@ public final class NextgramMusicPlayerView: UIView {
             }
         }
         actions.append(UIMenu(title: self.string("SystemNowPlaying"), children: systemModes))
-        if self.state != nil {
+        if let state = self.state {
             actions.append(UIMenu(options: .displayInline, children: [
-                UIAction(title: self.string("Shuffle"), image: UIImage(systemName: "shuffle"), state: self.state?.order == .random ? .on : .off) { [weak self] _ in self?.shufflePressed() },
-                UIAction(title: self.string("Repeat"), image: UIImage(systemName: self.state?.looping == .item ? "repeat.1" : "repeat"), state: (self.state?.looping ?? .none) == .none ? .off : .on) { [weak self] _ in self?.repeatPressed() }
+                UIAction(title: self.string("Shuffle"), image: UIImage(systemName: "shuffle"), state: state.order == .random ? .on : .off) { [weak self] _ in self?.shufflePressed() },
+                UIAction(title: self.string("Repeat"), image: UIImage(systemName: state.looping == .item ? "repeat.1" : "repeat"), state: state.looping == .none ? .off : .on) { [weak self] _ in self?.repeatPressed() }
             ]))
         }
         if self.settings.lyricsEnabled && self.state != nil {

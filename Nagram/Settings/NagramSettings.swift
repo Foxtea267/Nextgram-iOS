@@ -1083,7 +1083,7 @@ public extension NagramSettings {
     static let defaultTranslationLLMPrompt = "Translate to @toLang:\n\n@text"
 
     /// 有效的快进步长；存储值不在可选列表中时按原生的 15 秒处理。
-    public var videoSeekIntervalValue: Int32 {
+    var videoSeekIntervalValue: Int32 {
         let value = self.videoSeekInterval
         return NagramSettings.videoSeekIntervalOptions.contains(value) ? value : 15
     }

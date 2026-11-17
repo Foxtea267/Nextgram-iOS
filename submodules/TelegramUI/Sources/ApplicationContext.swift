@@ -39,7 +39,7 @@ import NagramSettingsSignal
 import NextgramNotificationPolicy // MARK: NEXTGRAM
 
 // MARK: NEXTGRAM — Schedule a local notification when APNs is unavailable but MTProto remains online.
-func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [Message], notify: Bool) {
+func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [EngineRawMessage], notify: Bool) {
     let messages = nextgramFilterHiddenMemberNotifications(messages, accountId: context.account.peerId.toInt64()) // MARK: NEXTGRAM
     guard NagramSettings.shared.localNotificationFallbackEnabled, notify, let firstMessage = messages.first else {
         return
@@ -145,84 +145,15 @@ func nagramScheduleLocalMessageNotification(context: AccountContext, messages: [
 }
 
 // MARK: NEXTGRAM — Use the same sender rule for local alerts and in-app notification previews.
-private func nextgramFilterHiddenMemberNotifications(_ messages: [Message], accountId: Int64) -> [Message] {
+private func nextgramFilterHiddenMemberNotifications(_ messages: [EngineRawMessage], accountId: Int64) -> [EngineRawMessage] {
     guard let chatId = messages.first?.id.peerId.toInt64() else { return messages }
     let hidden = NextgramGroupMemberFilter.hiddenMembers(accountId: accountId, chatId: chatId)
     return messages.filter { message in
         // MARK: NEXTGRAM — Apply event policy and content rules before creating any local alert.
-        if nextgramNotificationMode(message: EngineMessage(message), accountPeerId: PeerId(accountId)) == .off { return false }
+        if nextgramNotificationMode(message: EngineMessage(message), accountPeerId: EnginePeer.Id(accountId)) == .off { return false }
         if NagramSettings.shared.regexFilterMatcher(peerId: message.id.peerId.toInt64(), isOutgoing: !message.flags.contains(.Incoming))?.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) == true { return false }
         guard let authorId = message.author?.id.toInt64() else { return true }
         return !hidden.contains(authorId)
-    }
-}
-
-// MARK: NAGRAM — 从桌面角标中扣除被消息屏蔽规则隐藏的未读消息。
-private func nagramFilteredUnreadBadgeAdjustment(transaction: Transaction, accountPeerId: PeerId, seedConfiguration: SeedConfiguration, inAppSettings: InAppNotificationSettings) -> Int32 {
-    var unreadPeerIds = Set(transaction.getUnreadChatListPeerIds(groupId: .root, filterPredicate: nil, additionalFilter: nil, stopOnFirstMatch: false))
-    unreadPeerIds.formUnion(transaction.getUnreadChatListPeerIds(groupId: Namespaces.PeerGroup.archive, filterPredicate: nil, additionalFilter: nil, stopOnFirstMatch: false))
-    
-    let globalNotificationSettings = transaction.getGlobalNotificationSettings()
-    var hiddenMessageCount: Int32 = 0
-    var hiddenChatCount: Int32 = 0
-    
-    for peerId in unreadPeerIds {
-        guard let readState = transaction.getCombinedPeerReadState(peerId), readState.count > 0 else {
-            continue
-        }
-        guard let peer = transaction.getPeer(peerId) else {
-            continue
-        }
-        
-        let peerTags = seedConfiguration.peerSummaryCounterTags(peer, transaction.isPeerContact(peerId: peerId))
-        guard !peerTags.isDisjoint(with: inAppSettings.totalUnreadCountIncludeTags) else {
-            continue
-        }
-        
-        let notificationPeerId: PeerId
-        if let associatedPeerId = peer.associatedPeerId, peer.associatedPeerOverridesIdentity {
-            notificationPeerId = associatedPeerId
-        } else {
-            notificationPeerId = peerId
-        }
-        guard !resolvedIsRemovedFromTotalUnreadCount(globalSettings: globalNotificationSettings, peer: peer, peerSettings: transaction.getPeerNotificationSettings(id: notificationPeerId)) else {
-            continue
-        }
-        guard let matcher = NagramSettings.shared.regexFilterMatcher(peerId: peerId.toInt64(), isOutgoing: false) else {
-            continue
-        }
-        
-        let historyView = transaction.getMessagesHistoryViewState(
-            input: .single(peerId: peerId, threadId: nil),
-            ignoreMessagesInTimestampRange: nil,
-            ignoreMessageIds: Set(),
-            count: Int(readState.count) + 10,
-            clipHoles: true,
-            anchor: .upperBound,
-            namespaces: .not(Namespaces.Message.allNonRegular)
-        )
-        var peerHiddenMessageCount: Int32 = 0
-        for entry in historyView.entries {
-            let message = entry.message
-            guard !entry.isRead, message.id.peerId == peerId, message.effectivelyIncoming(accountPeerId) else {
-                continue
-            }
-            if matcher.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value()) {
-                peerHiddenMessageCount += 1
-            }
-        }
-        
-        hiddenMessageCount += peerHiddenMessageCount
-        if peerHiddenMessageCount >= readState.count {
-            hiddenChatCount += 1
-        }
-    }
-    
-    switch inAppSettings.totalUnreadCountDisplayCategory {
-    case .messages:
-        return hiddenMessageCount
-    case .chats:
-        return hiddenChatCount
     }
 }
 
@@ -501,7 +432,7 @@ final class AuthorizedApplicationContext {
         let engine = context.engine
         let nextgramNotificationAccountId = context.account.peerId.toInt64() // MARK: NEXTGRAM
         self.notificationMessagesDisposable.set((context.account.stateManager.notificationMessages
-        |> map { messageList -> [([Message], PeerGroupId, Bool, MessageHistoryThreadData?)] in
+        |> map { messageList -> [([EngineRawMessage], EnginePeerGroupId, Bool, EngineMessageHistoryThreadData?)] in
             messageList.compactMap { messages, groupId, notify, threadData in
                 let visibleMessages = nextgramFilterHiddenMemberNotifications(messages, accountId: nextgramNotificationAccountId)
                 return visibleMessages.isEmpty ? nil : (visibleMessages, groupId, notify, threadData)

@@ -1035,7 +1035,7 @@ public final class AccountContextImpl: AccountContext {
     
     public func requestCall(peerId: EnginePeer.Id, isVideo: Bool, completion: @escaping () -> Void) {
         // MARK: NAGRAM — 通话前确认:原逻辑封装为 makeCall,confirmCalls 开启时先弹确认
-        let makeCall: () -> Void = {
+        let makeCall: () -> Void = { [self] in // MARK: NEXTGRAM
         guard let callResult = self.sharedContext.callManager?.requestCall(context: self, peerId: peerId, isVideo: isVideo, endCurrentIfAny: false) else {
             return
         }

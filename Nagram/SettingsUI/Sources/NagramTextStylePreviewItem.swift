@@ -153,7 +153,7 @@ private final class NagramTextStylePreviewItemNode: ListViewItemNode, ItemListIt
     }
 
     func asyncLayout() -> (_ item: NagramTextStylePreviewItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [self] item, params, neighbors in
             let separatorHeight = UIScreenPixel
             let contentWidth = params.width - params.leftInset - params.rightInset - NagramTextStylePreviewMetrics.sideInset * 2.0
             let contentSize = CGSize(width: params.width, height: NagramTextStylePreviewMetrics.height(styleCount: item.styles.count, width: contentWidth))

@@ -335,7 +335,7 @@ final class TabBarControllerNode: ASDisplayNode {
             return (id, (index, item))
         })
         // MARK: NEXTGRAM — Use the same tab actions for configured items and the upstream News tab.
-        let makeTabBarItem: (Int, TabBarNodeItem) -> TabBarComponent.Item = { index, item in
+        let makeTabBarItem: (Int, TabBarNodeItem) -> TabBarComponent.Item = { [self] index, item in
             return TabBarComponent.Item(
                 content: .tabBarItem(item.item),
                 action: { [weak self] isLongTap in
