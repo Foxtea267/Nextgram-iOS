@@ -392,6 +392,20 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         self.window = nil
         self.nativeWindow = nil
     }
+
+    #if DEBUG && targetEnvironment(simulator)
+    // MARK: NEXTGRAM — Reuse the scene's real navigation and overlay host inside Xcode Canvas.
+    func takeCanvasRootController() -> UIViewController? {
+        guard NagramDemoMode.isCanvasPreview, let root = self.windowRootController else {
+            return nil
+        }
+        if let window = self.window, window.rootViewController === root {
+            window.rootViewController = nil
+            window.isHidden = true
+        }
+        return root
+    }
+    #endif
         
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         precondition(!testIsLaunched)
@@ -780,17 +794,20 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let isDemo = NagramDemoMode.isEnabled
         precondition(!(isUITest && isDemo), "Use --demo or --ui-test, not both")
 
+        // MARK: NEXTGRAM — Canvas instances must not reset each other's or --demo's databases.
+        let demoContainerPath = NagramDemoMode.isCanvasPreview
+            ? URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("nextgram-canvas-\(UUID().uuidString)", isDirectory: true).path
+            : appGroupUrl.path + "/nagram-demo-data"
         let rootPath: String
         if isDemo {
-            let demoDataPath = appGroupUrl.path + "/nagram-demo-data"
             do {
-                if FileManager.default.fileExists(atPath: demoDataPath) {
-                    try FileManager.default.removeItem(atPath: demoDataPath)
+                if FileManager.default.fileExists(atPath: demoContainerPath) {
+                    try FileManager.default.removeItem(atPath: demoContainerPath)
                 }
             } catch {
                 preconditionFailure("Could not reset demo data: \(error.localizedDescription)")
             }
-            rootPath = rootPathForBasePath(demoDataPath)
+            rootPath = rootPathForBasePath(demoContainerPath)
         } else if isUITest {
             let testDataPath = appGroupUrl.path + "/telegram-ui-tests-data"
             let _ = try? FileManager.default.removeItem(atPath: testDataPath)
@@ -920,7 +937,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         )
         
         // MARK: NAGRAM — helpers must resolve files inside the demo container too.
-        let applicationContainerPath = isDemo ? appGroupUrl.path + "/nagram-demo-data" : appGroupUrl.path
+        let applicationContainerPath = isDemo ? demoContainerPath : appGroupUrl.path // MARK: NEXTGRAM
         let applicationBindings = TelegramApplicationBindings(isMainApp: true, appBundleId: baseAppBundleId, appBuildType: buildConfig.isAppStoreBuild ? .public : .internal, containerPath: applicationContainerPath, appSpecificScheme: buildConfig.appSpecificUrlScheme, openUrl: { url in
             var parsedUrl = URL(string: url)
             if let parsed = parsedUrl {
@@ -1229,7 +1246,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
             self.mainWindow?.hostView.containerView.backgroundColor =  initialPresentationDataAndSettings.presentationData.theme.chatList.backgroundColor
             
             // MARK: NAGRAM — legacy shared account resources are isolated as well.
-            let legacyBasePath = isDemo ? appGroupUrl.path + "/nagram-demo-data" : appGroupUrl.path
+            let legacyBasePath = isDemo ? demoContainerPath : appGroupUrl.path // MARK: NEXTGRAM
             
             let presentationDataPromise = Promise<PresentationData>()
             // MARK: NAGRAM — AppLock retains the presentation controller across scene reconnects.
@@ -1572,9 +1589,10 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
                     if #available(iOS 10.0, *) {
                         authorizeNotifications = false
                     }
-                    self.registerForNotifications(context: context.context, authorize: authorizeNotifications)
-                    
-                    self.resetIntentsIfNeeded(context: context.context)
+                    if !NagramDemoMode.isCanvasPreview { // MARK: NEXTGRAM
+                        self.registerForNotifications(context: context.context, authorize: authorizeNotifications)
+                        self.resetIntentsIfNeeded(context: context.context)
+                    }
 
                     // MARK: NEXTGRAM
                     self.canPresentNextgramUsageAgreement = true
@@ -2242,7 +2260,8 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
 
     // MARK: NEXTGRAM — The acknowledgement is local and versioned so a materially revised agreement can be shown again.
     private func presentNextgramUsageAgreementIfNeeded(sharedContext: SharedAccountContextImpl) {
-        guard self.canPresentNextgramUsageAgreement,
+        guard !NagramDemoMode.isCanvasPreview, // MARK: NEXTGRAM — Canvas uses a disposable offline account.
+              self.canPresentNextgramUsageAgreement,
               !self.isPresentingNextgramUsageAgreement,
               NagramSettings.shared.usageAgreementAcceptedVersion < self.nextgramUsageAgreementVersion else {
             return

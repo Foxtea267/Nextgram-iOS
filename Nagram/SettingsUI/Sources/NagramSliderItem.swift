@@ -150,7 +150,7 @@ private final class NagramSliderItemNode: ListViewItemNode, ItemListItemNode {
     }
 
     func asyncLayout() -> (_ item: NagramSliderItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [self] item, params, neighbors in
             let separatorHeight = UIScreenPixel
             let separatorRightInset: CGFloat = item.systemStyle == .glass ? 16.0 : 0.0
 

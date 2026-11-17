@@ -118,6 +118,12 @@ config_setting(
     },
 )
 
+# MARK: NEXTGRAM — Xcode can build the app on an iOS simulator without a device profile.
+config_setting(
+    name = "iosSimulator",
+    constraint_values = ["@build_bazel_apple_support//constraints:simulator"],
+)
+
 bool_flag(
     name = "embedWatchApp",
     build_setting_default = False,
@@ -1996,6 +2002,8 @@ ios_application(
     minimum_os_version = minimum_os_version,
     provisioning_profile = select({
         ":disableProvisioningProfilesSetting": None,
+        # MARK: NEXTGRAM
+        ":iosSimulator": None,
         "//conditions:default": ":Telegram_xcode_profile" if telegram_use_xcode_managed_codesigning else "@build_configuration//provisioning:Telegram.mobileprovision",
     }),
     entitlements = ":TelegramEntitlements.entitlements",

@@ -146,6 +146,8 @@ Release 和“关于 Nextgram”使用 **Nagram 基础版本 + Nextgram 修订�
 
 Nextgram 使用 Telegram-iOS 的 Bazel 构建系统，统一通过 `build-system/Make/Make.py` 调用。完整签名、免费 Apple ID、模拟器构建和安装说明见 [`docs/build.md`](docs/build.md)。
 
+在 Xcode 中交互预览主应用，见 [iPhone 应用的 Xcode 画布](docs/xcode-previews.md)。
+
 ## Credits
 
 - [Telegram-iOS](https://github.com/TelegramMessenger/Telegram-iOS)

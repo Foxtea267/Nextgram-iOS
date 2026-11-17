@@ -95,11 +95,13 @@ extension ChatControllerImpl {
             }
             // `translateMessageIds` goes through the configured provider and completes without a translation when
             // it fails, so the result is read back from the message.
-            return (translateMessageIds(context: context, messageIds: [messageId], fromLang: nil, toLang: toLanguage)
-            |> mapToSignal { _ -> Signal<Bool, NoError> in
-                return .complete()
-            })
-            |> then(hasTranslation())
+            // MARK: NEXTGRAM — The translation signal completes without emitting a value.
+            let translation = translateMessageIds(context: context, messageIds: [messageId], fromLang: nil, toLang: toLanguage)
+            return Signal<Bool, NoError> { subscriber in
+                translation.start(completed: {
+                    subscriber.putCompletion()
+                })
+            } |> then(hasTranslation())
         }
         |> deliverOnMainQueue).startStandalone(next: { [weak self] translated in
             guard let self, !translated, let controllerInteraction = self.controllerInteraction, controllerInteraction.nagramTranslatedMessageIds.contains(messageId) else {

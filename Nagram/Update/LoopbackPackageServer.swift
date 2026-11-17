@@ -27,7 +27,7 @@ final class LoopbackPackageServer: @unchecked Sendable {
 
     func start() async throws -> URL {
         return try await withCheckedThrowingContinuation { continuation in
-            queue.async {
+            queue.async { [self] in
                 guard self.listener == nil else {
                     continuation.resume(throwing: NextgramInstallError.transport)
                     return

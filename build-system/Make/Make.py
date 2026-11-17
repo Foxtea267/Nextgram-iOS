@@ -8,6 +8,7 @@ import tempfile
 import subprocess
 import shutil
 import glob
+import xml.etree.ElementTree as ET
 
 from BuildEnvironment import resolve_executable, call_executable, run_executable_with_output, BuildEnvironmentVersions, BuildEnvironment
 from ProjectGeneration import generate
@@ -773,43 +774,55 @@ def patch_generated_xcodeproj_archive_layout(xcodeproj_path):
 
 
 def patch_generated_xcodeproj_telegram_scheme(xcodeproj_path):
-    scheme_path = os.path.join(xcodeproj_path, "xcshareddata/xcschemes/Telegram.xcscheme")
+    schemes_dir = os.path.join(xcodeproj_path, "xcshareddata/xcschemes")
+    scheme_path = os.path.join(schemes_dir, "Telegram.xcscheme")
     if not os.path.isfile(scheme_path):
         return
 
-    with open(scheme_path, "r") as file:
-        contents = file.read()
+    scheme = ET.parse(scheme_path)
+    build_entries = scheme.find("./BuildAction/BuildActionEntries")
+    if build_entries is not None:
+        app_entry = next((entry for entry in build_entries.findall("BuildActionEntry")
+                          if entry.find("./BuildableReference[@BlueprintName='Telegram']") is not None), None)
+        if app_entry is not None:
+            app_entry.set("buildForArchiving", "YES")
 
-    contents = contents.replace(
-        'buildForArchiving = "NO"',
-        'buildForArchiving = "YES"',
-        1
-    )
-    contents = contents.replace(
-        '<ArchiveAction\n      buildConfiguration = "Debug"',
-        '<ArchiveAction\n      buildConfiguration = "Release"',
-        1
-    )
+        # Debug compiles the preview in TelegramUI; only Release merges its
+        # sources into TelegramUIFramework. Keep Telegram.app as the run host.
+        preview_scheme_path = os.path.join(schemes_dir, "TelegramUI.xcscheme")
+        if app_entry is not None and os.path.isfile(preview_scheme_path) and not any(
+            reference.get("BlueprintName") == "TelegramUI"
+            for reference in build_entries.findall("./BuildActionEntry/BuildableReference")
+        ):
+            preview_entry = ET.parse(preview_scheme_path).find("./BuildAction/BuildActionEntries/BuildActionEntry")
+            if preview_entry is not None:
+                preview_reference = preview_entry.find("./BuildableReference[@BlueprintName='TelegramUI']")
+                if preview_reference is not None:
+                    app_reference = app_entry.find("./BuildableReference[@BlueprintName='Telegram']")
+                    preview_reference.set("ReferencedContainer", app_reference.attrib["ReferencedContainer"])
+                    build_entries.append(preview_entry)
 
-    old_script = (
-        'scriptText = "mkdir -p &quot;${BUILD_MARKER_FILE%/*}&quot;&#10;'
-        'touch &quot;$BUILD_MARKER_FILE&quot;&#10;"'
+    archive_action = scheme.find("./ArchiveAction")
+    if archive_action is not None and archive_action.get("buildConfiguration") == "Debug":
+        archive_action.set("buildConfiguration", "Release")
+
+    marker_action = scheme.find(
+        "./BuildAction/PreActions/ExecutionAction/ActionContent[@title='Initialize Bazel Build Output Groups File']"
     )
-    new_script = (
-        'scriptText = "mkdir -p &quot;${BUILD_MARKER_FILE%/*}&quot;&#10;'
-        'touch &quot;$BUILD_MARKER_FILE&quot;&#10;'
-        '# MARK: NAGRAM&#10;'
-        '# Existing Bazel-copied framework bundles can be read-only and block Xcode Archive Info.plist writes.&#10;'
-        'if [[ -d &quot;${BUILD_ROOT:-}&quot; ]]; then&#10;'
-        '  find &quot;$BUILD_ROOT&quot; -path &quot;*/bazel-out/*&quot; -exec chmod u+w {} + || true&#10;'
-        'fi&#10;"'
-    )
-    if "# MARK: NAGRAM&#10;" not in contents:
-        contents = contents.replace(old_script, new_script, 1)
+    if marker_action is not None:
+        marker_script = marker_action.get("scriptText", "")
+        if "# MARK: NAGRAM" not in marker_script:
+            marker_action.set("scriptText", marker_script.rstrip("\n") + "\n" + (
+                "# MARK: NAGRAM\n"
+                "# Existing Bazel-copied framework bundles can be read-only and block Xcode Archive Info.plist writes.\n"
+                'if [[ -d "${BUILD_ROOT:-}" ]]; then\n'
+                '  find "$BUILD_ROOT" -path "*/bazel-out/*" -exec chmod u+w {} + || true\n'
+                "fi\n"
+            ))
 
     os.chmod(scheme_path, os.stat(scheme_path).st_mode | 0o200)
-    with open(scheme_path, "w") as file:
-        file.write(contents)
+    ET.indent(scheme, space="   ")
+    scheme.write(scheme_path, encoding="utf-8", xml_declaration=True)
 
 
 def generate_project(bazel, arguments):
@@ -855,7 +868,8 @@ def generate_project(bazel, arguments):
     if arguments.target is not None:
         target_name = arguments.target
     
-    call_executable(['killall', 'Xcode'], check_result=False)
+    if not arguments.noOpen:
+        call_executable(['killall', 'Xcode'], check_result=False)
 
     xcodeproj_path = generate(
         build_environment=bazel_command_line.build_environment,
@@ -874,7 +888,8 @@ def generate_project(bazel, arguments):
     patch_generated_xcodeproj_archive_layout(xcodeproj_path)
     patch_generated_xcodeproj_telegram_scheme(xcodeproj_path)
 
-    call_executable(['open', xcodeproj_path])
+    if not arguments.noOpen:
+        call_executable(['open', xcodeproj_path])
 
 
 def resolve_watch_provisioning_profile(arguments, base_path):
@@ -1303,6 +1318,11 @@ if __name__ == '__main__':
         metavar='number'
     )
     add_project_and_build_common_arguments(generateProjectParser)
+    generateProjectParser.add_argument(
+        '--noOpen',
+        action='store_true',
+        help='Generate the project without closing or launching Xcode.',
+    )
     generateProjectParser.add_argument(
         '--disableExtensions',
         action='store_true',

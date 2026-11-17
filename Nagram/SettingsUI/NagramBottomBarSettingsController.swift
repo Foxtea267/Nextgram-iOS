@@ -558,7 +558,7 @@ private final class NagramBottomBarPreviewItemNode: ListViewItemNode, ItemListIt
     }
 
     func asyncLayout() -> (_ item: NagramBottomBarPreviewItem, _ params: ListViewItemLayoutParams, _ neighbors: ItemListNeighbors) -> (ListViewItemNodeLayout, () -> Void) {
-        return { item, params, neighbors in
+        return { [self] item, params, neighbors in
             let height: CGFloat = 228.0
             let layout = ListViewItemNodeLayout(contentSize: CGSize(width: params.width, height: height), insets: itemListNeighborsGroupedInsets(neighbors, params))
             return (layout, { [weak self] in

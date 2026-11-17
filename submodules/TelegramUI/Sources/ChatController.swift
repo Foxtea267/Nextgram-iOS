@@ -4920,7 +4920,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 if let chat = strongSelf.presentationInterfaceState.renderedPeer?.chatMainPeer,
                    case .user = peer, peer.id != context.account.peerId {
                     let isGroup: Bool
-                    switch chat {
+                    switch EnginePeer(chat) {
                     case .legacyGroup: isGroup = true
                     case let .channel(channel):
                         if case .group = channel.info { isGroup = true } else { isGroup = false }
