@@ -286,6 +286,7 @@ jobs:
 
   publish:
     name: Publish all compatibility IPAs
+    if: github.ref == 'refs/heads/main'
     needs: [prepare, build_baseline, build_compatibility]
     runs-on: ubuntu-latest
     timeout-minutes: 15
