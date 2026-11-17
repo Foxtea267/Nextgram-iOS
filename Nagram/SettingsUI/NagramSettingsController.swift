@@ -477,9 +477,6 @@ private func nagramGroups(
     let sensitiveContentCanAdjust: () -> Bool = {
         return sensitiveContentConfiguration()?.canAdjustSensitiveContent ?? false
     }
-    if NagramSettings.shared.chatListCompact && NagramSettings.shared.chatListMessagePreviewStyle != NagramChatListMessagePreviewStyle.two.rawValue {
-        NagramSettings.shared.chatListMessagePreviewStyle = NagramChatListMessagePreviewStyle.two.rawValue
-    }
     return [
         NagramGroup(tab: .chat, headerKey: nil, footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.ChatListQuickFilters", get: { NagramSettings.shared.chatListQuickFiltersEnabled }, set: { NagramSettings.shared.chatListQuickFiltersEnabled = $0 }),
@@ -773,6 +770,118 @@ private func nagramGroups(
     }
 }
 
+public struct NagramSettingsSearchEntry {
+    public let id: String
+    public let title: String
+    public let alternate: [String]
+    public let breadcrumbs: [String]
+    public let makeController: (AccountContext) -> ViewController
+}
+
+private struct NagramSubpageSearchRows {
+    let rows: [(key: String, titleKey: String)]
+    let makeController: (AccountContext, String) -> ViewController
+}
+
+private func nagramSubpageSearchRows(parentTitleKey: String) -> NagramSubpageSearchRows? {
+    switch parentTitleKey {
+    case "Nagram.MessageMenu":
+        return NagramSubpageSearchRows(rows: NagramSettings.shared.messageMenuItemOrder.map { (key: $0.rawValue, titleKey: "Nagram.MessageMenu.Item.\($0.rawValue)") }, makeController: { context, key in
+            nagramMessageMenuSettingsController(context: context, focusOnRow: key)
+        })
+    case "Nagram.GroupProfileSettings":
+        return NagramSubpageSearchRows(rows: NagramGroupProfileSettingItem.allCases.map { (key: $0.rawValue, titleKey: "Nagram.GroupProfileSettings.Item.\($0.rawValue)") }, makeController: { context, key in
+            nagramGroupProfileSettingsController(context: context, focusOnRow: key)
+        })
+    case "Nagram.STTSettings":
+        let keys = ["STTBaseURL", "STTEndpoint", "STTAPIKey", "STTModel", "STTLanguage", "STTPrompt", "STTTest"]
+        return NagramSubpageSearchRows(rows: keys.map { (key: $0, titleKey: "Nagram.\($0)") }, makeController: { context, key in
+            nagramSTTSettingsController(context: context, focusOnRow: key)
+        })
+    case "Nagram.TranslationLLMSettings":
+        var keys = ["TranslationLLMAPIFormat", "TranslationLLMBaseURL", "TranslationLLMEndpoint", "TranslationLLMAPIKey", "TranslationLLMModel", "TranslationLLMFetchModels", "TranslationLLMTestModel", "TranslationLLMPrompt", "TranslationLLMUseContext"]
+        if NagramSettings.shared.translationLLMAPIFormatValue == .openai {
+            keys.append("TranslationLLMTemperature")
+        }
+        return NagramSubpageSearchRows(rows: keys.map { (key: $0, titleKey: "Nagram.\($0)") }, makeController: { context, key in
+            nagramLLMTranslationSettingsController(context: context, focusOnRow: key)
+        })
+    default:
+        return nil
+    }
+}
+
+private func nagramSearchAlternates(titleKey: String, title: String, key: String) -> [String] {
+    let englishTitle = ngI18n(titleKey, nagramFallbackLocale)
+    return englishTitle == title ? [key] : [englishTitle, key]
+}
+
+public func nagramSettingsSearchEntries(lang: String) -> [NagramSettingsSearchEntry] {
+    let groups = nagramGroups(
+        hideCalls: { false },
+        setHideCalls: { _ in },
+        sensitiveContentConfiguration: { nil },
+        setSensitiveContentEnabled: { _ in },
+        latencyTestAction: {},
+        setLocalNotificationFallbackEnabled: { _ in },
+        notificationDiagnosticsAction: {},
+        bottomBarLayoutAction: {},
+        fontsAction: {},
+        appIconsAction: {},
+        antiRecallRulesAction: {},
+        exportDeletedMessagesAction: {},
+        importDeletedMessagesAction: {},
+        messageMenuAction: {},
+        regexFiltersAction: {},
+        memberNotificationsAction: {},
+        inlineBotRulesAction: {},
+        llmTranslationSettingsAction: {},
+        summarySettingsAction: {},
+        sttSettingsAction: {},
+        lyricsSourcesAction: {},
+        groupProfileSettingsAction: {},
+        sessionBackupAction: {},
+        pluginsAction: {},
+        appUpdateAction: {},
+        badgeStyleAction: {},
+        settingsBackupAction: {},
+        aboutAction: {},
+        showcaseAction: {}
+    )
+
+    let rootTitle = "Nextgram"
+    var entries = [NagramSettingsSearchEntry(id: "nagram", title: rootTitle, alternate: ["Nagram"], breadcrumbs: [], makeController: { context in
+        nagramSettingsController(context: context)
+    })]
+    for group in groups {
+        let tabTitle = ngI18n(group.tab.titleKey, lang)
+        let headerTitle = group.headerKey.map { ngI18n($0, lang) }
+        for row in group.rows where nagramRowIsVisible(row) {
+            let titleKey = nagramRowTitleKey(row)
+            let key = nagramRowDeepLinkKey(row)
+            let title = ngI18n(titleKey, lang)
+            let path = "\(group.tab.rawValue)?r=\(key)"
+            let id = "nagram/\(group.tab.rawValue)/\(key)"
+            var breadcrumbs = [rootTitle, tabTitle]
+            if let headerTitle, headerTitle != title {
+                breadcrumbs.append(headerTitle)
+            }
+            entries.append(NagramSettingsSearchEntry(id: id, title: title, alternate: nagramSearchAlternates(titleKey: titleKey, title: title, key: key) + nagramRowDeepLinkAliases(titleKey: titleKey), breadcrumbs: breadcrumbs, makeController: { context in
+                nagramSettingsController(context: context, deepLinkPath: path)
+            }))
+            if case .navigation = row, let subpage = nagramSubpageSearchRows(parentTitleKey: titleKey) {
+                for subRow in subpage.rows {
+                    let subTitle = ngI18n(subRow.titleKey, lang)
+                    entries.append(NagramSettingsSearchEntry(id: "\(id)/\(subRow.key)", title: subTitle, alternate: nagramSearchAlternates(titleKey: subRow.titleKey, title: subTitle, key: subRow.key), breadcrumbs: [rootTitle, tabTitle, title], makeController: { context in
+                        subpage.makeController(context, subRow.key)
+                    }))
+                }
+            }
+        }
+    }
+    return entries
+}
+
 private final class NagramSettingsArguments {
     let rowIcon: (Int) -> UIImage?
     let openCategory: (NextgramSettingsCategory) -> Void
@@ -986,6 +1095,9 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
             }))
         })
         presentControllerImpl?(picker, nil)
+    }
+    if NagramSettings.shared.chatListCompact && NagramSettings.shared.chatListMessagePreviewStyle != NagramChatListMessagePreviewStyle.two.rawValue {
+        NagramSettings.shared.chatListMessagePreviewStyle = NagramChatListMessagePreviewStyle.two.rawValue
     }
     let groups = nagramGroups(hideCalls: {
         return !currentShowCallsTab

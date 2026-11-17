@@ -32,6 +32,10 @@ final class NextgramFeedBubbleItem: ListViewItem {
         self.action = action
     }
 
+    var neighborDescriptor: AnyEquatable {
+        return .noNeighborInfluence
+    }
+
     var selectable: Bool { self.action != nil }
 
     func selected(listView: ListView) {
