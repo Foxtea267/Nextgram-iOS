@@ -24,6 +24,8 @@
 "Nagram.RoundVideoCamera.back" = "Rear";
 "Nagram.ChooseFolderAfterJoining" = "Choose Folder After Joining";
 "Nagram.JoinedChatFolderUnavailable" = "Could not add this chat. The folder may have been deleted or reached its chat limit. Free up space in the folder and try again.";
+"Nagram.Section.Interface" = "Interface";
+"Nagram.Section.MessageList" = "Message List";
 "Nagram.Section.MessageDisplay" = "Message Display";
 "Nagram.Section.Appearance" = "Appearance";
 "Nagram.Section.ChatList" = "Chat List";
@@ -121,6 +123,7 @@
 "Nagram.Section.Filtering" = "Filtering";
 "Nagram.Section.Sending" = "Sending";
 "Nagram.Section.Gesture" = "Gestures";
+"Nagram.Section.Gesture.Footer" = "Configure message tap and double-tap actions, access to recent chats, and swiping to the next channel or topic.";
 "Nagram.Section.Privacy" = "Privacy";
 "Nagram.Section.Notifications" = "Notifications";
 "Nagram.Section.Sync" = "Sync";
@@ -1018,6 +1021,12 @@ With iCloud Keychain sync on, backups follow your other devices and appear on th
 "Nagram.MusicPlayer.ShowRemainingTime" = "Show Remaining Time";
 "Nagram.MusicPlayer.LyricsFontSize" = "Lyrics Text Size";
 "Nagram.MusicPlayer.BlurIntensity" = "Progressive Blur Strength";
+"Nagram.MusicPlayer.FullscreenBlurHeight" = "Fullscreen Cover Blur Height";
+"Nagram.MusicPlayer.FullscreenBlurHeight.short" = "Short bottom fade (Default)";
+"Nagram.MusicPlayer.FullscreenBlurHeight.controls" = "Entire controls area";
+"Nagram.MusicPlayer.FullscreenBlurHeight.custom" = "Custom";
+"Nagram.MusicPlayer.SmartArtworkCrop" = "Smart Cover Framing";
+"Nagram.MusicPlayer.FullscreenBlurPercent" = "Custom Blur Height (%)";
 "Nagram.MusicPlayer.NowPlaying" = "Now Playing";
 "Nagram.MusicPlayer.PlaybackPosition" = "Playback Position";
 "Nagram.MusicPlayer.Previous" = "Previous Track";
@@ -1055,6 +1064,7 @@ With iCloud Keychain sync on, backups follow your other devices and appear on th
 "Nagram.MusicPlayer.Background.blur" = "Progressive Blur";
 "Nagram.MusicPlayer.Background.solid" = "Solid Color";
 "Nagram.MusicPlayer.Background.artwork" = "Clear Artwork";
+"Nagram.MusicPlayer.Background.gradient" = "Gradient";
 "Nagram.MusicPlayer.Colors" = "Color Source";
 "Nagram.MusicPlayer.Colors.cover" = "Cover Art";
 "Nagram.MusicPlayer.Colors.theme" = "App Theme";
@@ -1187,7 +1197,8 @@ With iCloud Keychain sync on, backups follow your other devices and appear on th
 "Nagram.Fonts.rounded" = "Rounded";
 "Nagram.Fonts.serif" = "Serif";
 "Nagram.Fonts.monospace" = "Monospace";
-"Nagram.MusicPlayer.ArtworkMotion" = "Interactive 3D artwork";
+"Nagram.MusicPlayer.ArtworkMotion" = "3D interaction in artwork viewer";
+"Nagram.MusicPlayer.ArtworkMetadata" = "Show song title and artist at bottom of artwork viewer";
 "Nagram.MusicPlayer.ArtworkDetails" = "View artwork details";
 "Nagram.Fonts.Download" = "Download";
 "Nagram.Fonts.DownloadNotice" = "Download this font from Google Fonts (GitHub)? The fixed version is verified using SHA-256. Review the SIL Open Font License before using it. Downloaded files stay on this device.";
@@ -1204,3 +1215,18 @@ With iCloud Keychain sync on, backups follow your other devices and appear on th
 "Nagram.MusicPlayer.SystemNowPlaying.background" = "Show only in background";
 "Nagram.MusicPlayer.SystemNowPlaying.never" = "Do not show";
 "Nagram.MusicPlayer.SystemNowPlayingHint" = "iOS shares music information across Dynamic Island, Lock Screen and Control Center; hiding it also removes their music controls. In-app and background audio continue. If tapping opens the signing app, check that app's re-signing hooks and app identity; Nextgram does not set a redirect to a signer.";
+
+"Nagram.MusicPlayer.LyricsWordHighlight" = "Word-by-word Sweep";
+"Nagram.MusicPlayer.LyricsGlow" = "Active Line Glow";
+"Nagram.MusicPlayer.LyricsBlur" = "Unfocused Line Blur";
+"Nagram.MusicPlayer.LyricsScale" = "Focused Line Scale";
+"Nagram.MusicPlayer.LyricsLinearScroll" = "Linear Smooth Scrolling";
+"Nagram.MusicPlayer.LyricsStagger" = "Staggered Line Follow";
+"Nagram.MusicPlayer.LyricsInterlude" = "Interlude Breathing Dots";
+"Nagram.MusicPlayer.LyricsEdgeFade" = "Fade Lyric Edges";
+
+"Nagram.MusicPlayer.LyricsWordFloat" = "Word Float";
+"Nagram.MusicPlayer.LyricsSpringScroll" = "Spring Lyric Scrolling";
+
+"Nagram.MusicPlayer.SourceUnavailable" = "Could not connect to the lyrics source. Please try again.";
+"Nagram.MusicPlayer.RefreshFailedKeepingLyrics" = "Refresh failed; showing saved lyrics";

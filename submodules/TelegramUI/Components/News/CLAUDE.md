@@ -75,9 +75,9 @@ and search results through `NewsFeedItemEnvironment.displayMode`.
   rows below move.
 - **The bubble is the chat's own.** The expanded text, link preview, polls and files are a real
   `ChatMessageItemImpl` node from `SharedAccountContext.makeChatMessageFeedItem`, the preview factory with
-  `ChatMessageFeedItemActions` (links, media, peers, Instant View, reply headers) routed to the screen. Four flags
-  on `ChatMessageItemAssociatedData` make it a feed bubble: `hidesBubbleBackground` (no background, so the row's
-  shows in both themes), `hidesAuthorHeader` (the row draws the channel line; without it a channel post shows the
+  `ChatMessageFeedItemActions` (links, media, peers, Instant View, reply headers) routed to the screen. It uses the
+  theme's message bubble background. Three flags on `ChatMessageItemAssociatedData` adapt it for the feed:
+  `hidesAuthorHeader` (the row draws the channel line; without it a channel post shows the
   channel's name inside the bubble too), `hidesShareButton` (no share arrow beside the bubble) and
   `hostHandlesGestures` (the row's long press is the menu, and the bubble's tap recogniser fails on what the bubble
   does not act on: it would otherwise begin on the lift to wait for a double tap and the row's tap would never

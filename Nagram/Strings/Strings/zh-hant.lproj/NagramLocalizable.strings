@@ -24,6 +24,8 @@
 "Nagram.RoundVideoCamera.back" = "後置";
 "Nagram.ChooseFolderAfterJoining" = "加入群組或頻道後選擇資料夾";
 "Nagram.JoinedChatFolderUnavailable" = "無法加入此聊天，資料夾可能已被刪除或達到聊天數量上限。請整理資料夾後重試。";
+"Nagram.Section.Interface" = "介面";
+"Nagram.Section.MessageList" = "訊息列表";
 "Nagram.Section.MessageDisplay" = "訊息顯示";
 "Nagram.Section.Appearance" = "外觀";
 "Nagram.Section.ChatList" = "會話列表";
@@ -121,6 +123,7 @@
 "Nagram.Section.Filtering" = "過濾";
 "Nagram.Section.Sending" = "傳送";
 "Nagram.Section.Gesture" = "手勢";
+"Nagram.Section.Gesture.Footer" = "設定訊息點按、點兩下動作及最近會話入口，並控制是否允許上滑切換至下一個頻道或主題。";
 "Nagram.Section.Privacy" = "隱私";
 "Nagram.Section.Notifications" = "通知";
 "Nagram.Section.Sync" = "同步";
@@ -1010,6 +1013,12 @@
 "Nagram.MusicPlayer.ShowRemainingTime" = "顯示剩餘時間";
 "Nagram.MusicPlayer.LyricsFontSize" = "歌詞字級";
 "Nagram.MusicPlayer.BlurIntensity" = "漸進模糊強度";
+"Nagram.MusicPlayer.FullscreenBlurHeight" = "全螢幕封面模糊高度";
+"Nagram.MusicPlayer.FullscreenBlurHeight.short" = "底部短漸層（預設）";
+"Nagram.MusicPlayer.FullscreenBlurHeight.controls" = "覆蓋整個控制區";
+"Nagram.MusicPlayer.FullscreenBlurHeight.custom" = "自訂";
+"Nagram.MusicPlayer.SmartArtworkCrop" = "智慧封面構圖";
+"Nagram.MusicPlayer.FullscreenBlurPercent" = "自訂模糊高度（%）";
 "Nagram.MusicPlayer.NowPlaying" = "正在播放";
 "Nagram.MusicPlayer.PlaybackPosition" = "播放進度";
 "Nagram.MusicPlayer.Previous" = "上一首";
@@ -1046,6 +1055,7 @@
 "Nagram.MusicPlayer.Background.blur" = "漸進式模糊";
 "Nagram.MusicPlayer.Background.solid" = "純色";
 "Nagram.MusicPlayer.Background.artwork" = "清晰封面";
+"Nagram.MusicPlayer.Background.gradient" = "漸層";
 "Nagram.MusicPlayer.Colors" = "顏色來源";
 "Nagram.MusicPlayer.Colors.cover" = "封面取色";
 "Nagram.MusicPlayer.Colors.theme" = "應用程式主題";
@@ -1187,7 +1197,8 @@
 "Nagram.Fonts.rounded" = "圓體";
 "Nagram.Fonts.serif" = "襯線體";
 "Nagram.Fonts.monospace" = "等寬體";
-"Nagram.MusicPlayer.ArtworkMotion" = "封面 3D 互動與傾斜視差";
+"Nagram.MusicPlayer.ArtworkMotion" = "封面檢視頁 3D 互動與傾斜視差";
+"Nagram.MusicPlayer.ArtworkMetadata" = "封面檢視頁底部顯示歌曲名稱和藝人";
 "Nagram.MusicPlayer.ArtworkDetails" = "查看封面詳情";
 "Nagram.Fonts.Download" = "下載";
 "Nagram.Fonts.DownloadNotice" = "從 Google Fonts（GitHub）下載此字體？使用固定版本並核驗 SHA-256。使用前請閱讀 SIL 開放字體授權條款。下載檔案只儲存在本機。";
@@ -1204,3 +1215,18 @@
 "Nagram.MusicPlayer.SystemNowPlaying.background" = "僅在背景顯示";
 "Nagram.MusicPlayer.SystemNowPlaying.never" = "不顯示";
 "Nagram.MusicPlayer.SystemNowPlayingHint" = "iOS 音樂動態島、鎖定畫面和控制中心共用播放資訊，隱藏後這些位置的音樂控制也會隱藏，不影響應用程式內及背景音訊。若點擊跳到簽章軟體，請檢查其重簽注入和應用程式識別碼；Nextgram 沒有設定跳轉簽章軟體的連結。";
+
+"Nagram.MusicPlayer.LyricsWordHighlight" = "逐字掃光";
+"Nagram.MusicPlayer.LyricsGlow" = "目前歌詞發光";
+"Nagram.MusicPlayer.LyricsBlur" = "非目前歌詞模糊";
+"Nagram.MusicPlayer.LyricsScale" = "焦點行縮放";
+"Nagram.MusicPlayer.LyricsLinearScroll" = "線性平滑捲動";
+"Nagram.MusicPlayer.LyricsStagger" = "逐行錯峰跟隨";
+"Nagram.MusicPlayer.LyricsInterlude" = "間奏呼吸圓點";
+"Nagram.MusicPlayer.LyricsEdgeFade" = "上下邊緣漸隱";
+
+"Nagram.MusicPlayer.LyricsWordFloat" = "逐字上浮";
+"Nagram.MusicPlayer.LyricsSpringScroll" = "彈性歌詞捲動";
+
+"Nagram.MusicPlayer.SourceUnavailable" = "歌詞來源連線失敗，請稍後重試。";
+"Nagram.MusicPlayer.RefreshFailedKeepingLyrics" = "重新整理失敗，保留已取得的歌詞";

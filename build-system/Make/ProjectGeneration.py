@@ -21,6 +21,9 @@ def generate_xcodeproj(build_environment: BuildEnvironment, disable_extensions, 
 
     bazel_generate_arguments = [build_environment.bazel_path]
 
+    startup_arguments = [argument for argument in bazel_app_arguments if argument.startswith('--output_user_root=')]
+    bazel_generate_arguments += startup_arguments
+
     bazel_generate_arguments += ['run', '//{}_xcodeproj'.format(app_target_spec)]
 
     if target_name == 'Telegram':
@@ -30,6 +33,8 @@ def generate_xcodeproj(build_environment: BuildEnvironment, disable_extensions, 
 
     project_bazel_arguments = []
     for argument in bazel_app_arguments:
+        if argument in startup_arguments:
+            continue
         project_bazel_arguments.append(argument)
 
     if target_name == 'Telegram':

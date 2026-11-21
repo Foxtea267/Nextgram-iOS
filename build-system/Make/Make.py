@@ -246,6 +246,7 @@ class BazelCommandLine:
 
     def get_project_generation_arguments(self):
         combined_arguments = []
+        combined_arguments += self.get_startup_bazel_arguments()
         combined_arguments += self.common_args
         combined_arguments += self.common_debug_args
         combined_arguments += self.get_define_arguments()
@@ -772,6 +773,153 @@ def patch_generated_xcodeproj_archive_layout(xcodeproj_path):
         file.write(contents)
 
 
+def patch_generated_xcodeproj_music_canvas(xcodeproj_path):
+    pbxproj_path = os.path.join(xcodeproj_path, "project.pbxproj")
+    with open(pbxproj_path, "r") as file:
+        contents = file.read()
+    if 'BAZEL_LABEL = "@@//Telegram/MusicCanvas";' not in contents:
+        return
+    original_contents = contents
+
+    dependencies_path = os.path.join(xcodeproj_path, "rules_xcodeproj/bazel/generate_bazel_dependencies.sh")
+    with open(dependencies_path, "r") as file:
+        dependencies = file.read()
+    # The native host handles preview replacement. Its static dependencies can
+    # reuse the ordinary Debug outputs instead of recompiling the entire graph.
+    patched_dependencies = dependencies.replace(
+        'readonly config="${BAZEL_CONFIG}_swiftuipreviews"',
+        'readonly config="_${BAZEL_CONFIG}_build"',
+        1
+    )
+    patched_dependencies = patched_dependencies.replace(
+        'readonly output_group_prefixes="bp"',
+        'readonly output_group_prefixes="bc,bp,bl"',
+        1
+    )
+    if patched_dependencies != dependencies:
+        with tempfile.NamedTemporaryFile(mode="w", dir=os.path.dirname(dependencies_path), delete=False) as file:
+            file.write(patched_dependencies)
+            temporary_path = file.name
+        os.chmod(temporary_path, os.stat(dependencies_path).st_mode | 0o200)
+        os.replace(temporary_path, dependencies_path)
+
+    # Preserve Xcode's native executables when refreshing the Bazel resources.
+    # Otherwise rsync --delete can remove an up-to-date debug dylib mid-build.
+    excludes_path = os.path.join(xcodeproj_path, "rules_xcodeproj/bazel/app.exclude.rsynclist")
+    with open(excludes_path, "r") as file:
+        excludes = file.read()
+    native_outputs = [
+        "/MusicCanvas.app/MusicCanvas",
+        "/MusicCanvas.app/MusicCanvas.debug.dylib",
+        "/MusicCanvas.app/__preview.dylib",
+    ]
+    missing_outputs = [path for path in native_outputs if path not in excludes.splitlines()]
+    if missing_outputs:
+        with open(excludes_path, "a") as file:
+            file.write("\n".join(missing_outputs) + "\n")
+
+    # Xcode 27 requires a real debug dylib even with Legacy Previews Execution.
+    # Compile only the tiny dedicated host natively; its static dependencies
+    # still use the generated Bazel integration.
+    native_clang = '"$(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang"'
+    native_clangxx = '"$(DEVELOPER_DIR)/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang++"'
+    for key, old_value, new_value in [
+        ("CC", '"$(BAZEL_INTEGRATION_DIR)/clang.sh"', native_clang),
+        ("CXX", '"$(BAZEL_INTEGRATION_DIR)/clang.sh"', native_clangxx),
+        ("LD", '"$(BAZEL_INTEGRATION_DIR)/ld"', native_clang),
+        ("LDPLUSPLUS", '"$(BAZEL_INTEGRATION_DIR)/ld"', native_clangxx),
+    ]:
+        contents = contents.replace(key + " = " + old_value + ";", key + " = " + new_value + ";", 1)
+    anchor = "\t\t\t\tCOMPILE_TARGET_NAME = MusicCanvas;\n"
+    settings = [
+        ("ENABLE_PREVIEWS", "YES"),
+        ("ENABLE_DEBUG_DYLIB", "YES"),
+        ("SWIFT_USE_INTEGRATED_DRIVER", "YES"),
+        ("SWIFT_EXEC", "swiftc"),
+        ("CC", native_clang),
+        ("CXX", native_clangxx),
+        ("LD", native_clang),
+        ("LDPLUSPLUS", native_clangxx),
+        ("LD_RUNPATH_SEARCH_PATHS", '"$(inherited) @executable_path/Frameworks"'),
+        ("NEXTGRAM_CANVAS_PREVIEW_FLAGS__", '""'),
+        ("NEXTGRAM_CANVAS_PREVIEW_FLAGS__NO", '""'),
+        ("NEXTGRAM_CANVAS_PREVIEW_FLAGS__YES", '"-Xfrontend -enable-private-imports -Xfrontend -enable-implicit-dynamic -Xfrontend -enable-dynamic-replacement-chaining"'),
+    ]
+    if contents.count(anchor) != 1:
+        raise Exception("MusicCanvas preview app build settings were not found; regenerate its Xcode project.")
+    settings_start = contents.index(anchor) + len(anchor)
+    remaining = contents[settings_start:].splitlines(keepends=True)
+    managed_keys = {key for key, _ in settings}
+    while remaining:
+        key = remaining[0].strip().split(" = ", 1)[0]
+        if key not in managed_keys and not key.startswith("NEXTGRAM_CANVAS_"):
+            break
+        remaining.pop(0)
+    contents = contents[:settings_start] + "".join(
+        "\t\t\t\t{} = {};\n".format(key, value) for key, value in settings
+    ) + "".join(remaining)
+
+    settings_end = contents.index("\n\t\t\t};", settings_start)
+    host_settings = contents[settings_start:settings_end].splitlines(keepends=True)
+    for index, line in enumerate(host_settings):
+        if "OTHER_SWIFT_FLAGS = " in line:
+            line = line.replace(" -static ", " ").replace(" -Xfrontend -internalize-at-link ", " ")
+            if "$(NEXTGRAM_CANVAS_PREVIEW_FLAGS__$(ENABLE_PREVIEWS))" not in line:
+                line = line.replace('";', ' $(NEXTGRAM_CANVAS_PREVIEW_FLAGS__$(ENABLE_PREVIEWS))";')
+            host_settings[index] = line
+        elif "PREVIEWS_SWIFT_INCLUDE__YES = " in line:
+            host_settings[index] = '\t\t\t\tPREVIEWS_SWIFT_INCLUDE__YES = "-I$(TARGET_BUILD_DIR)";\n'
+    contents = contents[:settings_start] + "".join(host_settings) + contents[settings_end:]
+
+    link_condition = 'if [[ \\"${ENABLE_PREVIEWS:-}\\" == \\"YES\\" ]]; then\\n'
+    link_fallback = 'else\\n  touch \\"$SCRIPT_OUTPUT_FILE_0\\"\\nfi\\n'
+    if link_condition in contents:
+        if link_fallback not in contents:
+            raise Exception("MusicCanvas link-parameter script changed; regenerate its Xcode project.")
+        contents = contents.replace(link_condition, "", 1).replace(link_fallback, "", 1)
+
+    # Bazel 9 adds a linked-binary marker and an archive file list. Native clang
+    # needs the archives themselves, while the marker is only for Bazel's tools.
+    if "index($_, q(LINKED_BINARY=))" not in contents:
+        contents = contents.replace(
+            "perl -pe 's/",
+            "perl -pe 'chomp; if (index($_, q(LINKED_BINARY=)) == 0) { $_ = q(); } "
+            "elsif (substr($_, -8) eq q(.objlist)) { open my $list, q(<), $_ or die $!; local $/; $_ = <$list>; } "
+            "else { $_ .= chr(10); } s/",
+            1
+        )
+    # Xcode owns the native simulator host's signing. Its preview linker parses
+    # Bazel's redundant DER entitlement segment names as input object paths.
+    contents = contents.replace(
+        "if (index($_, q(LINKED_BINARY=)) == 0)",
+        "if (index($_, q(LINKED_BINARY=)) == 0 || index($_, q(-Wl,-sectcreate,__TEXT,__ents_der,)) == 0)",
+        1
+    )
+    # Express runpaths through native Xcode settings so preview analysis does
+    # not interpret Bazel's comma-separated linker arguments as object files.
+    contents = contents.replace(
+        "index($_, q(-Wl,-sectcreate,__TEXT,__ents_der,)) == 0)",
+        "index($_, q(-Wl,-sectcreate,__TEXT,__ents_der,)) == 0 || index($_, q(-Wl,-rpath,)) == 0)",
+        1
+    )
+    # Preview analysis can invoke clang outside Bazel's execution directory.
+    absolute_link_paths = (
+        "s{(^|[[:space:],])bazel-out/}{$1$ENV{BAZEL_OUT}/}g; "
+        "s{(-[LF])bazel-out/}{$1$ENV{BAZEL_OUT}/}g; "
+        "s{(^|[[:space:],])external/}{$1$ENV{BAZEL_EXTERNAL}/}g; "
+    )
+    if absolute_link_paths not in contents:
+        contents = contents.replace(
+            "else { $_ .= chr(10); } s/",
+            "else { $_ .= chr(10); } " + absolute_link_paths + "s/",
+            1
+        )
+    if contents != original_contents:
+        os.chmod(pbxproj_path, os.stat(pbxproj_path).st_mode | 0o200)
+        with open(pbxproj_path, "w") as file:
+            file.write(contents)
+
+
 def patch_generated_xcodeproj_telegram_scheme(xcodeproj_path):
     scheme_path = os.path.join(xcodeproj_path, "xcshareddata/xcschemes/Telegram.xcscheme")
     if not os.path.isfile(scheme_path):
@@ -785,11 +933,15 @@ def patch_generated_xcodeproj_telegram_scheme(xcodeproj_path):
         'buildForArchiving = "YES"',
         1
     )
-    contents = contents.replace(
-        '<ArchiveAction\n      buildConfiguration = "Debug"',
-        '<ArchiveAction\n      buildConfiguration = "Release"',
-        1
-    )
+    with open(os.path.join(xcodeproj_path, "project.pbxproj"), "r") as file:
+        has_release = "name = Release;" in file.read()
+    archive_configuration = "Release" if has_release else "Debug"
+    for configuration in ("Debug", "Release"):
+        contents = contents.replace(
+            '<ArchiveAction\n      buildConfiguration = "' + configuration + '"',
+            '<ArchiveAction\n      buildConfiguration = "' + archive_configuration + '"',
+            1
+        )
 
     old_script = (
         'scriptText = "mkdir -p &quot;${BUILD_MARKER_FILE%/*}&quot;&#10;'
@@ -855,7 +1007,8 @@ def generate_project(bazel, arguments):
     if arguments.target is not None:
         target_name = arguments.target
     
-    call_executable(['killall', 'Xcode'], check_result=False)
+    if not arguments.noOpen:
+        call_executable(['killall', 'Xcode'], check_result=False)
 
     xcodeproj_path = generate(
         build_environment=bazel_command_line.build_environment,
@@ -872,9 +1025,11 @@ def generate_project(bazel, arguments):
     patch_generated_xcodeproj_generate_dependencies_script(xcodeproj_path)
     patch_generated_xcodeproj_swift_debug_settings_phase(xcodeproj_path)
     patch_generated_xcodeproj_archive_layout(xcodeproj_path)
+    patch_generated_xcodeproj_music_canvas(xcodeproj_path)
     patch_generated_xcodeproj_telegram_scheme(xcodeproj_path)
 
-    call_executable(['open', xcodeproj_path])
+    if not arguments.noOpen:
+        call_executable(['open', xcodeproj_path])
 
 
 def resolve_watch_provisioning_profile(arguments, base_path):
@@ -1294,6 +1449,11 @@ if __name__ == '__main__':
     )
 
     generateProjectParser = subparsers.add_parser('generateProject', help='Generate Xcode project')
+    generateProjectParser.add_argument(
+        '--noOpen',
+        action='store_true',
+        help='Generate without closing or opening Xcode.'
+    )
     generateProjectParser.add_argument(
         '--buildNumber',
         required=False,

@@ -666,7 +666,8 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.view.addSubview(self.nextgramQueueBackdrop)
         self.updateNextgramNowPlayingAppearance()
         if self.supportsPlaylistSearch {
-            self.nextgramPlayerStyleDisposable = (nagramBoolSignal("nagram.musicPlayerModernUI", defaultValue: false)
+            // MARK: NEXTGRAM — Use Apple Music presentation unless explicitly disabled.
+            self.nextgramPlayerStyleDisposable = (nagramBoolSignal("nagram.musicPlayerModernUI", defaultValue: true)
             |> deliverOnMainQueue).startStrict(next: { [weak self] enabled in
                 self?.updateNextgramMusicPlayer(enabled: enabled)
             })
@@ -1087,6 +1088,15 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             playerView.showQueue = { [weak self] in
                 self?.nextgramSetQueueVisible(true)
             }
+            // MARK: NEXTGRAM — Reuse profile music actions and their copy-protection checks.
+            playerView.toggleSavedMusic = { [weak self] in
+                guard let self, let saved = self.isSaved, let file = self.controlsNode.currentFileReference else { return }
+                if saved {
+                    self.removeFromSavedMusic(file: file)
+                } else {
+                    self.addToSavedMusic(file: file)
+                }
+            }
             playerView.openSettings = { [weak self] in
                 guard let self else {
                     return
@@ -1215,6 +1225,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         let controlsHeight = self.controlsNode.updateLayout(width: layout.size.width,
             leftInset: usesModernLayout ? layout.safeInsets.left : controlsLeftInset, rightInset: usesModernLayout ? layout.safeInsets.right : controlsRightInset,
             bottomInset: layout.intrinsicInsets.bottom, maxHeight: controlsMaxHeight, savedMusic: self.isSaved, transition: transition)
+        self.nextgramMusicPlayerView?.isSavedMusic = self.isSaved // MARK: NEXTGRAM
         
         let controlsFrame = CGRect(origin: CGPoint(x: 0.0, y: layout.size.height - controlsHeight), size: CGSize(width: layout.size.width, height: controlsHeight))
         let controlsTransition = self.controlsNode.frame.width > 0.0 ? transition : .immediate

@@ -2644,14 +2644,14 @@ public final class SharedAccountContextImpl: SharedAccountContext {
     public func makeChatMessageFeedItem(context: AccountContext, messages: [EngineMessage], presentationData: PresentationData, accountPeer: EnginePeer?, actions: ChatMessageFeedItemActions) -> ListViewItem {
         // Not a preview: a preview hides a link preview's action button (Instant View), and the feed shows it.
         // No tails: the text and link preview content nodes draw no status line (views, time) then, and the row
-        // shows both in its channel line instead; the bubble's shape does not matter, it draws no background.
+        // shows both in its channel line instead. // MARK: NEXTGRAM
         let corners = presentationData.chatBubbleCorners
         let feedCorners = PresentationChatBubbleCorners(mainRadius: corners.mainRadius, auxiliaryRadius: corners.auxiliaryRadius, mergeBubbleCorners: corners.mergeBubbleCorners, hasTails: false, serifMessageText: corners.serifMessageText)
         return self.makeStandaloneChatMessageItem(context: context, messages: messages, theme: presentationData.theme, strings: presentationData.strings, wallpaper: presentationData.chatWallpaper, fontSize: presentationData.chatFontSize, chatBubbleCorners: feedCorners, dateTimeFormat: presentationData.dateTimeFormat, nameOrder: presentationData.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: nil, availableReactions: nil, accountPeer: accountPeer, isCentered: false, isPreview: false, isStandalone: true, rank: nil, rankRole: nil, isGiftMessageComposerPreview: false, activateGiftMessageInput: nil, feedActions: actions)
     }
 
-    /// The item behind both the preview and the feed bubble; `feedActions` is set for the feed, which draws no
-    /// bubble background or author line and routes its taps to the host.
+    /// The item behind both the preview and the feed bubble. The feed draws its author line in the row and
+    /// routes taps to the host. // MARK: NEXTGRAM
     private func makeStandaloneChatMessageItem(context: AccountContext, messages: [EngineMessage], theme: PresentationTheme, strings: PresentationStrings, wallpaper: TelegramWallpaper, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, dateTimeFormat: PresentationDateTimeFormat, nameOrder: PresentationPersonNameOrder, forcedResourceStatus: FileMediaResourceStatus?, tapMessage: ((EngineMessage) -> Void)?, clickThroughMessage: ((UIView?, CGPoint?) -> Void)?, backgroundNode: ASDisplayNode?, availableReactions: AvailableReactions?, accountPeer: EnginePeer?, isCentered: Bool, isPreview: Bool, isStandalone: Bool, rank: String?, rankRole: ChatRankInfoScreenRole?, isGiftMessageComposerPreview: Bool, activateGiftMessageInput: (() -> Void)?, feedActions: ChatMessageFeedItemActions?) -> ListViewItem {
         let messages = messages.map { $0._asMessage() }
         let controllerInteraction: ChatControllerInteraction
@@ -2982,7 +2982,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 forceInlineReactions: true,
                 isStandalone: isStandalone,
                 showTextAsPlaceholder: rank != nil,
-                hidesBubbleBackground: feedActions != nil,
+                // MARK: NEXTGRAM — Use the theme’s bubble background in the feed.
                 hidesAuthorHeader: feedActions != nil,
                 hidesShareButton: feedActions != nil,
                 hostHandlesGestures: feedActions != nil

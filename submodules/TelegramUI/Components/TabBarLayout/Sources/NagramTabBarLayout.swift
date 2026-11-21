@@ -17,21 +17,26 @@ public enum NagramTabBarRowAlignment: Equatable {
 /// The gap between the items and the standalone slot.
 public let nagramTabBarSlotSpacing: CGFloat = 8.0
 
-/// The shortest bar `tabBarSystemItemsLayout` lays `fittedItemWidths` out in without squeezing them: up to three
-/// items hug their content 32pt apart, as UIKit's own bar does; more keep their padded widths 14pt apart, the
-/// smallest gap UIKit's flexible layout leaves before it shrinks items. Never longer than `availableLength`.
+/// The compact end of the width setting. Reduce the system spacing as the row narrows, preserving room
+/// for the width setting to grow from content-sized buttons to the full row.
+// MARK: NEXTGRAM — A system bar that fills the row must not make both slider endpoints identical.
 public func nagramTabBarSystemCompactLength(fittedItemWidths: [CGFloat], availableLength: CGFloat, scale: CGFloat = UIScreenScale) -> CGFloat {
     let count = fittedItemWidths.count
     if count == 0 {
         return min(availableLength, tabBarInnerInset * 2.0)
     }
-    if count <= 3 {
-        return tabBarSystemItemsLayout(fittedItemWidths: fittedItemWidths, availableLength: availableLength, hasAccessory: false, scale: scale).size.width
-    }
-    let sideInset: CGFloat = count > 4 ? 15.0 : 24.0
     let itemsLength = fittedItemWidths.reduce(0.0) { $0 + max(tabBarSystemItemThickness, $1 + 12.0) }
-    let length = sideInset * 2.0 + itemsLength + CGFloat(count - 1) * 14.0
-    return min(availableLength, ceil(length * scale) / scale)
+    let systemLength: CGFloat
+    if count <= 3 {
+        systemLength = tabBarSystemItemsLayout(fittedItemWidths: fittedItemWidths, availableLength: availableLength, hasAccessory: false, scale: scale).size.width
+    } else {
+        let sideInset: CGFloat = count > 4 ? 15.0 : 24.0
+        systemLength = ceil((sideInset * 2.0 + itemsLength + CGFloat(count - 1) * 14.0) * scale) / scale
+    }
+    let contentLength = ceil((tabBarInnerInset * 2.0 + itemsLength) * scale) / scale
+    let spacingLength = max(0.0, systemLength - contentLength)
+    let compactLength = max(contentLength, availableLength - spacingLength)
+    return min(availableLength, min(systemLength, compactLength))
 }
 
 /// The items of iOS 27's portrait bar under the width setting. `fillRatio` 0 is the compact bar
@@ -44,9 +49,12 @@ public func nagramTabBarSystemItemsLayout(fittedItemWidths: [CGFloat], available
         return tabBarSystemItemsLayout(fittedItemWidths: fittedItemWidths, availableLength: availableLength, hasAccessory: false, scale: scale)
     }
     let compactLength = nagramTabBarSystemCompactLength(fittedItemWidths: fittedItemWidths, availableLength: availableLength, scale: scale)
+    // MARK: NEXTGRAM — Preserve the compact fallback when the system's spacing would fill the row.
     if ratio <= 0.0 && fittedItemWidths.count <= 3 {
-        // Exactly UIKit's bar without an accessory.
-        return tabBarSystemItemsLayout(fittedItemWidths: fittedItemWidths, availableLength: availableLength, hasAccessory: false, scale: scale)
+        let systemLayout = tabBarSystemItemsLayout(fittedItemWidths: fittedItemWidths, availableLength: availableLength, hasAccessory: false, scale: scale)
+        if systemLayout.size.width <= compactLength {
+            return systemLayout
+        }
     }
     let length = floor((compactLength + (availableLength - compactLength) * ratio) * scale) / scale
     return tabBarSystemItemsLayout(fittedItemWidths: fittedItemWidths, availableLength: max(compactLength, length), hasAccessory: true, scale: scale)

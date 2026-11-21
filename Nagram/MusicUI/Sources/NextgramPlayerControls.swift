@@ -1,4 +1,91 @@
+import AVKit
+import MediaPlayer
 import UIKit
+
+final class NextgramPlayerVolumeView: MPVolumeView {
+#if DEBUG && targetEnvironment(simulator)
+    private var previewSlider: UISlider?
+
+    func showPreviewSlider() {
+        guard self.previewSlider == nil else { return }
+        self.showsVolumeSlider = false
+        let slider = NextgramPlayerSlider()
+        slider.value = 0.32
+        slider.minimumTrackTintColor = UIColor.white.withAlphaComponent(0.75)
+        slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.22)
+        slider.setThumbImage(UIGraphicsImageRenderer(size: CGSize(width: 8.0, height: 8.0)).image { _ in }, for: .normal)
+        self.previewSlider = slider
+        self.addSubview(slider)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.previewSlider?.frame = self.bounds
+    }
+#endif
+    override func volumeSliderRect(forBounds bounds: CGRect) -> CGRect {
+        let slider = super.volumeSliderRect(forBounds: bounds)
+        return CGRect(x: slider.minX, y: bounds.midY - slider.height * 0.5, width: slider.width, height: slider.height)
+    }
+}
+
+final class NextgramPlayerRoutePickerView: UIView {
+    private let picker = AVRoutePickerView()
+    private let icon = UIImageView()
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.picker.tintColor = .clear
+        self.picker.activeTintColor = .clear
+        self.picker.prioritizesVideoDevices = false
+        self.addSubview(self.picker)
+        self.updateRoute(bluetooth: false)
+        self.icon.contentMode = .center
+        self.icon.isUserInteractionEnabled = false
+        self.icon.isAccessibilityElement = false
+        self.addSubview(self.icon)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func updateRoute(bluetooth: Bool) {
+        let configuration = UIImage.SymbolConfiguration(pointSize: 27.0, weight: .medium)
+        if bluetooth {
+            self.icon.image = UIGraphicsImageRenderer(size: CGSize(width: 38.0, height: 30.0)).image { _ in
+                UIImage(systemName: "speaker.wave.2.fill", withConfiguration: configuration)?
+                    .withTintColor(.black, renderingMode: .alwaysOriginal).draw(in: CGRect(x: 0.0, y: 3.0, width: 25.0, height: 24.0))
+                UIColor.black.setStroke()
+                let mark = UIBezierPath()
+                mark.move(to: CGPoint(x: 29.0, y: 4.0))
+                mark.addLine(to: CGPoint(x: 36.0, y: 10.0))
+                mark.addLine(to: CGPoint(x: 26.0, y: 20.0))
+                mark.move(to: CGPoint(x: 26.0, y: 10.0))
+                mark.addLine(to: CGPoint(x: 36.0, y: 20.0))
+                mark.addLine(to: CGPoint(x: 29.0, y: 26.0))
+                mark.addLine(to: CGPoint(x: 29.0, y: 4.0))
+                mark.lineWidth = 2.3
+                mark.lineJoinStyle = .round
+                mark.lineCapStyle = .round
+                mark.stroke()
+            }.withRenderingMode(.alwaysTemplate)
+        } else {
+            self.icon.image = UIImage(systemName: "airplay.audio", withConfiguration: configuration)
+        }
+    }
+
+    override func tintColorDidChange() {
+        super.tintColorDidChange()
+        self.icon.tintColor = self.tintColor
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.picker.frame = self.bounds
+        self.icon.frame = self.bounds
+    }
+}
 
 final class NextgramPlayerSlider: UISlider {
     override func trackRect(forBounds bounds: CGRect) -> CGRect {
@@ -52,7 +139,9 @@ enum NextgramPlayerPalette {
                 total += weight
             }
             guard total > 0 else { return self.fallback }
-            return UIColor(red: CGFloat(r / total * 0.53), green: CGFloat(g / total * 0.53), blue: CGFloat(b / total * 0.53), alpha: 1.0)
+            return UIColor(red: CGFloat(min(0.44, r / total * 0.55 + 0.14)),
+                green: CGFloat(min(0.44, g / total * 0.55 + 0.12)),
+                blue: CGFloat(min(0.44, b / total * 0.55 + 0.14)), alpha: 1.0)
         }
     }
 

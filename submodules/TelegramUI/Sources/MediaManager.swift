@@ -304,6 +304,9 @@ public final class MediaManagerImpl: NSObject, MediaManager {
                     previousState = state
                     globalControlsStatus.set(.single(state.status))
                 }
+            } else if showsSystemPlayer, let (_, stateOrLoading, type) = stateAndType, type == .music, case .loading = stateOrLoading {
+                // MARK: NEXTGRAM — A buffering transition must not erase the active AirPlay session.
+                updatedGlobalControlOptions = currentGlobalControlsOptions
             } else {
                 previousState = nil
                 previousDisplayData = nil

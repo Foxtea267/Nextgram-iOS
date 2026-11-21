@@ -201,8 +201,21 @@ public struct NextgramSettingsBackup {
         "nagram.musicPlayerLyricsSourceOrder": (.media, .string),
         "nagram.musicPlayerShowVolume": (.media, .boolean),
         "nagram.musicPlayerShowRemainingTime": (.media, .boolean),
+        "nagram.musicPlayerLyricsWordHighlight": (.media, .boolean),
+        "nagram.musicPlayerLyricsWordFloat": (.media, .boolean),
+        "nagram.musicPlayerLyricsSpringScroll": (.media, .boolean),
+        "nagram.musicPlayerLyricsGlow": (.media, .boolean),
+        "nagram.musicPlayerLyricsBlur": (.media, .boolean),
+        "nagram.musicPlayerLyricsScale": (.media, .boolean),
+        "nagram.musicPlayerLyricsLinearScroll": (.media, .boolean),
+        "nagram.musicPlayerLyricsStagger": (.media, .boolean),
+        "nagram.musicPlayerLyricsInterlude": (.media, .boolean),
+        "nagram.musicPlayerLyricsEdgeFade": (.media, .boolean),
         "nagram.musicPlayerLyricsFontSize": (.media, .integer),
         "nagram.musicPlayerBlurIntensity": (.media, .integer),
+        "nagram.musicPlayerFullscreenBlurHeight": (.media, .string),
+        "nagram.musicPlayerFullscreenBlurPercent": (.media, .integer),
+        "nagram.musicPlayerSmartArtworkCrop": (.media, .boolean),
         "nagram.musicPlayerBackground": (.media, .string),
         "nagram.musicPlayerColors": (.media, .string),
         "nagram.musicPlayerCustomColor": (.media, .string),
@@ -212,6 +225,7 @@ public struct NextgramSettingsBackup {
         "nagram.musicPlayerDiscRotation": (.media, .boolean),
         "nagram.musicPlayerSwipeToSkip": (.media, .boolean),
         "nagram.musicPlayerArtworkMotion": (.media, .boolean),
+        "nagram.musicPlayerArtworkMetadata": (.media, .boolean),
         "nagram.musicSystemNowPlaying": (.media, .string),
         "nagram.channelFeedAutoLoad": (.chat, .boolean),
         "nagram.mediaMetadataEnabled": (.media, .boolean),
@@ -437,6 +451,8 @@ public struct NextgramSettingsBackup {
             return min(48, max(0, value))
         case "nagram.musicPlayerBlurIntensity":
             return min(60, max(0, value))
+        case "nagram.musicPlayerFullscreenBlurPercent":
+            return min(50, max(10, value))
         case "nagram.musicPlayerTitleFontSize":
             return min(32, max(20, value))
         case "nagram.musicPlayerControlScale":

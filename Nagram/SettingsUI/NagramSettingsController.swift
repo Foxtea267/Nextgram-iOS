@@ -107,7 +107,7 @@ private final class NagramSettingsItemListController: ItemListController {
 private enum NagramRow {
     case toggle(titleKey: String, get: () -> Bool, set: (Bool) -> Void, isVisible: () -> Bool = { true })
     case toggleWithEnabled(titleKey: String, get: () -> Bool, set: (Bool) -> Void, enabled: () -> Bool, enableInteractiveChanges: Bool)
-    case choice(titleKey: String, prefix: String, options: [String], current: () -> String, set: (String) -> Void)
+    case choice(titleKey: String, prefix: String, options: [String], current: () -> String, set: (String) -> Void, isVisible: () -> Bool = { true })
     case input(titleKey: String, placeholderKey: String, get: () -> String, set: (String) -> Void, isSecret: Bool, isVisible: () -> Bool)
     case startupFolder(titleKey: String)
     case slider(titleKey: String?, minValue: Int32, maxValue: Int32, get: () -> Int32, set: (Int32) -> Void, isVisible: () -> Bool)
@@ -134,7 +134,7 @@ private func nagramRowTitleKey(_ row: NagramRow) -> String {
         return titleKey
     case let .toggleWithEnabled(titleKey, _, _, _, _):
         return titleKey
-    case let .choice(titleKey, _, _, _, _):
+    case let .choice(titleKey, _, _, _, _, _):
         return titleKey
     case let .input(titleKey, _, _, _, _, _):
         return titleKey
@@ -149,7 +149,7 @@ private func nagramRowTitleKey(_ row: NagramRow) -> String {
 
 private func nagramRowIsVisible(_ row: NagramRow) -> Bool {
     switch row {
-    case let .toggle(_, _, _, isVisible), let .input(_, _, _, _, _, isVisible), let .slider(_, _, _, _, _, isVisible):
+    case let .toggle(_, _, _, isVisible), let .choice(_, _, _, _, _, isVisible), let .input(_, _, _, _, _, isVisible), let .slider(_, _, _, _, _, isVisible):
         return isVisible()
     default:
         return true
@@ -465,10 +465,8 @@ private func nagramGroups(
     groupProfileSettingsAction: @escaping () -> Void,
     sessionBackupAction: @escaping () -> Void,
     pluginsAction: @escaping () -> Void,
-    appUpdateAction: @escaping () -> Void,
     badgeStyleAction: @escaping () -> Void,
     settingsBackupAction: @escaping () -> Void,
-    aboutAction: @escaping () -> Void,
     showcaseAction: @escaping () -> Void
 ) -> [NagramGroup] {
     let sensitiveContentEnabled: () -> Bool = {
@@ -535,6 +533,15 @@ private func nagramGroups(
         ]),
         NagramGroup(tab: .media, headerKey: "Nagram.MusicPlayerModernUI", footerKey: "Nagram.MusicPlayer.OnlineLyricsPrivacy", rows: [
             .choice(titleKey: "Nagram.MusicPlayer.CoverLayout", prefix: "Nagram.MusicPlayer.CoverLayout", options: NagramMusicPlayerCoverLayout.allCases.map { $0.rawValue }, current: { NagramSettings.shared.musicPlayerCoverLayoutValue.rawValue }, set: { NagramSettings.shared.musicPlayerCoverLayout = $0 }),
+            .toggle(titleKey: "Nagram.MusicPlayer.SmartArtworkCrop", get: { NagramSettings.shared.musicPlayerSmartArtworkCrop },
+                set: { NagramSettings.shared.musicPlayerSmartArtworkCrop = $0 },
+                isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerCoverLayoutValue == .fullscreen }),
+            .choice(titleKey: "Nagram.MusicPlayer.FullscreenBlurHeight", prefix: "Nagram.MusicPlayer.FullscreenBlurHeight", options: NagramMusicPlayerFullscreenBlurHeight.allCases.map(\.rawValue),
+                current: { NagramSettings.shared.musicPlayerFullscreenBlurHeightValue.rawValue }, set: { NagramSettings.shared.musicPlayerFullscreenBlurHeight = $0 },
+                isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerCoverLayoutValue == .fullscreen }),
+            .slider(titleKey: "Nagram.MusicPlayer.FullscreenBlurPercent", minValue: 10, maxValue: 50,
+                get: { NagramSettings.shared.musicPlayerFullscreenBlurPercentValue }, set: { NagramSettings.shared.musicPlayerFullscreenBlurPercent = $0 },
+                isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerCoverLayoutValue == .fullscreen && NagramSettings.shared.musicPlayerFullscreenBlurHeightValue == .custom }),
             .choice(titleKey: "Nagram.MusicPlayer.Background", prefix: "Nagram.MusicPlayer.Background", options: NagramMusicPlayerBackground.allCases.map { $0.rawValue }, current: { NagramSettings.shared.musicPlayerBackgroundValue.rawValue }, set: { NagramSettings.shared.musicPlayerBackground = $0 }),
             .choice(titleKey: "Nagram.MusicPlayer.Colors", prefix: "Nagram.MusicPlayer.Colors", options: NagramMusicPlayerColors.allCases.map { $0.rawValue }, current: { NagramSettings.shared.musicPlayerColorsValue.rawValue }, set: { NagramSettings.shared.musicPlayerColors = $0 }),
             .input(titleKey: "Nagram.MusicPlayer.CustomColor", placeholderKey: "Nagram.MusicPlayer.CustomColor.Placeholder", get: { NagramSettings.shared.musicPlayerCustomColor }, set: {
@@ -548,11 +555,22 @@ private func nagramGroups(
             .toggle(titleKey: "Nagram.MusicPlayer.DiscRotation", get: { NagramSettings.shared.musicPlayerDiscRotation }, set: { NagramSettings.shared.musicPlayerDiscRotation = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerCoverLayoutValue == .disc }),
             .toggle(titleKey: "Nagram.MusicPlayer.SwipeToSkip", get: { NagramSettings.shared.musicPlayerSwipeToSkip }, set: { NagramSettings.shared.musicPlayerSwipeToSkip = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.ArtworkMotion", get: { NagramSettings.shared.musicPlayerArtworkMotion }, set: { NagramSettings.shared.musicPlayerArtworkMotion = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .toggle(titleKey: "Nagram.MusicPlayer.ArtworkMetadata", get: { NagramSettings.shared.musicPlayerArtworkMetadata }, set: { NagramSettings.shared.musicPlayerArtworkMetadata = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.Lyrics", get: { NagramSettings.shared.musicPlayerLyricsEnabled }, set: { NagramSettings.shared.musicPlayerLyricsEnabled = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.OnlineLyrics", get: { NagramSettings.shared.musicPlayerOnlineLyricsEnabled }, set: { NagramSettings.shared.musicPlayerOnlineLyricsEnabled = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
             .navigation(titleKey: "Nagram.MusicPlayer.SourcePriority", action: lyricsSourcesAction),
             .toggle(titleKey: "Nagram.MusicPlayer.ShowVolume", get: { NagramSettings.shared.musicPlayerShowVolume }, set: { NagramSettings.shared.musicPlayerShowVolume = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
             .toggle(titleKey: "Nagram.MusicPlayer.ShowRemainingTime", get: { NagramSettings.shared.musicPlayerShowRemainingTime }, set: { NagramSettings.shared.musicPlayerShowRemainingTime = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsWordHighlight", get: { NagramSettings.shared.musicPlayerLyricsWordHighlight }, set: { NagramSettings.shared.musicPlayerLyricsWordHighlight = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsWordFloat", get: { NagramSettings.shared.musicPlayerLyricsWordFloat }, set: { NagramSettings.shared.musicPlayerLyricsWordFloat = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsGlow", get: { NagramSettings.shared.musicPlayerLyricsGlow }, set: { NagramSettings.shared.musicPlayerLyricsGlow = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsBlur", get: { NagramSettings.shared.musicPlayerLyricsBlur }, set: { NagramSettings.shared.musicPlayerLyricsBlur = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsScale", get: { NagramSettings.shared.musicPlayerLyricsScale }, set: { NagramSettings.shared.musicPlayerLyricsScale = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsLinearScroll", get: { NagramSettings.shared.musicPlayerLyricsLinearScroll }, set: { NagramSettings.shared.musicPlayerLyricsLinearScroll = $0; if $0 { NagramSettings.shared.musicPlayerLyricsSpringScroll = false } }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsSpringScroll", get: { NagramSettings.shared.musicPlayerLyricsSpringScroll }, set: { NagramSettings.shared.musicPlayerLyricsSpringScroll = $0; if $0 { NagramSettings.shared.musicPlayerLyricsLinearScroll = false } }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsStagger", get: { NagramSettings.shared.musicPlayerLyricsStagger }, set: { NagramSettings.shared.musicPlayerLyricsStagger = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled && (NagramSettings.shared.musicPlayerLyricsLinearScroll || NagramSettings.shared.musicPlayerLyricsSpringScroll) }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsInterlude", get: { NagramSettings.shared.musicPlayerLyricsInterlude }, set: { NagramSettings.shared.musicPlayerLyricsInterlude = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
+            .toggle(titleKey: "Nagram.MusicPlayer.LyricsEdgeFade", get: { NagramSettings.shared.musicPlayerLyricsEdgeFade }, set: { NagramSettings.shared.musicPlayerLyricsEdgeFade = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
             .slider(titleKey: "Nagram.MusicPlayer.LyricsFontSize", minValue: 20, maxValue: 40, get: { NagramSettings.shared.musicPlayerLyricsFontSizeValue }, set: { NagramSettings.shared.musicPlayerLyricsFontSize = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerLyricsEnabled }),
             .slider(titleKey: "Nagram.MusicPlayer.BlurIntensity", minValue: 0, maxValue: 60, get: { NagramSettings.shared.musicPlayerBlurIntensityValue }, set: { NagramSettings.shared.musicPlayerBlurIntensity = $0 }, isVisible: { NagramSettings.shared.musicPlayerModernUI && NagramSettings.shared.musicPlayerBackgroundValue == .blur }),
         ]),
@@ -699,8 +717,6 @@ private func nagramGroups(
         NagramGroup(tab: .tools, headerKey: nil, footerKey: nil, rows: [
             .navigation(titleKey: "Nagram.Settings.Backup", action: settingsBackupAction),
             .navigation(titleKey: "Nagram.ExteraPlugins", action: pluginsAction),
-            .navigation(titleKey: "Nagram.Update.Title", action: appUpdateAction),
-            .navigation(titleKey: "Nagram.About", action: aboutAction),
         ]),
         NagramGroup(tab: .showcase, headerKey: nil, footerKey: nil, rows: [
             .navigation(titleKey: "Nagram.LocalPremium", action: showcaseAction),
@@ -812,8 +828,32 @@ private func nagramSubpageSearchRows(parentTitleKey: String) -> NagramSubpageSea
 }
 
 private func nagramSearchAlternates(titleKey: String, title: String, key: String) -> [String] {
-    let englishTitle = ngI18n(titleKey, nagramFallbackLocale)
-    return englishTitle == title ? [key] : [englishTitle, key]
+    let locales = [nagramFallbackLocale, "zh-hans", "zh-hant", "ja"]
+    var values = [key]
+    for locale in locales {
+        let translated = ngI18n(titleKey, locale)
+        if translated != title && !values.contains(translated) {
+            values.append(translated)
+        }
+    }
+    switch titleKey {
+    case "Nagram.MusicPlayerModernUI":
+        values += ["音乐播放器", "音樂播放器", "Music Player"]
+    case "Nagram.About":
+        values += ["检查更新", "檢查更新", "Check for Updates", "Update"]
+        values += locales.map { ngI18n("Nagram.Update.Title", $0) }
+    default:
+        break
+    }
+    return values
+}
+
+private func nagramMatchesSearch(_ terms: [(text: String, token: String)], values: [String]) -> Bool {
+    let tokens = values.map(normalizedNagramDeepLinkToken)
+    return terms.allSatisfy { term in
+        values.contains { $0.localizedCaseInsensitiveContains(term.text) }
+            || (!term.token.isEmpty && tokens.contains { $0.contains(term.token) })
+    }
 }
 
 public func nagramSettingsSearchEntries(lang: String) -> [NagramSettingsSearchEntry] {
@@ -842,10 +882,8 @@ public func nagramSettingsSearchEntries(lang: String) -> [NagramSettingsSearchEn
         groupProfileSettingsAction: {},
         sessionBackupAction: {},
         pluginsAction: {},
-        appUpdateAction: {},
         badgeStyleAction: {},
         settingsBackupAction: {},
-        aboutAction: {},
         showcaseAction: {}
     )
 
@@ -853,6 +891,12 @@ public func nagramSettingsSearchEntries(lang: String) -> [NagramSettingsSearchEn
     var entries = [NagramSettingsSearchEntry(id: "nagram", title: rootTitle, alternate: ["Nagram"], breadcrumbs: [], makeController: { context in
         nagramSettingsController(context: context)
     })]
+    let aboutTitle = ngI18n("Nagram.About", lang)
+    entries.append(NagramSettingsSearchEntry(id: "nagram/about", title: aboutTitle,
+        alternate: nagramSearchAlternates(titleKey: "Nagram.About", title: aboutTitle, key: "About"),
+        breadcrumbs: [rootTitle], makeController: { context in
+            nagramAboutController(context: context)
+        }))
     for group in groups {
         let tabTitle = ngI18n(group.tab.titleKey, lang)
         let headerTitle = group.headerKey.map { ngI18n($0, lang) }
@@ -1004,7 +1048,7 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
                 arguments.copyDeepLink(index)
             }, tag: self.tag)
         case let .input(_, section, title, text, placeholder, isSecret, rightAligned, index):
-            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), alignment: rightAligned ? .right : .default, spacing: rightAligned ? 8.0 : 0.0, clearType: .onFocus, tag: self.tag, sectionId: section, textUpdated: { updatedText in
+            return ItemListSingleLineInputItem(presentationData: presentationData, systemStyle: .glass, title: NSAttributedString(string: title, textColor: presentationData.theme.list.itemPrimaryTextColor), text: text, placeholder: placeholder, type: isSecret ? .password : .regular(capitalization: false, autocorrection: false), alignment: rightAligned ? .right : .default, spacing: rightAligned ? 8.0 : 0.0, clearType: .onFocus, tag: self.tag, preserveTextWhileEditing: index == -1, sectionId: section, textUpdated: { updatedText in
                 arguments.inputUpdated(index, updatedText)
             }, action: {
             })
@@ -1027,6 +1071,12 @@ private enum NagramSettingsEntry: ItemListNodeEntry {
 }
 
 public func nagramSettingsController(context: AccountContext, deepLinkPath: String? = nil) -> ViewController {
+    if let request = parseNagramDeepLinkRequest(deepLinkPath) {
+        let row = normalizedNagramDeepLinkToken(request.row ?? request.section ?? "")
+        if row == "about" || row == "updatetitle" {
+            return nagramAboutController(context: context)
+        }
+    }
     var currentShowCallsTab = CallListSettings.defaultSettings.showTab
     var currentContentSettingsConfiguration: ContentSettingsConfiguration?
     let contentSettingsConfigurationPromise = Promise<ContentSettingsConfiguration?>()
@@ -1195,16 +1245,10 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         pushControllerImpl?(nagramSessionBackupController(context: context))
     }, pluginsAction: {
         pushControllerImpl?(nagramExteraPluginsController(context: context))
-    }, appUpdateAction: {
-        Task { @MainActor in
-            pushControllerImpl?(nextgramUpdateController(context: context))
-        }
     }, badgeStyleAction: {
         pushControllerImpl?(nextgramBadgeSettingsController(context: context))
     }, settingsBackupAction: {
         pushControllerImpl?(nextgramSettingsBackupController(context: context))
-    }, aboutAction: {
-        pushControllerImpl?(nagramAboutController(context: context))
     }, showcaseAction: {
         pushControllerImpl?(nextgramShowcaseController(context: context))
     })
@@ -1245,6 +1289,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
     }
     notificationSettingsUpdated = bump
 
+    let aboutRowIndex = -2
     let arguments = NagramSettingsArguments(rowIcon: { index in
         guard flatRows.indices.contains(index) else { return nil }
         return NextgramSettingsIcons.icon(for: nagramRowTitleKey(flatRows[index]))
@@ -1259,12 +1304,16 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
             break
         }
     }, disclosureAction: { index in
+        if index == aboutRowIndex {
+            pushControllerImpl?(nagramAboutController(context: context))
+            return
+        }
         guard flatRows.indices.contains(index) else {
             return
         }
         let row = flatRows[index]
         if isRoot {
-            if case let .navigation(titleKey, action) = row, titleKey == "Nagram.About" || titleKey == "Nagram.TelegramLatency" {
+            if case let .navigation(titleKey, action) = row, titleKey == "Nagram.TelegramLatency" {
                 action()
                 return
             }
@@ -1274,7 +1323,7 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
             pushControllerImpl?(nagramSettingsController(context: context, deepLinkPath: target.string))
             return
         }
-        if case let .choice(titleKey, prefix, options, _, set) = row {
+        if case let .choice(titleKey, prefix, options, _, set, _) = row {
             // 参照 InstalledStickerPacksController.openSuggestOptions:disclosure 点击弹 ActionSheet 选档。
             let presentationData = context.sharedContext.currentPresentationData.with { $0 }
             let lang = presentationData.strings.baseLanguageCode
@@ -1352,7 +1401,10 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
         }
     }, inputUpdated: { index, value in
         if index == -1 {
-            searchPromise.set(value)
+            // Apply list changes after UIKit finishes updating the search field.
+            Queue.mainQueue().justDispatch {
+                searchPromise.set(value)
+            }
             return
         }
         guard flatRows.indices.contains(index) else {
@@ -1407,7 +1459,8 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 entries.append(.toggle(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), value: get(), enabled: true, enableInteractiveChanges: true, index: rowIndex))
             case let .toggleWithEnabled(titleKey, get, _, enabled, enableInteractiveChanges):
                 entries.append(.toggle(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), value: get(), enabled: enabled(), enableInteractiveChanges: enableInteractiveChanges, index: rowIndex))
-            case let .choice(titleKey, prefix, _, current, _):
+            case let .choice(titleKey, prefix, _, current, _, isVisible):
+                guard isVisible() else { return }
                 let currentValue = titleKey == "Nagram.ChatListMessagePreviewStyle" && NagramSettings.shared.chatListCompact ? NagramChatListMessagePreviewStyle.two.rawValue : current()
                 entries.append(.disclosure(stableId: rowStableId, section: sectionId, title: ngI18n(titleKey, lang), label: ngI18n("\(prefix).\(currentValue)", lang), index: rowIndex))
             case let .input(titleKey, placeholderKey, get, _, isSecret, isVisible):
@@ -1431,23 +1484,26 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 for (index, tab) in NextgramSettingsCategory.allCases.enumerated() {
                     entries.append(.category(stableId: -20 + Int32(index), tab: tab, title: ngI18n(tab.titleKey, lang)))
                 }
-                if let aboutIndex = flatRows.firstIndex(where: { nagramRowTitleKey($0) == "Nagram.About" }) {
-                    let version = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String
-                        ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-                        ?? ""
-                    entries.append(.disclosure(stableId: Int32.max, section: 5, title: ngI18n("Nagram.About", lang), label: version, index: aboutIndex))
-                }
             }
         }
 
-        let normalizedSearchQuery = normalizedNagramDeepLinkToken(searchQuery)
+        let searchTerms = searchQuery.split(whereSeparator: \.isWhitespace).map { (String($0), normalizedNagramDeepLinkToken(String($0))) }
+        let isSearching = isRoot && !searchTerms.isEmpty
         for (groupIndex, group) in groups.enumerated() {
             let sectionId = Int32(groupIndex + (isRoot ? 5 : 0))
             let showsGroup = !isRoot && group.tab == category && group.page == groupTab
             let headerStableId = stableId
             stableId += 1
-            let groupTitle = group.headerKey.map { ngI18n($0, lang) } ?? ngI18n(group.tab.titleKey, lang)
-            let groupMatchesSearch = groupTitle.localizedCaseInsensitiveContains(searchQuery) || ngI18n(group.tab.titleKey, lang).localizedCaseInsensitiveContains(searchQuery)
+            let tabTitle = ngI18n(group.tab.titleKey, lang)
+            let groupTitle = group.headerKey.map { ngI18n($0, lang) } ?? tabTitle
+            var groupSearchValues = [tabTitle, groupTitle]
+            if isSearching {
+                groupSearchValues += nagramSearchAlternates(titleKey: group.tab.titleKey, title: tabTitle, key: group.tab.rawValue)
+                if let headerKey = group.headerKey {
+                    groupSearchValues += nagramSearchAlternates(titleKey: headerKey, title: groupTitle, key: headerKey)
+                }
+            }
+            let groupMatchesSearch = isSearching && nagramMatchesSearch(searchTerms, values: groupSearchValues)
             var didAppendSearchHeader = false
             if showsGroup, let headerKey = group.headerKey {
                 entries.append(.header(stableId: headerStableId, section: sectionId, text: ngI18n(headerKey, lang)))
@@ -1458,13 +1514,15 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
                 stableId += 1
                 let rowIndex = globalRowIndex
                 globalRowIndex += 1
+                guard nagramRowIsVisible(row) else { continue }
                 let titleKey = nagramRowTitleKey(row)
                 let title = titleKey.isEmpty ? groupTitle : ngI18n(titleKey, lang)
-                let rowMatchesSearch = groupMatchesSearch || title.localizedCaseInsensitiveContains(searchQuery) || (!normalizedSearchQuery.isEmpty && nagramRowDeepLinkTokens(row).contains(where: { $0.contains(normalizedSearchQuery) }))
-                let shouldAppend = nagramRowIsVisible(row) && (showsGroup || (isRoot && !searchQuery.isEmpty && rowMatchesSearch))
+                let shouldAppend = showsGroup || (isSearching && (groupMatchesSearch || nagramMatchesSearch(searchTerms,
+                    values: groupSearchValues + [title] + nagramSearchAlternates(titleKey: titleKey, title: title, key: nagramRowDeepLinkKey(row))
+                        + nagramRowDeepLinkAliases(titleKey: titleKey))))
                 if shouldAppend {
                     if isRoot && !didAppendSearchHeader {
-                        let searchHeader = group.headerKey == nil ? ngI18n(group.tab.titleKey, lang) : "\(ngI18n(group.tab.titleKey, lang)) · \(groupTitle)"
+                        let searchHeader = group.headerKey == nil ? tabTitle : "\(tabTitle) → \(groupTitle)"
                         entries.append(.header(stableId: headerStableId, section: sectionId, text: searchHeader))
                         didAppendSearchHeader = true
                     }
@@ -1486,16 +1544,26 @@ public func nagramSettingsController(context: AccountContext, deepLinkPath: Stri
             }
         }
 
-        if isRoot && !searchQuery.isEmpty && entries.count == 1 {
-            entries.append(.footer(stableId: Int32.max, section: 1, text: ngI18n("Nagram.Settings.Search.Empty", lang)))
+        if isRoot {
+            let about = ngI18n("Nagram.About", lang)
+            if nagramMatchesSearch(searchTerms, values: [about] + nagramSearchAlternates(titleKey: "Nagram.About", title: about, key: "About")) {
+                let version = Bundle.main.object(forInfoDictionaryKey: "NextgramVersion") as? String
+                    ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+                    ?? ""
+                entries.append(.disclosure(stableId: Int32.max - 1, section: searchQuery.isEmpty ? 5 : Int32(groups.count + 5),
+                    title: about, label: version, index: aboutRowIndex))
+            }
         }
 
+        let emptyStateItem = isSearching && entries.count == 1
+            ? ItemListTextEmptyStateItem(text: ngI18n("Nagram.Settings.Search.Empty", lang))
+            : nil
         let title = isRoot ? ngI18n("Nagram.Settings.Title", lang) : ngI18n(deepLinkTarget.tab.titleKey, lang)
         let groupTabTitles = category.groupTabs.map { ngI18n($0, lang) }
         let titleStyle: ItemListControllerTitle = isRoot || groupTabTitles.isEmpty ? .text(title) : .textWithTabs(title, groupTabTitles, groupTab)
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: titleStyle, leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
         let ensureVisibleItemTag = isRoot || groupTab != initialGroupTab ? nil : deepLinkTarget.rowIndex.map { NagramSettingsRowTag(index: $0) }
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: ensureVisibleItemTag, initialScrollToItem: initialScrollToItem, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: entries, style: .blocks, ensureVisibleItemTag: ensureVisibleItemTag, emptyStateItem: emptyStateItem, initialScrollToItem: initialScrollToItem, animateChanges: false)
 
         return (controllerState, (listState, arguments))
     }

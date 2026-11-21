@@ -10,7 +10,9 @@ import ChatListHeaderComponent
 import NavigationBarComponent
 import GlassBackgroundComponent
 import EdgeEffect
+import NagramSettingsSignal // MARK: NEXTGRAM
 import NewsFeedSupport
+import SwiftSignalKit // MARK: NEXTGRAM
 
 /// The top row's content. It spans the header, above the search block, so its children keep the header's coordinates;
 /// it takes no touch of its own, so a touch it does not give a child reaches the search block under it.
@@ -23,8 +25,7 @@ private final class NewsHeaderRowContentView: UIView {
 
 /// The News header, one instance over both pages (Feed2 FeedScreen.swift:203-272). Back to front:
 /// - the search block, which scrolls with the active list (above everything while search is open);
-/// - the soft scroll edge (blur and whitening, shown once content scrolls under the header);
-/// - the mockup's static header gradient;
+/// - the soft scroll edge and the optional chat header shade; // MARK: NEXTGRAM
 /// - page overlays, a page's content drawn above the edges (Added's New posts pill);
 /// - the tab-switch shutter, over the edges too: they only blend towards its colour, so it looks the same there;
 /// - the top row (the tabs island and "…"), which never moves.
@@ -45,32 +46,7 @@ final class NewsHeaderView: UIView, NavigationBarComponentTransitionSource {
         let isSwitchingByDragging: Bool
     }
 
-    /// The mockup's header gradient, as written (FeedScreen.swift:260-269): list background 0.92 → 0.6 at 55 % →
-    /// clear, from the screen top to 22 pt below the header. Always shown; at rest it barely touches the search
-    /// (0.13 at the capsule's top edge, as on the mockup).
-    private static let staticGradient: [EdgeEffectView.GradientStop] = [
-        EdgeEffectView.GradientStop(location: 0.0, alpha: 0.92),
-        EdgeEffectView.GradientStop(location: 0.55, alpha: 0.6),
-        EdgeEffectView.GradientStop(location: 1.0, alpha: 0.0)
-    ]
-    /// The system soft scroll edge the mockup's gradient lies over: blur plus whitening, absent at rest and shown
-    /// once content scrolls under the header (`newsHeaderSoftEdgeAlpha`). With the static gradient over it, these
-    /// stops give the combined whitening measured on K1 with content scrolled under the mockup's header (the
-    /// darkest content pixel at each height over 12 scroll positions: y 48: 246, 72: 238, 96: 196, 108: 154,
-    /// 120: 105, 132: 45, 144: 8), less what the blur adds.
-    private static let softEdgeGradient: [EdgeEffectView.GradientStop] = [
-        EdgeEffectView.GradientStop(location: 0.0, alpha: 0.625),
-        EdgeEffectView.GradientStop(location: 0.32, alpha: 0.72),
-        EdgeEffectView.GradientStop(location: 0.56, alpha: 0.714),
-        EdgeEffectView.GradientStop(location: 0.64, alpha: 0.54),
-        EdgeEffectView.GradientStop(location: 0.72, alpha: 0.394),
-        EdgeEffectView.GradientStop(location: 0.80, alpha: 0.265),
-        EdgeEffectView.GradientStop(location: 0.88, alpha: 0.126),
-        EdgeEffectView.GradientStop(location: 0.96, alpha: 0.03),
-        EdgeEffectView.GradientStop(location: 1.0, alpha: 0.0)
-    ]
-    /// How far the soft edge reaches past the static gradient (measured: whitening ends ~150 pt, the gradient at
-    /// 136 on the reference device).
+    /// The blur extends just past the feed's resting header. // MARK: NEXTGRAM
     private static let softEdgeExtension: CGFloat = 14.0
 
     let segmentNode = NewsSegmentNode()
@@ -125,6 +101,19 @@ final class NewsHeaderView: UIView, NavigationBarComponentTransitionSource {
         self.glassHold.changed = { [weak self] in
             self?.applyGlassVisibility()
         }
+        // MARK: NEXTGRAM — Follow the chat header controls in both appearances.
+        self.headerEffectsDisposable = (nagramChatHeaderEffectsSignal() |> deliverOnMainQueue).start(next: { [weak self] effects in
+            guard let self else { return }
+            self.headerEffects = effects
+            if let params = self.params, let geometry = self.geometry {
+                self.updateHeaderEffects(params: params, geometry: geometry, transition: .immediate)
+            }
+        })
+    }
+
+    // MARK: NEXTGRAM
+    deinit {
+        self.headerEffectsDisposable?.dispose()
     }
 
     required init?(coder: NSCoder) {
@@ -172,6 +161,27 @@ final class NewsHeaderView: UIView, NavigationBarComponentTransitionSource {
             return 0.0
         }
         return geometry.listTopInset - self.blockOffset
+    }
+
+    // MARK: NEXTGRAM — Blur and shade are independent, with the same shade as a conversation.
+    private var headerEffects: (blur: Bool, shade: Bool, lightOpacity: Int32, darkOpacity: Int32) = (true, false, 0, 0)
+    private var headerEffectsDisposable: Disposable?
+
+    private func updateHeaderEffects(params: Params, geometry: NewsHeaderGeometry, transition: ComponentTransition) {
+        let width = params.layout.size.width
+        let navigationHeight = params.isSearchActive ? self.activeSearchNavigationHeight : geometry.topRow.maxY
+        let blurHeight = params.isSearchActive ? navigationHeight : geometry.edgeEffectHeight + NewsHeaderView.softEdgeExtension
+        let blurFrame = CGRect(x: 0.0, y: 0.0, width: width, height: blurHeight)
+        transition.setFrame(view: self.softEdgeView, frame: blurFrame)
+        self.softEdgeView.update(content: nil, blur: self.headerEffects.blur, blurRadius: 16.0, alpha: 0.0,
+            rect: blurFrame, edge: .top, edgeSize: min(80.0, blurHeight), transition: transition)
+
+        let shadeHeight = navigationHeight + 28.0
+        let shadeFrame = CGRect(x: 0.0, y: 0.0, width: width, height: shadeHeight)
+        let opacity = params.theme.overallDarkAppearance ? self.headerEffects.darkOpacity : self.headerEffects.lightOpacity
+        transition.setFrame(view: self.gradientView, frame: shadeFrame)
+        self.gradientView.update(content: .black, alpha: self.headerEffects.shade ? CGFloat(min(100, max(0, opacity))) / 100.0 : 0.0,
+            rect: shadeFrame, edge: .top, edgeSize: shadeHeight, transition: transition)
     }
 
     func update(params: Params, transition: ComponentTransition) -> NewsHeaderGeometry {
@@ -276,16 +286,7 @@ final class NewsHeaderView: UIView, NavigationBarComponentTransitionSource {
         self.shutterView.backgroundColor = theme.list.plainBackgroundColor
         transition.setFrame(view: self.shutterView, frame: CGRect(origin: CGPoint(), size: layout.size))
 
-        // With search open the edge ends where the results begin, under the field, so it does not lie over them;
-        // the mockup's header gradient belongs to the resting header and fades out with its row.
-        let softEdgeHeight = params.isSearchActive ? self.activeSearchNavigationHeight : geometry.edgeEffectHeight + NewsHeaderView.softEdgeExtension
-        let softEdgeFrame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: softEdgeHeight))
-        transition.setFrame(view: self.softEdgeView, frame: softEdgeFrame)
-        self.softEdgeView.update(content: theme.list.plainBackgroundColor, blur: true, alpha: 1.0, contentGradient: NewsHeaderView.softEdgeGradient, rect: softEdgeFrame, edge: .top, edgeSize: softEdgeFrame.height, transition: transition)
-        let gradientFrame = CGRect(origin: CGPoint(), size: CGSize(width: width, height: geometry.edgeEffectHeight))
-        transition.setFrame(view: self.gradientView, frame: gradientFrame)
-        self.gradientView.update(content: theme.list.plainBackgroundColor, blur: false, alpha: 1.0, contentGradient: NewsHeaderView.staticGradient, rect: gradientFrame, edge: .top, edgeSize: gradientFrame.height, transition: transition)
-        transition.setAlpha(view: self.gradientView, alpha: params.isSearchActive ? 0.0 : 1.0)
+        self.updateHeaderEffects(params: params, geometry: geometry, transition: transition) // MARK: NEXTGRAM
 
         // An open search field takes the top row and is drawn above the edge, as the bar's own content is; at
         // rest the search block is content and passes under it (and under the tab-switch shutter).

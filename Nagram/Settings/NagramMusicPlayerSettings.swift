@@ -1,14 +1,15 @@
 public enum NagramMusicPlayerCoverLayout: String, CaseIterable {
     case card
-    case wide
     case fullscreen
     case disc
-    case fit
-    case fill
 }
 
 public enum NagramMusicPlayerBackground: String, CaseIterable {
-    case blur, solid, artwork
+    case blur, solid, artwork, gradient
+}
+
+public enum NagramMusicPlayerFullscreenBlurHeight: String, CaseIterable {
+    case short, controls, custom
 }
 
 public enum NagramMusicPlayerColors: String, CaseIterable {
@@ -35,6 +36,49 @@ public enum NextgramLyricsSource: String, CaseIterable {
     }
 }
 
+/// Independent effects; leaving them off preserves the existing lyric presentation.
+public struct NagramLyricsEffects: Equatable {
+    public let wordHighlight: Bool
+    public let wordFloat: Bool
+    public let springScroll: Bool
+    public let glow: Bool
+    public let blur: Bool
+    public let scale: Bool
+    public let linearScroll: Bool
+    public let stagger: Bool
+    public let interlude: Bool
+    public let edgeFade: Bool
+
+    public static let none = NagramLyricsEffects(enabled: false)
+    public static let allEnabled = NagramLyricsEffects(enabled: true)
+
+    private init(enabled: Bool) {
+        self.wordHighlight = enabled
+        self.wordFloat = enabled
+        self.springScroll = enabled
+        self.glow = enabled
+        self.blur = enabled
+        self.scale = enabled
+        self.linearScroll = false
+        self.stagger = enabled
+        self.interlude = enabled
+        self.edgeFade = enabled
+    }
+
+    public init(settings: NagramSettings) {
+        self.wordHighlight = settings.musicPlayerLyricsWordHighlight
+        self.wordFloat = settings.musicPlayerLyricsWordFloat
+        self.springScroll = settings.musicPlayerLyricsSpringScroll
+        self.glow = settings.musicPlayerLyricsGlow
+        self.blur = settings.musicPlayerLyricsBlur
+        self.scale = settings.musicPlayerLyricsScale
+        self.linearScroll = settings.musicPlayerLyricsLinearScroll
+        self.stagger = settings.musicPlayerLyricsStagger
+        self.interlude = settings.musicPlayerLyricsInterlude
+        self.edgeFade = settings.musicPlayerLyricsEdgeFade
+    }
+}
+
 public struct NagramMusicPlayerSettings: Equatable {
     public let enabled: Bool
     public let coverLayout: NagramMusicPlayerCoverLayout
@@ -45,8 +89,12 @@ public struct NagramMusicPlayerSettings: Equatable {
     public let lyricsSources: [NextgramLyricsSource]
     public let showVolume: Bool
     public let showRemainingTime: Bool
+    public let lyricsEffects: NagramLyricsEffects
     public let lyricsFontSize: Int32
     public let blurIntensity: Int32
+    public let fullscreenBlurHeight: NagramMusicPlayerFullscreenBlurHeight
+    public let fullscreenBlurPercent: Int32
+    public let smartArtworkCrop: Bool
     public let background: NagramMusicPlayerBackground
     public let colors: NagramMusicPlayerColors
     public let customColor: String
@@ -56,6 +104,7 @@ public struct NagramMusicPlayerSettings: Equatable {
     public let discRotation: Bool
     public let swipeToSkip: Bool
     public let artworkMotion: Bool
+    public let artworkMetadata: Bool
 
     public init(settings: NagramSettings = .shared) {
         self.enabled = settings.musicPlayerModernUI
@@ -67,8 +116,12 @@ public struct NagramMusicPlayerSettings: Equatable {
         self.lyricsSources = NextgramLyricsSource.ordered(settings.musicPlayerLyricsSourceOrder)
         self.showVolume = settings.musicPlayerShowVolume
         self.showRemainingTime = settings.musicPlayerShowRemainingTime
+        self.lyricsEffects = NagramLyricsEffects(settings: settings)
         self.lyricsFontSize = settings.musicPlayerLyricsFontSizeValue
         self.blurIntensity = settings.musicPlayerBlurIntensityValue
+        self.fullscreenBlurHeight = settings.musicPlayerFullscreenBlurHeightValue
+        self.fullscreenBlurPercent = settings.musicPlayerFullscreenBlurPercentValue
+        self.smartArtworkCrop = settings.musicPlayerSmartArtworkCrop
         self.background = settings.musicPlayerBackgroundValue
         self.colors = settings.musicPlayerColorsValue
         self.customColor = settings.musicPlayerCustomColor
@@ -78,6 +131,7 @@ public struct NagramMusicPlayerSettings: Equatable {
         self.discRotation = settings.musicPlayerDiscRotation
         self.swipeToSkip = settings.musicPlayerSwipeToSkip
         self.artworkMotion = settings.musicPlayerArtworkMotion
+        self.artworkMetadata = settings.musicPlayerArtworkMetadata
     }
 }
 
@@ -107,6 +161,14 @@ public extension NagramSettings {
 
     var musicPlayerBlurIntensityValue: Int32 {
         return min(60, max(0, self.musicPlayerBlurIntensity))
+    }
+
+    var musicPlayerFullscreenBlurHeightValue: NagramMusicPlayerFullscreenBlurHeight {
+        NagramMusicPlayerFullscreenBlurHeight(rawValue: self.musicPlayerFullscreenBlurHeight) ?? .short
+    }
+
+    var musicPlayerFullscreenBlurPercentValue: Int32 {
+        min(50, max(10, self.musicPlayerFullscreenBlurPercent))
     }
 
     var musicPlayerTitleAlignmentValue: String {

@@ -134,32 +134,34 @@ public enum NextgramAMLLLyrics {
     }
 
     public static func fetch(title: String, artist: String, duration: Double) async -> NextgramLyrics? {
+        try? await self.lookup(title: title, artist: artist, duration: duration)
+    }
+
+    static func lookup(title: String, artist: String, duration: Double) async throws -> NextgramLyrics? {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let titleKey = self.normalized(title)
         let artistKey = self.normalized(artist)
         guard !titleKey.isEmpty, !artistKey.isEmpty, title.utf8.count <= 512, artist.utf8.count <= 512,
               duration.isFinite, duration > 0.0 else { return nil }
-        do {
-            let search: Search = try await self.request(path: "search", query: [
+        var search: Search = try await self.request(path: "search", query: [
                 URLQueryItem(name: "musicName", value: title), URLQueryItem(name: "artistName", value: artist),
                 URLQueryItem(name: "pageSize", value: "8")
             ])
-            func matches(_ song: Song) -> Bool {
-                song.musicNames.contains { self.normalized($0) == titleKey } &&
-                (song.artistNames.contains { self.normalized($0) == artistKey } ||
-                    self.normalized(song.artistNames.joined(separator: " ")) == artistKey)
-            }
-            for item in search.items.filter(matches).prefix(2) {
-                try Task.checkCancellation()
-                let song: Song = try await self.request(path: "get", query: [URLQueryItem(name: "id", value: String(item.id))])
-                guard song.id == item.id, matches(song), let text = song.lyrics,
-                      let parsed = NextgramTTMLParser.parse(text), parsed.lastEnd <= duration + 3.0 else { continue }
-                if let listedDuration = parsed.duration, abs(listedDuration - duration) > 5.0 { continue }
-                return parsed.lyrics
-            }
-        } catch {
-            return nil
+        func matches(_ song: Song) -> Bool {
+            song.musicNames.contains { self.normalized($0) == titleKey } &&
+            NextgramOnlineLyrics.artistsMatch(artist, foundArtists: song.artistNames)
+        }
+        if !search.items.contains(where: matches) {
+            search = try await self.request(path: "search", query: [URLQueryItem(name: "musicName", value: title), URLQueryItem(name: "pageSize", value: "20")])
+        }
+        for item in search.items.filter(matches).prefix(2) {
+            try Task.checkCancellation()
+            let song: Song = try await self.request(path: "get", query: [URLQueryItem(name: "id", value: String(item.id))])
+            guard song.id == item.id, matches(song), let text = song.lyrics,
+                  let parsed = NextgramTTMLParser.parse(text), parsed.lastEnd <= duration + 3.0 else { continue }
+            if let listedDuration = parsed.duration, abs(listedDuration - duration) > 5.0 { continue }
+            return parsed.lyrics
         }
         return nil
     }

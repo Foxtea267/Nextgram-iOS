@@ -283,6 +283,16 @@ static ASDisplayNodeMethodOverrides GetASDisplayNodeMethodOverrides(Class c)
 #if !AS_INITIALIZE_FRAMEWORK_MANUALLY
 + (void)load
 {
+  // MARK: NEXTGRAM — Canvas injects this library while UIKit is still initializing.
+  // Creating a UIView synchronously here would wait on that same initialization.
+#if TARGET_OS_SIMULATOR
+  if ([NSProcessInfo.processInfo.environment[@"XCODE_RUNNING_FOR_PREVIEWS"] isEqualToString:@"1"]) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+      ASInitializeFrameworkMainThread();
+    });
+    return;
+  }
+#endif
   ASInitializeFrameworkMainThread();
 }
 #endif

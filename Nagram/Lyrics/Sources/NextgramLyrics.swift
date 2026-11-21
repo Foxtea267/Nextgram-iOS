@@ -1,12 +1,12 @@
 import Foundation
 
-public struct NextgramLyricWord: Equatable {
+public struct NextgramLyricWord: Codable, Equatable {
     public let time: Double
     public let end: Double
     public let range: NSRange
 }
 
-public struct NextgramLyricLine: Equatable {
+public struct NextgramLyricLine: Codable, Equatable {
     public let time: Double?
     public let text: String
     public let words: [NextgramLyricWord]
@@ -27,7 +27,7 @@ public struct NextgramLyricLine: Equatable {
     }
 }
 
-public struct NextgramLyrics: Equatable {
+public struct NextgramLyrics: Codable, Equatable {
     public static let maximumFileSize = 1024 * 1024
 
     public let lines: [NextgramLyricLine]

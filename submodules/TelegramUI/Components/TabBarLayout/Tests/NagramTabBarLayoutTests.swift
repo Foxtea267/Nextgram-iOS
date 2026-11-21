@@ -50,6 +50,40 @@ final class NagramTabBarLayoutTests: XCTestCase {
         XCTAssertEqual(nagramTabBarSystemCompactLength(fittedItemWidths: items, availableLength: 300.0, scale: 3.0), 300.0)
     }
 
+    // MARK: NEXTGRAM — Phone and settings-preview widths must retain a usable slider range beside search.
+    func test_width_growsWhenSystemSpacingWouldFillTheRow() {
+        for (items, availableLength) in [
+            ([CGFloat](repeating: 40.0, count: 3), CGFloat(250.0)),
+            ([CGFloat](repeating: 40.0, count: 4), CGFloat(280.0))
+        ] {
+            let compact = nagramTabBarSystemItemsLayout(fittedItemWidths: items, availableLength: availableLength, fillRatio: 0.0, scale: 3.0)
+            XCTAssertLessThan(compact.size.width, availableLength)
+            var previousWidth = compact.size.width
+            for step in 1 ... 10 {
+                let layout = nagramTabBarSystemItemsLayout(fittedItemWidths: items, availableLength: availableLength, fillRatio: CGFloat(step) / 10.0, scale: 3.0)
+                XCTAssertGreaterThan(layout.size.width, previousWidth)
+                XCTAssertGreaterThanOrEqual(layout.itemFrames.first?.minX ?? 0.0, 0.0)
+                XCTAssertLessThanOrEqual(layout.itemFrames.last?.maxX ?? 0.0, layout.size.width)
+                previousWidth = layout.size.width
+            }
+            XCTAssertEqual(previousWidth, availableLength)
+        }
+    }
+
+    // MARK: NEXTGRAM — Removing excess spacing must not make the bar jump when the row is resized.
+    func test_width_compactChangesContinuouslyWithAvailableLength() {
+        for count in 2 ... 4 {
+            let items = [CGFloat](repeating: 40.0, count: count)
+            var previous = nagramTabBarSystemCompactLength(fittedItemWidths: items, availableLength: 220.0, scale: 3.0)
+            for availableLength in 221 ... 440 {
+                let length = nagramTabBarSystemCompactLength(fittedItemWidths: items, availableLength: CGFloat(availableLength), scale: 3.0)
+                XCTAssertGreaterThanOrEqual(length, previous)
+                XCTAssertLessThanOrEqual(length - previous, 1.0)
+                previous = length
+            }
+        }
+    }
+
     func test_rowOrigins_withoutSlot_startAtZero() {
         for alignment in [NagramTabBarRowAlignment.leading, .centeredBesideSlot, .centeredWithSlot] {
             let origins = nagramTabBarRowOrigins(tabsLength: 200.0, slotLength: nil, availableLength: 360.0, alignment: alignment)

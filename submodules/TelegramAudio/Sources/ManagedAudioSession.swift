@@ -1079,12 +1079,14 @@ public final class ManagedAudioSessionImpl: NSObject, ManagedAudioSession {
                 }
                 
                 if #available(iOS 13.0, *) {
-                    #if DEBUG && false
-                    try AVAudioSession.sharedInstance().setCategory(nativeCategory, mode: mode, policy: .longFormVideo, options: options)
-                    #else
-                    try AVAudioSession.sharedInstance().setCategory(nativeCategory, options: options)
-                    try AVAudioSession.sharedInstance().setMode(mode)
-                    #endif
+                    // MARK: NEXTGRAM — Associate music playback with the system AirPlay audio route.
+                    let policy: AVAudioSession.RouteSharingPolicy
+                    if case .play(mixWithOthers: false) = type, nativeCategory == .playback {
+                        policy = .longFormAudio
+                    } else {
+                        policy = .default
+                    }
+                    try AVAudioSession.sharedInstance().setCategory(nativeCategory, mode: mode, policy: policy, options: options)
                 } else {
                     try AVAudioSession.sharedInstance().setCategory(nativeCategory, options: options)
                     try AVAudioSession.sharedInstance().setMode(mode)

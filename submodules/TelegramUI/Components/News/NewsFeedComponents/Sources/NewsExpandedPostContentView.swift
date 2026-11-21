@@ -647,16 +647,14 @@ final class NewsExpandedPostContentView: UIView {
         })
     }
 
-    /// What `view` shows now within `band` (in this view), fading out in its place over the view's new content. With
-    /// `backing`, the snapshot lies on that colour, so what is the same underneath does not show through twice.
-    private func fadeOutSnapshot(of view: UIView, within band: CGRect, backing: UIColor?, transition: ComponentTransition) {
+    /// The old bubble drawing within `band`, fading out over the newly revealed part. // MARK: NEXTGRAM
+    private func fadeOutSnapshot(of view: UIView, within band: CGRect, transition: ComponentTransition) {
         guard view.superview === self, !view.isHidden, band.height > 0.0, let snapshot = view.snapshotView(afterScreenUpdates: false) else {
             return
         }
         let clip = UIView(frame: band)
         clip.clipsToBounds = true
         clip.isUserInteractionEnabled = false
-        clip.backgroundColor = backing
         snapshot.frame = view.frame.offsetBy(dx: -band.minX, dy: -band.minY)
         clip.addSubview(snapshot)
         self.insertSubview(clip, aboveSubview: view)
@@ -692,15 +690,17 @@ final class NewsExpandedPostContentView: UIView {
         return cut
     }
 
-    /// Lays the content out at `width`. `revealBacking` is the colour under the row, on which Show more's reveal
-    /// crossfades the cut's last lines; nil where the row is tinted or highlighted.
-    func update(component: NewsFeedPostComponent, content: NewsFeedPostExpandedContent, width: CGFloat, timeSize: CGSize, synchronousLoad: Bool, revealBacking: UIColor?, transition: ComponentTransition) -> Layout {
+    // MARK: NEXTGRAM
+    func update(component: NewsFeedPostComponent, content: NewsFeedPostExpandedContent, width: CGFloat, timeSize: CGSize, synchronousLoad: Bool, transition: ComponentTransition) -> Layout {
         let metrics = NewsExpandedPostMetrics.self
         let theme = component.theme
         let context = component.context
         let contentX = metrics.contentX(leftInset: 0.0)
         let contentWidth = metrics.contentWidth(width: width, leftInset: 0.0, rightInset: 0.0)
         let contentMaxX = contentX + contentWidth
+        // MARK: NEXTGRAM — Give the bubble more width while keeping text clear of the floating avatar.
+        let bubbleTextX = metrics.avatarInset + metrics.avatarSize + 2.0
+        let bubbleTextWidth = max(1.0, contentMaxX - bubbleTextX)
         let isRelayout = self.hasLaidOut
         let frameTransition: ComponentTransition = isRelayout ? transition : .immediate
         self.hasLaidOut = true
@@ -757,7 +757,7 @@ final class NewsExpandedPostContentView: UIView {
         let textIndex = parts.bubble.firstIndex(where: { !$0.text.isEmpty })
         var cutLength: Int?
         var textExpansionGrowth: CGFloat = 0.0
-        if !content.isTextExpanded, let textIndex, let cut = self.collapsedCut(of: parts.bubble[textIndex], presentationData: content.presentationData, width: contentWidth) {
+        if !content.isTextExpanded, let textIndex, let cut = self.collapsedCut(of: parts.bubble[textIndex], presentationData: content.presentationData, width: bubbleTextWidth) { // MARK: NEXTGRAM
             cutLength = cut.length
             textExpansionGrowth = cut.hiddenHeight
         }
@@ -788,7 +788,7 @@ final class NewsExpandedPostContentView: UIView {
         }, navigateToMessage: { id in
             content.openMessage(id)
         })
-        let bubbleWidth = contentWidth + metrics.bubbleWidthOverhead
+        let bubbleWidth = bubbleTextWidth + metrics.bubbleWidthOverhead // MARK: NEXTGRAM
         // Show more toggled: the rows and the gallery below ride the pass's spring, and the rest of the text is
         // revealed. The cut is drawn as the start of the whole text, so the text stays put while a clip around it grows
         // on the spring and what is under it moves down with the rows below. Only when the text alone makes the bubble
@@ -803,11 +803,11 @@ final class NewsExpandedPostContentView: UIView {
         var showMoreSnapshot: (view: UIView, frame: CGRect)?
         if reveals {
             // Only the cut's last lines (the …, a word it pushed down) differ from the whole text: their old drawing
-            // fades out on top, on the row's colour, so identical glyphs underneath stay exact. The band is three lines
+            // fades out on top with the bubble background. The band is three lines
             // at the bubble's pitch, rounded up, and a quote's or code block's padding.
             let pitch = ceil(Font.regular(content.presentationData.chatFontSize.baseDisplaySize).lineHeight * 1.2)
             let bandHeight = pitch * 3.0 + 8.0
-            self.fadeOutSnapshot(of: self.bubbleClipView, within: CGRect(x: contentX - 8.0, y: oldBubbleBottom - bandHeight, width: contentWidth + 16.0, height: bandHeight + metrics.showMoreTopSpacing), backing: revealBacking, transition: .easeInOut(duration: 0.2))
+            self.fadeOutSnapshot(of: self.bubbleClipView, within: CGRect(x: 0.0, y: oldBubbleBottom - bandHeight, width: width, height: bandHeight + metrics.showMoreTopSpacing), transition: .easeInOut(duration: 0.2))
             if let view = self.showMoreView.view, view.superview === self, let snapshot = view.snapshotView(afterScreenUpdates: false) {
                 showMoreSnapshot = (snapshot, view.frame)
             }
@@ -820,8 +820,11 @@ final class NewsExpandedPostContentView: UIView {
         }
         if !bubbleMessages.isEmpty {
             self.bubble.update(item: context.sharedContext.makeChatMessageFeedItem(context: context, messages: bubbleMessages, presentationData: content.presentationData, accountPeer: content.accountPeer, actions: actions), width: bubbleWidth, synchronousLoad: synchronousLoad)
-            self.bubbleTextOrigin = CGPoint(x: contentX, y: nextY)
-            nextY = self.bubble.place(textOrigin: CGPoint(x: contentX, y: nextY))
+            // MARK: NEXTGRAM — Start below the avatar and keep the filled bubble above the next element.
+            nextY = metrics.avatarTop + metrics.avatarSize + 4.0 + metrics.bubbleTextTopInset
+            let textOrigin = CGPoint(x: bubbleTextX, y: nextY)
+            self.bubbleTextOrigin = textOrigin
+            nextY = self.bubble.place(textOrigin: textOrigin) + metrics.bubbleTextTopInset
             if reveals {
                 // The revealed lines are drawn now, not a frame late.
                 self.bubble.displaySynchronously()
@@ -846,11 +849,11 @@ final class NewsExpandedPostContentView: UIView {
                     animateScale: false
                 )),
                 environment: {},
-                containerSize: CGSize(width: contentWidth, height: 100.0)
+                containerSize: CGSize(width: bubbleTextWidth, height: 100.0) // MARK: NEXTGRAM
             )
             if let view = self.showMoreView.view {
                 nextY += metrics.showMoreTopSpacing
-                let showMoreFrame = CGRect(origin: CGPoint(x: contentX, y: nextY), size: showMoreSize)
+                let showMoreFrame = CGRect(origin: CGPoint(x: bubbleTextX, y: nextY), size: showMoreSize) // MARK: NEXTGRAM
                 if view.superview == nil {
                     self.addSubview(view)
                     view.frame = showMoreFrame
@@ -867,8 +870,9 @@ final class NewsExpandedPostContentView: UIView {
 
         if !previewMessages.isEmpty {
             self.previewBubble.update(item: context.sharedContext.makeChatMessageFeedItem(context: context, messages: previewMessages, presentationData: content.presentationData, accountPeer: content.accountPeer, actions: actions), width: bubbleWidth, synchronousLoad: synchronousLoad)
-            nextY += metrics.showMoreTopSpacing
-            nextY = self.previewBubble.place(textOrigin: CGPoint(x: contentX, y: nextY))
+            // MARK: NEXTGRAM
+            nextY += metrics.showMoreTopSpacing + metrics.bubbleTextTopInset
+            nextY = self.previewBubble.place(textOrigin: CGPoint(x: bubbleTextX, y: nextY)) + metrics.bubbleTextTopInset
             if crossfades {
                 transition.animateAlpha(view: self.previewBubble.containerNode.view, from: 0.0, to: 1.0)
             }

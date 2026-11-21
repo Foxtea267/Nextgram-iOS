@@ -760,13 +760,13 @@ public final class NagramSettings {
     /// 音乐封面右下角显示未下载 / 下载中的状态。
     @NagramDefault("nagram.musicPlaylistShowDownloadStatus", true)
     public var musicPlaylistShowDownloadStatus: Bool
-    @NagramDefault("nagram.musicPlayerModernUI", false)
+    @NagramDefault("nagram.musicPlayerModernUI", true)
     public var musicPlayerModernUI: Bool
     @NagramDefault("nagram.musicPlayerCoverLayout", "card")
     public var musicPlayerCoverLayout: String
-    @NagramDefault("nagram.musicPlayerCoverSize", Int32(88))
+    @NagramDefault("nagram.musicPlayerCoverSize", Int32(100))
     public var musicPlayerCoverSize: Int32
-    @NagramDefault("nagram.musicPlayerCoverCornerRadius", Int32(16))
+    @NagramDefault("nagram.musicPlayerCoverCornerRadius", Int32(10))
     public var musicPlayerCoverCornerRadius: Int32
     @NagramDefault("nagram.musicPlayerLyricsEnabled", true)
     public var musicPlayerLyricsEnabled: Bool
@@ -782,8 +782,34 @@ public final class NagramSettings {
     public var musicPlayerShowRemainingTime: Bool
     @NagramDefault("nagram.musicPlayerLyricsFontSize", Int32(28))
     public var musicPlayerLyricsFontSize: Int32
+    @NagramDefault("nagram.musicPlayerLyricsWordHighlight", false)
+    public var musicPlayerLyricsWordHighlight: Bool
+    @NagramDefault("nagram.musicPlayerLyricsWordFloat", false)
+    public var musicPlayerLyricsWordFloat: Bool
+    @NagramDefault("nagram.musicPlayerLyricsSpringScroll", false)
+    public var musicPlayerLyricsSpringScroll: Bool
+    @NagramDefault("nagram.musicPlayerLyricsGlow", false)
+    public var musicPlayerLyricsGlow: Bool
+    @NagramDefault("nagram.musicPlayerLyricsBlur", false)
+    public var musicPlayerLyricsBlur: Bool
+    @NagramDefault("nagram.musicPlayerLyricsScale", false)
+    public var musicPlayerLyricsScale: Bool
+    @NagramDefault("nagram.musicPlayerLyricsLinearScroll", false)
+    public var musicPlayerLyricsLinearScroll: Bool
+    @NagramDefault("nagram.musicPlayerLyricsStagger", false)
+    public var musicPlayerLyricsStagger: Bool
+    @NagramDefault("nagram.musicPlayerLyricsInterlude", false)
+    public var musicPlayerLyricsInterlude: Bool
+    @NagramDefault("nagram.musicPlayerLyricsEdgeFade", false)
+    public var musicPlayerLyricsEdgeFade: Bool
     @NagramDefault("nagram.musicPlayerBlurIntensity", Int32(36))
     public var musicPlayerBlurIntensity: Int32
+    @NagramDefault("nagram.musicPlayerFullscreenBlurHeight", "short")
+    public var musicPlayerFullscreenBlurHeight: String
+    @NagramDefault("nagram.musicPlayerFullscreenBlurPercent", Int32(30))
+    public var musicPlayerFullscreenBlurPercent: Int32
+    @NagramDefault("nagram.musicPlayerSmartArtworkCrop", false)
+    public var musicPlayerSmartArtworkCrop: Bool
     @NagramDefault("nagram.musicPlayerBackground", "blur")
     public var musicPlayerBackground: String
     @NagramDefault("nagram.musicPlayerColors", "cover")
@@ -792,7 +818,7 @@ public final class NagramSettings {
     public var musicPlayerCustomColor: String
     @NagramDefault("nagram.musicPlayerTitleAlignment", "left")
     public var musicPlayerTitleAlignment: String
-    @NagramDefault("nagram.musicPlayerTitleFontSize", Int32(25))
+    @NagramDefault("nagram.musicPlayerTitleFontSize", Int32(22))
     public var musicPlayerTitleFontSize: Int32
     @NagramDefault("nagram.musicPlayerControlScale", Int32(100))
     public var musicPlayerControlScale: Int32
@@ -802,6 +828,8 @@ public final class NagramSettings {
     public var musicPlayerSwipeToSkip: Bool
     @NagramDefault("nagram.musicPlayerArtworkMotion", false)
     public var musicPlayerArtworkMotion: Bool
+    @NagramDefault("nagram.musicPlayerArtworkMetadata", false)
+    public var musicPlayerArtworkMetadata: Bool
     @NagramDefault("nagram.musicSystemNowPlaying", "always")
     public var musicSystemNowPlaying: String
     @NagramDefault("nagram.channelFeedAutoLoad", true)

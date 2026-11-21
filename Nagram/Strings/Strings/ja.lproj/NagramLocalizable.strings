@@ -24,6 +24,8 @@
 "Nagram.RoundVideoCamera.back" = "リア";
 "Nagram.ChooseFolderAfterJoining" = "参加後にフォルダを選択";
 "Nagram.JoinedChatFolderUnavailable" = "追加できませんでした。フォルダが削除されたか、チャット数の上限に達しています。フォルダを整理して再試行してください。";
+"Nagram.Section.Interface" = "インターフェース";
+"Nagram.Section.MessageList" = "メッセージ一覧";
 "Nagram.Section.MessageDisplay" = "メッセージ表示";
 "Nagram.Section.Appearance" = "外観";
 "Nagram.Section.ChatList" = "チャットリスト";
@@ -121,6 +123,7 @@
 "Nagram.Section.Filtering" = "フィルター";
 "Nagram.Section.Sending" = "送信";
 "Nagram.Section.Gesture" = "ジェスチャ";
+"Nagram.Section.Gesture.Footer" = "メッセージのタップ・ダブルタップ操作、最近のチャットへのアクセス、上スワイプによる次のチャンネルやトピックへの切り替えを設定します。";
 "Nagram.Section.Privacy" = "プライバシー";
 "Nagram.Section.Notifications" = "通知";
 "Nagram.Section.Sync" = "同期";
@@ -1010,6 +1013,12 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.MusicPlayer.ShowRemainingTime" = "残り時間を表示";
 "Nagram.MusicPlayer.LyricsFontSize" = "歌詞の文字サイズ";
 "Nagram.MusicPlayer.BlurIntensity" = "プログレッシブぼかしの強さ";
+"Nagram.MusicPlayer.FullscreenBlurHeight" = "フルスクリーンのカバーのぼかし範囲";
+"Nagram.MusicPlayer.FullscreenBlurHeight.short" = "下端のみ（デフォルト）";
+"Nagram.MusicPlayer.FullscreenBlurHeight.controls" = "操作エリア全体";
+"Nagram.MusicPlayer.FullscreenBlurHeight.custom" = "カスタム";
+"Nagram.MusicPlayer.SmartArtworkCrop" = "カバーのスマート構図";
+"Nagram.MusicPlayer.FullscreenBlurPercent" = "ぼかしの高さ（%）";
 "Nagram.MusicPlayer.NowPlaying" = "再生中";
 "Nagram.MusicPlayer.PlaybackPosition" = "再生位置";
 "Nagram.MusicPlayer.Previous" = "前の曲";
@@ -1046,6 +1055,7 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.MusicPlayer.Background.blur" = "段階的なぼかし";
 "Nagram.MusicPlayer.Background.solid" = "単色";
 "Nagram.MusicPlayer.Background.artwork" = "鮮明なカバー";
+"Nagram.MusicPlayer.Background.gradient" = "グラデーション";
 "Nagram.MusicPlayer.Colors" = "色の取得元";
 "Nagram.MusicPlayer.Colors.cover" = "カバーの色";
 "Nagram.MusicPlayer.Colors.theme" = "アプリのテーマ";
@@ -1187,7 +1197,8 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.Fonts.rounded" = "丸ゴシック";
 "Nagram.Fonts.serif" = "セリフ";
 "Nagram.Fonts.monospace" = "等幅";
-"Nagram.MusicPlayer.ArtworkMotion" = "カバーの 3D 操作・傾き視差";
+"Nagram.MusicPlayer.ArtworkMotion" = "カバー表示画面の 3D 操作・傾き視差";
+"Nagram.MusicPlayer.ArtworkMetadata" = "カバー表示画面の下部に曲名とアーティストを表示";
 "Nagram.MusicPlayer.ArtworkDetails" = "カバーの詳細を表示";
 "Nagram.Fonts.Download" = "ダウンロード";
 "Nagram.Fonts.DownloadNotice" = "Google Fonts（GitHub）からダウンロードしますか？固定バージョンを SHA-256 で検証します。利用前に SIL Open Font License を確認してください。ファイルはこの端末にのみ保存されます。";
@@ -1204,3 +1215,18 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.MusicPlayer.SystemNowPlaying.background" = "バックグラウンドのみ";
 "Nagram.MusicPlayer.SystemNowPlaying.never" = "表示しない";
 "Nagram.MusicPlayer.SystemNowPlayingHint" = "iOS の Dynamic Island・ロック画面・コントロールセンターは再生情報を共有します。非表示にすると、それらの音楽操作も非表示になります。アプリ内とバックグラウンドの音声は継続します。タップで署名アプリが開く場合は、再署名時のフックとアプリ ID を確認してください。Nextgram は署名アプリへのリンクを設定しません。";
+
+"Nagram.MusicPlayer.LyricsWordHighlight" = "単語ごとのハイライト";
+"Nagram.MusicPlayer.LyricsGlow" = "再生行のグロー";
+"Nagram.MusicPlayer.LyricsBlur" = "非再生行のぼかし";
+"Nagram.MusicPlayer.LyricsScale" = "再生行の拡大";
+"Nagram.MusicPlayer.LyricsLinearScroll" = "リニアスクロール";
+"Nagram.MusicPlayer.LyricsStagger" = "行ごとに遅延して追従";
+"Nagram.MusicPlayer.LyricsInterlude" = "間奏の呼吸ドット";
+"Nagram.MusicPlayer.LyricsEdgeFade" = "上下端をフェード";
+
+"Nagram.MusicPlayer.LyricsWordFloat" = "単語の浮き上がり";
+"Nagram.MusicPlayer.LyricsSpringScroll" = "歌詞のスプリングスクロール";
+
+"Nagram.MusicPlayer.SourceUnavailable" = "歌詞の取得元に接続できません。後でもう一度お試しください。";
+"Nagram.MusicPlayer.RefreshFailedKeepingLyrics" = "再取得に失敗したため、保存済みの歌詞を表示しています";

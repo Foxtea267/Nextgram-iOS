@@ -1158,11 +1158,8 @@ public final class NewsFeedPostComponent: Component {
                 environment: {},
                 containerSize: CGSize(width: 100.0, height: 100.0)
             )
-            // Show more's reveal crossfades the cut's last lines on the list's colour, which is what lies under the row
-            // except on a fresh row's tint and under the row's highlight: shown, still fading, or about to flash for
-            // the tap on the text that shows the rest (`isRunningTap`).
-            let revealBacking = component.fresh == nil && !self.isRunningTap && self.revealView.highlightView.superview == nil ? theme.list.plainBackgroundColor : nil
-            let layout = contentView.update(component: component, content: content, width: width, timeSize: timeSize, synchronousLoad: component.loading.isSynchronous, revealBacking: revealBacking, transition: transition)
+            // MARK: NEXTGRAM
+            let layout = contentView.update(component: component, content: content, width: width, timeSize: timeSize, synchronousLoad: component.loading.isSynchronous, transition: transition)
             contentFrameTransition.setFrame(view: contentView, frame: CGRect(origin: CGPoint(), size: CGSize(width: width, height: layout.height)))
 
             var credibilitySize = CGSize()

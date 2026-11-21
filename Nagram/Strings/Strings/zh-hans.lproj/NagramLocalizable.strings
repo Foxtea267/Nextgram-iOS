@@ -24,6 +24,8 @@
 "Nagram.RoundVideoCamera.back" = "后置";
 "Nagram.ChooseFolderAfterJoining" = "加入群组或频道后选择分组";
 "Nagram.JoinedChatFolderUnavailable" = "无法添加此聊天，分组可能已被删除或达到聊天数量上限。请整理分组后重试。";
+"Nagram.Section.Interface" = "界面";
+"Nagram.Section.MessageList" = "消息列表";
 "Nagram.Section.MessageDisplay" = "消息显示";
 "Nagram.Section.Appearance" = "外观";
 "Nagram.Section.ChatList" = "会话列表";
@@ -121,6 +123,7 @@
 "Nagram.Section.Filtering" = "过滤";
 "Nagram.Section.Sending" = "发送";
 "Nagram.Section.Gesture" = "手势";
+"Nagram.Section.Gesture.Footer" = "设置消息点击、双击动作及最近会话入口，并控制是否允许上滑切换到下一个频道或主题。";
 "Nagram.Section.Privacy" = "隐私";
 "Nagram.Section.Notifications" = "通知";
 "Nagram.Section.Sync" = "同步";
@@ -605,7 +608,7 @@
 "Nagram.MessageDeletedRetained" = "已删除";
 "Nagram.Settings.Search" = "搜索 Nextgram 设置";
 "Nagram.Settings.Sections" = "设置板块";
-"Nagram.Settings.Search.Empty" = "没有找到匹配的设置。";
+"Nagram.Settings.Search.Empty" = "未找到该设置项";
 "Nagram.AntiRecallRules" = "删除消息拦截规则";
 "Nagram.AntiRecallRules.Whitelist" = "白名单";
 "Nagram.AntiRecallRules.Blacklist" = "黑名单";
@@ -1010,6 +1013,12 @@
 "Nagram.MusicPlayer.ShowRemainingTime" = "显示剩余时间";
 "Nagram.MusicPlayer.LyricsFontSize" = "歌词字号";
 "Nagram.MusicPlayer.BlurIntensity" = "渐进模糊强度";
+"Nagram.MusicPlayer.FullscreenBlurHeight" = "全屏封面模糊高度";
+"Nagram.MusicPlayer.FullscreenBlurHeight.short" = "底部短渐变（默认）";
+"Nagram.MusicPlayer.FullscreenBlurHeight.controls" = "覆盖整个控制区";
+"Nagram.MusicPlayer.FullscreenBlurHeight.custom" = "自定义";
+"Nagram.MusicPlayer.SmartArtworkCrop" = "智能封面构图";
+"Nagram.MusicPlayer.FullscreenBlurPercent" = "自定义模糊高度（%）";
 "Nagram.MusicPlayer.NowPlaying" = "正在播放";
 "Nagram.MusicPlayer.PlaybackPosition" = "播放进度";
 "Nagram.MusicPlayer.Previous" = "上一首";
@@ -1047,6 +1056,7 @@
 "Nagram.MusicPlayer.Background.blur" = "渐进式模糊";
 "Nagram.MusicPlayer.Background.solid" = "纯色";
 "Nagram.MusicPlayer.Background.artwork" = "清晰封面";
+"Nagram.MusicPlayer.Background.gradient" = "渐变";
 "Nagram.MusicPlayer.Colors" = "颜色来源";
 "Nagram.MusicPlayer.Colors.cover" = "封面取色";
 "Nagram.MusicPlayer.Colors.theme" = "应用主题";
@@ -1187,7 +1197,8 @@
 "Nagram.Fonts.rounded" = "圆体";
 "Nagram.Fonts.serif" = "衬线体";
 "Nagram.Fonts.monospace" = "等宽体";
-"Nagram.MusicPlayer.ArtworkMotion" = "封面 3D 交互与倾斜视差";
+"Nagram.MusicPlayer.ArtworkMotion" = "封面查看页 3D 交互与倾斜视差";
+"Nagram.MusicPlayer.ArtworkMetadata" = "封面查看页底部显示歌曲名称和艺术家";
 "Nagram.MusicPlayer.ArtworkDetails" = "查看封面详情";
 "Nagram.Fonts.Download" = "下载";
 "Nagram.Fonts.DownloadNotice" = "从 Google Fonts（GitHub）下载此字体？使用固定版本并核验 SHA-256。使用前请阅读 SIL 开放字体许可证。下载文件只保存在本机。";
@@ -1204,3 +1215,18 @@
 "Nagram.MusicPlayer.SystemNowPlaying.background" = "仅在后台显示";
 "Nagram.MusicPlayer.SystemNowPlaying.never" = "不显示";
 "Nagram.MusicPlayer.SystemNowPlayingHint" = "iOS 音乐灵动岛、锁屏和控制中心共用播放信息，隐藏后这些位置的音乐控制也会隐藏，不影响应用内及后台音频。若点击跳到签名软件，请检查其重签注入和应用标识；Nextgram 没有设置跳转签名软件的链接。";
+
+"Nagram.MusicPlayer.LyricsWordHighlight" = "逐字扫光";
+"Nagram.MusicPlayer.LyricsGlow" = "当前歌词发光";
+"Nagram.MusicPlayer.LyricsBlur" = "非当前歌词模糊";
+"Nagram.MusicPlayer.LyricsScale" = "焦点行缩放";
+"Nagram.MusicPlayer.LyricsLinearScroll" = "线性平滑滚动";
+"Nagram.MusicPlayer.LyricsStagger" = "逐行错峰跟随";
+"Nagram.MusicPlayer.LyricsInterlude" = "间奏呼吸圆点";
+"Nagram.MusicPlayer.LyricsEdgeFade" = "上下边缘渐隐";
+
+"Nagram.MusicPlayer.LyricsWordFloat" = "逐字上浮";
+"Nagram.MusicPlayer.LyricsSpringScroll" = "弹性歌词滚动";
+
+"Nagram.MusicPlayer.SourceUnavailable" = "歌词来源连接失败，请稍后重试。";
+"Nagram.MusicPlayer.RefreshFailedKeepingLyrics" = "刷新失败，保留已获取的歌词";
