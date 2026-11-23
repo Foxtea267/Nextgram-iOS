@@ -43,7 +43,7 @@ enum NextgramLyricsHTTP {
 }
 
 public enum NextgramOnlineLyricsProvider: String {
-    case qqMusic, netease, amll, lrclib
+    case qqMusic, netease, amll, lrclib, kugou, betterLyrics
 }
 
 public enum NextgramLyricsLookupResult {
@@ -52,7 +52,19 @@ public enum NextgramLyricsLookupResult {
     case unavailable
 }
 
+public enum NextgramLyricsLookupEvent {
+    case invalidMetadata, memoryCache, diskCache, noUsableLyrics, timingMismatch
+    case networkError(Int), httpError(Int), invalidResponse
+    case candidate(title: String, artist: String, duration: Double?, decision: CandidateDecision)
+
+    public enum CandidateDecision {
+        case titleMismatch, artistMismatch, durationMismatch, match
+    }
+}
+
 public enum NextgramOnlineLyrics {
+    typealias LookupTrace = (NextgramLyricsLookupEvent) -> Void
+
     private struct Artist: Decodable {
         let id: Int64?
         let name: String
@@ -146,14 +158,39 @@ public enum NextgramOnlineLyrics {
     /// Refresh bypasses successful caches; a failed request never replaces the saved lyrics.
     public static func lookup(provider: NextgramOnlineLyricsProvider, title: String, artist: String, duration: Double,
         forceRefresh: Bool = false) async -> NextgramLyricsLookupResult {
+        await self.lookupWithDiagnostics(provider: provider, title: title, artist: artist, duration: duration, forceRefresh: forceRefresh).result
+    }
+
+    public static func lookupWithDiagnostics(provider: NextgramOnlineLyricsProvider, title: String, artist: String, duration: Double,
+        forceRefresh: Bool = false) async -> (result: NextgramLyricsLookupResult, events: [NextgramLyricsLookupEvent]) {
+        var events: [NextgramLyricsLookupEvent] = []
+        let result = await self.lookup(provider: provider, title: title, artist: artist, duration: duration, forceRefresh: forceRefresh) { event in
+            if case let .candidate(_, _, _, decision) = event, decision != .match, events.count >= 8 {
+                return
+            }
+            events.append(event)
+        }
+        return (result, events)
+    }
+
+    private static func lookup(provider: NextgramOnlineLyricsProvider, title: String, artist: String, duration: Double,
+        forceRefresh: Bool, trace: LookupTrace) async -> NextgramLyricsLookupResult {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !title.isEmpty, !artist.isEmpty, title.utf8.count <= 512, artist.utf8.count <= 512,
-              duration.isFinite, duration > 0, duration < 86400, !Task.isCancelled else { return .noMatch }
-        let key = "\(provider.rawValue)\u{1}\(title)\u{1}\(artist)\u{1}\(Int(duration.rounded()))"
+              duration.isFinite, duration > 0, duration < 86400 else {
+            trace(.invalidMetadata)
+            return .noMatch
+        }
+        guard !Task.isCancelled else { return .noMatch }
+        let providerKey = [.amll, .betterLyrics].contains(provider) ? provider.rawValue + "-2" : provider.rawValue
+        let key = "\(providerKey)\u{1}\(title)\u{1}\(artist)\u{1}\(Int(duration.rounded()))"
         let url = self.cacheURL(key)
         if !forceRefresh {
-            if let cached = self.cache.object(forKey: key as NSString) { return .found(cached.value) }
+            if let cached = self.cache.object(forKey: key as NSString) {
+                trace(.memoryCache)
+                return .found(cached.value)
+            }
             if let url, let file = try? FileHandle(forReadingFrom: url) {
                 defer { try? file.close() }
                 if let data = try? file.read(upToCount: 4 * NextgramLyrics.maximumFileSize + 1),
@@ -161,6 +198,7 @@ public enum NextgramOnlineLyrics {
                    let entry = try? JSONDecoder().decode(DiskEntry.self, from: data), entry.key == key,
                    Date().timeIntervalSince(entry.date) < 30 * 86400 {
                     self.cache.setObject(Cached(entry.lyrics), forKey: key as NSString)
+                    trace(.diskCache)
                     return .found(entry.lyrics)
                 }
             }
@@ -168,16 +206,32 @@ public enum NextgramOnlineLyrics {
         let result: NextgramLyrics?
         do {
             switch provider {
-            case .qqMusic: result = try await self.qqMusic(title: title, artist: artist, duration: duration)
-            case .netease: result = try await self.netease(title: title, artist: artist, duration: duration)
-            case .amll: result = try await NextgramAMLLLyrics.lookup(title: title, artist: artist, duration: duration)
-            case .lrclib: result = try await self.lrclib(title: title, artist: artist, duration: duration)
+            case .qqMusic: result = try await self.qqMusic(title: title, artist: artist, duration: duration, trace: trace)
+            case .netease: result = try await self.netease(title: title, artist: artist, duration: duration, trace: trace)
+            case .amll: result = try await NextgramAMLLLyrics.lookup(title: title, artist: artist, duration: duration, trace: trace)
+            case .lrclib: result = try await self.lrclib(title: title, artist: artist, duration: duration, trace: trace)
+            case .kugou: result = try await self.kugou(title: title, artist: artist, duration: duration, trace: trace)
+            case .betterLyrics: result = try await self.betterLyrics(title: title, artist: artist, duration: duration, trace: trace)
             }
-        } catch let error as NextgramLyricsHTTP.StatusError where error.code == 404 {
+        } catch let error as NextgramLyricsHTTP.StatusError {
+            trace(.httpError(error.code))
+            return error.code == 404 ? .noMatch : .unavailable
+        } catch let error as URLError where error.code != .badServerResponse && error.code != .dataLengthExceedsMaximum && error.code != .badURL {
+            trace(.networkError(error.errorCode))
+            return .unavailable
+        } catch {
+            trace(.invalidResponse)
+            return .unavailable
+        }
+        guard !Task.isCancelled else { return .noMatch }
+        guard let result else {
+            trace(.noUsableLyrics)
             return .noMatch
-        } catch { return .unavailable }
-        guard !Task.isCancelled, let result else { return .noMatch }
-        if result.isSynced, let end = result.lines.last?.time, end > duration + 5.0 { return .noMatch }
+        }
+        if result.isSynced, let end = result.lines.last?.time, end > duration + 5.0 {
+            trace(.timingMismatch)
+            return .noMatch
+        }
         let cost = result.lines.reduce(0) { cost, line in
             cost + line.text.utf8.count + (line.translation?.utf8.count ?? 0) + line.words.count * 32
         }
@@ -198,7 +252,7 @@ public enum NextgramOnlineLyrics {
         return .found(result)
     }
 
-    private static func qqMusic(title: String, artist: String, duration: Double) async throws -> NextgramLyrics? {
+    private static func qqMusic(title: String, artist: String, duration: Double, trace: LookupTrace) async throws -> NextgramLyrics? {
         let referer = "https://y.qq.com/"
         let encodedQuery = String(decoding: try JSONEncoder().encode(title + " " + artist), as: UTF8.self)
         let payload = #"{"req_1":{"param":{"num_per_page":12,"page_num":1,"query":\#(encodedQuery),"search_type":0},"module":"music.search.SearchCgiService","method":"DoSearchForQQMusicDesktop"}}"#
@@ -208,7 +262,7 @@ public enum NextgramOnlineLyrics {
         guard result.code == 0, let response = result.req_1, response.code == 0 else { throw URLError(.badServerResponse) }
         let songs = (response.data?.body?.song?.list ?? []).filter { song in
             matches(title: title, artist: artist, duration: duration, foundTitle: song.title ?? song.name,
-                foundArtists: song.singer?.map(\.name), foundDuration: song.interval)
+                foundArtists: song.singer?.map(\.name), foundDuration: song.interval, trace: trace)
         }.sorted { abs(($0.interval ?? 0) - duration) < abs(($1.interval ?? 0) - duration) }
         for song in songs.prefix(2) {
             guard let mid = song.mid, !mid.isEmpty else { continue }
@@ -230,7 +284,7 @@ public enum NextgramOnlineLyrics {
         return text.hasPrefix("[") ? text : nil
     }
 
-    private static func netease(title: String, artist: String, duration: Double) async throws -> NextgramLyrics? {
+    private static func netease(title: String, artist: String, duration: Double, trace: LookupTrace) async throws -> NextgramLyrics? {
         let referer = "https://music.163.com/"
         let data = try await NextgramLyricsHTTP.request(host: "music.163.com", path: "/api/search/get/web", query: [
             URLQueryItem(name: "s", value: title + " " + artist), URLQueryItem(name: "type", value: "1"),
@@ -240,8 +294,14 @@ public enum NextgramOnlineLyrics {
         guard response.code == 200 else { throw URLError(.badServerResponse) }
         let songs = (response.result?.songs ?? []).filter { song in
             let names = [song.name].compactMap { $0 } + (song.alias ?? []) + (song.transNames ?? [])
-            return song.duration.map { abs($0 / 1000.0 - duration) <= 5.0 } == true &&
-                names.contains { normalized($0) == normalized(title) }
+            let titleMatches = names.contains { normalized($0) == normalized(title) }
+            let seconds = song.duration.map { $0 / 1000.0 }
+            let durationMatches = seconds.map { abs($0 - duration) <= 5.0 } == true
+            if !titleMatches || !durationMatches {
+                trace(.candidate(title: song.name ?? "", artist: song.artists?.map(\.name).joined(separator: ", ") ?? "",
+                    duration: seconds, decision: titleMatches ? .durationMismatch : .titleMismatch))
+            }
+            return titleMatches && durationMatches
         }.sorted { abs(($0.duration ?? 0) / 1000.0 - duration) < abs(($1.duration ?? 0) / 1000.0 - duration) }
         for song in songs.prefix(2) {
             var artists = song.artists ?? []
@@ -254,8 +314,11 @@ public enum NextgramOnlineLyrics {
                     if response.code == 200, let detail = response.artist, detail.id == id { artists[index] = detail }
                 }
             }
-            guard artistsMatch(artist, foundArtists: artists.map(\.name)) ||
-                artistsMatch(artist, foundArtists: artists.flatMap(\.names)) else { continue }
+            let artistMatches = artistsMatch(artist, foundArtists: artists.map(\.name)) ||
+                artistsMatch(artist, foundArtists: artists.flatMap(\.names))
+            trace(.candidate(title: song.name ?? "", artist: artists.map(\.name).joined(separator: ", "),
+                duration: song.duration.map { $0 / 1000.0 }, decision: artistMatches ? .match : .artistMismatch))
+            guard artistMatches else { continue }
             let query = [URLQueryItem(name: "id", value: String(song.id))] + ["lv", "kv", "tv", "yv"].map { URLQueryItem(name: $0, value: "-1") }
             let data = try await NextgramLyricsHTTP.request(host: "music.163.com", path: "/api/song/lyric", query: query, referer: referer)
             let response = try JSONDecoder().decode(NetEaseLyrics.self, from: data)
@@ -268,46 +331,76 @@ public enum NextgramOnlineLyrics {
         return nil
     }
 
-    private static func lrclib(title: String, artist: String, duration: Double) async throws -> NextgramLyrics? {
-        var candidates: [LRCLIBLyrics] = []
+    private static func lrclib(title: String, artist: String, duration: Double, trace: LookupTrace) async throws -> NextgramLyrics? {
+        func lyrics(for response: LRCLIBLyrics) -> NextgramLyrics? {
+            guard matches(title: title, artist: artist, duration: duration, foundTitle: response.trackName,
+                foundArtists: [response.artistName], foundDuration: response.duration, trace: trace) else { return nil }
+            if response.instrumental { return NextgramLyrics(lines: [], isSynced: false, instrumental: true) }
+            return response.syncedLyrics.flatMap(NextgramLyrics.parse) ?? response.plainLyrics.flatMap(NextgramLyrics.parse)
+        }
+        var best: NextgramLyrics?
+        var exactError: Error?
         do {
             let data = try await NextgramLyricsHTTP.request(host: "lrclib.net", path: "/api/get", query: [
                 URLQueryItem(name: "track_name", value: title), URLQueryItem(name: "artist_name", value: artist),
                 URLQueryItem(name: "duration", value: String(Int(duration.rounded())))
             ])
-            candidates = [try JSONDecoder().decode(LRCLIBLyrics.self, from: data)]
+            best = try lyrics(for: JSONDecoder().decode(LRCLIBLyrics.self, from: data))
+            if best?.isSynced == true { return best }
         } catch let error as NextgramLyricsHTTP.StatusError where error.code == 404 {
-            // The exact endpoint can miss spelling/separator variants that search knows about.
+        } catch {
+            try Task.checkCancellation()
+            exactError = error
         }
-        if candidates.isEmpty {
-            let data = try await NextgramLyricsHTTP.request(host: "lrclib.net", path: "/api/search", query: [URLQueryItem(name: "track_name", value: title)])
-            candidates = try JSONDecoder().decode([LRCLIBLyrics].self, from: data)
+        do {
+            var query = [URLQueryItem(name: "track_name", value: title)]
+            if let primary = artistParts(artist).first, primary != artist {
+                query.append(URLQueryItem(name: "artist_name", value: primary))
+            }
+            let data = try await NextgramLyricsHTTP.request(host: "lrclib.net", path: "/api/search", query: query)
+            let candidates = try JSONDecoder().decode([LRCLIBLyrics].self, from: data)
+            for response in candidates.sorted(by: { abs($0.duration - duration) < abs($1.duration - duration) }) {
+                if let result = lyrics(for: response), best == nil || result.lookupQuality > (best?.lookupQuality ?? 0) {
+                    best = result
+                }
+            }
+        } catch {
+            try Task.checkCancellation()
+            if best == nil { throw exactError ?? error }
         }
-        for response in candidates.sorted(by: { abs($0.duration - duration) < abs($1.duration - duration) }) {
-            guard matches(title: title, artist: artist, duration: duration, foundTitle: response.trackName,
-                foundArtists: [response.artistName], foundDuration: response.duration) else { continue }
-            if response.instrumental { return NextgramLyrics(lines: [], isSynced: false, instrumental: true) }
-            if let lyrics = response.syncedLyrics.flatMap(NextgramLyrics.parse) ?? response.plainLyrics.flatMap(NextgramLyrics.parse) { return lyrics }
-        }
-        return nil
+        return best
     }
 
-    private static func matches(title: String, artist: String, duration: Double, foundTitle: String?, foundArtists: [String]?, foundDuration: Double?) -> Bool {
-        guard let foundTitle, let foundArtists, let foundDuration, foundDuration.isFinite,
-              abs(duration - foundDuration) <= 5.0, normalized(title) == normalized(foundTitle) else { return false }
-        return artistsMatch(artist, foundArtists: foundArtists)
+    static func matches(title: String, artist: String, duration: Double, foundTitle: String?, foundArtists: [String]?,
+        foundDuration: Double?, trace: LookupTrace) -> Bool {
+        let decision: NextgramLyricsLookupEvent.CandidateDecision
+        if foundTitle.map(normalized) != normalized(title) {
+            decision = .titleMismatch
+        } else if !artistsMatch(artist, foundArtists: foundArtists ?? []) {
+            decision = .artistMismatch
+        } else if foundDuration.map({ $0.isFinite && abs($0 - duration) <= 5.0 }) != true {
+            decision = .durationMismatch
+        } else {
+            decision = .match
+        }
+        trace(.candidate(title: foundTitle ?? "", artist: foundArtists?.joined(separator: ", ") ?? "", duration: foundDuration, decision: decision))
+        return decision == .match
     }
 
     static func artistsMatch(_ artist: String, foundArtists: [String]) -> Bool {
         let key = normalized(artist)
         guard !key.isEmpty else { return false }
         if foundArtists.contains(where: { normalized($0) == key }) || normalized(foundArtists.joined(separator: " ")) == key { return true }
-        func names(_ value: String) -> Set<String> {
-            let separators = try! NSRegularExpression(pattern: #"\s*(?:[,，、;/／&＆]|\bfeat\.?\s|\bft\.?\s|\band\s|\bx\s)\s*"#, options: .caseInsensitive)
-            let parts = separators.stringByReplacingMatches(in: value, range: NSRange(value.startIndex..., in: value), withTemplate: "\u{1}")
-            return Set(parts.components(separatedBy: "\u{1}").map(normalized).filter { !$0.isEmpty })
-        }
-        return names(artist) == Set(foundArtists.flatMap { names($0) })
+        let requested = artistParts(artist).map(normalized).filter { !$0.isEmpty }
+        let offered = Set(foundArtists.flatMap(artistParts).map(normalized).filter { !$0.isEmpty })
+        return Set(requested) == offered || (requested.count > 1 && offered.count == 1 && requested.first.map(offered.contains) == true)
+    }
+
+    private static let artistSeparators = try! NSRegularExpression(pattern: #"\s*(?:[,，、;/／&＆]|\bfeat\.?\s|\bft\.?\s|\band\s|\bx\s)\s*"#, options: .caseInsensitive)
+
+    private static func artistParts(_ value: String) -> [String] {
+        return artistSeparators.stringByReplacingMatches(in: value, range: NSRange(value.startIndex..., in: value), withTemplate: "\u{1}")
+            .components(separatedBy: "\u{1}").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
     }
 
     private static func normalized(_ string: String) -> String {

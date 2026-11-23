@@ -545,11 +545,12 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
             if let strongSelf = self {
                 let previousTheme = strongSelf.presentationData.theme
                 let previousStrings = strongSelf.presentationData.strings
+                let previousNameDisplayOrder = strongSelf.presentationData.nameDisplayOrder // MARK: NEXTGRAM
                 
                 strongSelf.presentationData = presentationData
                 strongSelf.presentationDataValue.set(.single(presentationData))
                 
-                if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings {
+                if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousNameDisplayOrder != presentationData.nameDisplayOrder { // MARK: NEXTGRAM
                     strongSelf.updateThemeAndStrings()
                 }
             }
@@ -3838,7 +3839,11 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                 }
             }))
         }
-        let sidebar = NextgramChatSidebar(theme: self.presentationData.theme, title: "Nextgram", closeTitle: strings.Common_Close, actions: actions)
+        // MARK: NEXTGRAM — Show the navigation actions in the selected sidebar style.
+        let style: NextgramChatSidebar.Style = NagramSettings.shared.chatSidebarStyleValue == .chatGPT ? .drawer : .panel
+        let sidebar = NextgramChatSidebar(theme: self.presentationData.theme, title: "Nextgram", closeTitle: strings.Common_Close, actions: actions, style: style, search: (strings.Common_Search, { [weak self] in
+            self?.activateSearch()
+        })) // MARK: NEXTGRAM
         self.nextgramChatSidebar = sidebar
         sidebar.open(in: self.navigationController?.view ?? self.view)
     }

@@ -229,12 +229,15 @@ public final class MediaManagerImpl: NSObject, MediaManager {
             if let status = latestNowPlayingStatus {
                 info[MPMediaItemPropertyPlaybackDuration] = status.duration as NSNumber
                 var timestamp = status.timestamp
-                if case .playing = status.status {
+                switch status.status {
+                case .playing:
                     info[MPNowPlayingInfoPropertyPlaybackRate] = status.baseRate as NSNumber
                     if status.generationTimestamp > 0 {
                         timestamp += max(0, CACurrentMediaTime() - status.generationTimestamp) * status.baseRate
                     }
-                } else { info[MPNowPlayingInfoPropertyPlaybackRate] = 0.0 as NSNumber }
+                default:
+                    info[MPNowPlayingInfoPropertyPlaybackRate] = 0.0 as NSNumber
+                }
                 info[MPNowPlayingInfoPropertyElapsedPlaybackTime] = max(0, min(status.duration, timestamp)) as NSNumber
             }
             MPNowPlayingInfoCenter.default().nowPlayingInfo = info
@@ -242,13 +245,15 @@ public final class MediaManagerImpl: NSObject, MediaManager {
         
         var previousState: SharedMediaPlayerItemPlaybackState?
         var previousDisplayData: SharedMediaPlaybackDisplayData?
+        var previousNowPlayingItem: AnyHashable? // MARK: NEXTGRAM
+        var previousNowPlayingAccount: Account? // MARK: NEXTGRAM
         let globalControlsArtwork = self.globalControlsArtwork
         let globalControlsStatus = self.globalControlsStatus
         
         var currentGlobalControlsOptions = GlobalControlOptions()
         
         // MARK: NEXTGRAM — iOS shares Now Playing across Dynamic Island, Lock Screen and Control Center.
-        self.globalControlsDisposable.set((combineLatest(self.globalMediaPlayerState, self.presentationData,
+        self.globalControlsDisposable.set((combineLatest(self.musicMediaPlayerState, self.presentationData,
             inForeground, nagramStringSignal("nagram.musicSystemNowPlaying", defaultValue: "always"))
         |> deliverOnMainQueue).startStrict(next: { stateAndType, presentationData, inForeground, visibility in
             let showsSystemPlayer = (NextgramSystemMusicDisplay(rawValue: visibility) ?? .always).isVisible(inForeground: inForeground)
@@ -267,16 +272,25 @@ public final class MediaManagerImpl: NSObject, MediaManager {
                 }
             }
             
-            if showsSystemPlayer, let (account, stateOrLoading, type) = stateAndType, type == .music, case let .state(state) = stateOrLoading, let displayData = state.item.displayData {
-                if previousDisplayData != displayData {
+            // MARK: NEXTGRAM — A voice playlist may still exist while music is playing.
+            if showsSystemPlayer, let (account, stateOrLoading, type) = stateAndType, type == .music, case let .state(state) = stateOrLoading {
+                let displayData = state.item.displayData
+                if previousNowPlayingAccount !== account || previousNowPlayingItem != state.item.stableId || previousDisplayData != displayData || baseNowPlayingInfo == nil {
+                    previousNowPlayingAccount = account
+                    previousNowPlayingItem = state.item.stableId
                     previousDisplayData = displayData
                     
-                    var nowPlayingInfo: [String: Any] = [:]
+                    var nowPlayingInfo: [String: Any] = [
+                        MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.audio.rawValue,
+                        MPNowPlayingInfoPropertyDefaultPlaybackRate: 1.0,
+                        MPMediaItemPropertyTitle: presentationData.strings.MediaPlayer_UnknownTrack,
+                        MPMediaItemPropertyArtist: presentationData.strings.MediaPlayer_UnknownArtist
+                    ]
                     
                     var artwork: SharedMediaPlaybackAlbumArt?
                     
                     switch displayData {
-                        case let .music(title, performer, artworkValue, _, _):
+                        case let .music(title, performer, artworkValue, _, _)?:
                             artwork = artworkValue
                             
                             let titleText: String = title ?? presentationData.strings.MediaPlayer_UnknownTrack
@@ -284,14 +298,16 @@ public final class MediaManagerImpl: NSObject, MediaManager {
                             
                             nowPlayingInfo[MPMediaItemPropertyTitle] = titleText
                             nowPlayingInfo[MPMediaItemPropertyArtist] = subtitleText
-                        case let .voice(author, _):
+                        case let .voice(author, _)?:
                             let titleText: String = author?.debugDisplayTitle ?? ""
                             
                             nowPlayingInfo[MPMediaItemPropertyTitle] = titleText
-                        case let .instantVideo(author, _, _):
+                        case let .instantVideo(author, _, _)?:
                             let titleText: String = author?.debugDisplayTitle ?? ""
                             
                             nowPlayingInfo[MPMediaItemPropertyTitle] = titleText
+                        case nil:
+                            break
                     }
                     
                     baseNowPlayingInfo = nowPlayingInfo
@@ -310,6 +326,8 @@ public final class MediaManagerImpl: NSObject, MediaManager {
             } else {
                 previousState = nil
                 previousDisplayData = nil
+                previousNowPlayingAccount = nil // MARK: NEXTGRAM
+                previousNowPlayingItem = nil // MARK: NEXTGRAM
                 latestNowPlayingStatus = nil // MARK: NEXTGRAM
                 baseNowPlayingInfo = nil // MARK: NEXTGRAM — Invalidate before cancellation can synchronously emit nil artwork.
                 globalControlsStatus.set(.single(nil))
@@ -669,37 +687,37 @@ public final class MediaManagerImpl: NSObject, MediaManager {
     }
     
     @objc func playCommandEvent(_ command: AnyObject) -> MPRemoteCommandHandlerStatus {
-        self.playlistControl(.playback(.play), type: nil)
+        self.playlistControl(.playback(.play), type: .music) // MARK: NEXTGRAM
         
         return .success
     }
     
     @objc func pauseCommandEvent(_ command: AnyObject) -> MPRemoteCommandHandlerStatus {
-        self.playlistControl(.playback(.pause), type: nil)
+        self.playlistControl(.playback(.pause), type: .music) // MARK: NEXTGRAM
         
         return .success
     }
     
     @objc func previousTrackCommandEvent(_ command: AnyObject) -> MPRemoteCommandHandlerStatus {
-        self.playlistControl(.previous, type: nil)
+        self.playlistControl(.previous, type: .music) // MARK: NEXTGRAM
         
         return .success
     }
     
     @objc func nextTrackCommandEvent(_ command: AnyObject) -> MPRemoteCommandHandlerStatus {
-        self.playlistControl(.next, type: nil)
+        self.playlistControl(.next, type: .music) // MARK: NEXTGRAM
         
         return .success
     }
     
     @objc func togglePlayPauseCommandEvent(_ command: AnyObject) -> MPRemoteCommandHandlerStatus {
-        self.playlistControl(.playback(.togglePlayPause), type: nil)
+        self.playlistControl(.playback(.togglePlayPause), type: .music) // MARK: NEXTGRAM
         
         return .success
     }
     
     @objc func changePlaybackPositionCommandEvent(_ event: MPChangePlaybackPositionCommandEvent) -> MPRemoteCommandHandlerStatus {
-        self.playlistControl(.seek(event.positionTime), type: nil)
+        self.playlistControl(.seek(event.positionTime), type: .music) // MARK: NEXTGRAM
         
         return .success
     }

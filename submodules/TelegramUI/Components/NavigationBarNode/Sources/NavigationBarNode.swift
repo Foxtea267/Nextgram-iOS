@@ -308,7 +308,7 @@ public final class NavigationBarNode: ASDisplayNode, NavigationBar, NavigationBa
     /// The title's glass pill (the chat header) as the transition's second right platter, in the row's coordinates; nil
     /// without one, while the row is hidden, or when two right platters leave it no slot.
     private var transitionTitlePill: NavigationBarTransitionTitlePill? {
-        guard let titleView = self.titleView as? NavigationBarGlassPillTitleView, titleView.superview === self.titleHost, let pillFrame = titleView.glassPillFrame, !pillFrame.isEmpty, let rowView = self.rowView, rowView.primaryHasRoomForTitlePill, self.transitionRowAlpha >= 0.5 else {
+        guard let titleView = self.titleView as? NavigationBarGlassPillTitleView, !titleView.isHidden, titleView.superview === self.titleHost, let pillFrame = titleView.glassPillFrame, !pillFrame.isEmpty, let rowView = self.rowView, rowView.primaryHasRoomForTitlePill, self.transitionRowAlpha >= 0.5 else { // MARK: NEXTGRAM
             return nil
         }
         // The title host and the row host share a frame, so the title view's frame is in the row's coordinates.
@@ -542,13 +542,16 @@ public final class NavigationBarNode: ASDisplayNode, NavigationBar, NavigationBa
             if titleView.frame.isEmpty {
                 titleViewTransition = .immediate
             }
-            // MARK: NEXTGRAM — Reserve equal space on both sides when the chat title is centered.
-            if titleView.prefersCenteredNavigationTitle {
-                let symmetricInset = max(leftTitleInset, rightTitleInset)
-                leftTitleInset = symmetricInset
-                rightTitleInset = symmetricInset
+            // MARK: NEXTGRAM — Balance button margins within the safe content band.
+            let forceCenter = titleView.prefersCenteredNavigationTitle
+            if forceCenter {
+                let buttonMargin = max(leftTitleInset - layout.leftInset, rightTitleInset - layout.rightInset)
+                leftTitleInset = layout.leftInset + buttonMargin
+                rightTitleInset = layout.rightInset + buttonMargin
             }
-            let titleSize = titleView.updateLayout(availableSize: CGSize(width: max(1.0, size.width - leftTitleInset - rightTitleInset), height: nominalHeight), transition: titleViewTransition)
+            let availableWidth = size.width - leftTitleInset - rightTitleInset
+            let titleSize = titleView.updateLayout(availableSize: CGSize(width: max(1.0, availableWidth), height: nominalHeight), transition: titleViewTransition)
+            titleView.isHidden = forceCenter && titleSize.width > availableWidth
             let titleX = navigationBarTitleViewOriginX(width: size.width, leftInset: layout.leftInset, rightInset: layout.rightInset, leftTitleInset: leftTitleInset, rightTitleInset: rightTitleInset, titleWidth: titleSize.width)
             let titleFrame = CGRect(origin: CGPoint(x: titleX, y: contentVerticalOrigin + floorToScreenPixels((nominalHeight - titleSize.height) / 2.0)), size: titleSize)
             titleViewTransition.updateFrame(view: titleView, frame: titleFrame)

@@ -1082,6 +1082,10 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
         self.controlsNode.usesModernMusicLayout = false
         if enabled {
             let playerView = NextgramMusicPlayerView(context: self.context)
+            // MARK: NEXTGRAM — The player draws behind the status bar and supplies its contrast.
+            playerView.updateStatusBarStyle = { [weak self] style in
+                self?.getParentController()?.statusBar.statusBarStyle = style
+            }
             playerView.dismiss = { [weak self] in
                 self?.requestDismiss()
             }
@@ -1101,7 +1105,8 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
                 guard let self else {
                     return
                 }
-                let controller = nagramSettingsController(context: self.context, deepLinkPath: "media?r=MusicPlayerModernUI")
+                // MARK: NEXTGRAM — Focus the first appearance row instead of the player enable switch.
+                let controller = nagramSettingsController(context: self.context, deepLinkPath: "media?r=MusicPlayer.CoverLayout")
                 if let navigationController = (self.getParentController() as? OverlayAudioPlayerControllerImpl)?.parentNavigationController {
                     self.requestDismiss()
                     navigationController.pushViewController(controller)
@@ -1115,6 +1120,7 @@ final class OverlayAudioPlayerControllerNode: ViewControllerTracingNode, ASGestu
             self.nextgramMusicPlayerView = playerView
             self.view.addSubview(playerView)
         } else {
+            self.getParentController()?.statusBar.statusBarStyle = .Ignore // MARK: NEXTGRAM
             self.nextgramQueueTransition?.stopAnimation(true)
             self.nextgramQueueTransition = nil
             self.nextgramQueueBackdrop.isHidden = true

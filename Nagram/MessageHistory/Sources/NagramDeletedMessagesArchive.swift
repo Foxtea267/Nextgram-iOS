@@ -105,17 +105,36 @@ private struct NagramArchivedDeletedMessage: Codable {
         return encoder.makeData()
     }
 
-    func storeMessage() -> StoreMessage? {
+    func storeMessage(mergingInto existing: Message?) -> StoreMessage? {
         let decodedAttributes = self.attributes.compactMap { data in
             return PostboxDecoder(buffer: MemoryBuffer(data: data)).decodeRootObject() as? MessageAttribute
         }
-        guard decodedAttributes.contains(where: { $0 is NagramDeletedMessageAttribute }), decodedAttributes.count == self.attributes.count else {
+        guard let deletion = decodedAttributes.first(where: { $0 is NagramDeletedMessageAttribute }) else {
             return nil
+        }
+        if let existing {
+            return StoreMessage(
+                id: existing.id,
+                customStableId: nil,
+                globallyUniqueId: existing.globallyUniqueId,
+                groupingKey: existing.groupingKey,
+                threadId: existing.threadId,
+                timestamp: existing.timestamp,
+                flags: StoreMessageFlags(existing.flags),
+                tags: existing.tags,
+                globalTags: existing.globalTags,
+                localTags: existing.localTags,
+                forwardInfo: existing.forwardInfo.flatMap(StoreMessageForwardInfo.init),
+                authorId: existing.author?.id,
+                text: existing.text,
+                attributes: nagramPreservingMessageHistory(previous: decodedAttributes, updated: existing.attributes + [deletion]),
+                media: existing.media
+            )
         }
         let decodedMedia = self.media.compactMap { data in
             return PostboxDecoder(buffer: MemoryBuffer(data: data)).decodeRootObject() as? Media
         }
-        guard decodedMedia.count == self.media.count else {
+        guard !self.text.isEmpty || !decodedMedia.isEmpty || self.media.isEmpty else {
             return nil
         }
         return StoreMessage(
@@ -125,7 +144,7 @@ private struct NagramArchivedDeletedMessage: Codable {
             groupingKey: self.groupingKey,
             threadId: self.threadId,
             timestamp: self.timestamp,
-            flags: StoreMessageFlags(rawValue: self.flags),
+            flags: StoreMessageFlags(MessageFlags(rawValue: self.flags)).subtracting([.Unsent, .Sending, .Failed]),
             tags: MessageTags(rawValue: self.tags),
             globalTags: GlobalMessageTags(rawValue: self.globalTags),
             localTags: LocalMessageTags(rawValue: self.localTags),
@@ -148,10 +167,8 @@ private struct NagramDeletedMessagesArchive: Codable {
 
 public func nagramExportDeletedMessages(postbox: Postbox, accountPeerId: PeerId) -> Signal<NagramDeletedMessagesExportResult?, NoError> {
     return postbox.transaction { transaction -> NagramDeletedMessagesExportResult? in
-        var peerIds = Set(transaction.chatListGetAllPeerIds())
-        peerIds.insert(accountPeerId)
         var messages: [NagramArchivedDeletedMessage] = []
-        for peerId in peerIds {
+        for peerId in transaction.nagramMessageHistoryPeerIds() {
             transaction.withAllMessages(peerId: peerId, { message in
                 if message.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) {
                     messages.append(NagramArchivedDeletedMessage(message))
@@ -195,16 +212,18 @@ public func nagramImportDeletedMessages(postbox: Postbox, accountPeerId: PeerId,
         var importedCount = 0
         var skippedCount = 0
         for record in archive.messages {
-            guard let message = record.storeMessage() else {
-                skippedCount += 1
-                continue
-            }
             let id = record.id.messageId
-            guard transaction.getMessage(id) == nil else {
+            let existing = transaction.getMessage(id)
+            guard existing?.attributes.contains(where: { $0 is NagramDeletedMessageAttribute }) != true,
+                  let message = record.storeMessage(mergingInto: existing) else {
                 skippedCount += 1
                 continue
             }
-            let _ = transaction.addMessages([message], location: .Random)
+            if existing != nil {
+                transaction.updateMessage(id, update: { _ in .update(message) })
+            } else {
+                let _ = transaction.addMessages([message], location: .Random)
+            }
             importedCount += 1
         }
         return .success(importedCount: importedCount, skippedCount: skippedCount)

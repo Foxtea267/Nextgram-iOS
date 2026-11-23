@@ -11,6 +11,7 @@ import UIKit
 struct NextgramFeedPost: Equatable {
     let peer: EnginePeer
     let message: EngineMessage
+    let messages: [EngineMessage]
     let showsMedia: Bool
     let day: String?
     let time: String
@@ -108,6 +109,7 @@ private enum FeedThumbnail {
 
 private final class NextgramFeedBubbleNode: ListViewItemNode {
     private let plate = ASDisplayNode()
+    private let servicePlate = NavigationBackgroundNode(color: .clear, enableBlur: false)
     private let dayPlate = ASDisplayNode()
     private let avatar = AvatarNode(font: avatarPlaceholderFont(size: 14.0))
     private let day = TextNode()
@@ -128,7 +130,7 @@ private final class NextgramFeedBubbleNode: ListViewItemNode {
         self.videoBadge.cornerRadius = 16.0
         self.videoBadge.contentMode = .center
         self.videoBadge.isUserInteractionEnabled = false
-        for node in [self.plate, self.dayPlate, self.avatar, self.day, self.title, self.body, self.time, self.unreadDot] as [ASDisplayNode] {
+        for node in [self.plate, self.servicePlate, self.dayPlate, self.avatar, self.day, self.title, self.body, self.time, self.unreadDot] as [ASDisplayNode] {
             node.isUserInteractionEnabled = false
             self.addSubnode(node)
         }
@@ -149,6 +151,7 @@ private final class NextgramFeedBubbleNode: ListViewItemNode {
             let post = item.post
             let thumbnail = post.flatMap(FeedThumbnail.init(post:))
             let theme = item.presentation.theme.theme
+            let wallpaper = item.presentation.theme.wallpaper
             let incoming = theme.chat.message.incoming
             let background = incoming.bubble.withWallpaper.fill.first ?? theme.list.itemBlocksBackgroundColor
             let availableWidth = max(1.0, params.width - params.leftInset - params.rightInset)
@@ -164,7 +167,7 @@ private final class NextgramFeedBubbleNode: ListViewItemNode {
 
             let (dayLayout, applyDay) = layoutDay(textArgs(post?.day ?? "", font: Font.semibold(12.0), color: .white, lines: 1, width: maxTextWidth))
             let (titleLayout, applyTitle) = layoutTitle(textArgs(post?.peer.compactDisplayTitle ?? "", font: Font.semibold(14.0), color: incoming.accentTextColor, lines: 1, width: maxTextWidth))
-            let bodyColor = post == nil && item.selectable ? incoming.accentTextColor : incoming.primaryTextColor
+            let bodyColor = post == nil ? bubbleVariableColor(variableColor: theme.chat.serviceMessage.dateTextColor, wallpaper: wallpaper) : incoming.primaryTextColor
             let (bodyLayout, applyBody) = layoutBody(textArgs(item.text, font: post == nil ? Font.semibold(13.0) : item.presentation.messageFont, color: bodyColor, lines: 0, width: maxTextWidth))
             let (timeLayout, applyTime) = layoutTime(textArgs(post?.time ?? "", font: Font.regular(11.0), color: incoming.secondaryTextColor, lines: 1, width: maxTextWidth))
 
@@ -193,8 +196,16 @@ private final class NextgramFeedBubbleNode: ListViewItemNode {
                 _ = applyBody()
                 _ = applyTime()
                 self.plate.backgroundColor = background
-                self.plate.cornerRadius = post == nil ? 15.0 : min(24.0, max(8.0, item.presentation.chatBubbleCorners.mainRadius))
+                self.plate.isHidden = post == nil
+                self.plate.cornerRadius = min(24.0, max(8.0, item.presentation.chatBubbleCorners.mainRadius))
                 self.plate.frame = bubble
+                self.servicePlate.isHidden = post != nil
+                if post == nil {
+                    self.servicePlate.updateColor(color: selectDateFillStaticColor(theme: theme, wallpaper: wallpaper),
+                                                  enableBlur: dateFillNeedsBlur(theme: theme, wallpaper: wallpaper), transition: .immediate)
+                    self.servicePlate.frame = bubble
+                    self.servicePlate.update(size: bubble.size, cornerRadius: bubble.height * 0.5, transition: .immediate)
+                }
                 self.dayPlate.isHidden = post?.day == nil
                 self.dayPlate.backgroundColor = UIColor.black.withAlphaComponent(0.45)
                 self.dayPlate.frame = CGRect(x: dayX - 10.0, y: 8.0, width: dayLayout.size.width + 20.0, height: 24.0)

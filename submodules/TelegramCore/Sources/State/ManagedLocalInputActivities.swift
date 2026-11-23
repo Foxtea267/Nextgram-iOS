@@ -145,10 +145,11 @@ private func actionFromActivity(_ activity: PeerInputActivity?) -> Api.SendMessa
 private func requestActivity(postbox: Postbox, network: Network, accountPeerId: PeerId, peerId: PeerId, threadId: Int64?, activity: PeerInputActivity?) -> Signal<Void, NoError> {
     // MARK: NEXTGRAM — Ghost mode never transmits typing/upload/recording activity.
     // MARK: NAGRAM
-    if NagramSettings.shared.suppressTypingStatus {
+    if NagramSettings.shared.suppressTypingStatus || nextgramIsPeerGhostModeEnabled(accountPeerId: accountPeerId, peerId: peerId) {
         return .complete()
     }
     return postbox.transaction { transaction -> Signal<Void, NoError> in
+        if nextgramIsPeerGhostModeEnabled(accountPeerId: accountPeerId, peerId: peerId) { return .complete() } // MARK: NEXTGRAM
         if let peer = transaction.getPeer(peerId) {
             if peerId == accountPeerId {
                 return .complete()

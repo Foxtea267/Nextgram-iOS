@@ -85,6 +85,11 @@ public enum NagramChatListMessagePreviewStyle: String {
     case two
 }
 
+public enum NagramChatSidebarStyle: String, CaseIterable {
+    case chatGPT = "chatgpt"
+    case panel
+}
+
 public enum NagramDeletedMessageIndicatorStyle: String {
     case hidden
     case text
@@ -525,6 +530,8 @@ public final class NagramSettings {
     public var glassTransparencyPercent: Int32
     @NagramDefault("nagram.hideChatBackUnreadCount", false)
     public var hideChatBackUnreadCount: Bool
+    @NagramDefault("nagram.forceCenterChatTitle", false)
+    public var forceCenterChatTitle: Bool
     @NagramDefault("nagram.hideChatTitleGlass", false)
     public var hideChatTitleGlass: Bool
     @NagramDefault("nagram.chatHeaderBlurEnabled", true)
@@ -706,6 +713,14 @@ public final class NagramSettings {
     /// 隐藏首页左上角的编辑按钮（默认关 = 原生）
     @NagramDefault("nagram.hideChatListEditButton", false)
     public var hideChatListEditButton: Bool
+
+    @NagramDefault("nagram.chatSidebarStyle", NagramChatSidebarStyle.chatGPT.rawValue)
+    public var chatSidebarStyle: String
+
+    public var chatSidebarStyleValue: NagramChatSidebarStyle {
+        get { NagramChatSidebarStyle(rawValue: self.chatSidebarStyle) ?? .chatGPT }
+        set { self.chatSidebarStyle = newValue.rawValue }
+    }
     /// 底栏没有设置入口时，隐藏首页顶部补上的设置按钮（默认关）
     @NagramDefault("nagram.hideChatListSettingsButton", false)
     public var hideChatListSettingsButton: Bool
@@ -766,10 +781,14 @@ public final class NagramSettings {
     public var musicPlayerCoverLayout: String
     @NagramDefault("nagram.musicPlayerCoverSize", Int32(100))
     public var musicPlayerCoverSize: Int32
+    @NagramDefault("nagram.musicPlayerPausedCoverSize", Int32(86))
+    public var musicPlayerPausedCoverSize: Int32
     @NagramDefault("nagram.musicPlayerCoverCornerRadius", Int32(10))
     public var musicPlayerCoverCornerRadius: Int32
     @NagramDefault("nagram.musicPlayerLyricsEnabled", true)
     public var musicPlayerLyricsEnabled: Bool
+    @NagramDefault("nagram.musicPlayerLyricsTranslation", true)
+    public var musicPlayerLyricsTranslation: Bool
     /// When enabled, only the song title, artist, and duration are sent to LRCLIB.
     @NagramDefault("nagram.musicPlayerOnlineLyricsEnabled", false)
     public var musicPlayerOnlineLyricsEnabled: Bool
@@ -778,6 +797,12 @@ public final class NagramSettings {
     public var musicPlayerLyricsSourceOrder: String
     @NagramDefault("nagram.musicPlayerShowVolume", true)
     public var musicPlayerShowVolume: Bool
+    @NagramDefault("nagram.musicPlayerElasticProgress", true)
+    public var musicPlayerElasticProgress: Bool
+    @NagramDefault("nagram.musicPlayerElasticVolume", false)
+    public var musicPlayerElasticVolume: Bool
+    @NagramDefault("nagram.musicPlayerTapToSeek", false)
+    public var musicPlayerTapToSeek: Bool
     @NagramDefault("nagram.musicPlayerShowRemainingTime", true)
     public var musicPlayerShowRemainingTime: Bool
     @NagramDefault("nagram.musicPlayerLyricsFontSize", Int32(28))
@@ -792,6 +817,8 @@ public final class NagramSettings {
     public var musicPlayerLyricsGlow: Bool
     @NagramDefault("nagram.musicPlayerLyricsBlur", false)
     public var musicPlayerLyricsBlur: Bool
+    @NagramDefault("nagram.musicPlayerLyricsLayeredBlur", false)
+    public var musicPlayerLyricsLayeredBlur: Bool
     @NagramDefault("nagram.musicPlayerLyricsScale", false)
     public var musicPlayerLyricsScale: Bool
     @NagramDefault("nagram.musicPlayerLyricsLinearScroll", false)
@@ -810,6 +837,14 @@ public final class NagramSettings {
     public var musicPlayerFullscreenBlurPercent: Int32
     @NagramDefault("nagram.musicPlayerSmartArtworkCrop", false)
     public var musicPlayerSmartArtworkCrop: Bool
+    @NagramDefault("nagram.musicPlayerOnlineArtwork", false)
+    public var musicPlayerOnlineArtwork: Bool
+    @NagramDefault("nagram.musicPlayerArtworkEnhancement", "off")
+    public var musicPlayerArtworkEnhancement: String
+    @NagramDefault("nagram.enhanceChatPhotos", false)
+    public var enhanceChatPhotos: Bool
+    @NagramDefault("nagram.enhanceStoryPhotos", false)
+    public var enhanceStoryPhotos: Bool
     @NagramDefault("nagram.musicPlayerBackground", "blur")
     public var musicPlayerBackground: String
     @NagramDefault("nagram.musicPlayerColors", "cover")

@@ -2098,8 +2098,14 @@ public final class ContactListNode: ASDisplayNode {
             if let strongSelf = self {
                 let previousTheme = strongSelf.presentationData.theme
                 let previousStrings = strongSelf.presentationData.strings
+                let previousNameDisplayOrder = strongSelf.presentationData.nameDisplayOrder // MARK: NEXTGRAM
                 
                 strongSelf.presentationData = presentationData
+
+                // MARK: NEXTGRAM — Refresh names without rebuilding the permission UI.
+                if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousNameDisplayOrder != presentationData.nameDisplayOrder {
+                    strongSelf.presentationDataPromise.set(.single(presentationData))
+                }
                 
                 if previousTheme !== presentationData.theme || previousStrings !== presentationData.strings {
                     strongSelf.backgroundColor = listStyle == .blocks ? strongSelf.presentationData.theme.list.blocksBackgroundColor : strongSelf.presentationData.theme.chatList.backgroundColor
@@ -2108,8 +2114,6 @@ public final class ContactListNode: ASDisplayNode {
                     } else {
                         strongSelf.listNode.verticalScrollIndicatorColor = strongSelf.presentationData.theme.list.scrollIndicatorColor
                     }
-                    strongSelf.presentationDataPromise.set(.single(presentationData))
-                    
                     let authorizationPreviousHidden = strongSelf.authorizationNode.isHidden
                     strongSelf.authorizationNode.removeFromSupernode()
                     strongSelf.authorizationNode = PermissionContentNode(context: strongSelf.context, theme: strongSelf.presentationData.theme, strings: strongSelf.presentationData.strings, kind: PermissionKind.contacts.rawValue, icon: .image(UIImage(bundleImageName: "Settings/Permissions/Contacts")), title: strongSelf.presentationData.strings.Contacts_PermissionsTitle, text: strongSelf.presentationData.strings.Contacts_PermissionsText, buttonTitle: strongSelf.presentationData.strings.Contacts_PermissionsAllow, buttonAction: {

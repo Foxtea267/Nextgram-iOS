@@ -146,6 +146,8 @@ open class ItemListController: ViewController, KeyShortcutResponder, Presentable
     
     private var presentationData: ItemListPresentationData
     private let hideNavigationBarBackground: Bool
+    // MARK: NEXTGRAM - Lets a host (the channel feed) use the chat's clear edge effect.
+    public var navigationEdgeEffectColorOverride: UIColor?
     
     private var validLayout: ContainerViewLayout?
     
@@ -584,7 +586,7 @@ open class ItemListController: ViewController, KeyShortcutResponder, Presentable
                     if strongSelf.presentationData != controllerState.presentationData || isFirstTime {
                         strongSelf.presentationData = controllerState.presentationData
                         
-                        strongSelf.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: NavigationBarTheme(rootControllerTheme: strongSelf.presentationData.theme, edgeEffectColor: state.0.style == .blocks ? strongSelf.presentationData.theme.list.blocksBackgroundColor : strongSelf.presentationData.theme.list.plainBackgroundColor), strings: NavigationBarStrings(presentationStrings: strongSelf.presentationData.strings)), transition: .immediate)
+                        strongSelf.navigationBar?.updatePresentationData(NavigationBarPresentationData(theme: NavigationBarTheme(rootControllerTheme: strongSelf.presentationData.theme, edgeEffectColor: strongSelf.navigationEdgeEffectColorOverride ?? (state.0.style == .blocks ? strongSelf.presentationData.theme.list.blocksBackgroundColor : strongSelf.presentationData.theme.list.plainBackgroundColor)), strings: NavigationBarStrings(presentationStrings: strongSelf.presentationData.strings)), transition: .immediate)
                         strongSelf.statusBar.updateStatusBarStyle(strongSelf.presentationData.theme.rootController.statusBarStyle.style, animated: true)
                         
                         strongSelf.segmentedTitleView?.theme = controllerState.presentationData.theme

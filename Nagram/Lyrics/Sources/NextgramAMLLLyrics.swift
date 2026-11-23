@@ -8,6 +8,8 @@ final class NextgramTTMLParser: NSObject, XMLParserDelegate {
     private var bodyDepth: Int?
     private var lineDepth: Int?
     private var ignoredDepth: Int?
+    private var translationDepth: Int?
+    private var lineTranslations: [String] = []
     private var lineStart = 0.0
     private var lineEnd = 0.0
     private var lineText = ""
@@ -62,16 +64,20 @@ final class NextgramTTMLParser: NSObject, XMLParserDelegate {
             self.bodyDepth = self.depth
             self.duration = Self.timestamp(attributes["dur"])
         }
-        guard self.bodyDepth != nil, self.ignoredDepth == nil else { return }
+        guard self.bodyDepth != nil, self.ignoredDepth == nil, self.translationDepth == nil else { return }
         if local == "p", self.lineDepth == nil, let start = Self.timestamp(attributes["begin"]) {
             self.lineDepth = self.depth
             self.lineStart = start
             self.lineEnd = max(start, Self.timestamp(attributes["end"]) ?? start)
             self.lineText = ""
+            self.lineTranslations = []
             self.words = []
         } else if self.lineDepth != nil && local == "span" {
             let role = attributes["ttm:role"]
-            if role == "x-bg" || role == "x-translation" || role == "x-roman" {
+            if role == "x-translation" {
+                self.translationDepth = self.depth
+                self.lineTranslations.append("")
+            } else if role == "x-bg" || role == "x-roman" {
                 self.ignoredDepth = self.depth
             } else if self.word == nil, let start = Self.timestamp(attributes["begin"]),
                       let end = Self.timestamp(attributes["end"]), end >= start {
@@ -85,12 +91,20 @@ final class NextgramTTMLParser: NSObject, XMLParserDelegate {
     func parser(_ parser: XMLParser, foundCharacters string: String) {
         guard self.lineDepth != nil, self.ignoredDepth == nil else { return }
         if string.contains("\n") && string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return }
+        if self.translationDepth != nil {
+            self.lineTranslations[self.lineTranslations.count - 1].append(string)
+            return
+        }
         self.lineText.append(string)
         if self.lineText.utf8.count > 16000 { parser.abortParsing() }
     }
 
     func parser(_ parser: XMLParser, didEndElement element: String, namespaceURI: String?, qualifiedName: String?) {
         defer { self.depth -= 1 }
+        if let translationDepth = self.translationDepth {
+            if translationDepth == self.depth { self.translationDepth = nil }
+            return
+        }
         if self.ignoredDepth == self.depth {
             self.ignoredDepth = nil
             return
@@ -108,7 +122,9 @@ final class NextgramTTMLParser: NSObject, XMLParserDelegate {
             self.lineDepth = nil
             if !self.lineText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 self.lastEnd = max(self.lastEnd, self.lineEnd)
-                self.lines.append(NextgramLyricLine(time: self.lineStart, text: self.lineText, words: self.words))
+                let translation = self.lineTranslations.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .first { !$0.isEmpty && $0 != self.lineText }
+                self.lines.append(NextgramLyricLine(time: self.lineStart, text: self.lineText, words: self.words, translation: translation))
                 if self.lines.count > 10000 { parser.abortParsing() }
             }
         }
@@ -137,7 +153,7 @@ public enum NextgramAMLLLyrics {
         try? await self.lookup(title: title, artist: artist, duration: duration)
     }
 
-    static func lookup(title: String, artist: String, duration: Double) async throws -> NextgramLyrics? {
+    static func lookup(title: String, artist: String, duration: Double, trace: NextgramOnlineLyrics.LookupTrace = { _ in }) async throws -> NextgramLyrics? {
         let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
         let artist = artist.trimmingCharacters(in: .whitespacesAndNewlines)
         let titleKey = self.normalized(title)
@@ -155,12 +171,22 @@ public enum NextgramAMLLLyrics {
         if !search.items.contains(where: matches) {
             search = try await self.request(path: "search", query: [URLQueryItem(name: "musicName", value: title), URLQueryItem(name: "pageSize", value: "20")])
         }
-        for item in search.items.filter(matches).prefix(2) {
+        let candidates = search.items.filter { item in
+            let titleMatches = item.musicNames.contains { self.normalized($0) == titleKey }
+            let accepted = matches(item)
+            trace(.candidate(title: item.musicNames.joined(separator: " / "), artist: item.artistNames.joined(separator: " / "),
+                duration: nil, decision: accepted ? .match : (titleMatches ? .artistMismatch : .titleMismatch)))
+            return accepted
+        }
+        for item in candidates.prefix(2) {
             try Task.checkCancellation()
             let song: Song = try await self.request(path: "get", query: [URLQueryItem(name: "id", value: String(item.id))])
             guard song.id == item.id, matches(song), let text = song.lyrics,
-                  let parsed = NextgramTTMLParser.parse(text), parsed.lastEnd <= duration + 3.0 else { continue }
-            if let listedDuration = parsed.duration, abs(listedDuration - duration) > 5.0 { continue }
+                  let parsed = NextgramTTMLParser.parse(text) else { continue }
+            if parsed.lastEnd > duration + 3.0 || parsed.duration.map({ abs($0 - duration) > 5.0 }) == true {
+                trace(.timingMismatch)
+                continue
+            }
             return parsed.lyrics
         }
         return nil

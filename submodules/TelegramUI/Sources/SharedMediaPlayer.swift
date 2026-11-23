@@ -437,9 +437,11 @@ final class SharedMediaPlayer {
                 if let playbackStateValue = self._playbackStateValue, case let .item(item) = playbackStateValue, item.status.duration > threshold, item.status.timestamp > threshold {
                     self.control(.seek(0.0))
                 } else {
-                    self.scheduledPlaybackAction = .play
-                    self.playlist.control(.previous)
+                    self.control(.previousTrack) // MARK: NEXTGRAM
                 }
+            case .previousTrack: // MARK: NEXTGRAM
+                self.scheduledPlaybackAction = .play
+                self.playlist.control(.previous)
             case let .playback(action):
                 if let playbackItem = self.playbackItem {
                     switch action {

@@ -4,6 +4,11 @@ import Postbox
 internal import TelegramApi
 import SwiftSignalKit
 
+// MARK: NEXTGRAM — Per-contact Ghost Mode applies to cloud private chats and stories.
+func nextgramIsPeerGhostModeEnabled(accountPeerId: PeerId, peerId: PeerId) -> Bool {
+    return peerId.namespace == Namespaces.Peer.CloudUser && peerId != accountPeerId
+        && NextgramPeerGhostMode.isEnabled(accountPeerId: accountPeerId.toInt64(), peerId: peerId.toInt64())
+}
 
 func _internal_applyMaxReadIndexInteractively(postbox: Postbox, stateManager: AccountStateManager, index: MessageIndex) -> Signal<Void, NoError> {
     return postbox.transaction { transaction -> Void in
@@ -32,7 +37,8 @@ func _internal_applyMaxReadIndexInteractively(postbox: Postbox, stateManager: Ac
 /// intent - can say it did nothing rather than claim success.
 func _internal_applyMaxReadMessageIdInteractively(postbox: Postbox, stateManager: AccountStateManager, messageId: MessageId) -> Signal<Bool, NoError> {
     return postbox.transaction { transaction -> Bool in
-        guard messageId.peerId.namespace != Namespaces.Peer.SecretChat else {
+        guard messageId.peerId.namespace != Namespaces.Peer.SecretChat,
+              !nextgramIsPeerGhostModeEnabled(accountPeerId: stateManager.accountPeerId, peerId: messageId.peerId) else { // MARK: NEXTGRAM
             return false
         }
         // A channel the account is not a member of has no read state to apply to.
@@ -46,6 +52,8 @@ func _internal_applyMaxReadMessageIdInteractively(postbox: Postbox, stateManager
 }
 
 func _internal_applyMaxReadIndexInteractively(transaction: Transaction, stateManager: AccountStateManager, index: MessageIndex) {
+    // MARK: NEXTGRAM — Do not advance the marker or enqueue a read that could be sent later.
+    guard !nextgramIsPeerGhostModeEnabled(accountPeerId: stateManager.accountPeerId, peerId: index.id.peerId) else { return }
     // MARK: NAGRAM
     // MARK: NEXTGRAM — Ghost mode must still clear local unread state and save the reading position.
     let suppressReadReceipts = NagramSettings.shared.suppressReadReceipts
@@ -359,6 +367,8 @@ func _internal_togglePeerUnreadMarkInteractively(transaction: Transaction, netwo
         
         if hasUnread {
             if setToValue == nil || !(setToValue!) {
+                // MARK: NEXTGRAM — Skip protected chats during bulk and explicit read actions.
+                if let account = viewTracker.account, nextgramIsPeerGhostModeEnabled(accountPeerId: account.peerId, peerId: peerId) { return }
                 _internal_readPeerHistoryToTopInteractively(transaction: transaction, peer: peer, principalNamespace: principalNamespace)
                 viewTracker.updateMarkAllMentionsSeen(peerId: peerId, threadId: nil)
             }

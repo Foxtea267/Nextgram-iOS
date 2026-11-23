@@ -121,7 +121,7 @@ func managedSynchronizeViewStoriesOperations(postbox: Postbox, network: Network,
 
 private func pushStoriesAreSeen(postbox: Postbox, network: Network, stateManager: AccountStateManager, peer: Peer, operation: SynchronizeViewStoriesOperation) -> Signal<Void, NoError> {
     // MARK: NEXTGRAM — Drop queued reports while privacy mode is enabled; never replay them after it is disabled.
-    if NagramSettings.shared.suppressStoryReadReceipts { return .complete() }
+    if NagramSettings.shared.suppressStoryReadReceipts || nextgramIsPeerGhostModeEnabled(accountPeerId: stateManager.accountPeerId, peerId: peer.id) { return .complete() }
     guard let inputPeer = apiInputPeer(peer) else {
         return .complete()
     }

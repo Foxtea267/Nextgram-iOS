@@ -78,6 +78,7 @@ public final class ChatMessageItemAssociatedData: Equatable {
     /// the host showing its own menu on a long press, and its tap recogniser fails on plain text instead of
     /// waiting for a double tap, so the host's tap fires.
     public let hostHandlesGestures: Bool
+    public let nextgramFeedShowsChannelAvatar: Bool? // MARK: NEXTGRAM
     public let isParticipant: Bool
     public let invitedOn: Int32?
     
@@ -125,7 +126,8 @@ public final class ChatMessageItemAssociatedData: Equatable {
         hidesBubbleBackground: Bool = false,
         hidesAuthorHeader: Bool = false,
         hidesShareButton: Bool = false,
-        hostHandlesGestures: Bool = false
+        hostHandlesGestures: Bool = false,
+        nextgramFeedShowsChannelAvatar: Bool? = nil // MARK: NEXTGRAM
     ) {
         self.automaticDownloadPeerType = automaticDownloadPeerType
         self.automaticDownloadPeerId = automaticDownloadPeerId
@@ -169,6 +171,7 @@ public final class ChatMessageItemAssociatedData: Equatable {
         self.hidesAuthorHeader = hidesAuthorHeader
         self.hidesShareButton = hidesShareButton
         self.hostHandlesGestures = hostHandlesGestures
+        self.nextgramFeedShowsChannelAvatar = nextgramFeedShowsChannelAvatar // MARK: NEXTGRAM
         self.isParticipant = isParticipant
         self.invitedOn = invitedOn
     }
@@ -286,6 +289,9 @@ public final class ChatMessageItemAssociatedData: Equatable {
             return false
         }
         if lhs.hostHandlesGestures != rhs.hostHandlesGestures {
+            return false
+        }
+        if lhs.nextgramFeedShowsChannelAvatar != rhs.nextgramFeedShowsChannelAvatar { // MARK: NEXTGRAM
             return false
         }
         if lhs.isParticipant != rhs.isParticipant {
@@ -1304,6 +1310,9 @@ public protocol ChatMessageItemNodeProtocol: ListViewItemNode {
     func cancelInsertionAnimations()
     func messages() -> [EngineRawMessage]
     func updateHiddenMedia()
+    // MARK: NEXTGRAM — Let the feed host drive the native media transition.
+    func transitionNode(id: EngineMessage.Id, media: EngineRawMedia, adjustRect: Bool) -> (ASDisplayNode, CGRect, () -> (UIView?, UIView?))?
+    func updateHiddenMedia(_ media: [EngineMessage.Id: [EngineRawMedia]])
 }
 
 public final class ChatControllerNavigationData: CustomViewControllerNavigationData {

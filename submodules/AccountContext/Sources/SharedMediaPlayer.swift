@@ -232,6 +232,7 @@ public enum SharedMediaPlayerPlaybackControlAction {
 public enum SharedMediaPlayerControlAction {
     case next
     case previous
+    case previousTrack // MARK: NEXTGRAM — Swipe directly to the previous track.
     case playback(SharedMediaPlayerPlaybackControlAction)
     case seek(Double)
     case setOrder(MusicPlaybackSettingsOrder)

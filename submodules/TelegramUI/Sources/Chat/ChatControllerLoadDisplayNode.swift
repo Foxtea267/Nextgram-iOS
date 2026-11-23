@@ -713,11 +713,12 @@ extension ChatControllerImpl {
         self.nextgramChatHeaderOptionsDisposable = (combineLatest(
             nagramBoolSignal("nagram.hideChatBackUnreadCount", defaultValue: false),
             nagramBoolSignal("nagram.hideChatTitleGlass", defaultValue: false),
+            nagramBoolSignal("nagram.forceCenterChatTitle", defaultValue: false),
             nagramChatHeaderEffectsSignal()
         )
-        |> deliverOnMainQueue).startStrict(next: { [weak self] hideUnread, hideGlass, _ in
+        |> deliverOnMainQueue).startStrict(next: { [weak self] hideUnread, hideGlass, forceCenterTitle, _ in
             guard let self else { return }
-            self.chatTitleView?.prefersCenteredNavigationTitle = hideUnread
+            self.chatTitleView?.prefersCenteredNavigationTitle = forceCenterTitle
             self.chatTitleView?.displaysGlassBackground = !hideGlass
             self.navigationItem.badge = hideUnread || !self.showsUnreadChatsBackBadge ? "" : self.nextgramChatBackUnreadBadge // MARK: NEXTGRAM
             self.requestLayout(transition: .immediate)

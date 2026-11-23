@@ -30,6 +30,7 @@ func _internal_markAllChatsAsRead(postbox: Postbox, network: Network, stateManag
                     case let .dialogPeer(dialogPeerData):
                         let peer = dialogPeerData.peer
                         let peerId = peer.peerId
+                        if nextgramIsPeerGhostModeEnabled(accountPeerId: stateManager.accountPeerId, peerId: peerId) { continue } // MARK: NEXTGRAM
                         if peerId.namespace == Namespaces.Peer.CloudChannel {
                             if let inputChannel = transaction.getPeer(peerId).flatMap(apiInputChannel) {
                                 signals.append(network.request(Api.functions.channels.readHistory(channel: inputChannel, maxId: Int32.max - 1))

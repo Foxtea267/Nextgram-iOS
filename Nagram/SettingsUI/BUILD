@@ -19,6 +19,7 @@ swift_library(
         "//submodules/SSignalKit/SwiftSignalKit:SwiftSignalKit",
         "//submodules/TelegramPresentationData:TelegramPresentationData",
         "//submodules/ItemListUI:ItemListUI",
+        "//submodules/ItemListPeerItem:ItemListPeerItem",
         "//submodules/LegacyMediaPickerUI:LegacyMediaPickerUI",
         "//submodules/PresentationDataUtils:PresentationDataUtils",
         "//submodules/AccountContext:AccountContext",
@@ -41,6 +42,7 @@ swift_library(
         # MARK: NAGRAM — 贴纸尺寸滑杆(SliderComponent,复刻省电模式粗轨道)
         "//submodules/AsyncDisplayKit",
         "//submodules/ComponentFlow",
+        "//submodules/TelegramUI/Components/EdgeEffect",
         "//submodules/TelegramUI/Components/FaceScanScreen",
         "//submodules/TelegramUI/Components/SliderComponent",
         "//submodules/TelegramUI/Components/TabBarComponent",

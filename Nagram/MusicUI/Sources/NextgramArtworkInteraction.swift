@@ -1,8 +1,8 @@
 import CoreMotion
 import UIKit
 
-/// Local device-motion parallax only; no motion data is stored or transmitted.
 final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
+    private let motionPlane = UIView()
     private let pressurePlane = UIView()
     private let imageView = UIImageView()
     var image: UIImage? {
@@ -10,14 +10,20 @@ final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
         set { self.imageView.image = newValue }
     }
     override var contentMode: UIView.ContentMode { didSet { self.imageView.contentMode = self.contentMode } }
+    var cornerRadius: CGFloat = 0.0 {
+        didSet {
+            guard oldValue != self.cornerRadius else { return }
+            self.layer.cornerRadius = self.cornerRadius
+            self.setNeedsLayout()
+        }
+    }
     var open: (() -> Void)? { didSet { self.tap.isEnabled = self.open != nil } }
-    var motionEnabled = false { didSet { self.updateMotion() } }
-    private let motion = CMMotionManager()
-    private var tilt = CGPoint.zero
+    var motionEnabled = false { didSet { if oldValue != self.motionEnabled { self.updateMotion() } } }
+    private var motionManager: CMMotionManager?
+    private var referenceAttitude: CMAttitude?
+    private var deviceTilt = CGPoint.zero
     private var touchTilt = CGPoint.zero
     private var pressed = false
-    private var reference: CMAttitude?
-    private var lastMotionTime: TimeInterval?
     private let tap = UITapGestureRecognizer()
     private let press = UILongPressGestureRecognizer()
     private let edgeHighlight = CAShapeLayer()
@@ -30,7 +36,8 @@ final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
         self.imageView.clipsToBounds = true
         self.imageView.isAccessibilityElement = false
         self.pressurePlane.addSubview(self.imageView)
-        self.addSubview(self.pressurePlane)
+        self.motionPlane.addSubview(self.pressurePlane)
+        self.addSubview(self.motionPlane)
         self.isAccessibilityElement = true
         self.isUserInteractionEnabled = true
         self.tap.addTarget(self, action: #selector(self.tapped))
@@ -59,7 +66,10 @@ final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(self.motionAccessibilityChanged), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-    deinit { self.motion.stopDeviceMotionUpdates(); NotificationCenter.default.removeObserver(self) }
+    deinit {
+        self.motionManager?.stopDeviceMotionUpdates()
+        NotificationCenter.default.removeObserver(self)
+    }
     @objc private func motionAccessibilityChanged() { self.updateMotion() }
 
     override func didMoveToWindow() { super.didMoveToWindow(); self.updateMotion() }
@@ -67,79 +77,79 @@ final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
     private func updateMotion() {
         let enabled = self.motionEnabled && self.window != nil && !UIAccessibility.isReduceMotionEnabled
         self.press.isEnabled = enabled
-        guard enabled else {
-            self.motion.stopDeviceMotionUpdates()
-            self.reference = nil
-            self.tilt = .zero
+        if enabled {
+            let manager = self.motionManager ?? CMMotionManager()
+            self.motionManager = manager
+            if manager.isDeviceMotionAvailable && !manager.isDeviceMotionActive {
+                manager.deviceMotionUpdateInterval = 1.0 / 60.0
+                manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+                    guard let self, self.press.isEnabled, let motion else { return }
+                    self.updateAttitude(motion.attitude)
+                }
+            }
+        }
+        if !enabled {
+            self.motionManager?.stopDeviceMotionUpdates()
+            self.referenceAttitude = nil
+            self.deviceTilt = .zero
+            self.motionPlane.layer.transform = CATransform3DIdentity
             self.touchTilt = .zero
             self.pressed = false
-            self.lastMotionTime = nil
-            self.layer.removeAnimation(forKey: "transform")
-            self.layer.transform = CATransform3DIdentity
             self.pressurePlane.layer.removeAnimation(forKey: "transform")
             self.pressurePlane.layer.transform = CATransform3DIdentity
             self.edgeHighlight.opacity = 0
             self.reflection.opacity = 0
+        }
+    }
+
+    private func updateAttitude(_ sample: CMAttitude) {
+        guard let attitude = sample.copy() as? CMAttitude else { return }
+        guard let referenceAttitude = self.referenceAttitude else {
+            self.referenceAttitude = attitude
             return
         }
-        guard !self.motion.isDeviceMotionActive, self.motion.isDeviceMotionAvailable else { return }
-        self.motion.deviceMotionUpdateInterval = 1.0 / 60.0
-        self.motion.startDeviceMotionUpdates(to: .main) { [weak self] value, _ in
-            guard let self, let value else { return }
-            if self.reference == nil { self.reference = value.attitude.copy() as? CMAttitude }
-            guard let reference = self.reference, let attitude = value.attitude.copy() as? CMAttitude else { return }
-            attitude.multiply(byInverseOf: reference)
-            self.updateDeviceMotion(roll: attitude.roll, pitch: attitude.pitch, timestamp: value.timestamp)
-        }
+        attitude.multiply(byInverseOf: referenceAttitude)
+        self.updateDeviceTilt(x: CGFloat(attitude.roll), y: CGFloat(attitude.pitch))
     }
 
-    private func updateDeviceMotion(roll: Double, pitch: Double, timestamp: TimeInterval) {
-        guard self.motionEnabled, self.window != nil, !UIAccessibility.isReduceMotionEnabled,
-              roll.isFinite, pitch.isFinite, timestamp.isFinite else { return }
-        if let previous = self.lastMotionTime, timestamp <= previous { return }
-        let interval = min(0.1, max(0.001, timestamp - (self.lastMotionTime ?? (timestamp - 1.0 / 60.0))))
-        self.lastMotionTime = timestamp
-        // Relative to the opening pose, expressed in the visible screen's axes.
-        var x = CGFloat(roll), y = CGFloat(pitch)
-        switch self.window?.windowScene?.interfaceOrientation {
-        case .landscapeLeft: (x, y) = (-y, x)
-        case .landscapeRight: (x, y) = (y, -x)
-        case .portraitUpsideDown: (x, y) = (-x, -y)
-        default: break
+    private func updateDeviceTilt(x: CGFloat, y: CGFloat) {
+        guard x.isFinite, y.isFinite, self.press.isEnabled else { return }
+        let target: CGPoint
+        let orientation: UIInterfaceOrientation?
+        if #available(iOS 16.0, *) {
+            orientation = self.window?.windowScene?.effectiveGeometry.interfaceOrientation
+        } else {
+            orientation = self.window?.windowScene?.interfaceOrientation
         }
-        func target(_ angle: CGFloat, limit: CGFloat) -> CGFloat {
-            let magnitude = max(0, abs(angle) - 0.003) * 0.85
-            return min(limit, magnitude) * (angle < 0 ? -1 : 1)
+        switch orientation {
+        case .landscapeLeft: target = CGPoint(x: -y, y: x)
+        case .landscapeRight: target = CGPoint(x: y, y: -x)
+        case .portraitUpsideDown: target = CGPoint(x: -x, y: -y)
+        default: target = CGPoint(x: x, y: y)
         }
-        let blend = CGFloat(1.0 - exp(-interval / 0.075))
-        self.tilt.x += (target(x, limit: 0.32) - self.tilt.x) * blend
-        self.tilt.y += (target(y, limit: 0.24) - self.tilt.y) * blend
-        if abs(self.tilt.x) < 0.00001 { self.tilt.x = 0 }
-        if abs(self.tilt.y) < 0.00001 { self.tilt.y = 0 }
-        self.applyDeviceMotionTransform()
-        self.updateReflection()
+        let limit: CGFloat = 0.115
+        let gain: CGFloat = 0.42
+        let smoothing: CGFloat = 0.16
+        let tilt = self.pressed ? CGPoint.zero : target
+        self.deviceTilt.x += (max(-limit, min(limit, tilt.x * gain)) - self.deviceTilt.x) * smoothing
+        self.deviceTilt.y += (max(-limit, min(limit, tilt.y * gain)) - self.deviceTilt.y) * smoothing
+        let intensity = max(abs(self.deviceTilt.x), abs(self.deviceTilt.y)) / limit
+        let scale = 1.0 - 0.018 * intensity
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.motionPlane.layer.transform = self.coverTransform(tilt: self.deviceTilt, scale: scale)
+        CATransaction.commit()
     }
 
-    private func applyDeviceMotionTransform() {
-        guard self.motionEnabled, self.bounds.width > 0, self.bounds.height > 0,
-              self.tilt.x != 0 || self.tilt.y != 0 else {
-            self.layer.transform = CATransform3DIdentity
-            return
-        }
-        // Project around the lower edge: its baseline stays put while the upper corners recede.
-        let pivot = self.bounds.height * 0.5
-        var transform = CATransform3DMakeTranslation(0, -pivot, 0)
-        transform = CATransform3DConcat(transform, CATransform3DMakeRotation(-self.tilt.y, 1, 0, 0))
-        transform = CATransform3DConcat(transform, CATransform3DMakeRotation(self.tilt.x, 0, 1, 0))
-        var perspective = CATransform3DIdentity
-        perspective.m34 = -1.0 / max(650.0, self.bounds.width * 2.2)
-        transform = CATransform3DConcat(transform, perspective)
-        self.layer.transform = CATransform3DConcat(transform, CATransform3DMakeTranslation(0, pivot, 0))
+#if DEBUG && targetEnvironment(simulator)
+    func previewDeviceTilt(x: CGFloat, y: CGFloat) {
+        self.updateDeviceTilt(x: x, y: y)
     }
+#endif
 
-    @objc private func tapped() { if self.image != nil { self.open?() } }
+    @objc private func tapped() { self.open?() }
     override func accessibilityActivate() -> Bool {
-        guard self.image != nil, let open = self.open else { return false }
+        guard let open = self.open else { return false }
         open()
         return true
     }
@@ -182,21 +192,22 @@ final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
     }
 
     private func applyTransform() {
-        var transform = CATransform3DIdentity
-        let x = self.touchTilt.x
-        let y = self.touchTilt.y
-        transform.m34 = -1.0 / max(1200.0, self.bounds.width * 3.5)
-        transform = CATransform3DRotate(transform, -y, 1, 0, 0)
-        transform = CATransform3DRotate(transform, x, 0, 1, 0)
         let scale: CGFloat = self.pressed ? 0.985 : 1
-        // Finger pressure animates independently, so live motion cannot cancel its spring.
-        self.pressurePlane.layer.transform = CATransform3DScale(transform, scale, scale, 1)
+        self.pressurePlane.layer.transform = self.coverTransform(tilt: self.touchTilt, scale: scale)
         self.updateReflection()
     }
 
+    private func coverTransform(tilt: CGPoint, scale: CGFloat) -> CATransform3D {
+        var transform = CATransform3DIdentity
+        transform.m34 = -1.0 / max(1200.0, self.bounds.width * 3.5)
+        transform = CATransform3DRotate(transform, -tilt.y, 1, 0, 0)
+        transform = CATransform3DRotate(transform, tilt.x, 0, 1, 0)
+        return CATransform3DScale(transform, scale, scale, 1)
+    }
+
     private func updateReflection() {
-        let x = self.tilt.x + self.touchTilt.x
-        let y = self.tilt.y + self.touchTilt.y
+        let x = self.touchTilt.x
+        let y = self.touchTilt.y
         CATransaction.begin()
         let duration = UIView.inheritedAnimationDuration
         CATransaction.setDisableActions(duration == 0)
@@ -211,6 +222,8 @@ final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        self.motionPlane.bounds = self.bounds
+        self.motionPlane.center = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
         self.pressurePlane.bounds = self.bounds
         self.pressurePlane.center = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
         self.imageView.frame = self.bounds
@@ -221,14 +234,7 @@ final class NextgramInteractiveArtwork: UIView, UIGestureRecognizerDelegate {
         let size = CGSize(width: self.bounds.width * 2.0, height: self.bounds.height * 2.0)
         self.reflection.bounds = CGRect(origin: .zero, size: size)
         self.reflection.position = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
-        self.applyDeviceMotionTransform()
     }
-
-#if DEBUG && targetEnvironment(simulator)
-    func previewDeviceMotion(roll: Double, pitch: Double) {
-        self.updateDeviceMotion(roll: roll, pitch: pitch, timestamp: CACurrentMediaTime())
-    }
-#endif
 }
 
 /// Kept inside the player so closing artwork cannot dismiss the music session.
@@ -243,7 +249,7 @@ final class NextgramArtworkDetailView: UIView, UIScrollViewDelegate {
     private var showsMetadata: Bool
     private let done = UIButton(type: .system)
     private var insets: UIEdgeInsets
-    private let motionAllowed: Bool
+    private var motionAllowed: Bool
     private var lastLayoutSize = CGSize.zero
 
     init(image: UIImage, title: String, artist: String, insets: UIEdgeInsets, motionEnabled: Bool, showsMetadata: Bool, closeLabel: String) {
@@ -269,7 +275,7 @@ final class NextgramArtworkDetailView: UIView, UIScrollViewDelegate {
         self.scroll.panGestureRecognizer.require(toFail: self.artwork.pressureGestureRecognizer)
         self.artwork.image = image
         self.artwork.clipsToBounds = false
-        self.artwork.layer.cornerRadius = 12
+        self.artwork.cornerRadius = 12
         self.artwork.contentMode = .scaleAspectFit
         self.artwork.motionEnabled = motionEnabled
         self.artwork.accessibilityLabel = [title, artist].filter { !$0.isEmpty }.joined(separator: ", ")
@@ -306,6 +312,10 @@ final class NextgramArtworkDetailView: UIView, UIScrollViewDelegate {
     deinit { NotificationCenter.default.removeObserver(self) }
     func updateImage(_ image: UIImage) { self.artwork.image = image; self.setNeedsLayout() }
     func updateInsets(_ insets: UIEdgeInsets) { self.insets = insets; self.setNeedsLayout() }
+    func updateMotionEnabled(_ enabled: Bool) {
+        self.motionAllowed = enabled
+        self.artwork.motionEnabled = enabled && self.scroll.zoomScale <= 1
+    }
     func updateMetadataVisibility(_ visible: Bool) {
         guard self.showsMetadata != visible else { return }
         self.showsMetadata = visible
@@ -370,8 +380,9 @@ final class NextgramArtworkDetailView: UIView, UIScrollViewDelegate {
     func previewPressure(at point: CGPoint?) {
         self.artwork.setPressure(at: point, animated: true)
     }
-    func previewDeviceMotion(roll: Double, pitch: Double) {
-        self.artwork.previewDeviceMotion(roll: roll, pitch: pitch)
+
+    func previewDeviceTilt(x: CGFloat, y: CGFloat) {
+        self.artwork.previewDeviceTilt(x: x, y: y)
     }
 #endif
 }

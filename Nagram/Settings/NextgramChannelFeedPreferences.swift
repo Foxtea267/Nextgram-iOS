@@ -1,6 +1,13 @@
 import Foundation
 
 public struct NextgramChannelFeedPreferences: Codable, Equatable {
+    public struct DisplayOptions: Codable, Equatable {
+        public var showPostAvatars = false
+        public var showChannelNames = false
+        public var showShareButtons = false
+        public var showSourceAvatars = true
+    }
+
     public struct Category: Codable, Equatable {
         public let id: UUID
         public var name: String
@@ -18,9 +25,37 @@ public struct NextgramChannelFeedPreferences: Codable, Equatable {
     public var categories: [Category] = []
     public var selectedCategoryId: UUID?
     public var unreadOnly = false
+    private var storedDisplayOptions: DisplayOptions?
+
+    public var displayOptions: DisplayOptions {
+        get { self.storedDisplayOptions ?? DisplayOptions() }
+        set { self.storedDisplayOptions = newValue }
+    }
 
     public func includesInDefaultFeed(channelId: Int64) -> Bool {
         return self.manuallyIncludedChannelIds?.contains(channelId) ?? !self.excludedChannelIds.contains(channelId)
+    }
+
+    public mutating func setChannelIncluded(_ included: Bool, channelId: Int64) {
+        if let selectedId = self.selectedCategoryId,
+           let index = self.categories.firstIndex(where: { $0.id == selectedId }) {
+            if included {
+                self.categories[index].channelIds.insert(channelId)
+            } else {
+                self.categories[index].channelIds.remove(channelId)
+            }
+        } else if var manual = self.manuallyIncludedChannelIds {
+            if included {
+                manual.insert(channelId)
+            } else {
+                manual.remove(channelId)
+            }
+            self.manuallyIncludedChannelIds = manual
+        } else if included {
+            self.excludedChannelIds.remove(channelId)
+        } else {
+            self.excludedChannelIds.insert(channelId)
+        }
     }
 
     public mutating func setAutomaticallyIncludesNewChannels(_ enabled: Bool, knownChannelIds: Set<Int64>) {

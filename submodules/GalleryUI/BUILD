@@ -84,6 +84,7 @@ swift_library(
         "//submodules/UIKitRuntimeUtils",
         # MARK: NAGRAM
         "//Nagram/Settings:NagramSettings",
+        "//Nagram/ImageSuperResolution:NextgramImageSuperResolution", # MARK: NEXTGRAM
     ],
     visibility = [
         "//visibility:public",

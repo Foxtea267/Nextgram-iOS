@@ -2,30 +2,68 @@ import AVKit
 import MediaPlayer
 import UIKit
 
-final class NextgramPlayerVolumeView: MPVolumeView {
+final class NextgramPlayerVolumeView: UIView {
+    let slider = NextgramPlayerSlider()
+    private let systemVolume = MPVolumeView()
+    private var volumeObservation: NSKeyValueObservation?
 #if DEBUG && targetEnvironment(simulator)
-    private var previewSlider: UISlider?
+    private var preview = false
 
     func showPreviewSlider() {
-        guard self.previewSlider == nil else { return }
-        self.showsVolumeSlider = false
-        let slider = NextgramPlayerSlider()
-        slider.value = 0.32
-        slider.minimumTrackTintColor = UIColor.white.withAlphaComponent(0.75)
-        slider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.22)
-        slider.setThumbImage(UIGraphicsImageRenderer(size: CGSize(width: 8.0, height: 8.0)).image { _ in }, for: .normal)
-        self.previewSlider = slider
-        self.addSubview(slider)
+        self.preview = true
+        self.volumeObservation = nil
+        self.slider.value = 0.32
+    }
+#endif
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.systemVolume.alpha = 0.0
+        self.systemVolume.isUserInteractionEnabled = false
+        self.systemVolume.accessibilityElementsHidden = true
+        self.addSubview(self.systemVolume)
+        self.addSubview(self.slider)
+        self.slider.valueChanged = { [weak self] in
+            guard let self else { return }
+#if DEBUG && targetEnvironment(simulator)
+            guard !self.preview else { return }
+#endif
+            // MPVolumeView owns the system volume slider, including its current route.
+            if let systemSlider = self.systemVolume.subviews.first(where: { $0 is UISlider }) as? UISlider {
+                systemSlider.setValue(self.slider.value, animated: false)
+            }
+        }
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        self.volumeObservation = nil
+        guard self.window != nil else { return }
+#if DEBUG && targetEnvironment(simulator)
+        guard !self.preview else { return }
+#endif
+        self.refreshVolume()
+        self.volumeObservation = AVAudioSession.sharedInstance().observe(\.outputVolume) { [weak self] _, _ in
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !self.slider.isTracking else { return }
+                self.refreshVolume()
+            }
+        }
+    }
+
+    private func refreshVolume() {
+#if DEBUG && targetEnvironment(simulator)
+        guard !self.preview else { return }
+#endif
+        self.slider.value = AVAudioSession.sharedInstance().outputVolume
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        self.previewSlider?.frame = self.bounds
-    }
-#endif
-    override func volumeSliderRect(forBounds bounds: CGRect) -> CGRect {
-        let slider = super.volumeSliderRect(forBounds: bounds)
-        return CGRect(x: slider.minX, y: bounds.midY - slider.height * 0.5, width: slider.width, height: slider.height)
+        self.systemVolume.frame = self.bounds
+        self.slider.frame = self.bounds
     }
 }
 
@@ -87,28 +125,178 @@ final class NextgramPlayerRoutePickerView: UIView {
     }
 }
 
-final class NextgramPlayerSlider: UISlider {
-    override func trackRect(forBounds bounds: CGRect) -> CGRect {
-        let track = super.trackRect(forBounds: bounds)
-        let height: CGFloat = self.isTracking ? 8.0 : 6.0
-        return CGRect(x: track.minX, y: bounds.midY - height / 2.0, width: track.width, height: height)
+final class NextgramPlayerSlider: UIControl {
+    var elasticEdges = false {
+        didSet {
+            if oldValue && !self.elasticEdges { self.resetEdgeStretch(animated: false) }
+        }
+    }
+    var jumpOnTap = false
+    var value: Float = 0.0 {
+        didSet { if self.value != oldValue { self.updateRail() } }
+    }
+    var editingStarted: (() -> Void)?
+    var valueChanged: (() -> Void)?
+    var editingFinished: ((Bool) -> Void)?
+    override var accessibilityValue: String? {
+        get { super.accessibilityValue ?? NumberFormatter.localizedString(from: NSNumber(value: self.value), number: .percent) }
+        set { super.accessibilityValue = newValue }
+    }
+    private let rail = CALayer()
+    private let fill = CALayer()
+    private var startPoint: CGPoint?
+    private var touchOffset: CGFloat = 0.0
+    private var dragging = false
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        self.isAccessibilityElement = true
+        self.accessibilityTraits = .adjustable
+        self.rail.masksToBounds = true
+        self.rail.addSublayer(self.fill)
+        self.layer.addSublayer(self.rail)
+        self.setColors(filled: UIColor.white.withAlphaComponent(0.9), empty: UIColor.white.withAlphaComponent(0.22))
+    }
+
+    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+
+    func setColors(filled: UIColor, empty: UIColor) {
+        self.fill.backgroundColor = filled.cgColor
+        self.rail.backgroundColor = empty.cgColor
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        self.updateRail()
+    }
+
+    private func updateRail() {
+        let height: CGFloat = self.dragging ? 8.0 : 6.0
+        let fraction = CGFloat(min(1, max(0, self.value)))
+        let rtl = self.effectiveUserInterfaceLayoutDirection == .rightToLeft
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.rail.bounds = CGRect(x: 0, y: 0, width: self.bounds.width, height: height)
+        self.rail.position = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
+        self.rail.cornerRadius = height * 0.5
+        self.fill.frame = CGRect(x: rtl ? self.bounds.width * (1 - fraction) : 0, y: 0, width: self.bounds.width * fraction, height: height)
+        CATransaction.commit()
+    }
+
+    private func updateValue(at position: CGFloat) {
+        let fraction = min(1, max(0, position / max(1, self.bounds.width)))
+        let value = Float(self.effectiveUserInterfaceLayoutDirection == .rightToLeft ? 1 - fraction : fraction)
+        guard value != self.value else { return }
+        self.value = value
+        self.valueChanged?()
     }
 
     override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
-        let tracking = super.beginTracking(touch, with: event)
-        self.setNeedsLayout()
-        return tracking
+        guard self.isEnabled else { return false }
+        let point = touch.location(in: self)
+        self.startPoint = point
+        let fraction = CGFloat(self.value)
+        let edge = self.bounds.width * (self.effectiveUserInterfaceLayoutDirection == .rightToLeft ? 1 - fraction : fraction)
+        self.touchOffset = abs(point.x - edge) <= 12.0 ? point.x - edge : 0.0
+        self.resetEdgeStretch(animated: false)
+        self.editingStarted?()
+        return true
+    }
+
+    override func continueTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
+        guard let startPoint = self.startPoint else { return false }
+        let position = touch.location(in: self).x
+        if !self.dragging && abs(position - startPoint.x) >= 4.0 {
+            self.dragging = true
+            self.updateRail()
+        }
+        if self.dragging {
+            let adjusted = position - self.touchOffset
+            self.updateValue(at: adjusted)
+            if self.elasticEdges {
+                self.setEdgeStretch(adjusted - min(self.bounds.width, max(0.0, adjusted)))
+            }
+        }
+        return true
     }
 
     override func endTracking(_ touch: UITouch?, with event: UIEvent?) {
-        super.endTracking(touch, with: event)
-        self.setNeedsLayout()
+        if let touch, self.dragging || self.jumpOnTap {
+            let point = touch.location(in: self)
+            if self.dragging || self.bounds.contains(point) {
+                self.updateValue(at: point.x - (self.dragging ? self.touchOffset : 0.0))
+                self.finishTracking(commit: true)
+                return
+            }
+        }
+        self.finishTracking(commit: false)
     }
 
     override func cancelTracking(with event: UIEvent?) {
         super.cancelTracking(with: event)
-        self.setNeedsLayout()
+        self.finishTracking(commit: false)
     }
+
+    private func finishTracking(commit: Bool) {
+        guard self.startPoint != nil else { return }
+        self.startPoint = nil
+        self.dragging = false
+        if self.elasticEdges { self.resetEdgeStretch(animated: true) }
+        self.updateRail()
+        self.editingFinished?(commit)
+    }
+
+    override func accessibilityIncrement() { self.adjustAccessibility(by: 0.05) }
+    override func accessibilityDecrement() { self.adjustAccessibility(by: -0.05) }
+
+    private func adjustAccessibility(by step: Float) {
+        guard self.isEnabled else { return }
+        self.editingStarted?()
+        self.value = min(1, max(0, self.value + step))
+        self.valueChanged?()
+        self.editingFinished?(true)
+    }
+
+    private func setEdgeStretch(_ overshoot: CGFloat) {
+        guard self.elasticEdges, !UIAccessibility.isReduceMotionEnabled, self.bounds.width > 0.0 else {
+            self.resetEdgeStretch(animated: false)
+            return
+        }
+        let stretch = 25.0 * overshoot / (25.0 + abs(overshoot))
+        var transform = CATransform3DMakeScale(1.0 + abs(stretch) / self.bounds.width, 1.0 - abs(stretch) / 180.0, 1.0)
+        transform.m41 = stretch * 0.5
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.rail.transform = transform
+        CATransaction.commit()
+    }
+
+    private func resetEdgeStretch(animated: Bool) {
+        let current = self.rail.presentation()?.transform ?? self.rail.transform
+        self.rail.removeAnimation(forKey: "nextgram.edgeStretch")
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        self.rail.transform = CATransform3DIdentity
+        CATransaction.commit()
+        guard animated, !UIAccessibility.isReduceMotionEnabled, !CATransform3DIsIdentity(current) else { return }
+        let spring = CASpringAnimation(keyPath: "transform")
+        spring.fromValue = NSValue(caTransform3D: current)
+        spring.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+        spring.stiffness = 320.0
+        spring.damping = 25.0
+        spring.duration = spring.settlingDuration
+        self.rail.add(spring, forKey: "nextgram.edgeStretch")
+    }
+
+#if DEBUG && targetEnvironment(simulator)
+    func previewEdgeStretch(_ overshoot: CGFloat?) {
+        if let overshoot {
+            self.setEdgeStretch(overshoot)
+        } else {
+            self.resetEdgeStretch(animated: true)
+        }
+    }
+#endif
 }
 
 enum NextgramPlayerPalette {
@@ -162,13 +350,4 @@ enum NextgramPlayerPalette {
         return linear(red) * 0.2126 + linear(green) * 0.7152 + linear(blue) * 0.0722 > 0.179 ? .black : .white
     }
 
-    static func rail(_ color: UIColor) -> UIImage {
-        let format = UIGraphicsImageRendererFormat()
-        format.opaque = false
-        let image = UIGraphicsImageRenderer(size: CGSize(width: 12.0, height: 6.0), format: format).image { _ in
-            color.setFill()
-            UIBezierPath(roundedRect: CGRect(x: 0.0, y: 0.0, width: 12.0, height: 6.0), cornerRadius: 3.0).fill()
-        }
-        return image.resizableImage(withCapInsets: UIEdgeInsets(top: 0.0, left: 5.0, bottom: 0.0, right: 5.0))
-    }
 }

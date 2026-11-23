@@ -63,6 +63,19 @@ final class MessageHistoryIndexTable: Table {
         key.setInt32(8 + 4, value: id.id)
         return key
     }
+
+    // MARK: NEXTGRAM — Include cached histories outside the chat list in local archives.
+    func allHistoryPeerIds() -> [PeerId] {
+        var peerIds: [PeerId] = []
+        self.valueBox.scan(self.table, keys: { key in
+            let peerId = PeerId(key.getInt64(0))
+            if peerIds.last != peerId {
+                peerIds.append(peerId)
+            }
+            return true
+        })
+        return peerIds
+    }
     
     private func lowerBound(peerId: PeerId) -> ValueBoxKey {
         let key = ValueBoxKey(length: 8)

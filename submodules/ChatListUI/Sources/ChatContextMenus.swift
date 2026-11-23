@@ -17,6 +17,7 @@ import ChatTimerScreen
 import NotificationPeerExceptionController
 import NagramSettings // MARK: NAGRAM
 import NagramSettingsUI // MARK: NAGRAM
+import NagramStrings // MARK: NEXTGRAM
 
 func archiveContextMenuItems(context: AccountContext, group: EngineChatList.Group, chatListController: ChatListControllerImpl?) -> Signal<[ContextMenuItem], NoError> {
     let presentationData = context.sharedContext.currentPresentationData.with({ $0 })
@@ -389,13 +390,29 @@ func chatContextMenuItems(context: AccountContext, peerId: EnginePeer.Id, promoI
                             }
                         }
                         
+                        // MARK: NEXTGRAM — Let users opt in before opening a private chat.
+                        let accountId = context.account.peerId.toInt64()
+                        let ghostPeerId = peerId.toInt64()
+                        var peerGhostMode = false
+                        if peerId.namespace == Namespaces.Peer.CloudUser, !isSavedMessages,
+                           case let .user(user) = peer, user.botInfo == nil {
+                            peerGhostMode = NextgramPeerGhostMode.isEnabled(accountPeerId: accountId, peerId: ghostPeerId)
+                            let enable = !peerGhostMode
+                            let key = enable ? "Nagram.PeerGhostMode.Enable" : "Nagram.PeerGhostMode.Disable"
+                            items.append(.action(ContextMenuActionItem(text: ngI18n(key, strings.baseLanguageCode), icon: { theme in
+                                generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/Privacy"), color: theme.contextMenu.primaryColor)
+                            }, action: { _, dismiss in
+                                NextgramPeerGhostMode.setEnabled(enable, accountPeerId: accountId, peerId: ghostPeerId)
+                                dismiss(.default)
+                            })))
+                        }
                         if !isCommunity {
-                            if isUnread {
+                            if isUnread && !peerGhostMode { // MARK: NEXTGRAM
                                 items.append(.action(ContextMenuActionItem(text: strings.ChatList_Context_MarkAsRead, icon: { theme in generateTintedImage(image: UIImage(bundleImageName: "Chat/Context Menu/MarkAsRead"), color: theme.contextMenu.primaryColor) }, action: { _, f in
                                     let _ = context.engine.messages.togglePeersUnreadMarkInteractively(peerIds: [peerId], setToValue: nil).startStandalone()
                                     f(.default)
                                 })))
-                            } else if !isForum {
+                            } else if !isUnread && !isForum { // MARK: NEXTGRAM
                                 var canMarkAsUnread = true
                                 if peerId.namespace == Namespaces.Peer.CloudChannel && joined {
                                     canMarkAsUnread = false

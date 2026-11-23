@@ -7,8 +7,8 @@ struct MusicCanvasRoot: UIViewControllerRepresentable {
         let interlude = CommandLine.arguments.contains("lyrics-interlude") || CommandLine.arguments.contains("lyrics-interlude-pause")
         let fullEffects = interlude || CommandLine.arguments.contains("lyrics-effects") || CommandLine.arguments.contains("lyrics-effects-paused") || CommandLine.arguments.contains("lyrics-motion-pause")
         let demo = fullEffects || CommandLine.arguments.contains("lyrics-original")
-        let artworkMotion: Bool? = CommandLine.arguments.contains("artwork-motion") || CommandLine.arguments.contains("artwork-gyro") ? true :
-            (CommandLine.arguments.contains("artwork-motion-off") || CommandLine.arguments.contains("artwork-gyro-off") || CommandLine.arguments.contains("artwork-metadata") ? false : nil)
+        let artworkMotion: Bool? = CommandLine.arguments.contains("artwork-motion") ? true :
+            (CommandLine.arguments.contains("artwork-motion-off") || CommandLine.arguments.contains("artwork-metadata") ? false : nil)
         return MusicCanvasViewController(showingLyrics: demo,
             playing: !CommandLine.arguments.contains("lyrics-paused") && !CommandLine.arguments.contains("lyrics-effects-paused"),
             allLyricsEffects: fullEffects, animatedLyrics: true, interludePreview: interlude, artworkMotionPreview: artworkMotion,
@@ -24,15 +24,20 @@ private final class MusicCanvasViewController: UIViewController {
     private let player: NextgramMusicPlayerView
     private var scheduledRecording = false
     private let artworkDetailPreview: Bool
-    private var motionTimer: Timer?
 
     init(showingLyrics: Bool, playing: Bool = true, allLyricsEffects: Bool = false, animatedLyrics: Bool = false,
         interludePreview: Bool = false, artworkMotionPreview: Bool? = nil, artworkDetailPreview: Bool = false,
         artworkMetadataPreview: Bool? = nil, usesConfiguredSettings: Bool = false) {
         self.artworkDetailPreview = artworkDetailPreview
-        let cover = Bundle.main.url(forResource: "MusicCanvasARU", withExtension: "jpg")
+        var cover = Bundle.main.url(forResource: "MusicCanvasARU", withExtension: "jpg")
             .flatMap { UIImage(contentsOfFile: $0.path) }
             ?? UIImage(systemName: "music.note")!
+        if CommandLine.arguments.contains("cover-regression") {
+            let format = UIGraphicsImageRendererFormat()
+            format.scale = 1.0
+            let bounds = CGRect(x: 0.0, y: 0.0, width: 256.0, height: 256.0)
+            cover = UIGraphicsImageRenderer(size: bounds.size, format: format).image { _ in cover.draw(in: bounds) }
+        }
         self.player = NextgramMusicPlayerView.makeCanvasPreview(coverImage: cover, showingLyrics: showingLyrics, playing: playing,
             allLyricsEffects: allLyricsEffects, animatedLyrics: animatedLyrics, interludePreview: interludePreview,
             artworkMotionPreview: artworkMotionPreview, artworkMetadataPreview: artworkMetadataPreview)
@@ -48,7 +53,6 @@ private final class MusicCanvasViewController: UIViewController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    deinit { self.motionTimer?.invalidate() }
 
     override func loadView() {
         self.view = UIView()
@@ -70,6 +74,47 @@ private final class MusicCanvasViewController: UIViewController {
         guard !self.scheduledRecording, let index = CommandLine.arguments.firstIndex(of: "--canvas-motion") else { return }
         guard index + 1 < CommandLine.arguments.count else { fatalError("--canvas-motion requires playback, lyrics-playing, or lyrics-paused") }
         let mode = CommandLine.arguments[index + 1]
+        if mode == "cover-regression" {
+            self.scheduledRecording = true
+            for (delay, action) in [(0.1, "cover:card"), (0.1, "enhancement:off"), (0.1, "background:blur"),
+                                    (1.0, "cover:disc"), (2.0, "cover:card"), (3.2, "cover:fullscreen"),
+                                    (4.3, "enhancement:fullscreen"), (6.2, "cover:card"), (7.3, "enhancement:always")] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.player.performCanvasAction(action) }
+            }
+            return
+        }
+        if mode == "progress-stretch" {
+            self.scheduledRecording = true
+            for (delay, action) in [(0.3, "playback"), (1.2, "progress-start"), (1.9, "progress-release"),
+                                    (2.6, "progress-end"), (3.3, "progress-release"), (4.1, "volume-toggle"),
+                                    (4.8, "volume-toggle")] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.player.performCanvasAction(action) }
+            }
+            for (start, direction) in [(1.3, -1.0), (2.7, 1.0)] {
+                for step in 1 ... 14 {
+                    let distance = direction * Double(step) * 2.0
+                    DispatchQueue.main.asyncAfter(deadline: .now() + start + Double(step) / 60.0) { [weak self] in
+                        self?.player.performCanvasAction("progress-stretch:\(distance)")
+                    }
+                }
+            }
+            return
+        }
+        if mode == "cover-swipe" || mode == "fullscreen-swipe" {
+            self.scheduledRecording = true
+            let layout = mode == "fullscreen-swipe" ? "fullscreen" : "card"
+            for (delay, action) in [(0.3, "cover:" + layout), (1.7, "cover-swipe-left"), (2.8, "cover-swipe-right")] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.player.performCanvasAction(action) }
+            }
+            return
+        }
+        if mode == "lyrics-seek" {
+            self.scheduledRecording = true
+            for (delay, action) in [(0.3, "effects-on"), (0.7, "lyrics"), (2.0, "lyrics-seek"), (3.5, "lyrics")] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.player.performCanvasAction(action) }
+            }
+            return
+        }
         if mode == "disc-playback" {
             self.scheduledRecording = true
             for (delay, action) in [(0.3, "cover:disc"), (2.5, "playback"), (5.5, "playback"), (8.5, "playback")] {
@@ -137,34 +182,6 @@ private final class MusicCanvasViewController: UIViewController {
             }
             return
         }
-        if mode == "artwork-gyro" || mode == "artwork-gyro-off" {
-            self.scheduledRecording = true
-            let start = CACurrentMediaTime()
-            // Relative sensor angles in radians; the real Core Motion filter handles these samples.
-            let poses: [(Double, Double, Double)] = [
-                (0, 0, 0), (0.3, 0, 0), (0.6, 0.34, -0.12), (1.0, 0.34, -0.12),
-                (1.25, 0, 0), (1.5, 0.30, -0.10), (1.75, 0, 0),
-                (2.05, -0.34, -0.12), (2.3, 0, 0), (2.6, 0.30, -0.10),
-                (2.85, 0, 0), (3.15, -0.30, -0.10), (3.45, 0, 0),
-                (3.8, 0.26, -0.10), (4.05, 0, 0), (4.4, -0.26, -0.10), (4.8, 0, 0)
-            ]
-            self.motionTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 60.0, repeats: true) { [weak self] timer in
-                guard let self else { timer.invalidate(); return }
-                let elapsed = CACurrentMediaTime() - start
-                let time = max(0, elapsed - 1.8)
-                let upper = poses.firstIndex { $0.0 >= time } ?? (poses.count - 1)
-                let lower = max(0, upper - 1)
-                let fraction = min(1.0, max(0, (time - poses[lower].0) / max(0.001, poses[upper].0 - poses[lower].0)))
-                let roll = poses[lower].1 + (poses[upper].1 - poses[lower].1) * fraction
-                let pitch = poses[lower].2 + (poses[upper].2 - poses[lower].2) * fraction
-                self.player.performCanvasDeviceMotion(roll: roll, pitch: pitch)
-                if elapsed > 9 { timer.invalidate(); self.motionTimer = nil }
-            }
-            for (delay, action) in [(1.0, "artwork"), (4.0, "artwork-center"), (4.7, "artwork-release"), (7.3, "artwork-close")] {
-                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in self?.player.performCanvasAction(action) }
-            }
-            return
-        }
         if mode == "artwork-motion" || mode == "artwork-motion-off" {
             self.scheduledRecording = true
             let events: [(Double, String)] = [
@@ -172,11 +189,17 @@ private final class MusicCanvasViewController: UIViewController {
                 (1.8, "artwork-top-left"), (2.6, "artwork-top-right"),
                 (3.4, "artwork-bottom-right"), (4.2, "artwork-bottom-left"),
                 (5.0, "artwork-release"), (6.0, "artwork-center"), (6.5, "artwork-release"),
-                (7.5, "artwork-close"), (8.3, "artwork-main-press")
+                (9.2, "artwork-close"), (10.0, "artwork-main-press")
             ]
             for (delay, action) in events {
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
                     self?.player.performCanvasAction(action)
+                }
+            }
+            for sample in 0 ... 96 {
+                let angle = 0.30 * sin(2.0 * .pi * Double(sample) / 72.0) * min(1.0, Double(96 - sample) / 24.0)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 7.0 + Double(sample) / 60.0) { [weak self] in
+                    self?.player.performCanvasAction("artwork-tilt:\(angle)")
                 }
             }
             return

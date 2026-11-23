@@ -59,6 +59,7 @@ import StatisticsUI
 import ChatHistoryEntry
 import ChatMessageItem
 import ChatMessageItemImpl
+import ChatMessageItemView // MARK: NEXTGRAM
 import ChatRecentActionsController
 import PeerInfoScreen
 import ChatQrCodeScreen
@@ -637,13 +638,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             }
         })
         
-        let _ = self.contactDataManager?.personNameDisplayOrder().start(next: { order in
-            let _ = updateContactSettingsInteractively(accountManager: accountManager, { settings in
-                var settings = settings
-                settings.nameDisplayOrder = order
-                return settings
-            }).start()
-        })
+        // MARK: NEXTGRAM — The app's name display preference is independent of iOS Contacts.
         
         self.automaticMediaDownloadSettingsDisposable.set(self._automaticMediaDownloadSettings.get().start(next: { [weak self] next in
             if let strongSelf = self {
@@ -2641,13 +2636,13 @@ public final class SharedAccountContextImpl: SharedAccountContext {
         return self.makeStandaloneChatMessageItem(context: context, messages: messages, theme: theme, strings: strings, wallpaper: wallpaper, fontSize: fontSize, chatBubbleCorners: chatBubbleCorners, dateTimeFormat: dateTimeFormat, nameOrder: nameOrder, forcedResourceStatus: forcedResourceStatus, tapMessage: tapMessage, clickThroughMessage: clickThroughMessage, backgroundNode: backgroundNode, availableReactions: availableReactions, accountPeer: accountPeer, isCentered: isCentered, isPreview: isPreview, isStandalone: isStandalone, rank: rank, rankRole: rankRole, isGiftMessageComposerPreview: isGiftMessageComposerPreview, activateGiftMessageInput: activateGiftMessageInput, feedActions: nil)
     }
 
-    public func makeChatMessageFeedItem(context: AccountContext, messages: [EngineMessage], presentationData: PresentationData, accountPeer: EnginePeer?, actions: ChatMessageFeedItemActions) -> ListViewItem {
+    public func makeChatMessageFeedItem(context: AccountContext, messages: [EngineMessage], presentationData: PresentationData, accountPeer: EnginePeer?, backgroundNode: ASDisplayNode? = nil, actions: ChatMessageFeedItemActions) -> ListViewItem {
         // Not a preview: a preview hides a link preview's action button (Instant View), and the feed shows it.
         // No tails: the text and link preview content nodes draw no status line (views, time) then, and the row
         // shows both in its channel line instead. // MARK: NEXTGRAM
         let corners = presentationData.chatBubbleCorners
-        let feedCorners = PresentationChatBubbleCorners(mainRadius: corners.mainRadius, auxiliaryRadius: corners.auxiliaryRadius, mergeBubbleCorners: corners.mergeBubbleCorners, hasTails: false, serifMessageText: corners.serifMessageText)
-        return self.makeStandaloneChatMessageItem(context: context, messages: messages, theme: presentationData.theme, strings: presentationData.strings, wallpaper: presentationData.chatWallpaper, fontSize: presentationData.chatFontSize, chatBubbleCorners: feedCorners, dateTimeFormat: presentationData.dateTimeFormat, nameOrder: presentationData.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: nil, availableReactions: nil, accountPeer: accountPeer, isCentered: false, isPreview: false, isStandalone: true, rank: nil, rankRole: nil, isGiftMessageComposerPreview: false, activateGiftMessageInput: nil, feedActions: actions)
+        let feedCorners = actions.nextgramHost != nil ? corners : PresentationChatBubbleCorners(mainRadius: corners.mainRadius, auxiliaryRadius: corners.auxiliaryRadius, mergeBubbleCorners: corners.mergeBubbleCorners, hasTails: false, serifMessageText: corners.serifMessageText) // MARK: NEXTGRAM
+        return self.makeStandaloneChatMessageItem(context: context, messages: messages, theme: presentationData.theme, strings: presentationData.strings, wallpaper: presentationData.chatWallpaper, fontSize: presentationData.chatFontSize, chatBubbleCorners: feedCorners, dateTimeFormat: presentationData.dateTimeFormat, nameOrder: presentationData.nameDisplayOrder, forcedResourceStatus: nil, tapMessage: nil, clickThroughMessage: nil, backgroundNode: backgroundNode, availableReactions: nil, accountPeer: accountPeer, isCentered: false, isPreview: false, isStandalone: actions.nextgramHost == nil, rank: nil, rankRole: nil, isGiftMessageComposerPreview: false, activateGiftMessageInput: nil, feedActions: actions)
     }
 
     /// The item behind both the preview and the feed bubble. The feed draws its author line in the row and
@@ -2671,7 +2666,13 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 feedActions?.openPeer(peer)
             },
             openPeerMention: { _, _ in },
-            openMessageContextMenu: { _, _, _, _, _, _ in },
+            openMessageContextMenu: { message, selectAll, node, _, recognizer, _ in
+                // MARK: NEXTGRAM
+                guard let feedActions, let host = feedActions.nextgramHost?(), let node = node as? ChatMessageItemView else { return }
+                let group = selectAll ? messages : [message]
+                nextgramOpenFeedMessageMenu(context: context, host: host, item: node, message: EngineMessage(message),
+                    messages: group.map(EngineMessage.init), selectAll: selectAll, recognizer: recognizer, actions: feedActions)
+            },
             openMessageReactionContextMenu: { _, _, _, _ in
             },
             updateMessageReaction: { _, _, _, _ in },
@@ -2730,6 +2731,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             },
             updatePresentationState: { _ in },
             openMessageShareMenu: { _ in
+                feedActions?.nextgramShare?() // MARK: NEXTGRAM
             },
             presentController: { _, _ in
             },
@@ -2817,7 +2819,10 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             },
             openPeerContextMenu: { _, _, _, _, _ in
             },
-            openMessageReplies: { _, _, _ in
+            openMessageReplies: { id, isChannelPost, _ in
+                // MARK: NEXTGRAM
+                guard let host = feedActions?.nextgramHost?() else { return }
+                nextgramOpenFeedReplies(context: context, host: host, id: id, isChannelPost: isChannelPost, displayModalProgress: true)
             },
             openReplyThreadOriginalMessage: { _ in
             },
@@ -2921,6 +2926,12 @@ public final class SharedAccountContextImpl: SharedAccountContext {
             stickerSettings: ChatInterfaceStickerSettings(),
             presentationContext: ChatPresentationContext(context: context, backgroundNode: backgroundNode as? WallpaperBackgroundNode)
         )
+        // MARK: NEXTGRAM — Feed items live in a normal top-to-bottom ItemList,
+        // unlike the inverted chat history list. Keep native message content
+        // upright when it is embedded in the channel feed.
+        if feedActions != nil {
+            controllerInteraction.chatIsRotated = false
+        }
         
         var entryAttributes = ChatMessageEntryAttributes()
         entryAttributes.isCentered = isCentered
@@ -2972,6 +2983,7 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 premiumGiftStickers: context.premiumGiftStickersValue,
                 tonGiftStickers: context.tonGiftStickersValue,
                 forcedResourceStatus: forcedResourceStatus,
+                isCopyProtectionEnabled: feedActions?.nextgramHost != nil && messages.first.map { $0.peers[$0.id.peerId]?.isCopyProtectionEnabled == true } == true, // MARK: NEXTGRAM
                 availableReactions: availableReactions,
                 availableMessageEffects: nil,
                 savedMessageTags: nil,
@@ -2983,9 +2995,10 @@ public final class SharedAccountContextImpl: SharedAccountContext {
                 isStandalone: isStandalone,
                 showTextAsPlaceholder: rank != nil,
                 // MARK: NEXTGRAM — Use the theme’s bubble background in the feed.
-                hidesAuthorHeader: feedActions != nil,
-                hidesShareButton: feedActions != nil,
-                hostHandlesGestures: feedActions != nil
+                hidesAuthorHeader: feedActions.map { !$0.nextgramShowsChannelName } ?? false,
+                hidesShareButton: feedActions.map { $0.nextgramShare == nil } ?? false,
+                hostHandlesGestures: feedActions != nil && feedActions?.nextgramHost == nil, // MARK: NEXTGRAM
+                nextgramFeedShowsChannelAvatar: feedActions?.nextgramShowsChannelAvatar
             ),
             controllerInteraction: controllerInteraction,
             content: content,

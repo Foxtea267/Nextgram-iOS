@@ -183,16 +183,15 @@ private enum NagramBottomBarEntry: ItemListNodeEntry {
                 }
             })
         case let .page(_, id, title, canRemove, canDrag):
-            let handle = canDrag ? UIImage(systemName: "line.3.horizontal")?.withTintColor(
-                presentationData.theme.list.itemSecondaryTextColor, renderingMode: .alwaysOriginal) : nil
+            let handle = canDrag ? PresentationResourcesItemList.itemListReorderIndicatorIcon(presentationData.theme) : nil
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass,
-                icon: nextgramBottomBarPageIcon(id, color: presentationData.theme.list.itemAccentColor),
+                icon: nextgramBottomBarPageIcon(id, color: presentationData.theme.list.itemPrimaryTextColor),
                 title: title, label: "", labelStyle: handle.map { .image(image: $0, size: CGSize(width: 18.0, height: 16.0)) } ?? .text,
                 sectionId: self.section, style: .blocks, disclosureStyle: .none,
                 action: canRemove ? { arguments.option(.remove(id)) } : nil, nextgramReorderable: canDrag)
         case let .add(title, enabled):
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass,
-                icon: UIImage(systemName: "plus.circle.fill")?.withTintColor(presentationData.theme.list.itemAccentColor, renderingMode: .alwaysOriginal),
+                icon: nextgramBottomBarRasterIcon("plus.circle.fill", color: enabled ? presentationData.theme.list.itemAccentColor : presentationData.theme.list.itemSecondaryTextColor),
                 title: title, enabled: enabled, titleColor: .accent, label: "", sectionId: self.section, style: .blocks,
                 action: enabled ? { arguments.option(.add) } : nil)
         case let .slider(_, section, title, value):
@@ -233,8 +232,16 @@ private func nextgramBottomBarPageIcon(_ id: NagramBottomBarItemId, color: UICol
     case .profile: symbol = "person.crop.circle"
     case .search: symbol = "magnifyingglass"
     }
-    return UIImage(systemName: symbol, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18.0, weight: .medium))?
-        .withTintColor(color, renderingMode: .alwaysOriginal)
+    return nextgramBottomBarRasterIcon(symbol, color: color)
+}
+
+private func nextgramBottomBarRasterIcon(_ name: String, color: UIColor) -> UIImage? {
+    guard let symbol = UIImage(systemName: name, withConfiguration: UIImage.SymbolConfiguration(pointSize: 18.0, weight: .medium)) else {
+        return nil
+    }
+    return UIGraphicsImageRenderer(size: symbol.size).image { _ in
+        symbol.withTintColor(color, renderingMode: .alwaysOriginal).draw(at: .zero)
+    }.withRenderingMode(.alwaysOriginal)
 }
 
 private func nextgramBottomBarPages(_ settings: NagramBottomBarSettings) -> [NagramBottomBarItemId] {

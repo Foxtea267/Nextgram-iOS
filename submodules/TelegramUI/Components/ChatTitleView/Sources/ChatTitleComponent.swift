@@ -1465,7 +1465,9 @@ public final class ChatTitleComponent: Component {
                 titleRightIconsWidth += statusIconSize.width + statusIconsSpacing
             }
             
-            let maxTitleWidth = availableSize.width - titleLeftIconsWidth - titleRightIconsWidth - containerSideInset * 2.0
+            // MARK: NEXTGRAM — A centered header may have very little room beside its buttons.
+            let titleContentWidth = max(0.0, availableSize.width - containerSideInset * 2.0)
+            let maxTitleWidth = max(0.0, titleContentWidth - titleLeftIconsWidth - titleRightIconsWidth)
             
             let titleSize = self.title.update(
                 transition: transition,
@@ -1484,7 +1486,7 @@ public final class ChatTitleComponent: Component {
             )
             
             let _ = subtitleNode.transitionToState(state, animation: transition.animation.isImmediate ? .none : .slide)
-            let subtitleSize = subtitleNode.updateLayout(CGSize(width: availableSize.width - containerSideInset * 2.0, height: 100.0), alignment: .center)
+            let subtitleSize = subtitleNode.updateLayout(CGSize(width: titleContentWidth, height: 100.0), alignment: .center) // MARK: NEXTGRAM
             
             var minSubtitleWidth: CGFloat?
             let activityMeasureSubtitleNode: ChatTitleActivityNode
@@ -1496,7 +1498,7 @@ public final class ChatTitleComponent: Component {
             }
             let measureTypingTextString = NSAttributedString(string: component.strings.Conversation_typing, font: subtitleFont, textColor: .black)
             let _ = activityMeasureSubtitleNode.transitionToState(.typingText(measureTypingTextString, .black), animation: .none)
-            let activityMeasureSubtitleSize = activityMeasureSubtitleNode.updateLayout(CGSize(width: availableSize.width - containerSideInset * 2.0, height: 100.0), alignment: .center)
+            let activityMeasureSubtitleSize = activityMeasureSubtitleNode.updateLayout(CGSize(width: titleContentWidth, height: 100.0), alignment: .center) // MARK: NEXTGRAM
             minSubtitleWidth = activityMeasureSubtitleSize.width
             
             var contentSize = titleSize

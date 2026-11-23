@@ -13,6 +13,7 @@ swift_library(
         # MARK: NAGRAM
         "//Nagram/Settings:NagramSettings",
         "//Nagram/Strings:NagramStrings", # MARK: NEXTGRAM
+        "//Nagram/ImageSuperResolution:NextgramImageSuperResolution", # MARK: NEXTGRAM
         "//submodules/UrlWhitelist",
         "//submodules/Display",
         "//submodules/AsyncDisplayKit",

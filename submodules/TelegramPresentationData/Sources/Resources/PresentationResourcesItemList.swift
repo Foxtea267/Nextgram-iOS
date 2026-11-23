@@ -141,10 +141,8 @@ public struct PresentationResourcesItemList {
         return theme.image(PresentationResourceKey.itemListReorderIndicatorIcon.rawValue, { theme in
             return generateImage(CGSize(width: 17.0, height: 14.0), rotatedContext: { size, context in
                 context.clear(CGRect(origin: CGPoint(), size: size))
-                // MARK: NEXTGRAM — Reorder handles must remain visible on dark themes.
-                // The placeholder color is intentionally near-black in the dark palette;
-                // use the secondary text color used by the other reorderable lists instead.
-                context.setFillColor(theme.list.itemSecondaryTextColor.cgColor)
+                // MARK: NEXTGRAM — Use the same contrasting color as the adjacent row title.
+                context.setFillColor(theme.list.itemPrimaryTextColor.withAlphaComponent(0.72).cgColor)
 
                 let lineHeight = 1.0 + UIScreenPixel
                 context.addPath(CGPath(roundedRect: CGRect(x: 0.0, y: UIScreenPixel, width: 17.0, height: lineHeight), cornerWidth: lineHeight / 2.0, cornerHeight: lineHeight / 2.0, transform: nil))

@@ -32,7 +32,7 @@ python3 build-system/Make/Make.py --overrideXcodeVersion generateProject \
 
 **Music · Artwork 3D** 打开独立封面查看页：居中封面、左上角关闭、轻微倾斜和按压回弹。设置中的封面 3D 选项只作用于这个查看页，播放器主页面保持平面封面。圆角裁切位于图像子视图，3D 投影容器不裁切。`--canvas-motion artwork-motion` 与 `artwork-motion-off` 通过实际交互共用的按压处理方法，依次演示查看页四角、中心、松手回正及关闭后主页面保持平面；它们不写入用户设置，也不模拟真实设备传感器。
 
-`--canvas-motion artwork-gyro` 将一段相对俯仰、横滚角数据以 60Hz 注入真实 Core Motion 回调共用的处理函数，检查下边缘支点透视、75ms 平滑、按住时继续倾斜及归零。`artwork-gyro-off` 重放同样数据但关闭效果。这是传感器输入的软件模拟，不能代替真机传感器测试。主页面不接收这类 3D 变换；关闭、放大图片或启用系统“减弱动态效果”时停止运动输入并清除变换。
+封面查看页的 3D 效果由指尖位置驱动，松手回正。`--canvas-motion cover-swipe` 和 `fullscreen-swipe` 可分别录制专辑与全屏封面向左右滑动。
 
 “封面查看页底部显示歌曲名称和艺术家”独立于 3D 开关，默认关闭，支持设置同步与备份。开启后在查看页底部居中显示两项信息，长文本最多两行；空间不足时缩小封面的可用区域以避免重叠。**Music · Artwork Title / Artist** 预览开启状态；`--canvas-motion artwork-metadata` 在同一查看页演示默认关闭、开启、关闭与再次开启，不修改真实设置。
 

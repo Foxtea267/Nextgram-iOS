@@ -40,6 +40,13 @@ public struct NextgramLyrics: Codable, Equatable {
         self.instrumental = instrumental
     }
 
+    public var lookupQuality: Int {
+        guard !self.instrumental, self.lines.contains(where: { !$0.text.isEmpty }) else { return 0 }
+        let timing = self.isSynced ? (self.lines.contains(where: { !$0.words.isEmpty }) ? 4 : 3) : 1
+        let hasTranslation = self.lines.contains(where: { $0.translation?.isEmpty == false })
+        return timing + (hasTranslation ? 2 : 0)
+    }
+
     private static let timestamp = try! NSRegularExpression(pattern: #"\[([0-9]{1,4}):([0-5]?[0-9])(?:[.:]([0-9]{1,3}))?\]"#)
     private static let wordTimestamp = try! NSRegularExpression(pattern: #"<[0-9]{1,4}:[0-5]?[0-9](?:[.:][0-9]{1,3})?>"#)
     private static let metadata = try! NSRegularExpression(pattern: #"^\[[A-Za-z][A-Za-z0-9_-]*:.*\]$"#)

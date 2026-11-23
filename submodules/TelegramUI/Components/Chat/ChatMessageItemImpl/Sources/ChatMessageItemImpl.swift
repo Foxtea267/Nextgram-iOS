@@ -239,7 +239,13 @@ public final class ChatMessageItemImpl: ChatMessageItem, CustomStringConvertible
             self.topicHeader = nil
         }
         
-        if displayAuthorInfo {
+        // MARK: NEXTGRAM
+        if let showsAvatar = associatedData.nextgramFeedShowsChannelAvatar {
+            let message = content.firstMessage
+            if showsAvatar, let peer = message.peers[message.id.peerId] {
+                avatarHeader = ChatMessageAvatarHeader(timestamp: content.index.timestamp, peerId: peer.id, peer: EnginePeer(peer), messageReference: nil, message: EngineMessage(message), presentationData: presentationData, context: context, controllerInteraction: controllerInteraction, storyStats: nil)
+            }
+        } else if displayAuthorInfo {
             let message = content.firstMessage
             // Without bubbles a service message, expired media included, has no avatar beside it.
             var hasActionMedia = bubbleStyle == .bubblelessService

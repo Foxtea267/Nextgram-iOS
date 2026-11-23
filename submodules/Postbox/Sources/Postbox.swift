@@ -536,6 +536,12 @@ public final class Transaction {
         assert(!self.disposed)
         return self.postbox?.chatListTable.getAllPeerIds() ?? []
     }
+
+    // MARK: NEXTGRAM
+    public func nagramMessageHistoryPeerIds() -> [PeerId] {
+        assert(!self.disposed)
+        return self.postbox?.messageHistoryIndexTable.allHistoryPeerIds() ?? []
+    }
     
     public func chatListGetAllPeerIds(groupId: PeerGroupId) -> [PeerId] {
         assert(!self.disposed)

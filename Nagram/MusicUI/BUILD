@@ -6,6 +6,7 @@ swift_library(
     srcs = glob(["Sources/**/*.swift"]),
     copts = ["-warnings-as-errors"],
     deps = [
+        "//Nagram/ImageSuperResolution:NextgramImageSuperResolution",
         "//Nagram/Lyrics:NextgramLyrics",
         "//Nagram/Settings:NagramSettings",
         "//Nagram/SettingsSignal:NagramSettingsSignal",

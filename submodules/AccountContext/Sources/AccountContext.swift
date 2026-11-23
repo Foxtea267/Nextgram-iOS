@@ -1471,13 +1471,25 @@ public final class ChatMessageFeedItemActions {
     public let openInstantPage: (EngineMessage) -> Void
     /// A tap on a reply header: the message it replies to.
     public let navigateToMessage: (EngineMessage.Id) -> Void
+    // MARK: NEXTGRAM
+    public let nextgramShowsChannelAvatar: Bool?
+    public let nextgramShowsChannelName: Bool
+    public let nextgramShare: (() -> Void)?
+    public let nextgramHost: (() -> ViewController?)?
+    public let nextgramHideChannel: (() -> Void)? // MARK: NEXTGRAM
 
-    public init(openUrl: @escaping (String) -> Void, openMessage: @escaping (EngineMessage) -> Bool, openPeer: @escaping (EnginePeer) -> Void, openInstantPage: @escaping (EngineMessage) -> Void, navigateToMessage: @escaping (EngineMessage.Id) -> Void) {
+    public init(openUrl: @escaping (String) -> Void, openMessage: @escaping (EngineMessage) -> Bool, openPeer: @escaping (EnginePeer) -> Void, openInstantPage: @escaping (EngineMessage) -> Void, navigateToMessage: @escaping (EngineMessage.Id) -> Void, nextgramShowsChannelAvatar: Bool? = nil, nextgramShowsChannelName: Bool = false, nextgramShare: (() -> Void)? = nil, nextgramHost: (() -> ViewController?)? = nil, nextgramHideChannel: (() -> Void)? = nil) { // MARK: NEXTGRAM
         self.openUrl = openUrl
         self.openMessage = openMessage
         self.openPeer = openPeer
         self.openInstantPage = openInstantPage
         self.navigateToMessage = navigateToMessage
+        // MARK: NEXTGRAM
+        self.nextgramShowsChannelAvatar = nextgramShowsChannelAvatar
+        self.nextgramShowsChannelName = nextgramShowsChannelName
+        self.nextgramShare = nextgramShare
+        self.nextgramHost = nextgramHost
+        self.nextgramHideChannel = nextgramHideChannel
     }
 }
 
@@ -1554,7 +1566,7 @@ public protocol SharedAccountContext: AnyObject {
     /// A message bubble's content for a feed row (the News tab's expanded post): the bubble's text, link preview and
     /// other content, drawn without the bubble's background and author line. The host draws the channel line and the
     /// photos and videos (the item never shows them).
-    func makeChatMessageFeedItem(context: AccountContext, messages: [EngineMessage], presentationData: PresentationData, accountPeer: EnginePeer?, actions: ChatMessageFeedItemActions) -> ListViewItem
+    func makeChatMessageFeedItem(context: AccountContext, messages: [EngineMessage], presentationData: PresentationData, accountPeer: EnginePeer?, backgroundNode: ASDisplayNode?, actions: ChatMessageFeedItemActions) -> ListViewItem
     func makeChatMessageDateHeaderItem(context: AccountContext, timestamp: Int32, theme: PresentationTheme, strings: PresentationStrings, wallpaper: TelegramWallpaper, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, dateTimeFormat: PresentationDateTimeFormat, nameOrder: PresentationPersonNameOrder) -> ListViewItemHeader
     func makeChatMessageAvatarHeaderItem(context: AccountContext, timestamp: Int32, peer: EnginePeer, message: EngineMessage, theme: PresentationTheme, strings: PresentationStrings, wallpaper: TelegramWallpaper, fontSize: PresentationFontSize, chatBubbleCorners: PresentationChatBubbleCorners, dateTimeFormat: PresentationDateTimeFormat, nameOrder: PresentationPersonNameOrder) -> ListViewItemHeader
     func makePeerSharedMediaController(context: AccountContext, peerId: EnginePeer.Id) -> ViewController?

@@ -2060,6 +2060,9 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             }
         }
         
+        if let showsAvatar = item.associatedData.nextgramFeedShowsChannelAvatar { // MARK: NEXTGRAM
+            hasAvatar = showsAvatar && firstMessage.peers[firstMessage.id.peerId] != nil
+        }
         avatarInset = hasAvatar ? layoutConstants.avatarInset : 0.0
         if isSidePanelOpen {
             avatarInset = 0.0
@@ -2782,6 +2785,13 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             authorNameColor = color
         }
                 
+        if item.associatedData.nextgramFeedShowsChannelAvatar != nil, !item.associatedData.hidesAuthorHeader,
+           let peer = firstMessage.peers[firstMessage.id.peerId] { // MARK: NEXTGRAM
+            displayAuthorInfo = true
+            initialDisplayHeader = true
+            effectiveAuthor = peer
+            overrideEffectiveAuthor = false
+        }
         if item.associatedData.hidesAuthorHeader {
             // The host draws the author line (a feed row).
             displayAuthorInfo = false
@@ -4261,7 +4271,7 @@ public class ChatMessageBubbleItemNode: ChatMessageItemView, ChatMessagePreviewI
             }
         }
         
-        let disablesComments = !hasInstantVideo
+        let disablesComments = !hasInstantVideo || item.associatedData.nextgramFeedShowsChannelAvatar != nil // MARK: NEXTGRAM
         
         return (layout, { animation, applyInfo, synchronousLoads in
             return ChatMessageBubbleItemNode.applyLayout(selfReference: selfReference, animation, synchronousLoads,

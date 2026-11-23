@@ -263,7 +263,7 @@ private func validatePeerReadState(network: Network, postbox: Postbox, stateMana
 private func pushPeerReadState(network: Network, postbox: Postbox, stateManager: AccountStateManager, peerId: PeerId, readState: PeerReadState) -> Signal<PeerReadState, PeerReadStateValidationError> {
     // MARK: NAGRAM
     // MARK: NEXTGRAM
-    if NagramSettings.shared.suppressReadReceipts {
+    if NagramSettings.shared.suppressReadReceipts || nextgramIsPeerGhostModeEnabled(accountPeerId: stateManager.accountPeerId, peerId: peerId) {
         return .single(readState)
     }
 
@@ -300,6 +300,8 @@ private func pushPeerReadState(network: Network, postbox: Postbox, stateManager:
     } else {
         return inputPeer(postbox: postbox, peerId: peerId)
         |> mapToSignal { inputPeer -> Signal<PeerReadState, PeerReadStateValidationError> in
+            // MARK: NEXTGRAM — Recheck after asynchronous peer resolution.
+            if nextgramIsPeerGhostModeEnabled(accountPeerId: stateManager.accountPeerId, peerId: peerId) { return .single(readState) }
             switch inputPeer {
             case let .inputPeerChannel(inputPeerChannelData):
                 let (channelId, accessHash) = (inputPeerChannelData.channelId, inputPeerChannelData.accessHash)

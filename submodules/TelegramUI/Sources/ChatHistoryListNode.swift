@@ -2708,11 +2708,12 @@ public final class ChatHistoryListNodeImpl: ASDisplayNode, ChatHistoryNode, Chat
                 let previousTheme = strongSelf.currentPresentationData.theme
                 let previousStrings = strongSelf.currentPresentationData.strings
                 let previousWallpaper = strongSelf.currentPresentationData.theme.wallpaper
+                let previousNameDisplayOrder = strongSelf.currentPresentationData.nameDisplayOrder // MARK: NEXTGRAM
                 let previousAnimatedEmojiScale = strongSelf.currentPresentationData.animatedEmojiScale
                 
                 let animatedEmojiConfig = ChatHistoryAnimatedEmojiConfiguration.with(appConfiguration: appConfiguration)
                 
-                if !didSetPresentationData || previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousWallpaper != presentationData.chatWallpaper || previousAnimatedEmojiScale != animatedEmojiConfig.scale || previousDeletedAppearance != deletedAppearance { // MARK: NEXTGRAM
+                if !didSetPresentationData || previousTheme !== presentationData.theme || previousStrings !== presentationData.strings || previousWallpaper != presentationData.chatWallpaper || previousAnimatedEmojiScale != animatedEmojiConfig.scale || previousDeletedAppearance != deletedAppearance || previousNameDisplayOrder != presentationData.nameDisplayOrder { // MARK: NEXTGRAM
                     didSetPresentationData = true
                     previousDeletedAppearance = deletedAppearance // MARK: NEXTGRAM
                     

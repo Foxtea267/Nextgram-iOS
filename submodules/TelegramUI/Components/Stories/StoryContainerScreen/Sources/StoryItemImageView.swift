@@ -11,9 +11,13 @@ import Display
 import TelegramPresentationData
 import BundleIconComponent
 import MultilineTextComponent
+// MARK: NEXTGRAM
+import NagramSettings
+import NextgramImageSuperResolution
 
 final class StoryItemImageView: UIView {
     private let contentView: UIImageView
+    private var imageEnhancementTask: DispatchWorkItem? // MARK: NEXTGRAM
     private var captureProtectedView: UITextField?
     
     private var captureProtectedInfo: ComponentView<Empty>?
@@ -38,10 +42,20 @@ final class StoryItemImageView: UIView {
     
     deinit {
         self.disposable?.dispose()
+        self.imageEnhancementTask?.cancel() // MARK: NEXTGRAM
     }
     
-    private func updateImage(image: UIImage, isCaptureProtected: Bool) {
+    // MARK: NEXTGRAM
+    private func updateImage(image: UIImage, isCaptureProtected: Bool, enhancePhoto: Bool = false) {
+        self.imageEnhancementTask?.cancel()
+        self.imageEnhancementTask = nil
         self.contentView.image = image
+        if enhancePhoto && NagramSettings.shared.enhanceStoryPhotos && !isCaptureProtected {
+            self.imageEnhancementTask = NextgramImageSuperResolution.enhance(image) { [weak self] enhanced in
+                guard let self, let enhanced, self.contentView.image === image, NagramSettings.shared.enhanceStoryPhotos else { return }
+                self.contentView.image = enhanced
+            }
+        }
         
         if isCaptureProtected {
             let captureProtectedView: UITextField
@@ -86,11 +100,11 @@ final class StoryItemImageView: UIView {
                     if attemptSynchronous, let path = context.engine.resources.completedResourcePath(id: EngineMediaResource.Id(representation.resource.id), pathExtension: nil) {
                         if #available(iOS 15.0, *) {
                             if let image = UIImage(contentsOfFile: path)?.preparingForDisplay() {
-                                self.updateImage(image: image, isCaptureProtected: isCaptureProtected)
+                                self.updateImage(image: image, isCaptureProtected: isCaptureProtected, enhancePhoto: true) // MARK: NEXTGRAM
                             }
                         } else {
                             if let image = UIImage(contentsOfFile: path)?.precomposed() {
-                                self.updateImage(image: image, isCaptureProtected: isCaptureProtected)
+                                self.updateImage(image: image, isCaptureProtected: isCaptureProtected, enhancePhoto: true) // MARK: NEXTGRAM
                             }
                         }
                         self.isContentLoaded = true
@@ -130,7 +144,7 @@ final class StoryItemImageView: UIView {
                                 return
                             }
                             if let image {
-                                self.updateImage(image: image, isCaptureProtected: isCaptureProtected)
+                                self.updateImage(image: image, isCaptureProtected: isCaptureProtected, enhancePhoto: true) // MARK: NEXTGRAM
                                 self.isContentLoaded = true
                                 self.didLoadContents?()
                             }

@@ -6236,7 +6236,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
         
         self.chatTitleView = ChatNavigationBarTitleView(frame: CGRect())
         // MARK: NEXTGRAM — Set the initial appearance before the first navigation layout.
-        self.chatTitleView?.prefersCenteredNavigationTitle = NagramSettings.shared.hideChatBackUnreadCount
+        self.chatTitleView?.prefersCenteredNavigationTitle = NagramSettings.shared.forceCenterChatTitle
         self.chatTitleView?.displaysGlassBackground = !NagramSettings.shared.hideChatTitleGlass
         
         self.navigationItem.titleView = self.chatTitleView
@@ -7045,6 +7045,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 let previousTheme = strongSelf.presentationData.theme
                 let previousStrings = strongSelf.presentationData.strings
                 let previousChatWallpaper = strongSelf.presentationData.chatWallpaper
+                let previousNameDisplayOrder = strongSelf.presentationData.nameDisplayOrder // MARK: NEXTGRAM
                 
                 var chatTheme = chatTheme
                 if let chatThemePreview {
@@ -7220,7 +7221,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
                 
                 let previousChatTheme = currentChatTheme.swap((chatTheme, useDarkAppearance))
                 
-                if isFirstTime || previousTheme != presentationData.theme || previousStrings !== presentationData.strings || presentationData.chatWallpaper != previousChatWallpaper {
+                if isFirstTime || previousTheme != presentationData.theme || previousStrings !== presentationData.strings || presentationData.chatWallpaper != previousChatWallpaper || previousNameDisplayOrder != presentationData.nameDisplayOrder { // MARK: NEXTGRAM
                     strongSelf.themeAndStringsUpdated()
                     
                     controllerInteraction.updatedPresentationData = strongSelf.updatedPresentationData
@@ -7590,7 +7591,7 @@ public final class ChatControllerImpl: TelegramBaseController, ChatController, G
             state = state.updatedTheme(self.presentationData.theme)
             state = state.updatedPreferredGlassType(preferredGlassType)
             state = state.updatedStrings(self.presentationData.strings)
-            state = state.updatedDateTimeFormat(self.presentationData.dateTimeFormat)
+            state = state.updatedDateTimeFormat(self.presentationData.dateTimeFormat, nameDisplayOrder: self.presentationData.nameDisplayOrder) // MARK: NEXTGRAM
             state = state.updatedChatWallpaper(self.presentationData.chatWallpaper)
             state = state.updatedBubbleCorners(self.presentationData.chatBubbleCorners)
             return state

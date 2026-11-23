@@ -3,9 +3,12 @@ import Postbox
 internal import TelegramApi
 import SwiftSignalKit
 
-func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, messageId: MessageId) -> Signal<Void, NoError> {
+func _internal_markMessageContentAsConsumedInteractively(postbox: Postbox, accountPeerId: PeerId, messageId: MessageId) -> Signal<Void, NoError> { // MARK: NEXTGRAM
     return postbox.transaction { transaction -> Void in
         if let message = transaction.getMessage(messageId), message.flags.contains(.Incoming) {
+            // MARK: NEXTGRAM — Keep normal playback private while honoring expiring-media consumption.
+            let ghostMode = nextgramIsPeerGhostModeEnabled(accountPeerId: accountPeerId, peerId: messageId.peerId)
+            if ghostMode && !message.isSelfExpiring { return }
             var updateMessage = false
             var updatedAttributes = message.attributes
             

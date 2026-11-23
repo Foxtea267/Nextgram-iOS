@@ -4,6 +4,7 @@ public enum NextgramSettingsIcons {
     private static let bottomBar = make("rectangle.bottomthird.inset.filled", color: 0x5856d6)
     private static let badge = make("camera.viewfinder", color: 0x5856d6)
     private static let backup = make("externaldrive.fill", color: 0x00a6a6)
+    private static let archiveImport = make("tray.and.arrow.down.fill", color: 0x007aff)
     private static let update = make("arrow.triangle.2.circlepath", color: 0x007aff)
     private static let plugins = make("puzzlepiece.extension.fill", color: 0xaf52de)
     private static let translation = make("character.bubble.fill", color: 0xaf52de)
@@ -26,7 +27,8 @@ public enum NextgramSettingsIcons {
         case "Nagram.Settings.AppIcons": return self.appIcon
         case "Nagram.BadgeStyle": return self.badge
         case "Nagram.Settings.Backup", "Nagram.SessionBackup",
-             "Nagram.DeletedMessages.Export", "Nagram.DeletedMessages.Import": return self.backup
+             "Nagram.DeletedMessages.Export": return self.backup
+        case "Nagram.DeletedMessages.Import": return self.archiveImport
         case "Nagram.Update.Title": return self.update
         case "Nagram.ExteraPlugins": return self.plugins
         case "Nagram.TranslationLLMSettings", "Nagram.Summary.Settings": return self.translation
@@ -36,7 +38,7 @@ public enum NextgramSettingsIcons {
         case "Nagram.TelegramLatency", "Nagram.NotificationDiagnostics": return self.diagnostics
         case "Nagram.GroupProfileSettings": return self.profile
         case "Nagram.Bookmarks": return self.bookmarks
-        case "Nagram.ChannelFeed": return self.feed
+        case "Nagram.ChannelFeed", "Nagram.ChannelFeed.Settings": return self.feed
         case "Nagram.About": return nextgramSettingsLogo
         default: return nil
         }

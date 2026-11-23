@@ -981,6 +981,8 @@ public final class AccountViewTracker {
                     
                     if let account = self.account {
                         let signal = (account.postbox.transaction { transaction -> Signal<Void, NoError> in
+                            // MARK: NEXTGRAM — Viewing live locations must not report the message as seen.
+                            if nextgramIsPeerGhostModeEnabled(accountPeerId: account.peerId, peerId: peerId) { return .complete() }
                             if let peer = transaction.getPeer(peerId), let inputPeer = apiInputPeer(peer) {
                                 let request: Signal<Bool, MTRpcError>
                                 switch inputPeer {
@@ -1631,6 +1633,7 @@ public final class AccountViewTracker {
                 return
             }
             let _ = (account.postbox.transaction { transaction -> Set<MessageId> in
+                if nextgramIsPeerGhostModeEnabled(accountPeerId: account.peerId, peerId: peerId) { return [] } // MARK: NEXTGRAM
                 let ids = Set(transaction.getMessageIndicesWithTag(peerId: peerId, threadId: threadId, namespace: Namespaces.Message.Cloud, tag: .unseenPersonalMessage).map({ $0.id }))
                 
                 for id in ids {
@@ -1667,8 +1670,9 @@ public final class AccountViewTracker {
     
     public func updateMarkMentionsSeenForMessageIds(messageIds: Set<MessageId>) {
         self.queue.async {
+            guard let accountPeerId = self.account?.peerId else { return } // MARK: NEXTGRAM
             var addedMessageIds: [MessageId] = []
-            for messageId in messageIds {
+            for messageId in messageIds where !nextgramIsPeerGhostModeEnabled(accountPeerId: accountPeerId, peerId: messageId.peerId) { // MARK: NEXTGRAM
                 if !self.updatedSeenPersonalMessageIds.contains(messageId) {
                     self.updatedSeenPersonalMessageIds.insert(messageId)
                     addedMessageIds.append(messageId)
@@ -1678,6 +1682,7 @@ public final class AccountViewTracker {
                 if let account = self.account {
                     let _ = (account.postbox.transaction { transaction -> Void in
                         for id in addedMessageIds {
+                            if nextgramIsPeerGhostModeEnabled(accountPeerId: account.peerId, peerId: id.peerId) { continue } // MARK: NEXTGRAM
                             if let message = transaction.getMessage(id) {
                                 var consume = false
                                 inner: for attribute in message.attributes {
@@ -1714,6 +1719,7 @@ public final class AccountViewTracker {
                 return
             }
             let _ = (account.postbox.transaction { transaction -> Set<MessageId> in
+                if nextgramIsPeerGhostModeEnabled(accountPeerId: account.peerId, peerId: peerId) { return [] } // MARK: NEXTGRAM
                 let reactionIds = Set(transaction.getMessageIndicesWithTag(peerId: peerId, threadId: threadId, namespace: Namespaces.Message.Cloud, tag: .unseenReaction).map({ $0.id }))
                 let pollVoteIds = Set(transaction.getMessageIndicesWithTag(peerId: peerId, threadId: threadId, namespace: Namespaces.Message.Cloud, tag: .unseenPollVote).map({ $0.id }))
                 
@@ -1775,6 +1781,7 @@ public final class AccountViewTracker {
                 if let account = self.account {
                     let _ = (account.postbox.transaction { transaction -> Void in
                         for id in addedMessageIds {
+                            if nextgramIsPeerGhostModeEnabled(accountPeerId: account.peerId, peerId: id.peerId) { continue } // MARK: NEXTGRAM
                             if let _ = transaction.getMessage(id) {
                                 transaction.updateMessage(id, update: { currentMessage in
                                     if !currentMessage.tags.contains(.unseenReaction) && !currentMessage.tags.contains(.unseenPollVote) {

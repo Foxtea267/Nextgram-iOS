@@ -1,0 +1,6 @@
+FSRCNN 2× pretrained weights by Saafke, published through OpenCV's Google Summer of Code 2019 project under Apache-2.0.
+https://github.com/Saafke/FSRCNN_Tensorflow/blob/6a4812c4ef1c4f5947d79beafa32a05a6eb4a94d/models/FSRCNN_x2.pb
+Original SHA-256: 366b33f0084c7b3f2bf6724f0a2c77bca94fcec9d7b6d72389d330073b380d5c
+
+Nextgram converted the TensorFlow convolutions, PReLU activations and subpixel shuffle to Core ML.
+The conversion adds border padding and combines the predicted luminance with interpolated input chroma.

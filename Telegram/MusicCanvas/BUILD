@@ -24,6 +24,7 @@ ios_application(
     linkopts = ["-framework", "MediaPlayer"],
     resources = [
         "Resources/MusicCanvasARU.jpg",
+        "//Nagram/ImageSuperResolution:ModelResources",
         "//Telegram:AppStringResources",
         "//Telegram:GeneratedPresentationStrings/Resources/PresentationStrings.data",
     ],

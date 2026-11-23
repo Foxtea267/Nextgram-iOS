@@ -8,6 +8,7 @@ import MediaPlayer
 import NagramSettings
 import NagramSettingsSignal
 import NagramStrings
+import NextgramImageSuperResolution
 import NextgramLyrics
 import PhotoResources
 import PresentationDataUtils
@@ -33,6 +34,9 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     public var openSettings: (() -> Void)?
     public var presentController: ((ViewController) -> Void)?
     public var toggleSavedMusic: (() -> Void)?
+    public var updateStatusBarStyle: ((StatusBarStyle) -> Void)? {
+        didSet { self.updateStatusBarStyle?(self.playerStatusBarStyle) }
+    }
     public var isSavedMusic: Bool? { didSet { self.updateFavorite() } }
 
     private let context: AccountContext?
@@ -56,6 +60,27 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     private var transitioningLyrics = false
     private var lyricsTransitionGeneration = 0
     private var lastPlaying: Bool?
+    private final class CoverDrag {
+        let overlay = UIView()
+        let neighbor = UIImageView()
+        let surface: UIView
+        let trackId: AnyHashable?
+        var direction: CGFloat = 0.0
+        var neighborId: AnyHashable?
+        var artworkDisposable: Disposable?
+        var committed = false
+        var settled = false
+
+        init(surface: UIView, trackId: AnyHashable?) {
+            self.surface = surface
+            self.trackId = trackId
+        }
+
+        deinit {
+            self.artworkDisposable?.dispose()
+        }
+    }
+    private var coverDrag: CoverDrag?
 #if DEBUG && targetEnvironment(simulator)
     private var previewPlaying: Bool?
     private var previewLyricsEffects: NagramLyricsEffects?
@@ -74,6 +99,12 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     private var artworkFocusImage: UIImage?
     private var artworkFocus: CGPoint?
     private var artworkFocusTask: DispatchWorkItem?
+    private var originalArtwork: UIImage?
+    private var telegramArtwork: UIImage?
+    private var onlineArtwork: UIImage?
+    private var onlineArtworkTask: Task<Void, Never>?
+    private var enhancedArtwork: UIImage?
+    private var artworkEnhancementTask: DispatchWorkItem?
     private let shade = UIView()
     private let gradientBackground = CAGradientLayer()
     private let fullscreenShade = CAGradientLayer()
@@ -83,6 +114,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     private var artworkDisposable: Disposable?
     private var artworkColor = NextgramPlayerPalette.fallback
     private var foregroundColor = UIColor.white
+    private var playerStatusBarStyle: StatusBarStyle = .White
     private let artwork = NextgramInteractiveArtwork(frame: .zero)
     private let artworkShadow = UIView()
     private var artworkDetail: NextgramArtworkDetailView?
@@ -111,17 +143,27 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     private let dismissalPan = UIPanGestureRecognizer()
     private let spinner = UIActivityIndicatorView(style: .medium)
     private let lyricsView = NextgramLyricsView()
-    private let sourceLabel = UILabel()
     private var lyrics: NextgramLyrics?
     private var lyricsPlaceholder = ""
     private var lyricsRequest = UUID()
     private var onlineTask: Task<Void, Never>?
     private var lyricsSourceOverride: NextgramLyricsSource?
     private var activeLyricsSource: NextgramLyricsSource?
+    private var localLyricsOrigin: String?
+    private struct LyricsAttempt {
+        let source: NextgramLyricsSource
+        let elapsed: Double
+        let result: NextgramLyricsLookupResult
+        let events: [NextgramLyricsLookupEvent]
+    }
+    private var lyricsAttempts: [LyricsAttempt] = []
+    private var reusedPlayerLyrics = false
+    private weak var lyricsDiagnostics: NextgramLyricsDiagnosticsController?
     private struct CachedLyrics {
         let lyrics: NextgramLyrics
-        let label: String?
         let source: NextgramLyricsSource?
+        let localOrigin: String?
+        let attempts: [LyricsAttempt]
     }
     private var lyricsMemory: [AnyHashable: [String: CachedLyrics]] = [:]
     private var lyricsSelections: [AnyHashable: NextgramLyricsSource] = [:]
@@ -134,8 +176,8 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
             self.lyricsMemory.removeValue(forKey: oldest)
             self.lyricsSelections.removeValue(forKey: oldest)
         }
-        self.lyricsMemory[id, default: [:]][self.lyricsChoiceKey] = CachedLyrics(lyrics: lyrics,
-            label: self.sourceLabel.text, source: self.activeLyricsSource)
+        self.lyricsMemory[id, default: [:]][self.lyricsChoiceKey] = CachedLyrics(lyrics: lyrics, source: self.activeLyricsSource,
+            localOrigin: self.localLyricsOrigin, attempts: self.lyricsAttempts)
     }
     private let embeddedLoader = NextgramEmbeddedLyricsLoader()
     private var embeddedLyricsFound = false
@@ -191,16 +233,11 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.artwork.isUserInteractionEnabled = true
         self.artwork.open = { [weak self] in self?.openArtworkDetail() }
         self.backgroundArtworkContainer.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(self.openArtworkDetail)))
-        let nextGesture = UISwipeGestureRecognizer(target: self, action: #selector(self.artworkSwiped(_:)))
-        nextGesture.direction = .left
-        self.artwork.addGestureRecognizer(nextGesture)
-        let previousGesture = UISwipeGestureRecognizer(target: self, action: #selector(self.artworkSwiped(_:)))
-        previousGesture.direction = .right
-        self.artwork.addGestureRecognizer(previousGesture)
-        for direction in [UISwipeGestureRecognizer.Direction.left, .right] {
-            let gesture = UISwipeGestureRecognizer(target: self, action: #selector(self.artworkSwiped(_:)))
-            gesture.direction = direction
-            self.backgroundArtworkContainer.addGestureRecognizer(gesture)
+        for surface in [self.artwork, self.backgroundArtworkContainer] {
+            let pan = UIPanGestureRecognizer(target: self, action: #selector(self.artworkPanned(_:)))
+            pan.maximumNumberOfTouches = 1
+            pan.delegate = self
+            surface.addGestureRecognizer(pan)
         }
 
         self.titleLabel.font = .systemFont(ofSize: 25.0, weight: .bold)
@@ -211,7 +248,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.grabber.layer.cornerRadius = 2.5
         self.grabber.isUserInteractionEnabled = false
         self.addSubview(self.grabber)
-        for label in [self.titleLabel, self.artistLabel, self.elapsedLabel, self.remainingLabel, self.sourceLabel] {
+        for label in [self.titleLabel, self.artistLabel, self.elapsedLabel, self.remainingLabel] {
             self.addSubview(label)
         }
         self.titleLabel.textColor = .white
@@ -220,10 +257,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
             label.textColor = UIColor.white.withAlphaComponent(0.6)
         }
         self.remainingLabel.textAlignment = .right
-        self.sourceLabel.font = .systemFont(ofSize: 11.0, weight: .medium)
-        self.sourceLabel.textColor = UIColor.white.withAlphaComponent(0.5)
-        self.sourceLabel.textAlignment = .center
-        self.sourceLabel.accessibilityElementsHidden = true
         self.insertSubview(self.lyricsView, aboveSubview: self.shade)
         self.lyricsView.seek = { [weak self] time in self?.seek(time) }
 
@@ -236,15 +269,18 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.configure(self.nextButton, symbol: "forward.end.fill", size: 28.0, action: #selector(self.nextPressed))
         self.configure(self.lyricsButton, symbol: "quote.bubble.fill", size: 23.0, action: #selector(self.lyricsPressed))
         self.configure(self.queueButton, symbol: "list.bullet", size: 18.0, action: #selector(self.queuePressed))
-        self.positionSlider.minimumTrackTintColor = UIColor.white.withAlphaComponent(0.9)
-        self.positionSlider.maximumTrackTintColor = UIColor.white.withAlphaComponent(0.2)
-        self.positionSlider.setThumbImage(Self.sliderThumb(), for: .normal)
-        self.positionSlider.addTarget(self, action: #selector(self.scrubBegan), for: .touchDown)
-        self.positionSlider.addTarget(self, action: #selector(self.scrubChanged), for: .valueChanged)
-        self.positionSlider.addTarget(self, action: #selector(self.scrubEnded), for: [.touchUpInside, .touchUpOutside])
-        self.positionSlider.addTarget(self, action: #selector(self.scrubCancelled), for: .touchCancel)
+        self.positionSlider.editingStarted = { [weak self] in self?.scrubbing = true }
+        self.positionSlider.valueChanged = { [weak self] in self?.updatePosition() }
+        self.positionSlider.editingFinished = { [weak self] commit in
+            guard let self else { return }
+            self.scrubbing = false
+            if commit {
+                self.seek(Double(self.positionSlider.value) * self.playbackDuration)
+            } else {
+                self.updatePosition()
+            }
+        }
         self.addSubview(self.positionSlider)
-        self.volumeView.setVolumeThumbImage(Self.sliderThumb(), for: .normal)
         self.addSubview(self.volumeView)
         let volumeConfig = UIImage.SymbolConfiguration(pointSize: 13.0, weight: .semibold)
         self.volumeLow.image = UIImage(systemName: "speaker.fill", withConfiguration: volumeConfig)
@@ -283,10 +319,17 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
             let reloadLyrics = settings.lyricsEnabled != self.settings.lyricsEnabled ||
                 settings.onlineLyricsEnabled != self.settings.onlineLyricsEnabled ||
                 (self.lyricsSourceOverride == nil && settings.lyricsSources != self.settings.lyricsSources)
+            let reloadOnlineArtwork = settings.onlineArtwork != self.settings.onlineArtwork
+            if settings.coverLayout != self.settings.coverLayout || !settings.swipeToSkip {
+                self.finishCoverDrag()
+            }
             self.settings = settings
             self.artworkDetail?.updateMetadataVisibility(settings.artworkMetadata)
             if !settings.lyricsEnabled { self.showingLyrics = false }
             self.updateAppearance()
+            if reloadOnlineArtwork {
+                self.refreshOnlineArtwork()
+            }
             if reloadLyrics { self.reloadLyrics() }
             self.updateDisplayLink()
         })
@@ -321,18 +364,21 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                     self.file = nil
                 }
                 self.albumArt = nil
+                self.finishCoverDrag()
+                self.onlineArtworkTask?.cancel()
+                self.onlineArtworkTask = nil
+                self.onlineArtwork = nil
+                self.telegramArtwork = nil
                 self.trackTitle = ""
                 self.trackArtist = ""
                 self.titleLabel.text = self.presentationData.strings.MediaPlayer_UnknownTrack
                 self.artistLabel.text = self.presentationData.strings.MediaPlayer_UnknownArtist
-                self.artwork.image = nil
-                self.backgroundArtwork.image = nil
+                self.setOriginalArtwork(nil)
                 self.artworkDisposable?.dispose()
                 self.artworkColor = NextgramPlayerPalette.fallback
                 self.updateAppearance()
                 self.cancelLyrics()
                 self.lyrics = nil
-                self.sourceLabel.text = nil
                 self.lyricsPlaceholder = self.string("NoLyrics")
                 self.updateLyricsView()
                 self.updateMenu()
@@ -358,7 +404,9 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.playbackDisposable?.dispose()
         self.presentationDisposable?.dispose()
         self.artworkDisposable?.dispose()
+        self.onlineArtworkTask?.cancel()
         self.artworkFocusTask?.cancel()
+        self.artworkEnhancementTask?.cancel()
         self.detailArtworkDisposable?.dispose()
         self.displayLink?.invalidate()
         self.onlineTask?.cancel()
@@ -377,8 +425,12 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.updateDisplayLink()
         if active {
             self.reloadLyrics()
+            self.refreshOnlineArtwork()
             self.updatePosition()
         } else {
+            self.finishCoverDrag()
+            self.onlineArtworkTask?.cancel()
+            self.onlineArtworkTask = nil
             self.cancelLyrics()
         }
     }
@@ -389,6 +441,11 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.bounds = CGRect(origin: .zero, size: size)
         self.setNeedsLayout()
         self.layoutIfNeeded()
+    }
+
+    public override func safeAreaInsetsDidChange() {
+        super.safeAreaInsetsDidChange()
+        self.setNeedsLayout()
     }
 
 #if DEBUG && targetEnvironment(simulator)
@@ -413,8 +470,8 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.fullscreenShade.frame = self.bounds
         CATransaction.commit()
 
-        let top = max(12.0, self.safeInsets.top) + 6.0
-        let bottom = max(12.0, self.safeInsets.bottom)
+        let top = max(12.0, self.safeInsets.top, self.safeAreaInsets.top) + 4.0
+        let bottom = max(12.0, self.safeInsets.bottom, self.safeAreaInsets.bottom)
         let landscape = size.width > size.height * 1.15
         let left = max(landscape ? 24.0 : 32.0, self.safeInsets.left + 16.0)
         let right = max(landscape ? 24.0 : 32.0, self.safeInsets.right + 16.0)
@@ -422,25 +479,25 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.closeButton.isHidden = !UIAccessibility.isVoiceOverRunning
         self.grabber.frame = CGRect(x: (size.width - 60.0) * 0.5, y: top + 1.0, width: 60.0, height: 4.0)
 
-        let contentTop = top + (landscape ? 40.0 : 27.0)
+        let contentTop = top + (landscape ? 40.0 : 22.0)
         let columnLeft = landscape ? size.width * 0.5 + 18.0 : left
         let columnRight = right
         let columnWidth = max(1.0, size.width - columnLeft - columnRight)
         let compact = size.height - top - bottom < 610.0
         let spacingScale = landscape ? 1.0 : min(1.0, max(0.72, (size.height - top - bottom) / 750.0))
-        let footerY = landscape ? size.height - bottom - 48.0 : size.height - max(12.0, bottom * 0.5) - 73.0 * spacingScale
-        let volumeHeight: CGFloat = self.settings.showVolume ? (landscape ? 34.0 : 46.0 * spacingScale) : 8.0
-        let controlsHeight: CGFloat = landscape ? 58.0 : (compact ? 68.0 : 82.0)
-        let baseControlsY = landscape ? footerY - volumeHeight - controlsHeight : footerY - volumeHeight + 17.0 - 91.0 * spacingScale - controlsHeight * 0.5
+        let footerY = size.height - bottom - (landscape ? 48.0 : 72.0)
+        let volumeHeight: CGFloat = self.settings.showVolume ? (landscape ? 34.0 : max(34.0, 39.0 * spacingScale)) : 8.0
+        let controlsHeight: CGFloat = landscape ? 58.0 : (compact ? 60.0 : 70.0)
+        let baseControlsY = footerY - volumeHeight - controlsHeight - (landscape ? 0.0 : 16.0 * spacingScale)
         let roomAboveVolume = footerY - volumeHeight - baseControlsY - controlsHeight - 8.0
         let fullscreenLift = !landscape && self.settings.coverLayout == .fullscreen ? min(26.0, max(0.0, roomAboveVolume)) : 0.0
         let controlsY = baseControlsY + (self.showingLyrics ? 0.0 : fullscreenLift)
-        let sliderOffset = landscape ? 44.0 : 64.0 * spacingScale
-        let titleOffsetFromSlider = landscape ? 61.0 : 67.0 * spacingScale
+        let sliderOffset = landscape ? 44.0 : max(44.0, 54.0 * spacingScale)
+        let titleOffsetFromSlider = landscape ? 61.0 : max(55.0, 63.0 * spacingScale)
         let sliderY = controlsY - sliderOffset
         let normalTitleY = sliderY - titleOffsetFromSlider
         let titleY = self.showingLyrics && !landscape ? contentTop : max(top, normalTitleY)
-        let availableCoverHeight = max(0.0, normalTitleY - contentTop - 30.0 * spacingScale)
+        let availableCoverHeight = max(0.0, normalTitleY - contentTop - 22.0 * spacingScale)
         let coverWidth = landscape ? max(1.0, size.width * 0.5 - left - 28.0) : max(1.0, size.width - 48.0)
         let coverHeight = landscape ? max(0.0, size.height - contentTop - bottom - 20.0) : availableCoverHeight
         var coverFrame = CGRect.zero
@@ -453,19 +510,21 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         case .card, .disc:
             let side = min(coverWidth, coverHeight, 460.0) * ratio
             coverFrame = CGRect(x: landscape ? left + (coverWidth - side) * 0.5 : (size.width - side) * 0.5,
-                y: landscape ? contentTop + (coverHeight - side) * 0.5 : contentTop, width: side, height: side)
+                y: contentTop + (coverHeight - side) * 0.5, width: side, height: side)
         }
-        if self.showingLyrics && !landscape {
-            coverFrame = CGRect(x: columnLeft, y: titleY, width: 72.0, height: 72.0)
-        } else if !landscape && self.settings.coverLayout == .card && !self.playing {
-            let pausedSide = coverFrame.width * 0.73
+        if self.showingLyrics {
+            coverFrame = landscape
+                ? CGRect(x: left, y: contentTop, width: 62.0, height: 62.0)
+                : CGRect(x: columnLeft, y: titleY, width: 72.0, height: 72.0)
+        } else if self.settings.coverLayout == .card && !self.playing {
+            let pausedSide = coverFrame.width * CGFloat(self.settings.pausedCoverSize) / 100.0
             coverFrame = CGRect(x: coverFrame.midX - pausedSide * 0.5, y: coverFrame.midY - pausedSide * 0.5,
                 width: pausedSide, height: pausedSide)
         }
         self.artwork.bounds = CGRect(origin: .zero, size: coverFrame.size)
         self.artwork.center = CGPoint(x: coverFrame.midX, y: coverFrame.midY)
         self.artworkDetail?.frame = self.bounds
-        self.artwork.layer.cornerRadius = self.showingLyrics ? 8.0 :
+        self.artwork.cornerRadius = self.showingLyrics ? 8.0 :
             (self.settings.coverLayout == .disc ? coverFrame.width * 0.5 : (self.settings.coverLayout == .fullscreen ? 0.0 : CGFloat(self.settings.coverCornerRadius)))
         let holeSide = coverFrame.width * 0.12
         self.discHole.frame = CGRect(x: (coverFrame.width - holeSide) * 0.5, y: (coverFrame.height - holeSide) * 0.5, width: holeSide, height: holeSide)
@@ -473,11 +532,10 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.discHole.isHidden = self.settings.coverLayout != .disc || self.showingLyrics
         // Fullscreen uses the single background artwork layer; the card/disc
         // artwork view is reserved for the other cover layouts.
-        self.artwork.isHidden = (self.showingLyrics && landscape) ||
-            (!self.showingLyrics && self.settings.coverLayout == .fullscreen)
+        self.artwork.isHidden = !self.showingLyrics && self.settings.coverLayout == .fullscreen
         self.artworkShadow.bounds = self.artwork.bounds
         self.artworkShadow.center = self.artwork.center
-        self.artworkShadow.layer.cornerRadius = self.artwork.layer.cornerRadius
+        self.artworkShadow.layer.cornerRadius = self.artwork.cornerRadius
         self.artworkShadow.isHidden = self.artwork.isHidden || self.settings.coverLayout == .fullscreen
         self.artworkShadow.alpha = self.showingLyrics ? 0.0 : 1.0
         self.artwork.contentMode = self.settings.coverLayout == .fullscreen && !self.showingLyrics ? .scaleAspectFit : .scaleAspectFill
@@ -529,17 +587,11 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
             self.backgroundArtwork.frame = self.backgroundArtworkContainer.bounds
         }
 
-        let lyricTop = landscape ? contentTop : contentTop + 98.0
+        let lyricTop = contentTop + (landscape ? 72.0 : 98.0)
         self.lyricsView.frame = CGRect(x: landscape ? left : 0.0, y: lyricTop,
             width: landscape ? coverWidth : size.width,
-            height: max(0.0, (landscape ? size.height - bottom - 18.0 : sliderY - 16.0) - lyricTop))
+            height: max(0.0, (landscape ? size.height - bottom : sliderY - 6.0) - lyricTop))
         self.lyricsView.isHidden = !self.showingLyrics && !self.transitioningLyrics
-        self.sourceLabel.frame = CGRect(x: columnLeft, y: sliderY - 16.0, width: columnWidth, height: 14.0)
-        self.sourceLabel.isHidden = !self.showingLyrics && !self.transitioningLyrics
-        if landscape {
-            // Reserve the left column for artwork/lyrics and the right column for controls.
-            self.sourceLabel.frame = CGRect(x: left, y: size.height - bottom - 16.0, width: coverWidth, height: 14.0)
-        }
         let titleInset: CGFloat = self.showingLyrics && !landscape ? 84.0 : 0.0
         let titleOffset: CGFloat = self.showingLyrics && !landscape ? 11.0 : 0.0
         self.menuButton.frame = CGRect(x: size.width - columnRight - 38.0, y: titleY + titleOffset + 4.0, width: 44.0, height: 44.0)
@@ -608,10 +660,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.routePicker.updateRoute(bluetooth: outputs.contains { [.bluetoothA2DP, .bluetoothHFP, .bluetoothLE].contains($0.portType) })
     }
 
-    private static func sliderThumb() -> UIImage {
-        return UIGraphicsImageRenderer(size: CGSize(width: 8.0, height: 8.0)).image { _ in }
-    }
-
     private func string(_ key: String) -> String {
 #if DEBUG && targetEnvironment(simulator)
         if self.previewPlaying != nil { return ngI18n("Nagram.MusicPlayer." + key, "zh-hans") }
@@ -620,13 +668,19 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     }
 
     private func updateAppearance() {
+        self.updateArtworkEnhancement()
         self.updateBackdrop()
         self.updateDisplayLink()
+        self.updateArtworkMotion()
         self.closeButton.accessibilityLabel = self.presentationData.strings.Common_Close
         self.menuButton.accessibilityLabel = self.presentationData.strings.Common_More
         self.lyricsButton.accessibilityLabel = self.string("Lyrics")
         self.queueButton.accessibilityLabel = self.string("Queue")
         self.positionSlider.accessibilityLabel = self.string("PlaybackPosition")
+        self.positionSlider.elasticEdges = self.settings.elasticProgress
+        self.positionSlider.jumpOnTap = self.settings.tapToSeek
+        self.volumeView.slider.accessibilityLabel = self.string("Volume")
+        self.volumeView.slider.elasticEdges = self.settings.elasticVolume
         self.previousButton.accessibilityLabel = self.string("Previous")
         self.nextButton.accessibilityLabel = self.string("Next")
         self.lyricsButton.isHidden = !self.settings.lyricsEnabled
@@ -634,7 +688,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.updateLyricsView()
         if !self.transitioningLyrics {
             self.lyricsView.alpha = self.showingLyrics ? 1.0 : 0.0
-            self.sourceLabel.alpha = self.lyricsView.alpha
         }
         self.updateFavorite()
         self.updateMenu()
@@ -648,8 +701,8 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         let reduceTransparency = UIAccessibility.isReduceTransparencyEnabled
         let radius = CGFloat(self.settings.blurIntensity)
         let gradient = !fullscreen && self.settings.background == .gradient
-        let showsArt = self.backgroundArtwork.image != nil && (fullscreen || (!reduceTransparency && (self.settings.background == .blur || self.settings.background == .artwork)))
-        let progressiveBlur = !fullscreen && !reduceTransparency && showsArt && self.settings.background == .blur && radius > 0.0
+        let showsArt = self.backgroundArtwork.image != nil && (fullscreen || (!reduceTransparency && self.settings.background == .blur && radius > 0.0))
+        let progressiveBlur = !fullscreen && showsArt
         let base: UIColor
         switch self.settings.colors {
         case .cover: base = self.artworkColor
@@ -699,13 +752,15 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.backgroundArtworkContainer.isHidden = !showsArt
         self.backgroundArtworkContainer.isUserInteractionEnabled = fullscreen
         self.updateArtworkFocus(enabled: fullscreen && self.settings.smartArtworkCrop)
-        self.shade.backgroundColor = !showsArt || fullscreen ? .clear : (self.settings.background == .blur ? base.withAlphaComponent(self.showingLyrics ? 0.85 : 0.73) : UIColor.black.withAlphaComponent(self.showingLyrics ? 0.66 : 0.42))
-        let ink: UIColor = gradient || (showsArt && (fullscreen || self.settings.background == .artwork)) ? .white : NextgramPlayerPalette.foreground(on: surface)
+        self.shade.backgroundColor = !showsArt || fullscreen ? .clear : base.withAlphaComponent(self.showingLyrics ? 0.85 : 0.73)
+        let ink: UIColor = gradient || (fullscreen && showsArt) ? .white : NextgramPlayerPalette.foreground(on: surface)
         self.foregroundColor = ink
+        self.playerStatusBarStyle = ink == .white ? .White : .Black
+        self.updateStatusBarStyle?(self.playerStatusBarStyle)
         self.titleLabel.textColor = ink
         self.artistLabel.textColor = ink.withAlphaComponent(0.72)
         self.grabber.backgroundColor = ink.withAlphaComponent(0.30)
-        for label in [self.elapsedLabel, self.remainingLabel, self.sourceLabel] { label.textColor = ink.withAlphaComponent(0.66) }
+        for label in [self.elapsedLabel, self.remainingLabel] { label.textColor = ink.withAlphaComponent(0.66) }
         for button in [self.closeButton, self.menuButton, self.previousButton, self.playButton, self.nextButton, self.lyricsButton, self.queueButton] {
             button.tintColor = ink
         }
@@ -722,12 +777,10 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.spinner.color = ink
         self.volumeLow.tintColor = ink.withAlphaComponent(0.62)
         self.volumeHigh.tintColor = self.volumeLow.tintColor
-        let filledRail = NextgramPlayerPalette.rail(ink.withAlphaComponent(0.78))
-        let emptyRail = NextgramPlayerPalette.rail(ink.withAlphaComponent(0.21))
-        self.positionSlider.setMinimumTrackImage(filledRail, for: .normal)
-        self.positionSlider.setMaximumTrackImage(emptyRail, for: .normal)
-        self.volumeView.setMinimumVolumeSliderImage(filledRail, for: .normal)
-        self.volumeView.setMaximumVolumeSliderImage(emptyRail, for: .normal)
+        let filledRail = ink.withAlphaComponent(0.78)
+        let emptyRail = ink.withAlphaComponent(0.21)
+        self.positionSlider.setColors(filled: filledRail, empty: emptyRail)
+        self.volumeView.slider.setColors(filled: filledRail, empty: emptyRail)
         self.titleLabel.font = .systemFont(ofSize: min(self.showingLyrics ? 18.0 : 32.0, CGFloat(self.settings.titleFontSize)), weight: .bold)
         self.artistLabel.font = .systemFont(ofSize: self.showingLyrics ? 16.0 : 20.0, weight: .regular)
         self.lyricsButton.layer.cornerRadius = 22.0
@@ -749,6 +802,9 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         let previousArtist = self.trackArtist
         let menuChanged = self.state?.order != state.order || self.state?.looping != state.looping
         let changedItem = self.trackId != state.item.stableId
+        if changedItem, let drag = self.coverDrag, !drag.committed {
+            self.finishCoverDrag()
+        }
         self.state = state
         self.trackId = state.item.stableId
         if let source = state.item.playbackData?.source, case let .telegramFile(file, _, _) = source {
@@ -768,10 +824,21 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
             self.artistLabel.text = artist ?? self.presentationData.strings.MediaPlayer_UnknownArtist
             if changed || resumedFromLoading || self.albumArt != albumArt {
                 self.albumArt = albumArt
-                self.artwork.image = nil
-                self.backgroundArtwork.image = nil
+                if changed {
+                    self.onlineArtworkTask?.cancel()
+                    self.onlineArtworkTask = nil
+                    self.onlineArtwork = nil
+                    self.telegramArtwork = self.coverDrag.flatMap { $0.neighborId == self.trackId ? $0.neighbor.image : nil }
+                    self.applyAvailableArtwork()
+                }
                 self.updateArtwork()
             }
+        }
+        if changed || previousTitle != self.trackTitle || previousArtist != self.trackArtist || (previousDuration == 0.0 && state.status.duration > 0.0) {
+            self.refreshOnlineArtwork()
+        }
+        if changedItem, self.coverDrag?.settled == true {
+            self.finishCoverDrag()
         }
         if case .buffering = state.status.status { self.spinner.startAnimating() } else { self.spinner.stopAnimating() }
         self.updateTransport()
@@ -790,16 +857,94 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     private func updateArtwork() {
         guard let context = self.context else { return }
         self.artworkDisposable?.dispose()
+        let expectedTrack = self.trackId
         self.artworkDisposable = (nextgramPlayerArtwork(engine: context.engine, fileReference: self.file, albumArt: self.albumArt)
         |> deliverOnMainQueue).startStrict(next: { [weak self] image in
-            guard let self else { return }
-            self.artwork.image = image
-            self.backgroundArtwork.image = image
-            self.artworkColor = NextgramPlayerPalette.artworkColor(image)
-            self.updateBackdrop()
-            self.updateLyricsView()
-            self.setNeedsLayout()
+            guard let self, self.trackId == expectedTrack else { return }
+            if let image {
+                self.telegramArtwork = image
+                self.applyAvailableArtwork()
+            }
         })
+    }
+
+    private func refreshOnlineArtwork() {
+        self.onlineArtworkTask?.cancel()
+        self.onlineArtworkTask = nil
+        guard self.settings.onlineArtwork else {
+            if self.onlineArtwork != nil {
+                self.onlineArtwork = nil
+                self.applyAvailableArtwork()
+                self.reloadDetailArtwork()
+            }
+            return
+        }
+        guard self.trackId != nil || self.isCanvasPlayer, self.active, self.foreground,
+              self.onlineArtwork == nil, !self.trackTitle.isEmpty, !self.trackArtist.isEmpty else { return }
+        let expectedTrack = self.trackId
+        let title = self.trackTitle
+        let artist = self.trackArtist
+        let duration = self.playbackDuration
+        self.onlineArtworkTask = Task { @MainActor [weak self] in
+            let image = await NextgramOnlineArtwork.shared.artwork(title: title, artist: artist, duration: duration)
+            guard let self, !Task.isCancelled, self.trackId == expectedTrack,
+                  self.trackTitle == title, self.trackArtist == artist, self.settings.onlineArtwork else { return }
+            self.onlineArtworkTask = nil
+            if let image {
+                self.onlineArtwork = image
+                self.applyAvailableArtwork()
+                self.reloadDetailArtwork()
+            }
+        }
+    }
+
+    private func applyAvailableArtwork() {
+        let image = self.preferredOnlineArtwork ?? self.telegramArtwork
+        guard self.originalArtwork !== image else { return }
+        self.setOriginalArtwork(image)
+        self.artworkColor = NextgramPlayerPalette.artworkColor(image)
+        self.updateBackdrop()
+        self.updateLyricsView()
+        self.setNeedsLayout()
+    }
+
+    private var preferredOnlineArtwork: UIImage? {
+        guard let online = self.onlineArtwork else { return nil }
+        guard let local = self.telegramArtwork else { return online }
+        let onlineSide = min(online.size.width, online.size.height) * online.scale
+        let localSide = min(local.size.width, local.size.height) * local.scale
+        return onlineSide > localSide ? online : nil
+    }
+
+    private func setOriginalArtwork(_ image: UIImage?) {
+        guard self.originalArtwork !== image else { return }
+        self.artworkEnhancementTask?.cancel()
+        self.artworkEnhancementTask = nil
+        self.originalArtwork = image
+        self.enhancedArtwork = nil
+        self.updateArtworkEnhancement()
+    }
+
+    private func updateArtworkEnhancement() {
+        let fullscreen = self.settings.coverLayout == .fullscreen && !self.showingLyrics
+        let enabled = self.settings.artworkEnhancement == .always || (fullscreen && self.settings.artworkEnhancement == .fullscreen)
+        self.artwork.image = (enabled ? self.enhancedArtwork : nil) ?? self.originalArtwork
+        self.backgroundArtwork.image = (enabled && fullscreen ? self.enhancedArtwork : nil) ?? self.originalArtwork
+        guard enabled else {
+            self.artworkEnhancementTask?.cancel()
+            self.artworkEnhancementTask = nil
+            return
+        }
+        guard self.enhancedArtwork == nil, self.artworkEnhancementTask == nil, let source = self.originalArtwork else { return }
+        self.artworkEnhancementTask = NextgramImageSuperResolution.enhance(source) { [weak self] image in
+            guard let self, self.originalArtwork === source, self.artworkEnhancementTask != nil else { return }
+            self.artworkEnhancementTask = nil
+            guard let image else { return }
+            self.enhancedArtwork = image
+            self.updateArtworkEnhancement()
+            self.updateBackdrop()
+            self.setNeedsLayout()
+        }
     }
 
     private func updateArtworkFocus(enabled: Bool) {
@@ -842,12 +987,12 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     fileprivate func updatePosition() {
 #if DEBUG && targetEnvironment(simulator)
         if self.previewPlaying != nil {
-            if self.showingLyrics { self.lyricsView.updatePosition(self.currentPosition) }
-            if self.previewAnimatedLyrics {
-                self.elapsedLabel.text = Self.timeString(self.currentPosition)
-                self.remainingLabel.text = self.settings.showRemainingTime ? "−" + Self.timeString(self.previewDuration - self.currentPosition) : Self.timeString(self.previewDuration)
-                self.positionSlider.value = Float(self.currentPosition / self.previewDuration)
-            }
+            let time = self.scrubbing ? Double(self.positionSlider.value) * self.previewDuration : self.currentPosition
+            if self.showingLyrics { self.lyricsView.updatePosition(time) }
+            self.elapsedLabel.text = Self.timeString(time)
+            self.remainingLabel.text = self.settings.showRemainingTime ? "−" + Self.timeString(self.previewDuration - time) : Self.timeString(self.previewDuration)
+            if !self.scrubbing { self.positionSlider.value = Float(time / self.previewDuration) }
+            self.positionSlider.accessibilityValue = Self.timeString(time) + " / " + Self.timeString(self.previewDuration)
             return
         }
 #endif
@@ -904,6 +1049,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
 
     private func updateDisplayLink() {
         let running = self.active && self.foreground && self.playing
+        self.lyricsView.followsPlayback = running && self.showingLyrics
         if running && self.displayLink == nil {
             let link = CADisplayLink(target: self.displayLinkTarget, selector: #selector(NextgramPlayerDisplayLinkTarget.tick))
             link.preferredFramesPerSecond = 10
@@ -1001,10 +1147,13 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         }
         self.lyrics = cached?.lyrics
         self.activeLyricsSource = cached?.source
-        self.sourceLabel.text = cached?.label
+        self.localLyricsOrigin = cached?.localOrigin
+        self.reusedPlayerLyrics = cached != nil && !forceRefresh
+        self.lyricsAttempts = self.reusedPlayerLyrics ? (cached?.attempts ?? []) : []
         self.embeddedLyricsFound = false
         self.lyricsPlaceholder = self.string("NoLyrics")
         self.updateLyricsView()
+        self.updateLyricsDiagnostics()
         self.updateMenu()
         guard self.active, self.foreground, self.settings.lyricsEnabled else {
             self.lyrics = nil
@@ -1030,9 +1179,11 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                 guard let self, self.lyricsRequest == request else { return }
                 if let imported {
                     self.lyrics = imported
-                    self.sourceLabel.text = self.string("ImportLyrics")
+                    self.activeLyricsSource = nil
+                    self.localLyricsOrigin = "DiagnosticsImported"
                     self.rememberLyrics()
                     self.updateLyricsView()
+                    self.updateLyricsDiagnostics()
                     return
                 }
                 self.lyricsPlaceholder = self.string("NoLyrics")
@@ -1043,9 +1194,11 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                     self.onlineTask?.cancel()
                     self.onlineTask = nil
                     self.lyrics = lyrics
-                    self.sourceLabel.text = nil
+                    self.activeLyricsSource = nil
+                    self.localLyricsOrigin = "DiagnosticsEmbedded"
                     self.rememberLyrics()
                     self.updateLyricsView()
+                    self.updateLyricsDiagnostics()
                 }
                 if self.settings.onlineLyricsEnabled {
                     self.loadOnlineLyrics(request: request, sources: self.settings.lyricsSources, forceRefresh: forceRefresh)
@@ -1056,44 +1209,165 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
 
     private func loadOnlineLyrics(request: UUID, sources: [NextgramLyricsSource], forceRefresh: Bool) {
         let title = self.trackTitle, artist = self.trackArtist
-        var duration = self.state?.status.duration ?? 0.0
-#if DEBUG && targetEnvironment(simulator)
-        if self.previewPlaying != nil { duration = self.previewDuration }
-#endif
+        let duration = self.playbackDuration
+        let manualSource = self.lyricsSourceOverride
         self.lyricsPlaceholder = self.string("LoadingLyrics")
         self.updateLyricsView()
+        self.updateLyricsDiagnostics()
         self.onlineTask = Task { @MainActor [weak self] in
-            var match: (NextgramLyricsSource, NextgramLyrics)?
-            var unavailable = false
-            for source in sources {
-                guard !Task.isCancelled, let provider = NextgramOnlineLyricsProvider(rawValue: source.rawValue) else { return }
-                let result = await NextgramOnlineLyrics.lookup(provider: provider, title: title, artist: artist,
-                    duration: duration, forceRefresh: forceRefresh)
-                switch result {
-                case let .found(lyrics): match = (source, lyrics)
-                case .unavailable: unavailable = true
-                case .noMatch: break
+            var match: (source: NextgramLyricsSource, lyrics: NextgramLyrics, priority: Int)?
+            var manualFailure: String?
+            await withTaskGroup(of: (Int, LyricsAttempt).self) { group in
+                for (priority, source) in sources.enumerated() {
+                    guard let provider = NextgramOnlineLyricsProvider(rawValue: source.rawValue) else { continue }
+                    group.addTask {
+                        let started = ProcessInfo.processInfo.systemUptime
+                        let (result, events) = await NextgramOnlineLyrics.lookupWithDiagnostics(provider: provider, title: title, artist: artist,
+                            duration: duration, forceRefresh: forceRefresh)
+                        return (priority, LyricsAttempt(source: source, elapsed: ProcessInfo.processInfo.systemUptime - started, result: result, events: events))
+                    }
                 }
-                if match != nil { break }
+                for await (priority, attempt) in group {
+                    guard !Task.isCancelled, let self, self.lyricsRequest == request, !self.embeddedLyricsFound else {
+                        group.cancelAll()
+                        return
+                    }
+                    self.lyricsAttempts.append(attempt)
+                    switch attempt.result {
+                    case let .found(lyrics):
+                        if match.map({ lyrics.lookupQuality > $0.lyrics.lookupQuality || (lyrics.lookupQuality == $0.lyrics.lookupQuality && priority < $0.priority) }) ?? true {
+                            match = (attempt.source, lyrics, priority)
+                        }
+                    case .unavailable where attempt.source == manualSource:
+                        if case .networkError? = attempt.events.last { manualFailure = "SourceUnavailable" }
+                        else { manualFailure = "SourceServiceError" }
+                    case .noMatch, .unavailable: break
+                    }
+                    self.updateLyricsDiagnostics()
+                }
             }
             guard !Task.isCancelled, let self, self.lyricsRequest == request, !self.embeddedLyricsFound else { return }
             self.onlineTask = nil
-            if let (source, lyrics) = match {
+            if let (source, lyrics, _) = match {
                 self.activeLyricsSource = source
+                self.localLyricsOrigin = nil
                 self.lyrics = lyrics
                 self.lyricsPlaceholder = self.string(lyrics.instrumental ? "Instrumental" : "NoLyrics")
-                self.sourceLabel.text = self.lyricsSourceName(source)
                 self.rememberLyrics()
             } else {
-                let message = self.string(unavailable ? "SourceUnavailable" :
-                    (self.lyricsSourceOverride == nil ? "NoLyrics" : "SourceNoMatch"))
-                self.lyricsPlaceholder = message
-                // Keep a successful prior result visible when a retry fails.
-                self.sourceLabel.text = self.lyrics == nil ? self.lyricsSourceOverride.map { self.lyricsSourceName($0) } :
-                    self.string("RefreshFailedKeepingLyrics")
+                self.lyricsPlaceholder = self.string(manualFailure ?? (manualSource == nil ? "NoLyrics" : "SourceNoMatch"))
             }
             self.updateLyricsView()
             self.updateMenu()
+            self.updateLyricsDiagnostics()
+        }
+    }
+
+    private func showLyricsDiagnostics() {
+        let controller = NextgramLyricsDiagnosticsController(title: self.string("Diagnostics"),
+            done: self.presentationData.strings.Common_Done, refresh: self.string("DiagnosticsRefresh"),
+            viewLyrics: self.string("DiagnosticsViewLyrics"), hideLyrics: self.string("DiagnosticsHideLyrics"), onRefresh: { [weak self] in
+                self?.reloadLyrics(forceRefresh: true)
+            })
+        self.lyricsDiagnostics = controller
+        self.updateLyricsDiagnostics()
+        let navigation = UINavigationController(rootViewController: controller)
+        navigation.modalPresentationStyle = .formSheet
+        if let context = self.context {
+            navigation.overrideUserInterfaceStyle = self.presentationData.theme.overallDarkAppearance ? .dark : .light
+            context.sharedContext.applicationBindings.presentNativeController(navigation)
+        } else {
+            var responder: UIResponder? = self
+            while let current = responder {
+                if let host = current as? UIViewController {
+                    host.present(navigation, animated: true)
+                    break
+                }
+                responder = current.next
+            }
+        }
+    }
+
+    private func updateLyricsDiagnostics() {
+        guard let controller = self.lyricsDiagnostics else { return }
+        let requested = self.lyricsSourceOverride.map(self.lyricsSourceName) ?? self.string("SourceAutomatic")
+        let order = self.lyricsSourceOverride.map { [$0] } ?? self.settings.lyricsSources
+        let selected = self.activeLyricsSource.map(self.lyricsSourceName) ?? self.localLyricsOrigin.map(self.string) ?? "—"
+        let mode = String(format: self.string("DiagnosticsMode"), requested)
+        let source = String(format: self.string("DiagnosticsSelected"), selected)
+        var lines = [self.trackTitle, self.trackArtist, String(format: "%.1fs", self.playbackDuration), "", mode, source]
+        if self.settings.onlineLyricsEnabled {
+            lines.append(String(format: self.string("DiagnosticsOrder"), order.map(self.lyricsSourceName).joined(separator: " → ")))
+        } else {
+            lines.append(self.string("DiagnosticsOffline"))
+        }
+        var lyricsSections: [Int: String] = [:]
+        var nextLyricsSection = 0
+        func appendLyricsDetails(_ lyrics: NextgramLyrics) {
+            guard !lyrics.instrumental, !lyrics.lines.isEmpty else { return }
+            let id = nextLyricsSection
+            nextLyricsSection += 1
+            let details = lyrics.lines.map { line -> String in
+                let timestamp = line.time.map { String(format: "[%02d:%05.2f] ", Int($0) / 60, $0.truncatingRemainder(dividingBy: 60)) } ?? ""
+                if let translation = line.translation, !translation.isEmpty {
+                    return timestamp + line.text + "\n↳ " + translation
+                }
+                return timestamp + line.text
+            }.joined(separator: "\n")
+            lyricsSections[id] = details
+            lines.append("__NEXTGRAM_LYRICS__:\(id)")
+        }
+        if let lyrics = self.lyrics {
+            lines.append(self.lyricsDiagnosticResult(.found(lyrics)))
+            appendLyricsDetails(lyrics)
+            if self.reusedPlayerLyrics { lines.append(self.string("DiagnosticsMemoryCache")) }
+        } else {
+            lines.append(self.lyricsPlaceholder)
+        }
+        for attempt in self.lyricsAttempts {
+            lines += ["", self.lyricsSourceName(attempt.source) + String(format: " · %.1fs", attempt.elapsed),
+                      self.lyricsDiagnosticResult(attempt.result)]
+            if case let .found(lyrics) = attempt.result {
+                appendLyricsDetails(lyrics)
+            }
+            lines += attempt.events.map(self.lyricsDiagnosticEvent)
+        }
+        controller.lyricsSections = lyricsSections
+        controller.report = lines.joined(separator: "\n")
+    }
+
+    private func lyricsDiagnosticResult(_ result: NextgramLyricsLookupResult) -> String {
+        switch result {
+        case .noMatch: return self.string("NoLyrics")
+        case .unavailable: return self.string("DiagnosticsRequestFailed")
+        case let .found(lyrics):
+            if lyrics.instrumental { return self.string("Instrumental") }
+            let timedWords = lyrics.lines.contains(where: { !$0.words.isEmpty })
+            let format = self.string(timedWords ? "DiagnosticsWord" : (lyrics.isSynced ? "DiagnosticsLine" : "DiagnosticsPlain"))
+            return String(format: self.string("DiagnosticsFound"), format, lyrics.lines.count)
+        }
+    }
+
+    private func lyricsDiagnosticEvent(_ event: NextgramLyricsLookupEvent) -> String {
+        switch event {
+        case .invalidMetadata: return self.string("DiagnosticsMissingMetadata")
+        case .memoryCache: return self.string("DiagnosticsMemoryCache")
+        case .diskCache: return self.string("DiagnosticsDiskCache")
+        case .noUsableLyrics: return self.string("DiagnosticsNoUsableLyrics")
+        case .timingMismatch: return self.string("DiagnosticsTimingMismatch")
+        case let .networkError(code): return String(format: self.string("DiagnosticsNetworkError"), code)
+        case let .httpError(code): return "HTTP \(code)"
+        case .invalidResponse: return self.string("SourceServiceError")
+        case let .candidate(title, artist, duration, decision):
+            let key: String
+            switch decision {
+            case .titleMismatch: key = "DiagnosticsTitleMismatch"
+            case .artistMismatch: key = "DiagnosticsArtistMismatch"
+            case .durationMismatch: key = "DiagnosticsDurationMismatch"
+            case .match: key = "DiagnosticsCandidateMatch"
+            }
+            let seconds = duration.map { String(format: "%.1fs", $0) } ?? "—"
+            return "• \(title.prefix(120)) / \(artist.prefix(120)) · \(seconds) · \(self.string(key))"
         }
     }
 
@@ -1130,7 +1404,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
 
     private func updateLyricsView() {
         self.lyricsView.update(lyrics: self.lyrics, placeholder: self.lyricsPlaceholder.isEmpty ? self.string("NoLyrics") : self.lyricsPlaceholder,
-            fontSize: CGFloat(self.settings.lyricsFontSize), color: self.foregroundColor, effects: self.lyricEffects)
+            fontSize: CGFloat(self.settings.lyricsFontSize), color: self.foregroundColor, effects: self.lyricEffects, showsTranslation: self.settings.lyricsTranslation)
         self.lyricsView.updatePosition(self.currentPosition)
     }
 
@@ -1164,19 +1438,31 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                 NagramSettings.shared.musicPlayerColors = color.rawValue
             }
         }
-        // Keep text-only appearance options in their own section so other actions' icons do not indent them.
-        var actions: [UIMenuElement] = [UIMenu(options: .displayInline, children: [
-            UIMenu(title: self.string("CoverLayout"), children: covers),
-            UIMenu(title: self.string("Background"), children: backgrounds),
-            UIMenu(title: self.string("Colors"), children: colors)
-        ])]
+        let enhancementModes = NagramMusicPlayerArtworkEnhancement.allCases.map { mode in
+            UIAction(title: self.string("ArtworkEnhancement." + mode.rawValue), state: self.settings.artworkEnhancement == mode ? .on : .off) { _ in
+                NagramSettings.shared.musicPlayerArtworkEnhancement = mode.rawValue
+            }
+        }
         let systemModes = [NextgramSystemMusicDisplay.always, .background, .never].map { mode in
             UIAction(title: self.string("SystemNowPlaying." + mode.rawValue),
                 state: NagramSettings.shared.musicSystemNowPlaying == mode.rawValue ? .on : .off) { _ in
                 NagramSettings.shared.musicSystemNowPlaying = mode.rawValue
             }
         }
-        actions.append(UIMenu(title: self.string("SystemNowPlaying"), children: systemModes))
+        // Keep text-only options together so icon-bearing rows do not indent their titles.
+        var actions: [UIMenuElement] = [UIMenu(options: .displayInline, children: [
+            UIMenu(title: self.string("CoverLayout"), children: covers),
+            UIAction(title: self.string("OnlineArtwork"), state: self.settings.onlineArtwork ? .on : .off) { _ in
+                NagramSettings.shared.musicPlayerOnlineArtwork.toggle()
+            },
+            UIMenu(title: self.string("ArtworkEnhancement"), children: enhancementModes),
+            UIMenu(title: self.string("Background"), children: backgrounds),
+            UIMenu(title: self.string("Colors"), children: colors),
+            UIMenu(title: self.string("SystemNowPlaying"), children: systemModes),
+            UIAction(title: self.string(self.settings.showVolume ? "HideVolume" : "ShowVolume")) { _ in
+                NagramSettings.shared.musicPlayerShowVolume.toggle()
+            }
+        ])]
         if let state = self.state {
             actions.append(UIMenu(options: .displayInline, children: [
                 UIAction(title: self.string("Shuffle"), image: UIImage(systemName: "shuffle"), state: state.order == .random ? .on : .off) { [weak self] _ in self?.shufflePressed() },
@@ -1202,6 +1488,11 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         }
         if self.settings.lyricsEnabled && self.settings.onlineLyricsEnabled && (self.state != nil || self.isCanvasPlayer) {
             actions.append(self.makeLyricsSourceMenu())
+        }
+        if self.settings.lyricsEnabled && (self.state != nil || self.isCanvasPlayer) {
+            actions.append(UIAction(title: self.string("Diagnostics"), image: UIImage(systemName: "waveform.path.ecg")) { [weak self] _ in
+                self?.showLyricsDiagnostics()
+            })
         }
         actions.append(UIAction(title: self.string("Settings"), image: UIImage(systemName: "slider.horizontal.3")) { [weak self] _ in self?.openSettings?() })
         self.menuButton.menu = UIMenu(children: actions)
@@ -1273,6 +1564,12 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     }
 
     public override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        if let pan = gestureRecognizer as? UIPanGestureRecognizer, gestureRecognizer !== self.dismissalPan,
+           pan.view === self.artwork || pan.view === self.backgroundArtworkContainer {
+            let velocity = pan.velocity(in: self)
+            return self.active && self.artworkDetail == nil && !self.transitioningLyrics && self.coverDrag == nil && self.settings.swipeToSkip
+                && !self.showingLyrics && abs(velocity.x) > abs(velocity.y)
+        }
         guard gestureRecognizer === self.dismissalPan else { return true }
         guard self.active, self.artworkDetail == nil else { return false }
         let velocity = self.dismissalPan.velocity(in: self)
@@ -1324,7 +1621,12 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     @objc private func closePressed() { self.dismiss?() }
     @objc private func queuePressed() { self.showQueue?() }
     @objc private func openArtworkDetail() {
-        guard self.active, self.foreground, self.artworkDetail == nil, let image = self.artwork.image ?? self.backgroundArtwork.image else { return }
+        guard self.active, self.foreground, self.artworkDetail == nil else { return }
+        if self.showingLyrics {
+            self.lyricsPressed()
+            return
+        }
+        guard let image = self.artwork.image ?? self.backgroundArtwork.image else { return }
         let detail = NextgramArtworkDetailView(image: image, title: self.trackTitle, artist: self.trackArtist,
             insets: self.safeInsets, motionEnabled: self.artworkMotionEnabled, showsMetadata: self.artworkMetadataVisible,
             closeLabel: self.presentationData.strings.Common_Close)
@@ -1332,12 +1634,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         detail.close = { [weak self] in self?.closeArtworkDetail(animated: true) }
         self.artworkDetail = detail
         self.addSubview(detail)
-        if let context = self.context {
-            self.detailArtworkDisposable = (nextgramPlayerArtwork(engine: context.engine, fileReference: self.file,
-                albumArt: self.albumArt, embeddedArtSize: 2048) |> deliverOnMainQueue).startStrict(next: { [weak detail] image in
-                    if let image { detail?.updateImage(image) }
-                })
-        }
+        self.reloadDetailArtwork()
         detail.alpha = 0
         detail.transform = UIAccessibility.isReduceMotionEnabled ? .identity : CGAffineTransform(scaleX: 0.94, y: 0.94)
         self.updateArtworkMotion()
@@ -1346,6 +1643,21 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                 detail.alpha = 1
                 detail.transform = .identity
             }, completion: { _ in UIAccessibility.post(notification: .screenChanged, argument: detail) })
+    }
+
+    private func reloadDetailArtwork() {
+        self.detailArtworkDisposable?.dispose()
+        self.detailArtworkDisposable = nil
+        guard let detail = self.artworkDetail else { return }
+        if let image = self.preferredOnlineArtwork ?? self.telegramArtwork {
+            detail.updateImage(image)
+        }
+        if self.preferredOnlineArtwork == nil, let context = self.context {
+            self.detailArtworkDisposable = (nextgramPlayerArtwork(engine: context.engine, fileReference: self.file,
+                albumArt: self.albumArt, embeddedArtSize: 2048) |> deliverOnMainQueue).startStrict(next: { [weak detail] image in
+                    if let image { detail?.updateImage(image) }
+                })
+        }
     }
 
     private func closeArtworkDetail(animated: Bool) {
@@ -1368,7 +1680,8 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
 
     private func updateArtworkMotion() {
         self.artwork.motionEnabled = false
-        self.artwork.accessibilityLabel = self.string("ArtworkDetails")
+        self.artwork.accessibilityLabel = self.showingLyrics ? self.string("CloseLyrics") : self.string("ArtworkDetails")
+        self.artworkDetail?.updateMotionEnabled(self.artworkMotionEnabled)
     }
 
     private var artworkMotionEnabled: Bool {
@@ -1400,6 +1713,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     @objc private func previousPressed() { self.context?.sharedContext.mediaManager.playlistControl(.previous, type: .music) }
     @objc private func nextPressed() { self.context?.sharedContext.mediaManager.playlistControl(.next, type: .music) }
     @objc private func lyricsPressed() {
+        self.finishCoverDrag()
         self.layoutIfNeeded()
         self.transitioningLyrics = true
         self.showingLyrics.toggle()
@@ -1408,7 +1722,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         let opening = self.showingLyrics
         if opening {
             self.lyricsView.isHidden = false
-            self.sourceLabel.isHidden = false
             UIView.performWithoutAnimation {
                 self.lyricsView.layoutIfNeeded()
                 self.lyricsView.updatePosition(self.currentPosition, force: true)
@@ -1437,7 +1750,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
             delay: opening && !UIAccessibility.isReduceMotionEnabled ? 0.12 : 0.0,
             options: [.beginFromCurrentState, .allowUserInteraction, .curveEaseOut], animations: {
                 self.lyricsView.alpha = opening ? 1.0 : 0.0
-                self.sourceLabel.alpha = self.lyricsView.alpha
             })
     }
     @objc private func shufflePressed() {
@@ -1457,28 +1769,148 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         let _ = updateMusicPlaybackSettingsInteractively(accountManager: context.sharedContext.accountManager, { $0.withUpdatedLooping(looping) }).startStandalone()
         context.sharedContext.mediaManager.playlistControl(.setLooping(looping), type: .music)
     }
-    @objc private func scrubBegan() { self.scrubbing = true }
-    @objc private func scrubChanged() {
-        if !self.positionSlider.isTracking { self.seek(Double(self.positionSlider.value) * self.playbackDuration) }
-        self.updatePosition()
+    @objc private func artworkPanned(_ pan: UIPanGestureRecognizer) {
+        let offset = pan.translation(in: self).x
+        switch pan.state {
+        case .began:
+            guard let surface = pan.view else { return }
+            self.beginCoverDrag(surface: surface)
+            self.updateCoverDrag(offset: offset)
+        case .changed:
+            self.updateCoverDrag(offset: offset)
+        case .ended:
+            guard let drag = self.coverDrag else { return }
+            let velocity = pan.velocity(in: self).x
+            let threshold = min(94.0, self.bounds.width * 0.23)
+            let commits = abs(offset) > threshold || (abs(offset) > 16.0 && velocity * offset > 0.0 && abs(velocity) > 460.0)
+            self.settleCoverDrag(drag, commit: commits && self.canSwitchCover(drag))
+        case .cancelled, .failed:
+            if let drag = self.coverDrag { self.settleCoverDrag(drag, commit: false) }
+        default:
+            break
+        }
     }
-    @objc private func scrubEnded() {
-        self.seek(Double(self.positionSlider.value) * self.playbackDuration)
-        self.scrubbing = false
+
+    private func beginCoverDrag(surface: UIView) {
+        guard self.coverDrag == nil, !surface.isHidden, let snapshot = surface.snapshotView(afterScreenUpdates: false) else { return }
+        let drag = CoverDrag(surface: surface, trackId: self.trackId)
+        drag.overlay.frame = surface.frame
+        drag.overlay.isUserInteractionEnabled = false
+        snapshot.frame = drag.overlay.bounds
+        drag.overlay.addSubview(snapshot)
+        drag.neighbor.contentMode = .scaleAspectFill
+        drag.neighbor.backgroundColor = self.artworkColor
+        drag.neighbor.clipsToBounds = true
+        drag.neighbor.layer.cornerRadius = surface.layer.cornerRadius
+        drag.neighbor.layer.cornerCurve = .continuous
+        drag.neighbor.isHidden = true
+        drag.overlay.addSubview(drag.neighbor)
+        self.insertSubview(drag.overlay, aboveSubview: surface)
+        surface.alpha = 0.0
+        self.coverDrag = drag
     }
-    @objc private func scrubCancelled() { self.scrubbing = false; self.updatePosition() }
-    @objc private func artworkSwiped(_ gesture: UISwipeGestureRecognizer) {
-        guard self.settings.swipeToSkip, self.state != nil else { return }
-        if gesture.direction == .left { self.nextPressed() } else { self.previousPressed() }
+
+    private func updateCoverDrag(offset: CGFloat) {
+        guard let drag = self.coverDrag, !drag.committed else { return }
+        let direction: CGFloat = offset < 0.0 ? -1.0 : 1.0
+        if drag.direction != direction {
+            drag.direction = direction
+            drag.artworkDisposable?.dispose()
+            drag.neighborId = nil
+            drag.neighbor.image = nil
+            if let state = self.state, state.order != .random, let context = self.context {
+                let earlier = (direction < 0.0) == (state.order == .regular)
+                if let item = earlier ? state.previousItem : state.nextItem {
+                    drag.neighborId = item.stableId
+                    var file: FileMediaReference?
+                    if case let .telegramFile(reference, _, _)? = item.playbackData?.source { file = reference }
+                    var albumArt: SharedMediaPlaybackAlbumArt?
+                    if case let .music(_, _, art, _, _)? = item.displayData { albumArt = art }
+                    drag.artworkDisposable = (nextgramPlayerArtwork(engine: context.engine, fileReference: file, albumArt: albumArt)
+                    |> deliverOnMainQueue).startStrict(next: { [weak drag] image in
+                        if let image { drag?.neighbor.image = image }
+                    })
+                }
+            }
+#if DEBUG && targetEnvironment(simulator)
+            if self.previewPlaying != nil { drag.neighbor.image = self.originalArtwork }
+#endif
+            let stride = self.bounds.width
+            drag.neighbor.frame = drag.overlay.bounds.offsetBy(dx: -direction * stride, dy: 0.0)
+            drag.neighbor.isHidden = !self.canSwitchCover(drag)
+        }
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        let distance = min(self.bounds.width, abs(offset))
+        let translation = self.canSwitchCover(drag) ? distance : min(32.0, distance * 0.20)
+        drag.overlay.transform = CGAffineTransform(translationX: direction * translation, y: 0.0)
+        if drag.surface === self.artwork {
+            self.artworkShadow.transform = drag.overlay.transform
+        }
     }
+
+    private func canSwitchCover(_ drag: CoverDrag) -> Bool {
+#if DEBUG && targetEnvironment(simulator)
+        if self.previewPlaying != nil { return true }
+#endif
+        guard let state = self.state, self.trackId == drag.trackId else { return false }
+        return drag.neighborId != nil || state.order == .random || state.looping == .all
+    }
+
+    private func settleCoverDrag(_ drag: CoverDrag, commit: Bool) {
+        drag.committed = commit
+        let reduced = UIAccessibility.isReduceMotionEnabled
+        let target = commit && !reduced ? drag.direction * self.bounds.width : 0.0
+        UIView.animate(withDuration: reduced ? 0.0 : (commit ? 0.23 : 0.30),
+            delay: 0.0, usingSpringWithDamping: commit ? 1.0 : 0.85, initialSpringVelocity: 0.0,
+            options: [.beginFromCurrentState, .allowUserInteraction], animations: {
+                drag.overlay.transform = CGAffineTransform(translationX: target, y: 0.0)
+                if drag.surface === self.artwork {
+                    self.artworkShadow.transform = drag.overlay.transform
+                }
+            }, completion: { [weak self, weak drag] _ in
+                guard let self, let drag, self.coverDrag === drag else { return }
+                drag.settled = true
+                if !commit || self.trackId != drag.trackId || self.isCanvasPlayer {
+                    self.finishCoverDrag()
+                }
+            })
+        if commit && !self.isCanvasPlayer {
+            self.context?.sharedContext.mediaManager.playlistControl(drag.direction < 0.0 ? .next : .previousTrack, type: .music)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.1) { [weak self, weak drag] in
+                guard let self, let drag, self.coverDrag === drag else { return }
+                self.settleCoverDrag(drag, commit: false)
+            }
+        }
+    }
+
+    private func finishCoverDrag() {
+        guard let drag = self.coverDrag else { return }
+        self.coverDrag = nil
+        drag.overlay.removeFromSuperview()
+        drag.surface.alpha = 1.0
+        self.artworkShadow.transform = .identity
+    }
+
+#if DEBUG && targetEnvironment(simulator)
+    private func animateCoverSwipe(direction: CGFloat) {
+        self.beginCoverDrag(surface: self.settings.coverLayout == .fullscreen && !self.showingLyrics ? self.backgroundArtworkContainer : self.artwork)
+        guard let drag = self.coverDrag else { return }
+        self.updateCoverDrag(offset: direction * self.bounds.width * 0.22)
+        self.settleCoverDrag(drag, commit: true)
+    }
+#endif
     @objc private func didEnterBackground() {
         self.foreground = false
+        self.finishCoverDrag()
+        self.onlineArtworkTask?.cancel()
+        self.onlineArtworkTask = nil
         self.closeArtworkDetail(animated: false)
         self.cancelLyrics()
         self.updateDisplayLink()
     }
     @objc private func didBecomeActive() {
         self.foreground = true
+        self.refreshOnlineArtwork()
         self.updateDisplayLink()
         self.updatePosition()
         if self.active && self.lyrics == nil { self.reloadLyrics() }
@@ -1499,7 +1931,26 @@ public extension NextgramMusicPlayerView {
             NagramSettings.shared.musicPlayerBackground = background.rawValue
             return
         }
+        if action.hasPrefix("enhancement:"), let mode = NagramMusicPlayerArtworkEnhancement(rawValue: String(action.dropFirst("enhancement:".count))) {
+            NagramSettings.shared.musicPlayerArtworkEnhancement = mode.rawValue
+            return
+        }
+        if action.hasPrefix("progress-stretch:"), let distance = Double(action.dropFirst(17)) {
+            self.positionSlider.previewEdgeStretch(CGFloat(distance))
+            return
+        }
+        if action.hasPrefix("artwork-tilt:"), let angle = Double(action.dropFirst("artwork-tilt:".count)) {
+            self.artworkDetail?.previewDeviceTilt(x: CGFloat(angle), y: CGFloat(angle) * 0.65)
+            return
+        }
         switch action {
+        case "progress-start": self.seek(0.0)
+        case "progress-end": self.seek(self.previewDuration)
+        case "progress-release": self.positionSlider.previewEdgeStretch(nil)
+        case "volume-toggle": NagramSettings.shared.musicPlayerShowVolume.toggle()
+        case "cover-swipe-left": self.animateCoverSwipe(direction: -1.0)
+        case "cover-swipe-right": self.animateCoverSwipe(direction: 1.0)
+        case "lyrics-seek": self.lyricsView.previewSeekVisibleLine()
         case "effects-on": self.setCanvasLyricsEffects(enabled: true)
         case "effects-off": self.setCanvasLyricsEffects(enabled: false)
         case "playback": self.playPressed()
@@ -1523,12 +1974,6 @@ public extension NextgramMusicPlayerView {
         }
     }
 
-    func performCanvasDeviceMotion(roll: Double, pitch: Double) {
-        guard self.previewPlaying != nil else { return }
-        self.artwork.previewDeviceMotion(roll: roll, pitch: pitch)
-        self.artworkDetail?.previewDeviceMotion(roll: roll, pitch: pitch)
-    }
-
     static func makeCanvasPreview(coverImage: UIImage, showingLyrics: Bool, playing: Bool = true,
         allLyricsEffects: Bool = false, animatedLyrics: Bool = false, interludePreview: Bool = false,
         artworkMotionPreview: Bool? = nil, artworkMetadataPreview: Bool? = nil) -> NextgramMusicPlayerView {
@@ -1538,8 +1983,8 @@ public extension NextgramMusicPlayerView {
         view.trackArtist = "ARU / 存流"
         view.titleLabel.text = view.trackTitle
         view.artistLabel.text = view.trackArtist
-        view.artwork.image = cover
-        view.backgroundArtwork.image = cover
+        view.telegramArtwork = cover
+        view.setOriginalArtwork(cover)
         view.artworkColor = NextgramPlayerPalette.artworkColor(cover)
         view.showingLyrics = showingLyrics
         view.previewDuration = 194.493
@@ -1585,8 +2030,12 @@ public extension NextgramMusicPlayerView {
                 NextgramLyricLine(time: 82.0, text: "把未唱完的梦慢慢唱给你听")
             ], isSynced: true)
         }
+        if CommandLine.arguments.contains("--canvas-plain-lyrics") {
+            let middle = (2 ... 16).map { "第\($0)行：夜里的灯光" }
+            view.lyrics = NextgramLyrics.parse((["第一行：在这里开始"] + middle + ["最后一行：在这里结束"]).joined(separator: "\n"))
+            view.showingLyrics = true
+        }
         view.previewSampleLyrics = view.lyrics
-        view.sourceLabel.text = "Canvas · 本地样例"
         view.updateAppearance()
         view.lyricsButton.isHidden = false
         view.updateTransport()
@@ -1614,6 +2063,7 @@ public extension NextgramMusicPlayerView {
         self.previewArtworkMotion = nil
         self.previewArtworkMetadata = nil
         self.updateAppearance()
+        self.refreshOnlineArtwork()
     }
 
     func presentCanvasSettings(from host: UIViewController) {
@@ -1632,7 +2082,11 @@ public extension NextgramMusicPlayerView {
             .choice(title("CoverLayout"), NagramMusicPlayerCoverLayout.allCases.map { ($0.rawValue, title("CoverLayout." + $0.rawValue)) },
                 { settings.musicPlayerCoverLayout }, { settings.musicPlayerCoverLayout = $0 }),
             .toggle(title("SmartArtworkCrop"), { settings.musicPlayerSmartArtworkCrop }, { settings.musicPlayerSmartArtworkCrop = $0 }),
+            .toggle(title("OnlineArtwork"), { settings.musicPlayerOnlineArtwork }, { settings.musicPlayerOnlineArtwork = $0 }),
+            .choice(title("ArtworkEnhancement"), NagramMusicPlayerArtworkEnhancement.allCases.map { ($0.rawValue, title("ArtworkEnhancement." + $0.rawValue)) },
+                { settings.musicPlayerArtworkEnhancementValue.rawValue }, { settings.musicPlayerArtworkEnhancement = $0 }),
             .number(title("CoverSize"), 60...100, { settings.musicPlayerCoverSize }, { settings.musicPlayerCoverSize = $0 }),
+            .number(title("PausedCoverSize"), 60...100, { settings.musicPlayerPausedCoverSize }, { settings.musicPlayerPausedCoverSize = $0 }),
             .number(title("CoverCornerRadius"), 0...48, { settings.musicPlayerCoverCornerRadius }, { settings.musicPlayerCoverCornerRadius = $0 }),
             .toggle(title("DiscRotation"), { settings.musicPlayerDiscRotation }, { settings.musicPlayerDiscRotation = $0 }),
             .toggle(title("SwipeToSkip"), { settings.musicPlayerSwipeToSkip }, { settings.musicPlayerSwipeToSkip = $0 }),
@@ -1641,7 +2095,7 @@ public extension NextgramMusicPlayerView {
         ]))
         sections.append(("背景与配色", [
             .choice(title("Background"), NagramMusicPlayerBackground.allCases.map { ($0.rawValue, title("Background." + $0.rawValue)) },
-                { settings.musicPlayerBackground }, { settings.musicPlayerBackground = $0 }),
+                { settings.musicPlayerBackgroundValue.rawValue }, { settings.musicPlayerBackground = $0 }),
             .choice(title("Colors"), NagramMusicPlayerColors.allCases.map { ($0.rawValue, title("Colors." + $0.rawValue)) },
                 { settings.musicPlayerColors }, { settings.musicPlayerColors = $0 }),
             .text(title("CustomColor"), { settings.musicPlayerCustomColor }, { settings.musicPlayerCustomColor = $0 }),
@@ -1655,6 +2109,9 @@ public extension NextgramMusicPlayerView {
         ]))
         sections.append(("播放界面", [
             .toggle(title("ShowVolume"), { settings.musicPlayerShowVolume }, { settings.musicPlayerShowVolume = $0 }),
+            .toggle(title("ElasticProgress"), { settings.musicPlayerElasticProgress }, { settings.musicPlayerElasticProgress = $0 }),
+            .toggle(title("ElasticVolume"), { settings.musicPlayerElasticVolume }, { settings.musicPlayerElasticVolume = $0 }),
+            .toggle(title("TapToSeek"), { settings.musicPlayerTapToSeek }, { settings.musicPlayerTapToSeek = $0 }),
             .toggle(title("ShowRemainingTime"), { settings.musicPlayerShowRemainingTime }, { settings.musicPlayerShowRemainingTime = $0 }),
             .choice(title("TitleAlignment"), [("left", "左对齐"), ("center", "居中")],
                 { settings.musicPlayerTitleAlignment }, { settings.musicPlayerTitleAlignment = $0 }),
@@ -1663,6 +2120,7 @@ public extension NextgramMusicPlayerView {
         ]))
         sections.append(("歌词来源", [
             .toggle(title("Lyrics"), { settings.musicPlayerLyricsEnabled }, { settings.musicPlayerLyricsEnabled = $0 }),
+            .toggle(title("LyricsTranslation"), { settings.musicPlayerLyricsTranslation }, { settings.musicPlayerLyricsTranslation = $0 }),
             .toggle(title("OnlineLyrics"), { settings.musicPlayerOnlineLyricsEnabled }, { settings.musicPlayerOnlineLyricsEnabled = $0 }),
             .choice("优先来源", NextgramLyricsSource.allCases.map { ($0.rawValue, self.lyricsSourceName($0)) },
                 { self.settings.lyricsSources.first?.rawValue ?? "qqMusic" }, { source in
@@ -1682,6 +2140,7 @@ public extension NextgramMusicPlayerView {
             .toggle(title("LyricsWordFloat"), { settings.musicPlayerLyricsWordFloat }, { settings.musicPlayerLyricsWordFloat = $0 }),
             .toggle(title("LyricsGlow"), { settings.musicPlayerLyricsGlow }, { settings.musicPlayerLyricsGlow = $0 }),
             .toggle(title("LyricsBlur"), { settings.musicPlayerLyricsBlur }, { settings.musicPlayerLyricsBlur = $0 }),
+            .toggle(title("LyricsLayeredBlur"), { settings.musicPlayerLyricsLayeredBlur }, { settings.musicPlayerLyricsLayeredBlur = $0 }),
             .toggle(title("LyricsScale"), { settings.musicPlayerLyricsScale }, { settings.musicPlayerLyricsScale = $0 }),
             .toggle(title("LyricsSpringScroll"), { settings.musicPlayerLyricsSpringScroll }, {
                 settings.musicPlayerLyricsSpringScroll = $0
@@ -1695,6 +2154,7 @@ public extension NextgramMusicPlayerView {
             .toggle(title("LyricsInterlude"), { settings.musicPlayerLyricsInterlude }, { settings.musicPlayerLyricsInterlude = $0 }),
             .toggle(title("LyricsEdgeFade"), { settings.musicPlayerLyricsEdgeFade }, { settings.musicPlayerLyricsEdgeFade = $0 })
         ]))
+        sections.append(("", [.action(title("Reset"), { settings.resetMusicPlayerSettings() })]))
         let panel = NextgramCanvasSettingsController(sections: sections, changed: changed)
         let navigation = UINavigationController(rootViewController: panel)
         navigation.sheetPresentationController?.prefersGrabberVisible = true
@@ -1708,6 +2168,7 @@ public extension NextgramMusicPlayerView {
         settings.musicPlayerLyricsWordFloat = enabled
         settings.musicPlayerLyricsGlow = enabled
         settings.musicPlayerLyricsBlur = enabled
+        settings.musicPlayerLyricsLayeredBlur = enabled
         settings.musicPlayerLyricsScale = enabled
         settings.musicPlayerLyricsSpringScroll = enabled
         settings.musicPlayerLyricsLinearScroll = false
@@ -1729,8 +2190,14 @@ public extension NextgramMusicPlayerView {
         self.previewClockStart = self.previewPlaying == true ? CACurrentMediaTime() : nil
         self.previewAnimatedLyrics = true
         self.lyricsSourceOverride = nil
+        self.activeLyricsSource = nil
+        self.localLyricsOrigin = nil
+        self.reusedPlayerLyrics = false
+        self.lyricsAttempts = []
         self.lyrics = self.previewSampleLyrics
-        self.sourceLabel.text = "Canvas · 本地样例"
+        self.onlineArtwork = nil
+        self.applyAvailableArtwork()
+        self.refreshOnlineArtwork()
         self.updateLyricsView()
         self.updateMenu()
         self.updateDisplayLink()
@@ -1754,6 +2221,9 @@ public extension NextgramMusicPlayerView {
         NagramSettings.shared.musicPlayerOnlineLyricsEnabled = true
         self.settings = NagramMusicPlayerSettings()
         self.showingLyrics = true
+        self.onlineArtwork = nil
+        self.applyAvailableArtwork()
+        self.refreshOnlineArtwork()
         self.reloadLyrics(forceRefresh: forceRefresh)
         self.updateAppearance()
         self.updateDisplayLink()

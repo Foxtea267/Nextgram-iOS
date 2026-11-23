@@ -33,6 +33,7 @@ import ComponentDisplayAdapters
 import NagramMediaMetadata
 import NagramStrings // MARK: NAGRAM
 import NagramSettings
+import NextgramImageSuperResolution // MARK: NEXTGRAM
 
 /// Upper bound on the pixel dimensions a full-screen photo is decoded and rasterized at.
 /// Photos larger than this are downscaled to fit; smaller ones are left untouched.
@@ -235,6 +236,10 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     private var sendSticker: ((FileMediaReference) -> Void)?
     
     private let imageNode: TransformImageNode
+    // MARK: NEXTGRAM
+    private var isCentralForImageEnhancement = false
+    private var imageEnhancementSource: UIImage?
+    private var imageEnhancementTask: DispatchWorkItem?
     private var recognizedContentNode: RecognizedContentContainer?
     
     private let recognitionOverlayContentNode: ImageRecognitionOverlayContentNode
@@ -303,8 +308,9 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         
         self.clipsToBounds = true
         
-        self.imageNode.imageUpdated = { [weak self] _ in
+        self.imageNode.imageUpdated = { [weak self] image in
             self?._ready.set(.single(Void()))
+            self?.enhanceImageIfNeeded(image) // MARK: NEXTGRAM
         }
         
         self.imageNode.view.contentMode = .scaleAspectFill
@@ -345,6 +351,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
     }
     
     deinit {
+        self.imageEnhancementTask?.cancel() // MARK: NEXTGRAM
         //self.fetchDisposable.dispose()
         self.statusDisposable.dispose()
         self.dataDisposable.dispose()
@@ -1005,6 +1012,35 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
         self.contextAndMedia = (context, fileReference.abstract)
     }
     
+    // MARK: NEXTGRAM
+    override func centralityUpdated(isCentral: Bool) {
+        super.centralityUpdated(isCentral: isCentral)
+        self.isCentralForImageEnhancement = isCentral
+        if isCentral {
+            self.enhanceImageIfNeeded(self.imageNode.image)
+        } else if let task = self.imageEnhancementTask {
+            task.cancel()
+            self.imageEnhancementTask = nil
+            self.imageEnhancementSource = nil
+        }
+    }
+
+    private func enhanceImageIfNeeded(_ image: UIImage?) {
+        guard self.isCentralForImageEnhancement, let image, self.imageEnhancementSource !== image,
+              NagramSettings.shared.enhanceChatPhotos, !self.imageNode.captureProtected,
+              case .Local? = self.status else { return }
+        self.imageEnhancementTask?.cancel()
+        self.imageEnhancementSource = image
+        self.imageEnhancementTask = NextgramImageSuperResolution.enhance(image) { [weak self] enhanced in
+            guard let self, self.imageEnhancementSource === image, self.isCentralForImageEnhancement else { return }
+            self.imageEnhancementTask = nil
+            guard let enhanced, self.imageNode.image === image,
+                  NagramSettings.shared.enhanceChatPhotos, !self.imageNode.captureProtected else { return }
+            // Keep the original available to the gallery's save, share and recognition actions.
+            self.imageNode.contents = enhanced.cgImage
+        }
+    }
+
     private func setupStatus(resource: MediaResource) {
         self.statusDisposable.set((self.context.engine.resources.status(resource: EngineMediaResource(resource))
         |> deliverOnMainQueue).start(next: { [weak self] status in
@@ -1024,6 +1060,7 @@ final class ChatImageGalleryItemNode: ZoomableContentGalleryItemNode {
                         let adjustedProgress = max(progress, 0.027)
                         strongSelf.statusNode.transitionToState(.progress(color: .white, lineWidth: nil, value: CGFloat(adjustedProgress), cancelEnabled: true, animateRotation: true), completion: {})
                     case .Local:
+                        strongSelf.enhanceImageIfNeeded(strongSelf.imageNode.image) // MARK: NEXTGRAM
                         if let previousStatus = previousStatus, case .Fetching = previousStatus {
                             strongSelf.statusNode.transitionToState(.progress(color: .white, lineWidth: nil, value: 1.0, cancelEnabled: true, animateRotation: true), completion: {
                                 if let strongSelf = self {

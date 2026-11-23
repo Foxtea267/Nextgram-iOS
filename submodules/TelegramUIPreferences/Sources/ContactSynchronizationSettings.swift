@@ -31,7 +31,8 @@ public struct ContactSynchronizationSettings: Equatable, Codable {
         let container = try decoder.container(keyedBy: StringCodingKey.self)
 
         self._legacySynchronizeDeviceContacts = (try container.decode(Int32.self, forKey: "synchronizeDeviceContacts")) != 0
-        self.nameDisplayOrder = PresentationPersonNameOrder(rawValue: try container.decode(Int32.self, forKey: "nameDisplayOrder")) ?? .firstLast
+        // MARK: NEXTGRAM — The legacy value was written by iOS sync, not chosen in the app.
+        self.nameDisplayOrder = (try container.decodeIfPresent(Int32.self, forKey: "nextgramNameDisplayOrder")).flatMap(PresentationPersonNameOrder.init(rawValue:)) ?? .firstLast
         self.sortOrder = ContactsSortOrder(rawValue: try container.decode(Int32.self, forKey: "sortOrder")) ?? .presence
     }
     
@@ -40,6 +41,8 @@ public struct ContactSynchronizationSettings: Equatable, Codable {
 
         try container.encode((self._legacySynchronizeDeviceContacts ? 1 : 0) as Int32, forKey: "synchronizeDeviceContacts")
         try container.encode(self.nameDisplayOrder.rawValue, forKey: "nameDisplayOrder")
+        // MARK: NEXTGRAM — Keep the legacy key readable by older builds.
+        try container.encode(self.nameDisplayOrder.rawValue, forKey: "nextgramNameDisplayOrder")
         try container.encode(self.sortOrder.rawValue, forKey: "sortOrder")
     }
 }

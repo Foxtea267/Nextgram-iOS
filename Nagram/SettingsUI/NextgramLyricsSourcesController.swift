@@ -32,7 +32,8 @@ private enum NextgramLyricsSourceEntry: ItemListNodeEntry {
     func item(presentationData: ItemListPresentationData, arguments: Any) -> ListViewItem {
         switch self {
         case let .source(index, _, title):
-            let icon = UIImage(systemName: "line.3.horizontal")?.withTintColor(presentationData.theme.list.itemSecondaryTextColor, renderingMode: .alwaysOriginal)
+            // MARK: NEXTGRAM — Keep the reorder handle readable in dark themes.
+            let icon = PresentationResourcesItemList.itemListReorderIndicatorIcon(presentationData.theme)
             return ItemListDisclosureItem(presentationData: presentationData, systemStyle: .glass,
                 title: "\(index + 1).  \(title)", label: "",
                 labelStyle: icon.map { .image(image: $0, size: CGSize(width: 18, height: 16)) } ?? .text,

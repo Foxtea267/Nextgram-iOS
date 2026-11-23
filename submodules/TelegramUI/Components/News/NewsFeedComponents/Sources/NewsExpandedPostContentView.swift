@@ -819,7 +819,7 @@ final class NewsExpandedPostContentView: UIView {
             }
         }
         if !bubbleMessages.isEmpty {
-            self.bubble.update(item: context.sharedContext.makeChatMessageFeedItem(context: context, messages: bubbleMessages, presentationData: content.presentationData, accountPeer: content.accountPeer, actions: actions), width: bubbleWidth, synchronousLoad: synchronousLoad)
+            self.bubble.update(item: context.sharedContext.makeChatMessageFeedItem(context: context, messages: bubbleMessages, presentationData: content.presentationData, accountPeer: content.accountPeer, backgroundNode: nil, actions: actions), width: bubbleWidth, synchronousLoad: synchronousLoad)
             // MARK: NEXTGRAM — Start below the avatar and keep the filled bubble above the next element.
             nextY = metrics.avatarTop + metrics.avatarSize + 4.0 + metrics.bubbleTextTopInset
             let textOrigin = CGPoint(x: bubbleTextX, y: nextY)
@@ -869,7 +869,7 @@ final class NewsExpandedPostContentView: UIView {
         }
 
         if !previewMessages.isEmpty {
-            self.previewBubble.update(item: context.sharedContext.makeChatMessageFeedItem(context: context, messages: previewMessages, presentationData: content.presentationData, accountPeer: content.accountPeer, actions: actions), width: bubbleWidth, synchronousLoad: synchronousLoad)
+            self.previewBubble.update(item: context.sharedContext.makeChatMessageFeedItem(context: context, messages: previewMessages, presentationData: content.presentationData, accountPeer: content.accountPeer, backgroundNode: nil, actions: actions), width: bubbleWidth, synchronousLoad: synchronousLoad)
             // MARK: NEXTGRAM
             nextY += metrics.showMoreTopSpacing + metrics.bubbleTextTopInset
             nextY = self.previewBubble.place(textOrigin: CGPoint(x: bubbleTextX, y: nextY)) + metrics.bubbleTextTopInset

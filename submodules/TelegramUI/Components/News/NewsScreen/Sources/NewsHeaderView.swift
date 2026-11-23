@@ -169,7 +169,10 @@ final class NewsHeaderView: UIView, NavigationBarComponentTransitionSource {
 
     private func updateHeaderEffects(params: Params, geometry: NewsHeaderGeometry, transition: ComponentTransition) {
         let width = params.layout.size.width
-        let navigationHeight = params.isSearchActive ? self.activeSearchNavigationHeight : geometry.topRow.maxY
+        // MARK: NEXTGRAM — Match the conversation header's compact navigation band.
+        // topRow.maxY includes the feed title/subtitle and made the shade taller than
+        // the same setting in a conversation.
+        let navigationHeight = params.isSearchActive ? self.activeSearchNavigationHeight : min(geometry.topRow.maxY, 96.0)
         let blurHeight = params.isSearchActive ? navigationHeight : geometry.edgeEffectHeight + NewsHeaderView.softEdgeExtension
         let blurFrame = CGRect(x: 0.0, y: 0.0, width: width, height: blurHeight)
         transition.setFrame(view: self.softEdgeView, frame: blurFrame)

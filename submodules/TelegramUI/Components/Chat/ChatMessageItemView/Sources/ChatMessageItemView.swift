@@ -830,6 +830,12 @@ open class ChatMessageItemView: ListViewItemNode, ChatMessageItemNodeProtocol {
     
     open func updateHiddenMedia() {
     }
+
+    // MARK: NEXTGRAM
+    public func updateHiddenMedia(_ media: [EngineMessage.Id: [EngineRawMedia]]) {
+        self.item?.controllerInteraction.hiddenMedia = media
+        self.updateHiddenMedia()
+    }
     
     open func updateSelectionState(animated: Bool) {
     }

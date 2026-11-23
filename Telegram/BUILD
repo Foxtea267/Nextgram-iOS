@@ -2014,6 +2014,8 @@ ios_application(
     ],
     resources = [
         ":LaunchScreen",
+        # MARK: NEXTGRAM — On-device image super-resolution.
+        "//Nagram/ImageSuperResolution:ModelResources",
         # MARK: NEXTGRAM — Python plugin resources are used by the main app.
         "//Nagram/Plugins:ExteraRuntimeResources",
         # MARK: NEXTGRAM — Include the local signing libraries' licenses.
