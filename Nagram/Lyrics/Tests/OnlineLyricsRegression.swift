@@ -27,8 +27,18 @@ private final class LyricsProtocol: URLProtocol {
             switch self.request.url!.path {
             case "/api/search/get/web":
                 body = ["code": 200, "result": ["songs": [["id": 12345, "name": "別の表記", "alias": [Self.title],
-                    "duration": 200000, "artists": [["id": 67890, "name": "別名"]]]]]]
+                    "duration": 200000, "artists": [["id": 67890, "name": "別名"]]], ["id": 12346, "name": Self.title,
+                    "duration": 201000, "artists": [["name": "Singer A"], ["name": "Singer B"]]]]]]
             case "/api/artist/67890": body = ["code": 200, "artist": ["id": 67890, "name": "別名", "alias": ["Singer A & Singer B"]]]
+            case "/api/song/lyric/v1":
+                let query = URLComponents(url: self.request.url!, resolvingAgainstBaseURL: false)?.queryItems
+                precondition(query?.contains(URLQueryItem(name: "ytv", value: "-1")) == true)
+                if query?.contains(URLQueryItem(name: "id", value: "12346")) == true {
+                    body = ["code": 200, "yrc": ["lyric": "[1000,1000](1000,1000,0)Rich lyrics\n[3000,1000](3000,1000,0)Second line"],
+                        "ytlrc": ["lyric": "[00:01.40]第一句\n[00:03.60]第二句"], "tlyric": ["lyric": "[00:01.00]备用译文"]]
+                } else {
+                    body = ["code": 500]
+                }
             case "/api/song/lyric": body = ["code": 200, "lrc": ["lyric": "[00:01.00]alias match"]]
             default: fatalError("Unexpected NetEase request")
             }
@@ -90,7 +100,7 @@ private struct Regression {
             .appendingPathComponent("NextgramOnlineLyrics-v1").appendingPathComponent(name)
         defer {
             try? FileManager.default.removeItem(at: cache)
-            for provider in ["netease", "kugou", "betterLyrics-2"] {
+            for provider in ["netease-2", "kugou", "betterLyrics-2"] {
                 let providerKey = key.replacingOccurrences(of: "lrclib\u{1}", with: provider + "\u{1}")
                 let providerName = SHA256.hash(data: Data(providerKey.utf8)).map { String(format: "%02x", $0) }.joined() + ".json"
                 try? FileManager.default.removeItem(at: cache.deletingLastPathComponent().appendingPathComponent(providerName))
@@ -133,9 +143,13 @@ private struct Regression {
         precondition(!NextgramOnlineLyrics.artistsMatch("Singer A & Someone Else", foundArtists: ["Singer A", "Singer B"]))
         precondition(!NextgramOnlineLyrics.artistsMatch("bbno$/Ironmouse", foundArtists: ["Ironmouse"]))
         LyricsProtocol.neteaseFixture = true
-        let aliasResult = await NextgramOnlineLyrics.lookup(provider: .netease, title: title,
-            artist: "Singer A & Singer B", duration: 200, forceRefresh: true)
-        guard case let .found(aliasLyrics) = aliasResult, aliasLyrics.lines.count == 1 else { fatalError("NetEase song/artist alias resolution failed") }
+        let netease = await self.diagnostics(.netease, title: title)
+        guard case let .found(neteaseLyrics) = netease.result,
+              netease.events.contains(where: { if case .candidate("別の表記", _, 200, .match) = $0 { return true }; return false }),
+              neteaseLyrics.lines.map(\.translation) == ["第一句", "第二句"],
+              neteaseLyrics.lines.allSatisfy({ !$0.words.isEmpty }) else {
+            fatalError("Expected the richer NetEase edition with aligned translations after the first candidate falls back to LRC")
+        }
         LyricsProtocol.neteaseFixture = false
         let kugou = await self.diagnostics(.kugou, title: title)
         guard case let .found(kugouLyrics) = kugou.result, kugouLyrics.lines.first?.text == "KuGou fixture", kugouLyrics.isSynced else {

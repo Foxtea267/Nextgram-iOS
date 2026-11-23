@@ -117,6 +117,7 @@ public enum NextgramOnlineLyrics {
         let lrc: Text?
         let yrc: Text?
         let tlyric: Text?
+        let ytlrc: Text?
         let nolyric: Bool?
     }
     private struct LRCLIBLyrics: Decodable {
@@ -183,7 +184,7 @@ public enum NextgramOnlineLyrics {
             return .noMatch
         }
         guard !Task.isCancelled else { return .noMatch }
-        let providerKey = [.amll, .betterLyrics].contains(provider) ? provider.rawValue + "-2" : provider.rawValue
+        let providerKey = [.amll, .betterLyrics, .netease].contains(provider) ? provider.rawValue + "-2" : provider.rawValue
         let key = "\(providerKey)\u{1}\(title)\u{1}\(artist)\u{1}\(Int(duration.rounded()))"
         let url = self.cacheURL(key)
         if !forceRefresh {
@@ -303,15 +304,23 @@ public enum NextgramOnlineLyrics {
             }
             return titleMatches && durationMatches
         }.sorted { abs(($0.duration ?? 0) / 1000.0 - duration) < abs(($1.duration ?? 0) / 1000.0 - duration) }
-        for song in songs.prefix(2) {
+        var best: NextgramLyrics?
+        var bestTranslatedCount = 0
+        var candidateError: Error?
+        for song in songs.prefix(3) {
             var artists = song.artists ?? []
             if !artistsMatch(artist, foundArtists: artists.flatMap(\.names)) {
                 // Search omits romanised aliases. Resolve only plausible title/duration candidates.
                 for (index, candidate) in artists.prefix(4).enumerated() {
                     guard let id = candidate.id else { continue }
-                    let data = try await NextgramLyricsHTTP.request(host: "music.163.com", path: "/api/artist/" + String(id), referer: referer)
-                    let response = try JSONDecoder().decode(NetEaseArtist.self, from: data)
-                    if response.code == 200, let detail = response.artist, detail.id == id { artists[index] = detail }
+                    do {
+                        let data = try await NextgramLyricsHTTP.request(host: "music.163.com", path: "/api/artist/" + String(id), referer: referer)
+                        let response = try JSONDecoder().decode(NetEaseArtist.self, from: data)
+                        if response.code == 200, let detail = response.artist, detail.id == id { artists[index] = detail }
+                    } catch {
+                        try Task.checkCancellation()
+                        candidateError = error
+                    }
                 }
             }
             let artistMatches = artistsMatch(artist, foundArtists: artists.map(\.name)) ||
@@ -319,15 +328,38 @@ public enum NextgramOnlineLyrics {
             trace(.candidate(title: song.name ?? "", artist: artists.map(\.name).joined(separator: ", "),
                 duration: song.duration.map { $0 / 1000.0 }, decision: artistMatches ? .match : .artistMismatch))
             guard artistMatches else { continue }
-            let query = [URLQueryItem(name: "id", value: String(song.id))] + ["lv", "kv", "tv", "yv"].map { URLQueryItem(name: $0, value: "-1") }
-            let data = try await NextgramLyricsHTTP.request(host: "music.163.com", path: "/api/song/lyric", query: query, referer: referer)
-            let response = try JSONDecoder().decode(NetEaseLyrics.self, from: data)
-            guard response.code == 200 else { continue }
-            if let lyrics = response.yrc?.lyric.flatMap(parseYRC) ?? response.lrc?.lyric.flatMap(NextgramLyrics.parse) {
-                return withTranslation(lyrics, text: response.tlyric?.lyric)
+            let query = [URLQueryItem(name: "id", value: String(song.id))] + ["lv", "kv", "tv", "yv", "ytv"].map { URLQueryItem(name: $0, value: "-1") }
+            for path in ["/api/song/lyric/v1", "/api/song/lyric"] {
+                do {
+                    let data = try await NextgramLyricsHTTP.request(host: "music.163.com", path: path, query: query, referer: referer)
+                    let response = try JSONDecoder().decode(NetEaseLyrics.self, from: data)
+                    guard response.code == 200 else { throw URLError(.badServerResponse) }
+                    if let lyrics = response.yrc?.lyric.flatMap(parseYRC) ?? response.lrc?.lyric.flatMap(NextgramLyrics.parse) {
+                        let translated = withTranslation(withTranslation(lyrics, text: response.ytlrc?.lyric), text: response.tlyric?.lyric)
+                        if translated.isSynced, let end = translated.lines.last?.time, end > duration + 5.0 {
+                            trace(.timingMismatch)
+                            continue
+                        }
+                        let translatedCount = translated.lines.filter { $0.translation != nil }.count
+                        if best.map({ translated.lookupQuality > $0.lookupQuality ||
+                            (translated.lookupQuality == $0.lookupQuality && translatedCount > bestTranslatedCount) }) ?? true {
+                            best = translated
+                            bestTranslatedCount = translatedCount
+                        }
+                        if translated.lookupQuality == 6 { return translated }
+                    }
+                    if response.nolyric == true, best == nil {
+                        best = NextgramLyrics(lines: [], isSynced: false, instrumental: true)
+                    }
+                } catch let error as NextgramLyricsHTTP.StatusError where error.code == 404 {
+                } catch {
+                    try Task.checkCancellation()
+                    candidateError = error
+                }
             }
-            if response.nolyric == true { return NextgramLyrics(lines: [], isSynced: false, instrumental: true) }
         }
+        if let best { return best }
+        if let candidateError { throw candidateError }
         return nil
     }
 
@@ -441,11 +473,21 @@ public enum NextgramOnlineLyrics {
 
     private static func withTranslation(_ lyrics: NextgramLyrics, text: String?) -> NextgramLyrics {
         guard lyrics.isSynced, let translation = text.flatMap(NextgramLyrics.parse), translation.isSynced else { return lyrics }
-        return NextgramLyrics(lines: lyrics.lines.map { line in
-            guard let time = line.time, let index = translation.currentLineIndex(at: time + 0.25),
-                  let start = translation.lines[index].time, abs(start - time) <= 0.25,
-                  !translation.lines[index].text.isEmpty, translation.lines[index].text != line.text else { return line }
-            return NextgramLyricLine(time: time, text: line.text, words: line.words, translation: translation.lines[index].text)
+        var lastTranslationIndex = -1
+        return NextgramLyrics(lines: lyrics.lines.enumerated().map { index, line in
+            guard let time = line.time, !line.text.isEmpty else { return line }
+            let before = translation.currentLineIndex(at: time)
+            let after = (before ?? -1) + 1
+            let candidates = [before, after].compactMap { $0 }.filter { $0 > lastTranslationIndex && translation.lines.indices.contains($0) }
+            guard let match = candidates.min(by: {
+                abs((translation.lines[$0].time ?? .infinity) - time) < abs((translation.lines[$1].time ?? .infinity) - time)
+            }), let start = translation.lines[match].time, abs(start - time) <= 0.75,
+                  !translation.lines[match].text.isEmpty else { return line }
+            let nearestOriginal = [index - 1, index + 1].filter { lyrics.lines.indices.contains($0) }
+            guard nearestOriginal.allSatisfy({ abs((lyrics.lines[$0].time ?? .infinity) - start) >= abs(start - time) }) else { return line }
+            lastTranslationIndex = match
+            guard line.translation == nil, translation.lines[match].text != line.text else { return line }
+            return NextgramLyricLine(time: time, text: line.text, words: line.words, translation: translation.lines[match].text)
         }, isSynced: true)
     }
 }

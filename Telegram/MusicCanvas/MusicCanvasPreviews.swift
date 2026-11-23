@@ -5,7 +5,8 @@ import UIKit
 struct MusicCanvasRoot: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController {
         let interlude = CommandLine.arguments.contains("lyrics-interlude") || CommandLine.arguments.contains("lyrics-interlude-pause")
-        let fullEffects = interlude || CommandLine.arguments.contains("lyrics-effects") || CommandLine.arguments.contains("lyrics-effects-paused") || CommandLine.arguments.contains("lyrics-motion-pause")
+        let translation = CommandLine.arguments.contains("--canvas-translated-lyrics")
+        let fullEffects = interlude || translation || CommandLine.arguments.contains("lyrics-effects") || CommandLine.arguments.contains("lyrics-effects-paused") || CommandLine.arguments.contains("lyrics-motion-pause")
         let demo = fullEffects || CommandLine.arguments.contains("lyrics-original")
         let artworkMotion: Bool? = CommandLine.arguments.contains("artwork-motion") ? true :
             (CommandLine.arguments.contains("artwork-motion-off") || CommandLine.arguments.contains("artwork-metadata") ? false : nil)
@@ -13,7 +14,7 @@ struct MusicCanvasRoot: UIViewControllerRepresentable {
             playing: !CommandLine.arguments.contains("lyrics-paused") && !CommandLine.arguments.contains("lyrics-effects-paused"),
             allLyricsEffects: fullEffects, animatedLyrics: true, interludePreview: interlude, artworkMotionPreview: artworkMotion,
             artworkMetadataPreview: CommandLine.arguments.contains("artwork-metadata") ? false : nil,
-            usesConfiguredSettings: !CommandLine.arguments.contains("--canvas-motion"))
+            usesConfiguredSettings: !translation && !CommandLine.arguments.contains("--canvas-motion"), translationPreview: translation)
     }
 
     func updateUIViewController(_ uiViewController: UIViewController, context: Context) {
@@ -27,7 +28,7 @@ private final class MusicCanvasViewController: UIViewController {
 
     init(showingLyrics: Bool, playing: Bool = true, allLyricsEffects: Bool = false, animatedLyrics: Bool = false,
         interludePreview: Bool = false, artworkMotionPreview: Bool? = nil, artworkDetailPreview: Bool = false,
-        artworkMetadataPreview: Bool? = nil, usesConfiguredSettings: Bool = false) {
+        artworkMetadataPreview: Bool? = nil, usesConfiguredSettings: Bool = false, translationPreview: Bool = false) {
         self.artworkDetailPreview = artworkDetailPreview
         var cover = Bundle.main.url(forResource: "MusicCanvasARU", withExtension: "jpg")
             .flatMap { UIImage(contentsOfFile: $0.path) }
@@ -40,7 +41,7 @@ private final class MusicCanvasViewController: UIViewController {
         }
         self.player = NextgramMusicPlayerView.makeCanvasPreview(coverImage: cover, showingLyrics: showingLyrics, playing: playing,
             allLyricsEffects: allLyricsEffects, animatedLyrics: animatedLyrics, interludePreview: interludePreview,
-            artworkMotionPreview: artworkMotionPreview, artworkMetadataPreview: artworkMetadataPreview)
+            artworkMotionPreview: artworkMotionPreview, artworkMetadataPreview: artworkMetadataPreview, translationPreview: translationPreview)
         super.init(nibName: nil, bundle: nil)
         if usesConfiguredSettings { self.player.useCanvasSettings() }
         self.player.openSettings = { [weak self] in
@@ -252,6 +253,11 @@ private final class MusicCanvasViewController: UIViewController {
 @available(iOS 17.0, *)
 #Preview("Lyrics · All Effects") {
     MusicCanvasViewController(showingLyrics: true, allLyricsEffects: true)
+}
+
+@available(iOS 17.0, *)
+#Preview("Lyrics · With Translation") {
+    MusicCanvasViewController(showingLyrics: true, allLyricsEffects: true, translationPreview: true)
 }
 
 @available(iOS 17.0, *)

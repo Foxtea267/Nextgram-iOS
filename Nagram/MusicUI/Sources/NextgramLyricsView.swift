@@ -216,22 +216,22 @@ private final class NextgramLyricCell: UITableViewCell {
         self.lyricLabel.isHidden = interlude
         self.interludeDots.isHidden = !interlude || !active
         self.lyricLabel.isActiveLine = active
-        self.lyricLabel.wordFloatEnabled = self.effects.wordFloat && self.timed && !UIAccessibility.isReduceMotionEnabled
-        self.lyricLabel.sweepEnabled = active && self.effects.wordHighlight && self.line?.words.isEmpty == false
+        self.lyricLabel.wordFloatEnabled = !self.browsing && self.effects.wordFloat && self.timed && !UIAccessibility.isReduceMotionEnabled
+        self.lyricLabel.sweepEnabled = !self.browsing && active && self.effects.wordHighlight && self.line?.words.isEmpty == false
         self.lyricLabel.glowEnabled = self.lyricLabel.sweepEnabled && self.effects.glow
         self.lyricLabel.layer.shadowColor = self.color.cgColor
         self.lyricLabel.layer.shadowRadius = 6.0
         self.lyricLabel.layer.shadowOffset = .zero
-        self.lyricLabel.layer.shadowOpacity = active && self.effects.glow && self.line?.words.isEmpty == false && !self.lyricLabel.sweepEnabled ? 0.65 : 0.0
+        self.lyricLabel.layer.shadowOpacity = !self.browsing && active && self.effects.glow && self.line?.words.isEmpty == false && !self.lyricLabel.sweepEnabled ? 0.65 : 0.0
         self.lyricLabel.setNeedsDisplay()
         let activeOpacity: CGFloat = self.line?.words.isEmpty == false ? 1.0 : 0.85
-        let alpha: CGFloat = self.timed ? (active ? activeOpacity : 0.4) : 0.85
+        let alpha: CGFloat = self.browsing ? 1.0 : (self.timed ? (active ? activeOpacity : 0.4) : 0.85)
         var traits: UIAccessibilityTraits = self.timed ? .button : .staticText
         if active {
             traits.insert(.selected)
         }
         self.accessibilityTraits = traits
-        if !active, !self.wordProgress.isEmpty {
+        if (!active || self.browsing), !self.wordProgress.isEmpty {
             self.wordProgress = []
             self.lyricLabel.attributedText = nil
             self.lyricLabel.text = self.line?.text
@@ -250,6 +250,7 @@ private final class NextgramLyricCell: UITableViewCell {
     }
 
     func updateWords(at position: Double) {
+        guard !self.browsing else { return }
         if !self.interludeDots.isHidden, self.interludeDots.position != position {
             self.interludeDots.position = position
             self.interludeDots.setNeedsDisplay()
@@ -302,6 +303,7 @@ private final class NextgramLyricCell: UITableViewCell {
     func setBrowsing(_ browsing: Bool, animated: Bool) {
         guard self.browsing != browsing else { return }
         self.browsing = browsing
+        self.setActive(self.active, animated: animated)
         self.updateFocus(animated: animated)
     }
 
@@ -318,7 +320,7 @@ private final class NextgramLyricCell: UITableViewCell {
 
     private func updateFocus(animated: Bool) {
         let blur = self.blurRadius > 0.0
-        let scale: CGFloat = self.effects.scale && self.timed && !self.active ? 0.94 : 1.0
+        let scale: CGFloat = !self.browsing && self.effects.scale && self.timed && !self.active ? 0.94 : 1.0
         let transform = CGAffineTransform(translationX: -self.stack.bounds.width * (1.0 - scale) * 0.5, y: 0.0)
             .scaledBy(x: scale, y: scale)
         let update = {
@@ -356,7 +358,7 @@ private final class NextgramLyricCell: UITableViewCell {
             self.interludeDots.frame = CGRect(x: -dotPadding, y: 0.0, width: width + dotPadding * 2.0, height: heights.0)
             self.translationLabel.frame = CGRect(x: 0.0, y: heights.0 + 6.0, width: width, height: heights.1)
         }
-        let scale: CGFloat = self.effects.scale && self.timed && !self.active ? 0.94 : 1.0
+        let scale: CGFloat = !self.browsing && self.effects.scale && self.timed && !self.active ? 0.94 : 1.0
         let transform = CGAffineTransform(translationX: -self.stack.bounds.width * (1.0 - scale) * 0.5, y: 0.0)
             .scaledBy(x: scale, y: scale)
         if self.stack.transform != transform { self.stack.transform = transform }
@@ -415,7 +417,6 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
     private var manualScrollUntil = 0.0
     var followsPlayback = false
     private var browsing = false
-    private var resumeAfterInteraction = false
     private var returningToPlayback = false
     private var scrollGeneration = 0
     private var smoothScrollAnimator: DisplayLinkAnimator?
@@ -454,6 +455,12 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
         return font.fontDescriptor.withDesign(.rounded).map { UIFont(descriptor: $0, size: size) } ?? font
     }
 
+    func resetBrowsing() {
+        self.manualScrollUntil = 0.0
+        self.setBrowsing(false)
+        self.cancelRowMotion()
+    }
+
     func update(lyrics: NextgramLyrics?, placeholder: String, fontSize: CGFloat, color: UIColor, effects: NagramLyricsEffects = .none, showsTranslation: Bool = true) {
         let fontSize = fontSize.isFinite ? min(64.0, max(12.0, fontSize)) : 28.0
         let lyricsChanged = self.lyrics != lyrics
@@ -465,7 +472,7 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
         self.reduceMotion = UIAccessibility.isReduceMotionEnabled
         self.effects = effects
         self.showsTranslation = showsTranslation
-        self.layer.mask = effects.edgeFade ? self.edgeMask : nil
+        self.layer.mask = effects.edgeFade && !self.browsing ? self.edgeMask : nil
         self.placeholderLabel.text = placeholder
         let hasLines = lyrics?.lines.isEmpty == false
         self.tableView.isHidden = !hasLines
@@ -483,16 +490,14 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
         self.tableView.allowsSelection = lyrics?.isSynced == true
         self.activeIndex = lyrics?.currentLineIndex(at: self.position)
         self.needsCentering = true
-        if lyricsChanged {
+        if lyricsChanged && !self.browsing {
             self.manualScrollUntil = 0.0
-            self.resumeAfterInteraction = false
-            self.setBrowsing(false)
         }
         self.cancelRowMotion()
         self.tableView.reloadData()
         self.setNeedsLayout()
         self.layoutIfNeeded()
-        if self.activeIndex == nil && lyricsChanged {
+        if self.activeIndex == nil && lyricsChanged && !self.browsing {
             self.tableView.setContentOffset(CGPoint(x: 0.0, y: -self.tableView.contentInset.top), animated: false)
         }
         self.centerActiveLineIfNeeded(animated: false)
@@ -504,10 +509,9 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
         }
         self.position = max(0.0, timestamp)
         if force {
-            self.cancelRowMotion()
-            self.manualScrollUntil = 0.0
-            self.setBrowsing(false)
-            self.resumeAfterInteraction = self.tableView.isDragging || self.tableView.isDecelerating
+            if !self.browsing {
+                self.cancelRowMotion()
+            }
             self.needsCentering = true
         }
         let index = self.lyrics?.currentLineIndex(at: self.position)
@@ -733,6 +737,8 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
               let timestamp = lyrics.lines[indexPath.row].time, timestamp.isFinite else {
             return
         }
+        self.manualScrollUntil = 0.0
+        self.setBrowsing(false)
         self.updatePosition(timestamp, force: true)
         self.seek?(timestamp)
         tableView.layoutIfNeeded()
@@ -752,21 +758,22 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
     private func setBrowsing(_ browsing: Bool) {
         guard self.browsing != browsing else { return }
         self.browsing = browsing
+        self.layer.mask = self.effects.edgeFade && !browsing ? self.edgeMask : nil
         for path in self.tableView.indexPathsForVisibleRows ?? [] {
-            (self.tableView.cellForRow(at: path) as? NextgramLyricCell)?.setBrowsing(browsing, animated: true)
+            (self.tableView.cellForRow(at: path) as? NextgramLyricCell)?.setBrowsing(browsing, animated: !browsing)
         }
     }
 
     func scrollViewWillBeginDragging(_ scrollView: UIScrollView) {
         self.setBrowsing(true)
         self.cancelRowMotion(preservingPosition: true)
-        self.resumeAfterInteraction = false
         self.needsCentering = true
         self.manualScrollUntil = ProcessInfo.processInfo.systemUptime + 5.0
     }
 
     func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if scrollView.isDragging || scrollView.isDecelerating {
+            self.setBrowsing(true)
             self.manualScrollUntil = ProcessInfo.processInfo.systemUptime + 5.0
         }
     }
@@ -782,15 +789,10 @@ final class NextgramLyricsView: UIView, UITableViewDataSource, UITableViewDelega
     }
 
     private func finishManualScrolling() {
-        self.manualScrollUntil = self.resumeAfterInteraction ? 0.0 : ProcessInfo.processInfo.systemUptime + 5.0
-        if self.resumeAfterInteraction {
-            self.setBrowsing(false)
-        } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5.05) { [weak self] in
-                self?.resumeFollowingPlaybackIfNeeded()
-            }
+        self.manualScrollUntil = ProcessInfo.processInfo.systemUptime + 5.0
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.05) { [weak self] in
+            self?.resumeFollowingPlaybackIfNeeded()
         }
-        self.resumeAfterInteraction = false
     }
 
     private func resumeFollowingPlaybackIfNeeded() {

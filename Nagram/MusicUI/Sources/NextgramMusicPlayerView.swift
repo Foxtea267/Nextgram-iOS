@@ -84,6 +84,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
 #if DEBUG && targetEnvironment(simulator)
     private var previewPlaying: Bool?
     private var previewLyricsEffects: NagramLyricsEffects?
+    private var previewShowsTranslation = false
     private var previewSampleLyrics: NextgramLyrics?
     private var previewOnlineLyrics = false
     private var previewDuration = 200.0
@@ -168,7 +169,8 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     private var lyricsMemory: [AnyHashable: [String: CachedLyrics]] = [:]
     private var lyricsSelections: [AnyHashable: NextgramLyricsSource] = [:]
     private var lyricsChoiceKey: String {
-        self.lyricsSourceOverride?.rawValue ?? self.settings.lyricsSources.map(\.rawValue).joined(separator: ",")
+        guard self.settings.onlineLyricsEnabled else { return "local" }
+        return self.lyricsSourceOverride?.rawValue ?? self.settings.lyricsSources.map(\.rawValue).joined(separator: ",")
     }
     private func rememberLyrics() {
         guard let id = self.trackId, let lyrics = self.lyrics else { return }
@@ -180,7 +182,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
             localOrigin: self.localLyricsOrigin, attempts: self.lyricsAttempts)
     }
     private let embeddedLoader = NextgramEmbeddedLyricsLoader()
-    private var embeddedLyricsFound = false
     private let displayLinkTarget = NextgramPlayerDisplayLinkTarget()
     private var displayLink: CADisplayLink?
 
@@ -815,6 +816,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         let changed = changedItem || previousFileId != self.file?.media.fileId
         if changed {
             self.lyricsSourceOverride = self.lyricsSelections[state.item.stableId]
+            self.lyricsView.resetBrowsing()
             self.closeArtworkDetail(animated: false)
         }
         if let display = state.item.displayData, case let .music(title, artist, albumArt, _, _) = display {
@@ -1150,7 +1152,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         self.localLyricsOrigin = cached?.localOrigin
         self.reusedPlayerLyrics = cached != nil && !forceRefresh
         self.lyricsAttempts = self.reusedPlayerLyrics ? (cached?.attempts ?? []) : []
-        self.embeddedLyricsFound = false
         self.lyricsPlaceholder = self.string("NoLyrics")
         self.updateLyricsView()
         self.updateLyricsDiagnostics()
@@ -1190,9 +1191,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                 self.updateLyricsView()
                 self.embeddedLoader.load(context: context, file: file) { [weak self] text in
                     guard let self, self.lyricsRequest == request, let text, let lyrics = NextgramLyrics.parse(text) else { return }
-                    self.embeddedLyricsFound = true
-                    self.onlineTask?.cancel()
-                    self.onlineTask = nil
+                    if let current = self.lyrics, current.lookupQuality > lyrics.lookupQuality { return }
                     self.lyrics = lyrics
                     self.activeLyricsSource = nil
                     self.localLyricsOrigin = "DiagnosticsEmbedded"
@@ -1228,7 +1227,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                     }
                 }
                 for await (priority, attempt) in group {
-                    guard !Task.isCancelled, let self, self.lyricsRequest == request, !self.embeddedLyricsFound else {
+                    guard !Task.isCancelled, let self, self.lyricsRequest == request else {
                         group.cancelAll()
                         return
                     }
@@ -1246,9 +1245,10 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                     self.updateLyricsDiagnostics()
                 }
             }
-            guard !Task.isCancelled, let self, self.lyricsRequest == request, !self.embeddedLyricsFound else { return }
+            guard !Task.isCancelled, let self, self.lyricsRequest == request else { return }
             self.onlineTask = nil
-            if let (source, lyrics, _) = match {
+            let embedded = self.localLyricsOrigin == "DiagnosticsEmbedded" ? self.lyrics : nil
+            if let (source, lyrics, _) = match, embedded.map({ lyrics.lookupQuality > $0.lookupQuality }) ?? true {
                 self.activeLyricsSource = source
                 self.localLyricsOrigin = nil
                 self.lyrics = lyrics
@@ -1256,6 +1256,7 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
                 self.rememberLyrics()
             } else {
                 self.lyricsPlaceholder = self.string(manualFailure ?? (manualSource == nil ? "NoLyrics" : "SourceNoMatch"))
+                self.rememberLyrics()
             }
             self.updateLyricsView()
             self.updateMenu()
@@ -1403,8 +1404,12 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
     }
 
     private func updateLyricsView() {
+        var showsTranslation = self.settings.lyricsTranslation
+#if DEBUG && targetEnvironment(simulator)
+        showsTranslation = showsTranslation || self.previewShowsTranslation
+#endif
         self.lyricsView.update(lyrics: self.lyrics, placeholder: self.lyricsPlaceholder.isEmpty ? self.string("NoLyrics") : self.lyricsPlaceholder,
-            fontSize: CGFloat(self.settings.lyricsFontSize), color: self.foregroundColor, effects: self.lyricEffects, showsTranslation: self.settings.lyricsTranslation)
+            fontSize: CGFloat(self.settings.lyricsFontSize), color: self.foregroundColor, effects: self.lyricEffects, showsTranslation: showsTranslation)
         self.lyricsView.updatePosition(self.currentPosition)
     }
 
@@ -1452,9 +1457,6 @@ public final class NextgramMusicPlayerView: UIView, UIGestureRecognizerDelegate 
         // Keep text-only options together so icon-bearing rows do not indent their titles.
         var actions: [UIMenuElement] = [UIMenu(options: .displayInline, children: [
             UIMenu(title: self.string("CoverLayout"), children: covers),
-            UIAction(title: self.string("OnlineArtwork"), state: self.settings.onlineArtwork ? .on : .off) { _ in
-                NagramSettings.shared.musicPlayerOnlineArtwork.toggle()
-            },
             UIMenu(title: self.string("ArtworkEnhancement"), children: enhancementModes),
             UIMenu(title: self.string("Background"), children: backgrounds),
             UIMenu(title: self.string("Colors"), children: colors),
@@ -1976,7 +1978,7 @@ public extension NextgramMusicPlayerView {
 
     static func makeCanvasPreview(coverImage: UIImage, showingLyrics: Bool, playing: Bool = true,
         allLyricsEffects: Bool = false, animatedLyrics: Bool = false, interludePreview: Bool = false,
-        artworkMotionPreview: Bool? = nil, artworkMetadataPreview: Bool? = nil) -> NextgramMusicPlayerView {
+        artworkMotionPreview: Bool? = nil, artworkMetadataPreview: Bool? = nil, translationPreview: Bool = false) -> NextgramMusicPlayerView {
         let view = NextgramMusicPlayerView(context: nil, presentationData: defaultPresentationData())
         let cover = coverImage
         view.trackTitle = "Blue Dream"
@@ -2022,7 +2024,20 @@ public extension NextgramMusicPlayerView {
             lines.insert(NextgramLyricLine(time: 78.0, text: ""), at: 3)
             view.lyrics = NextgramLyrics(lines: lines, isSynced: true)
         }
-        if interludePreview {
+        if translationPreview {
+            view.previewShowsTranslation = true
+            let text = """
+            <tt xmlns="http://www.w3.org/ns/ttml" xmlns:ttm="http://www.w3.org/ns/ttml#metadata"><body><div>
+            <p begin="66s" end="70s"><span begin="66s" end="67.5s">Save </span><span begin="67.5s" end="70s">a little light</span><span ttm:role="x-translation">留住一点微光</span></p>
+            <p begin="70s" end="75s"><span begin="70s" end="71s">Let </span><span begin="71s" end="72.5s">the music </span><span begin="72.5s" end="75s">carry us home</span><span ttm:role="x-translation">让音乐伴我们归家</span></p>
+            <p begin="75s" end="80s"><span begin="75s" end="77s">The city sleeps </span><span begin="77s" end="80s">beneath the stars</span><span ttm:role="x-translation">星空下，城市静静入睡</span></p>
+            <p begin="80s" end="85s"><span begin="80s" end="82s">We sing </span><span begin="82s" end="85s">until the morning</span><span ttm:role="x-translation">我们一直唱到天亮</span></p>
+            <p begin="85s" end="90s"><span begin="85s" end="88s">Keep this song </span><span begin="88s" end="90s">close to your heart</span><span ttm:role="x-translation">把这首歌留在心里</span></p>
+            </div></body></tt>
+            """
+            guard let sample = NextgramLyrics.parse(text) else { preconditionFailure("Invalid translated Canvas lyric fixture") }
+            view.lyrics = sample
+        } else if interludePreview {
             view.lyrics = NextgramLyrics(lines: [
                 NextgramLyricLine(time: 66.0, text: "留住这一刻的光"),
                 NextgramLyricLine(time: 70.0, text: ""),

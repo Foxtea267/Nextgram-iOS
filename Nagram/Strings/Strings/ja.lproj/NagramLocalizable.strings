@@ -1033,7 +1033,7 @@ iCloud キーチェーン同期を有効にすると、バックアップは他�
 "Nagram.MusicPlayer.FullscreenBlurHeight.controls" = "操作エリア全体";
 "Nagram.MusicPlayer.FullscreenBlurHeight.custom" = "カスタム";
 "Nagram.MusicPlayer.SmartArtworkCrop" = "カバーのスマート構図";
-"Nagram.MusicPlayer.OnlineArtwork" = "外部サービスで高画質カバーを検索";
+"Nagram.MusicPlayer.OnlineArtwork" = "外部サービスのジャケットを使用";
 "Nagram.MusicPlayer.FullscreenBlurPercent" = "ぼかしの高さ（%）";
 "Nagram.MusicPlayer.NowPlaying" = "再生中";
 "Nagram.MusicPlayer.PlaybackPosition" = "再生位置";

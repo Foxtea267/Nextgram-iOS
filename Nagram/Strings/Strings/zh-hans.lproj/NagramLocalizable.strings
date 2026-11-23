@@ -1033,7 +1033,7 @@
 "Nagram.MusicPlayer.FullscreenBlurHeight.controls" = "覆盖整个控制区";
 "Nagram.MusicPlayer.FullscreenBlurHeight.custom" = "自定义";
 "Nagram.MusicPlayer.SmartArtworkCrop" = "智能封面构图";
-"Nagram.MusicPlayer.OnlineArtwork" = "在线查找第三方高清封面";
+"Nagram.MusicPlayer.OnlineArtwork" = "使用第三方平台封面";
 "Nagram.MusicPlayer.FullscreenBlurPercent" = "自定义模糊高度（%）";
 "Nagram.MusicPlayer.NowPlaying" = "正在播放";
 "Nagram.MusicPlayer.PlaybackPosition" = "播放进度";

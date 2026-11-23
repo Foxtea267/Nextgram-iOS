@@ -8,7 +8,9 @@ public final class NextgramChatSidebar: UIView {
     }
 
     private let backdrop = UIButton(type: .custom)
+    private let transitionView = UIView()
     private let panel = UIView()
+    private let panelContent = UIStackView()
     private let contentShade = UIView()
     private var contentPreview: UIView?
     private var closing = false
@@ -19,11 +21,27 @@ public final class NextgramChatSidebar: UIView {
         super.init(frame: .zero)
         self.accessibilityViewIsModal = true
         self.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        self.clipsToBounds = true
+        self.transitionView.translatesAutoresizingMaskIntoConstraints = false
+        self.addSubview(self.transitionView)
+        NSLayoutConstraint.activate([
+            self.transitionView.leadingAnchor.constraint(equalTo: self.leadingAnchor),
+            self.transitionView.trailingAnchor.constraint(equalTo: self.trailingAnchor),
+            self.transitionView.topAnchor.constraint(equalTo: self.topAnchor),
+            self.transitionView.bottomAnchor.constraint(equalTo: self.bottomAnchor)
+        ])
 
         self.backdrop.backgroundColor = UIColor.black.withAlphaComponent(0.36)
         self.backdrop.accessibilityLabel = closeTitle
         self.backdrop.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
-        self.addSubview(self.backdrop)
+        self.backdrop.translatesAutoresizingMaskIntoConstraints = false
+        self.transitionView.addSubview(self.backdrop)
+        NSLayoutConstraint.activate([
+            self.backdrop.leadingAnchor.constraint(equalTo: self.transitionView.leadingAnchor),
+            self.backdrop.trailingAnchor.constraint(equalTo: self.transitionView.trailingAnchor),
+            self.backdrop.topAnchor.constraint(equalTo: self.transitionView.topAnchor),
+            self.backdrop.bottomAnchor.constraint(equalTo: self.transitionView.bottomAnchor)
+        ])
 
         let isDrawer = style == .drawer
         self.panel.backgroundColor = isDrawer ? theme.list.plainBackgroundColor : theme.list.modalBlocksBackgroundColor
@@ -31,7 +49,7 @@ public final class NextgramChatSidebar: UIView {
         self.panel.layer.cornerCurve = .continuous
         self.panel.clipsToBounds = true
         self.panel.translatesAutoresizingMaskIntoConstraints = false
-        self.addSubview(self.panel)
+        self.transitionView.addSubview(self.panel)
 
         let heading = UILabel()
         heading.text = title
@@ -58,7 +76,8 @@ public final class NextgramChatSidebar: UIView {
         } else {
             header = heading
         }
-        let stack = UIStackView(arrangedSubviews: [header])
+        let stack = self.panelContent
+        stack.addArrangedSubview(header)
         stack.axis = .vertical
         stack.spacing = isDrawer ? 0.0 : 4.0
         stack.setCustomSpacing(isDrawer ? 7.0 : 16.0, after: header)
@@ -83,13 +102,13 @@ public final class NextgramChatSidebar: UIView {
             stack.addArrangedSubview(button)
         }
 
-        let preferredWidth = isDrawer ? self.panel.widthAnchor.constraint(equalTo: self.widthAnchor, multiplier: 0.77) : self.panel.widthAnchor.constraint(equalToConstant: 300.0)
+        let preferredWidth = isDrawer ? self.panel.widthAnchor.constraint(equalTo: self.transitionView.widthAnchor, multiplier: 0.77) : self.panel.widthAnchor.constraint(equalToConstant: 300.0)
         preferredWidth.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            self.panel.leadingAnchor.constraint(equalTo: isDrawer ? self.leadingAnchor : self.safeAreaLayoutGuide.leadingAnchor, constant: isDrawer ? 0.0 : 10.0),
+            self.panel.leadingAnchor.constraint(equalTo: isDrawer ? self.transitionView.leadingAnchor : self.safeAreaLayoutGuide.leadingAnchor, constant: isDrawer ? 0.0 : 10.0),
             self.panel.trailingAnchor.constraint(lessThanOrEqualTo: self.safeAreaLayoutGuide.trailingAnchor, constant: isDrawer ? -48.0 : -36.0),
-            self.panel.topAnchor.constraint(equalTo: isDrawer ? self.topAnchor : self.safeAreaLayoutGuide.topAnchor, constant: isDrawer ? 0.0 : 8.0),
-            self.panel.bottomAnchor.constraint(equalTo: isDrawer ? self.bottomAnchor : self.safeAreaLayoutGuide.bottomAnchor, constant: isDrawer ? 0.0 : -8.0),
+            self.panel.topAnchor.constraint(equalTo: isDrawer ? self.transitionView.topAnchor : self.safeAreaLayoutGuide.topAnchor, constant: isDrawer ? 0.0 : 8.0),
+            self.panel.bottomAnchor.constraint(equalTo: isDrawer ? self.transitionView.bottomAnchor : self.safeAreaLayoutGuide.bottomAnchor, constant: isDrawer ? 0.0 : -8.0),
             preferredWidth,
             stack.leadingAnchor.constraint(equalTo: self.panel.safeAreaLayoutGuide.leadingAnchor, constant: isDrawer ? 32.0 : 22.0),
             stack.trailingAnchor.constraint(equalTo: self.panel.safeAreaLayoutGuide.trailingAnchor, constant: isDrawer ? -24.0 : -22.0),
@@ -100,15 +119,6 @@ public final class NextgramChatSidebar: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
-    }
-
-    public override func layoutSubviews() {
-        super.layoutSubviews()
-        self.backdrop.frame = self.bounds
-        if let contentPreview = self.contentPreview {
-            contentPreview.bounds = self.bounds
-            contentPreview.center = CGPoint(x: self.bounds.midX, y: self.bounds.midY)
-        }
     }
 
     public func open(in view: UIView) {
@@ -123,13 +133,14 @@ public final class NextgramChatSidebar: UIView {
             self.backdrop.alpha = 0.0
         }
         if !reduceMotion {
-            self.panel.transform = self.offscreenTransform
+            self.setClosedPosition()
         }
         let animations = {
             self.backdrop.alpha = 1.0
+            self.transitionView.transform = .identity
             self.panel.transform = .identity
+            self.panelContent.transform = .identity
             self.panel.alpha = 1.0
-            self.contentPreview?.transform = CGAffineTransform(translationX: self.drawerOffset, y: 0.0)
             self.contentPreview?.layer.cornerRadius = 48.0
             self.contentShade.alpha = 1.0
         }
@@ -158,8 +169,7 @@ public final class NextgramChatSidebar: UIView {
             if reduceMotion {
                 self.panel.alpha = 0.0
             } else {
-                self.panel.transform = self.offscreenTransform
-                self.contentPreview?.transform = .identity
+                self.setClosedPosition()
                 self.contentPreview?.layer.cornerRadius = 0.0
                 self.contentShade.alpha = 0.0
             }
@@ -199,7 +209,14 @@ public final class NextgramChatSidebar: UIView {
         self.contentShade.alpha = 0.0
         preview.addSubview(self.contentShade)
         self.backdrop.isHidden = true
-        self.addSubview(preview)
+        preview.translatesAutoresizingMaskIntoConstraints = false
+        self.transitionView.addSubview(preview)
+        NSLayoutConstraint.activate([
+            preview.leadingAnchor.constraint(equalTo: self.panel.trailingAnchor),
+            preview.topAnchor.constraint(equalTo: self.transitionView.topAnchor),
+            preview.widthAnchor.constraint(equalTo: self.transitionView.widthAnchor),
+            preview.heightAnchor.constraint(equalTo: self.transitionView.heightAnchor)
+        ])
         self.contentPreview = preview
     }
 
@@ -207,13 +224,14 @@ public final class NextgramChatSidebar: UIView {
         self.panel.bounds.width * (self.effectiveUserInterfaceLayoutDirection == .rightToLeft ? -1.0 : 1.0)
     }
 
-    private var offscreenTransform: CGAffineTransform {
+    private func setClosedPosition() {
         if self.contentPreview != nil {
-            // The panel stays nearly in place while the page slides over it. // MARK: NEXTGRAM
-            return CGAffineTransform(translationX: -self.drawerOffset * 0.20, y: 0.0)
+            self.transitionView.transform = CGAffineTransform(translationX: -self.drawerOffset, y: 0.0)
+            self.panelContent.transform = CGAffineTransform(translationX: self.drawerOffset * 0.80, y: 0.0)
+        } else {
+            let rtl = self.effectiveUserInterfaceLayoutDirection == .rightToLeft
+            let distance = self.panel.bounds.width + max(self.safeAreaInsets.left, self.safeAreaInsets.right) + 12.0
+            self.panel.transform = CGAffineTransform(translationX: rtl ? distance : -distance, y: 0.0)
         }
-        let rtl = self.effectiveUserInterfaceLayoutDirection == .rightToLeft
-        let distance = self.panel.bounds.width + max(self.safeAreaInsets.left, self.safeAreaInsets.right) + 12.0
-        return CGAffineTransform(translationX: rtl ? distance : -distance, y: 0.0)
     }
 }
