@@ -272,13 +272,10 @@ public final class NextgramChatSidebar: UIView {
         guard self.style == .drawer, let snapshot = view.snapshotView(afterScreenUpdates: false) else { return }
         self.backgroundColor = self.panel.backgroundColor
         self.backdrop.backgroundColor = .clear
-        let preview = UIView()
+        let preview = UIButton(type: .custom)
         preview.frame = self.bounds
-        preview.isUserInteractionEnabled = true
         preview.accessibilityLabel = self.backdrop.accessibilityLabel
-        let previewTap = UITapGestureRecognizer(target: self, action: #selector(handlePreviewTap))
-        previewTap.cancelsTouchesInView = false
-        preview.addGestureRecognizer(previewTap)
+        preview.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
         snapshot.isUserInteractionEnabled = false
         preview.clipsToBounds = true
         preview.layer.cornerCurve = .continuous
@@ -304,10 +301,6 @@ public final class NextgramChatSidebar: UIView {
             preview.heightAnchor.constraint(equalTo: self.transitionView.heightAnchor)
         ])
         self.contentPreview = preview
-    }
-
-    @objc private func handlePreviewTap() {
-        self.close()
     }
 
     private var drawerOffset: CGFloat {
