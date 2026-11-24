@@ -24,6 +24,7 @@ public final class NextgramChatSidebar: UIView {
         self.accessibilityViewIsModal = true
         self.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         self.clipsToBounds = true
+        self.panGesture.cancelsTouchesInView = false
         self.addGestureRecognizer(self.panGesture)
         self.transitionView.translatesAutoresizingMaskIntoConstraints = false
         self.addSubview(self.transitionView)
@@ -169,6 +170,7 @@ public final class NextgramChatSidebar: UIView {
             self.panel.transform = .identity
             self.panelContent.transform = .identity
             self.panel.alpha = 1.0
+            self.contentPreview?.transform = .identity
             self.contentPreview?.layer.cornerRadius = 48.0
             self.contentShade.alpha = 1.0
         }
@@ -198,6 +200,7 @@ public final class NextgramChatSidebar: UIView {
                 self.panel.alpha = 0.0
             } else {
                 self.setClosedPosition()
+                self.contentPreview?.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
                 self.contentPreview?.layer.cornerRadius = 0.0
                 self.contentShade.alpha = 0.0
             }
@@ -251,6 +254,7 @@ public final class NextgramChatSidebar: UIView {
         self.transitionView.transform = CGAffineTransform(translationX: -offset * progress, y: 0.0)
         self.panelContent.transform = CGAffineTransform(translationX: offset * 0.80 * progress, y: 0.0)
             .scaledBy(x: 1.0 - 0.06 * progress, y: 1.0 - 0.06 * progress)
+        self.contentPreview?.transform = CGAffineTransform(scaleX: 1.0 - 0.04 * progress, y: 1.0 - 0.04 * progress)
         self.contentPreview?.layer.cornerRadius = 48.0 * progress
         self.contentShade.alpha = 1.0 - progress
     }
@@ -268,10 +272,13 @@ public final class NextgramChatSidebar: UIView {
         guard self.style == .drawer, let snapshot = view.snapshotView(afterScreenUpdates: false) else { return }
         self.backgroundColor = self.panel.backgroundColor
         self.backdrop.backgroundColor = .clear
-        let preview = UIButton(type: .custom)
+        let preview = UIView()
         preview.frame = self.bounds
+        preview.isUserInteractionEnabled = true
         preview.accessibilityLabel = self.backdrop.accessibilityLabel
-        preview.addAction(UIAction { [weak self] _ in self?.close() }, for: .touchUpInside)
+        let previewTap = UITapGestureRecognizer(target: self, action: #selector(handlePreviewTap))
+        previewTap.cancelsTouchesInView = false
+        preview.addGestureRecognizer(previewTap)
         snapshot.isUserInteractionEnabled = false
         preview.clipsToBounds = true
         preview.layer.cornerCurve = .continuous
@@ -299,6 +306,10 @@ public final class NextgramChatSidebar: UIView {
         self.contentPreview = preview
     }
 
+    @objc private func handlePreviewTap() {
+        self.close()
+    }
+
     private var drawerOffset: CGFloat {
         self.panel.bounds.width * (self.effectiveUserInterfaceLayoutDirection == .rightToLeft ? -1.0 : 1.0)
     }
@@ -306,6 +317,7 @@ public final class NextgramChatSidebar: UIView {
     private func setClosedPosition() {
         if self.contentPreview != nil {
             self.transitionView.transform = CGAffineTransform(translationX: -self.drawerOffset, y: 0.0)
+            self.contentPreview?.transform = CGAffineTransform(scaleX: 0.96, y: 0.96)
             self.panelContent.transform = CGAffineTransform(translationX: self.drawerOffset * 0.80, y: 0.0).scaledBy(x: 0.94, y: 0.94)
         } else {
             let rtl = self.effectiveUserInterfaceLayoutDirection == .rightToLeft
