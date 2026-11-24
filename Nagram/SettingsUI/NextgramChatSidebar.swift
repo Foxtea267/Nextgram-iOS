@@ -13,6 +13,8 @@ public final class NextgramChatSidebar: UIView {
     private let panelContent = UIStackView()
     private let contentShade = UIView()
     private var contentPreview: UIView?
+    private lazy var panGesture = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+    private var panStartProgress: CGFloat = 0.0
     private var closing = false
     private let style: Style
 
@@ -22,6 +24,7 @@ public final class NextgramChatSidebar: UIView {
         self.accessibilityViewIsModal = true
         self.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         self.clipsToBounds = true
+        self.addGestureRecognizer(self.panGesture)
         self.transitionView.translatesAutoresizingMaskIntoConstraints = false
         self.addSubview(self.transitionView)
         NSLayoutConstraint.activate([
@@ -178,7 +181,7 @@ public final class NextgramChatSidebar: UIView {
             UIView.animate(withDuration: 0.15, delay: 0.0, options: [.beginFromCurrentState], animations: animations, completion: completion)
         } else {
             // Fast start and a soft settle, like the reference recording. // MARK: NEXTGRAM
-            UIView.animate(withDuration: self.contentPreview == nil ? 0.28 : 0.46, delay: 0.0, usingSpringWithDamping: 0.93, initialSpringVelocity: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: animations, completion: completion)
+            UIView.animate(withDuration: self.contentPreview == nil ? 0.22 : 0.30, delay: 0.0, usingSpringWithDamping: 0.94, initialSpringVelocity: 0.0, options: [.beginFromCurrentState, .allowUserInteraction], animations: animations, completion: completion)
         }
     }
 
@@ -187,7 +190,7 @@ public final class NextgramChatSidebar: UIView {
         self.closing = true
         self.isUserInteractionEnabled = false
         let reduceMotion = UIAccessibility.isReduceMotionEnabled
-        UIView.animate(withDuration: animated ? 0.34 : 0.0, delay: 0.0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
+        UIView.animate(withDuration: animated ? 0.24 : 0.0, delay: 0.0, options: [.beginFromCurrentState, .curveEaseOut], animations: {
             if self.contentPreview == nil || reduceMotion {
                 self.backdrop.alpha = 0.0
             }
@@ -208,6 +211,57 @@ public final class NextgramChatSidebar: UIView {
     public override func accessibilityPerformEscape() -> Bool {
         self.close()
         return true
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        guard self.style == .drawer, self.contentPreview != nil, !self.closing else { return }
+        let offset = max(1.0, abs(self.drawerOffset))
+        let direction = self.effectiveUserInterfaceLayoutDirection == .rightToLeft ? 1.0 : -1.0
+        let translation = gesture.translation(in: self).x * direction
+        let velocity = gesture.velocity(in: self).x * direction
+        switch gesture.state {
+        case .began:
+            self.layer.removeAllAnimations()
+            self.transitionView.layer.removeAllAnimations()
+            self.panStartProgress = self.currentDismissProgress
+        case .changed:
+            let progress = min(1.0, max(0.0, self.panStartProgress + translation / offset))
+            self.applyDismissProgress(progress)
+        case .ended, .cancelled, .failed:
+            let progress = self.currentDismissProgress
+            let shouldClose = progress > 0.28 || velocity > 520.0
+            if shouldClose {
+                self.close()
+            } else {
+                self.animateDismissProgress(to: 0.0, velocity: velocity)
+            }
+        default:
+            break
+        }
+    }
+
+    private var currentDismissProgress: CGFloat {
+        let offset = max(1.0, abs(self.drawerOffset))
+        return min(1.0, max(0.0, abs(self.transitionView.transform.tx) / offset))
+    }
+
+    private func applyDismissProgress(_ progress: CGFloat) {
+        let progress = min(1.0, max(0.0, progress))
+        let offset = self.drawerOffset
+        self.transitionView.transform = CGAffineTransform(translationX: -offset * progress, y: 0.0)
+        self.panelContent.transform = CGAffineTransform(translationX: offset * 0.80 * progress, y: 0.0)
+            .scaledBy(x: 1.0 - 0.06 * progress, y: 1.0 - 0.06 * progress)
+        self.contentPreview?.layer.cornerRadius = 48.0 * progress
+        self.contentShade.alpha = 1.0 - progress
+    }
+
+    private func animateDismissProgress(to progress: CGFloat, velocity: CGFloat) {
+        let distance = abs(self.currentDismissProgress - progress)
+        let duration = min(0.24, max(0.12, 0.12 + 0.18 * Double(distance)))
+        UIView.animate(withDuration: duration, delay: 0.0, usingSpringWithDamping: 0.88,
+            initialSpringVelocity: min(2.0, abs(velocity) / 700.0), options: [.beginFromCurrentState, .allowUserInteraction]) {
+            self.applyDismissProgress(progress)
+        }
     }
 
     private func prepareContentPreview(in view: UIView) {
