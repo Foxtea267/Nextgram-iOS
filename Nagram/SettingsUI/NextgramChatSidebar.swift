@@ -59,15 +59,7 @@ public final class NextgramChatSidebar: UIView {
 
         let header: UIView
         if isDrawer, let search {
-            let button = UIButton(type: .system)
-            button.setImage(UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .medium)), for: .normal)
-            button.tintColor = theme.list.itemPrimaryTextColor
-            button.backgroundColor = theme.list.itemPrimaryTextColor.withAlphaComponent(0.10)
-            button.layer.cornerRadius = 22.0
-            button.accessibilityLabel = search.title
-            button.addAction(UIAction { [weak self] _ in self?.close(completion: search.action) }, for: .touchUpInside)
-            button.widthAnchor.constraint(equalToConstant: 44.0).isActive = true
-            button.heightAnchor.constraint(equalToConstant: 44.0).isActive = true
+            let button = self.makeGlassSearchButton(theme: theme, title: search.title, action: search.action)
             let row = UIStackView(arrangedSubviews: [heading, button])
             row.alignment = .center
             row.spacing = 12.0
@@ -119,6 +111,39 @@ public final class NextgramChatSidebar: UIView {
 
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    private func makeGlassSearchButton(theme: PresentationTheme, title: String, action: @escaping () -> Void) -> UIView {
+        let container: UIView
+        if #available(iOS 26.0, *) {
+            let glass = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
+            glass.layer.cornerRadius = 22.0
+            glass.layer.cornerCurve = .continuous
+            glass.clipsToBounds = true
+            container = glass
+        } else {
+            let fallback = UIView()
+            fallback.backgroundColor = theme.list.itemPrimaryTextColor.withAlphaComponent(0.10)
+            fallback.layer.cornerRadius = 22.0
+            fallback.layer.cornerCurve = .continuous
+            container = fallback
+        }
+        let button = UIButton(type: .system)
+        button.setImage(UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .medium)), for: .normal)
+        button.tintColor = theme.list.itemPrimaryTextColor
+        button.accessibilityLabel = title
+        button.addAction(UIAction { _ in action() }, for: .touchUpInside)
+        button.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(button)
+        NSLayoutConstraint.activate([
+            container.widthAnchor.constraint(equalToConstant: 44.0),
+            container.heightAnchor.constraint(equalToConstant: 44.0),
+            button.leadingAnchor.constraint(equalTo: container.leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: container.trailingAnchor),
+            button.topAnchor.constraint(equalTo: container.topAnchor),
+            button.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+        ])
+        return container
     }
 
     public func open(in view: UIView) {
@@ -227,7 +252,7 @@ public final class NextgramChatSidebar: UIView {
     private func setClosedPosition() {
         if self.contentPreview != nil {
             self.transitionView.transform = CGAffineTransform(translationX: -self.drawerOffset, y: 0.0)
-            self.panelContent.transform = CGAffineTransform(translationX: self.drawerOffset * 0.80, y: 0.0)
+            self.panelContent.transform = CGAffineTransform(translationX: self.drawerOffset * 0.80, y: 0.0).scaledBy(x: 0.94, y: 0.94)
         } else {
             let rtl = self.effectiveUserInterfaceLayoutDirection == .rightToLeft
             let distance = self.panel.bounds.width + max(self.safeAreaInsets.left, self.safeAreaInsets.right) + 12.0
