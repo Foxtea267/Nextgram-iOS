@@ -119,18 +119,21 @@ public final class NextgramChatSidebar: UIView {
 
     private func makeGlassSearchButton(theme: PresentationTheme, title: String, action: @escaping () -> Void) -> UIView {
         let container: UIView
+        let contentView: UIView
         if #available(iOS 26.0, *) {
             let glass = UIVisualEffectView(effect: UIGlassEffect(style: .regular))
             glass.layer.cornerRadius = 22.0
             glass.layer.cornerCurve = .continuous
             glass.clipsToBounds = true
             container = glass
+            contentView = glass.contentView
         } else {
             let fallback = UIView()
             fallback.backgroundColor = theme.list.itemPrimaryTextColor.withAlphaComponent(0.10)
             fallback.layer.cornerRadius = 22.0
             fallback.layer.cornerCurve = .continuous
             container = fallback
+            contentView = fallback
         }
         let button = UIButton(type: .system)
         button.setImage(UIImage(systemName: "magnifyingglass", withConfiguration: UIImage.SymbolConfiguration(pointSize: 20.0, weight: .medium)), for: .normal)
@@ -138,14 +141,14 @@ public final class NextgramChatSidebar: UIView {
         button.accessibilityLabel = title
         button.addAction(UIAction { _ in action() }, for: .touchUpInside)
         button.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(button)
+        contentView.addSubview(button)
         NSLayoutConstraint.activate([
             container.widthAnchor.constraint(equalToConstant: 44.0),
             container.heightAnchor.constraint(equalToConstant: 44.0),
-            button.leadingAnchor.constraint(equalTo: container.leadingAnchor),
-            button.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            button.topAnchor.constraint(equalTo: container.topAnchor),
-            button.bottomAnchor.constraint(equalTo: container.bottomAnchor)
+            button.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            button.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            button.topAnchor.constraint(equalTo: contentView.topAnchor),
+            button.bottomAnchor.constraint(equalTo: contentView.bottomAnchor)
         ])
         return container
     }
