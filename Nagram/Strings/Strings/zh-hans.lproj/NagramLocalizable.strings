@@ -1295,3 +1295,5 @@
 "Nagram.MusicPlayer.DiagnosticsDurationMismatch" = "时长不匹配";
 "Nagram.MusicPlayer.DiagnosticsCandidateMatch" = "曲目信息匹配";
 "Nagram.MusicPlayer.DiagnosticsOffline" = "在线歌词已关闭";
+"Nagram.IgnoreChatThemesAndWallpapers" = "忽略对话自定义主题和壁纸";
+"Nagram.IgnoreChatThemesAndWallpapers.Footer" = "所有对话都使用全局主题和壁纸，不显示为单个对话设置的主题和壁纸。仍可为对话设置主题和壁纸：其他人照常看到，关闭此选项后你也会重新看到。";

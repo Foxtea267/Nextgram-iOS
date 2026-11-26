@@ -546,6 +546,9 @@ public final class NagramSettings {
     public var globalHeaderBlurEnabled: Bool
     @NagramDefault("nagram.globalHeaderShadeEnabled", false)
     public var globalHeaderShadeEnabled: Bool
+    /// 忽略为单个对话设置的主题和壁纸，对话与资料页改用全局主题和壁纸（默认关 = 原生）
+    @NagramDefault("nagram.ignoreChatThemesAndWallpapers", false)
+    public var ignoreChatThemesAndWallpapers: Bool
 
     // MARK: 波次 3 批 B — UI 中改
     /// 底栏布局完整配置。新逻辑只读写这一份模型。
