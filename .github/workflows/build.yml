@@ -86,18 +86,22 @@ jobs:
       - name: Validate variant credentials
         run: |
           set -euo pipefail
-          if [[ ! "${TELEGRAM_API_HASH}" =~ ^[0-9a-fA-F]{32}$ ]]; then
+          if [[ -z "${TELEGRAM_API_HASH}" ]]; then
+            echo "::warning::Skipping ${VARIANT}: the ${API_HASH_SECRET_NAME} secret is not set."
+          elif [[ ! "${TELEGRAM_API_HASH}" =~ ^[0-9a-fA-F]{32}$ ]]; then
             echo "::error::Set ${API_HASH_SECRET_NAME} to the matching ${VARIANT} API hash before building."
             exit 1
           fi
 
       - name: Check out source and submodules
+        if: env.TELEGRAM_API_HASH != ''
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
       - name: Select upstream Xcode toolchain
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           XCODE_VERSION="$(python3 -c 'import json; print(json.load(open("versions.json"))["xcode"])')"
@@ -110,9 +114,11 @@ jobs:
           xcodebuild -version
 
       - name: Install Metal toolchain
+        if: env.TELEGRAM_API_HASH != ''
         run: xcodebuild -downloadComponent MetalToolchain || true
 
       - name: Cache Bazel downloads and build outputs
+        if: env.TELEGRAM_API_HASH != ''
         uses: actions/cache@v4
         with:
           path: ~/telegram-bazel-cache
@@ -122,6 +128,7 @@ jobs:
             nextgram-bazel-${{ runner.os }}-
 
       - name: Configure re-signable build
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           cat > local.bazelrc <<'EOF'
           build --//Telegram:disableExtensions
@@ -135,6 +142,7 @@ jobs:
           EOF
 
       - name: Write build configuration
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           mkdir -p build-input
@@ -156,9 +164,11 @@ jobs:
           JSON
 
       - name: Import disposable build certificate
+        if: env.TELEGRAM_API_HASH != ''
         run: python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
 
       - name: Generate matching disposable provisioning profile
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           CODESIGNING_PATH="build-input/nextgram-codesigning"
@@ -213,6 +223,7 @@ jobs:
             -out "${CODESIGNING_PATH}/profiles/Telegram.mobileprovision"
 
       - name: Build arm64 IPA
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           python3 - "${NEXTGRAM_APP_VERSION}" "${NEXTGRAM_RELEASE_VERSION}" <<'PY'
@@ -239,6 +250,7 @@ jobs:
             --continueOnError
 
       - name: Prepare artifacts
+        if: env.TELEGRAM_API_HASH != ''
         run: |
           set -euo pipefail
           rm -rf build/package
@@ -263,6 +275,7 @@ jobs:
           fi
 
       - name: Upload IPA and symbols
+        if: env.TELEGRAM_API_HASH != ''
         uses: actions/upload-artifact@v4
         with:
           name: Nextgram-${{ matrix.variant }}-${{ github.sha }}
@@ -313,9 +326,10 @@ jobs:
 
           with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
               variants = json.load(source)
-          expected_files = {f"Nextgram-{entry['variant']}.ipa" for entry in variants}
           actual_files = {path.name for path in Path("build/artifacts").glob("*.ipa")}
-          assert actual_files == expected_files, "Missing or unexpected compatibility IPA"
+          assert actual_files <= {f"Nextgram-{entry['variant']}.ipa" for entry in variants}, "Unexpected compatibility IPA"
+          variants = [entry for entry in variants if f"Nextgram-{entry['variant']}.ipa" in actual_files]
+          assert variants, "No compatibility IPA was built"
           for entry in variants:
               filename = f"Nextgram-{entry['variant']}.ipa"
               with zipfile.ZipFile(Path("build/artifacts") / filename) as archive:
@@ -353,8 +367,9 @@ jobs:
             echo
             python3 - <<'PY'
           import json
+          from pathlib import Path
           with open("build-system/nextgram-variants.json", encoding="utf-8") as source:
-              variants = json.load(source)
+              variants = [entry for entry in json.load(source) if Path(f"build/artifacts/Nextgram-{entry['variant']}.ipa").exists()]
           print("| IPA | Bundle ID | App with the same bundle ID |")
           print("| --- | --- | --- |")
           for entry in variants:

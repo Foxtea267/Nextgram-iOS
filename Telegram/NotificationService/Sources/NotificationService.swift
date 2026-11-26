@@ -2286,7 +2286,7 @@ private final class NotificationServiceHandler {
                                             if let messageId, let message = transaction.getMessage(messageId) {
                                                 // MARK: NEXTGRAM — Apply the same persisted filters to parsed background notifications.
                                                 let regexHidden = NagramSettings.shared.regexFilterMatcher(peerId: message.id.peerId.toInt64(), isOutgoing: false).map {
-                                                    $0.isHidden(text: message.text, authorPeerId: message.author?.id.id._internalGetInt64Value())
+                                                    $0.isHidden(text: message.nagramRegexFilterText, authorPeerId: message.author?.id.id._internalGetInt64Value())
                                                 } ?? false
                                                 let memberHidden = message.author.map {
                                                     NextgramGroupMemberFilter.hiddenMembers(accountId: accountPeerId.toInt64(), chatId: message.id.peerId.toInt64()).contains($0.id.toInt64())

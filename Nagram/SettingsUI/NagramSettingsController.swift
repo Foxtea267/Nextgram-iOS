@@ -270,6 +270,8 @@ private func nagramRowDeepLinkAliases(titleKey: String) -> [String] {
         return ["ShowDC", "ShowDataCenter", "ShowIdAndDc"]
     case "Nagram.ControlHighlight":
         return ["ControlHighlight", "GlassHighlight", "LiquidGlassHighlight"]
+    case "Nagram.IgnoreChatThemesAndWallpapers":
+        return ["IgnoreChatThemes", "IgnoreChatWallpapers", "ChatTheme", "ChatWallpaper", "CustomChatTheme", "CustomChatWallpaper"]
     case "Nagram.GlassTransparency":
         return ["GlassTransparency", "LiquidGlassTransparency", "GlassOpacity", "LiquidGlassOpacity", "LiquidGlass", "GlassTint"]
     case "Nagram.GlassTransparency.OverlayOpacity":
@@ -616,6 +618,9 @@ private func nagramGroups(
             .slider(titleKey: "Nagram.ChatHeaderLightShade", minValue: 0, maxValue: 100, get: { NagramSettings.shared.chatHeaderLightShadeOpacity }, set: { NagramSettings.shared.chatHeaderLightShadeOpacity = $0 }, isVisible: { NagramSettings.shared.chatHeaderShadeEnabled || NagramSettings.shared.globalHeaderShadeEnabled }),
             .slider(titleKey: "Nagram.ChatHeaderDarkShade", minValue: 0, maxValue: 100, get: { NagramSettings.shared.chatHeaderDarkShadeOpacity }, set: { NagramSettings.shared.chatHeaderDarkShadeOpacity = $0 }, isVisible: { NagramSettings.shared.chatHeaderShadeEnabled || NagramSettings.shared.globalHeaderShadeEnabled }),
             .toggle(titleKey: "Nagram.ControlHighlight", get: { NagramSettings.shared.controlHighlightEnabled }, set: { NagramSettings.shared.controlHighlightEnabled = $0 }),
+        ]),
+        NagramGroup(tab: .appearance, headerKey: nil, footerKey: "Nagram.IgnoreChatThemesAndWallpapers.Footer", rows: [
+            .toggle(titleKey: "Nagram.IgnoreChatThemesAndWallpapers", get: { NagramSettings.shared.ignoreChatThemesAndWallpapers }, set: { NagramSettings.shared.ignoreChatThemesAndWallpapers = $0 }),
         ]),
         NagramGroup(tab: .privacy, headerKey: "Nagram.Section.Stories", footerKey: nil, rows: [
             .toggle(titleKey: "Nagram.HideStories", get: { NagramSettings.shared.hideStories }, set: { NagramSettings.shared.hideStories = $0 }),

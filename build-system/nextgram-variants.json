@@ -22,5 +22,11 @@
         "bundle_id": "com.seastar.turrit",
         "api_id": "27626847",
         "api_hash_secret": "TURRIT_API_HASH"
+    },
+    {
+        "variant": "Telegram",
+        "bundle_id": "ph.telegra.Telegraph",
+        "api_id": "8",
+        "api_hash_secret": "TELEGRAM_OFFICIAL_API_HASH"
     }
 ]
